@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DropTableDef",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^drop\\.[a-z0-9_]+$",
+      "description": "Drop table id, e.g. drop.slime."
+    },
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Optional editor-facing name."
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "pattern": "^item\\.[a-z0-9_]+$",
+            "description": "Item id (item.*)."
+          },
+          "chance": {
+            "type": "number",
+            "description": "Probability 0–1 of dropping. The caller rolls with injected RNG."
+          },
+          "min": {
+            "type": "integer",
+            "description": "Minimum quantity when dropped. Default 1."
+          },
+          "max": {
+            "type": "integer",
+            "description": "Maximum quantity when dropped. Default 1."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One possible drop.",
+        "required": [
+          "item_id"
+        ]
+      },
+      "description": "Entries, each rolled once per drop."
+    }
+  },
+  "additionalProperties": false,
+  "description": "A drop table. Server only; never in the client bundle. Each entry rolls independently.",
+  "required": [
+    "id"
+  ]
+}

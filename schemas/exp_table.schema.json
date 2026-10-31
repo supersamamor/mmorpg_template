@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ExpTableDef",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^exp\\.[a-z0-9_]+$",
+      "description": "Table id, e.g. exp.base."
+    },
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Optional editor-facing name."
+    },
+    "exp": {
+      "type": "array",
+      "items": {
+        "type": "integer"
+      },
+      "description": "EXP needed to advance from level i + 1 to i + 2 at index i. The max level is Exp.Count + 1."
+    }
+  },
+  "additionalProperties": false,
+  "description": "An EXP curve for base or job levels (ARCHITECTURE §6.5).",
+  "required": [
+    "id"
+  ]
+}

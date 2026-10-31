@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FormulaSetDef",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Optional editor-facing name."
+    },
+    "derived": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "propertyNames": {
+        "enum": [
+          "max_hp",
+          "max_sp",
+          "atk",
+          "matk",
+          "def",
+          "mdef",
+          "hit",
+          "flee",
+          "crit",
+          "aspd",
+          "move_speed",
+          "cast_time_mod",
+          "hp_regen",
+          "sp_regen",
+          "weight_limit"
+        ]
+      },
+      "description": "Formula per derived stat id (DerivedStats), e.g. max_hp."
+    },
+    "physical_damage": {
+      "type": "string",
+      "description": "Base physical damage, used by auto-attacks and non-magic damage effects."
+    },
+    "magic_damage": {
+      "type": "string",
+      "description": "Base magic damage, used by magic damage effects."
+    },
+    "hit_chance": {
+      "type": "string",
+      "description": "Hit probability 0–1 for physical attacks."
+    },
+    "crit_chance": {
+      "type": "string",
+      "description": "Critical probability 0–1 for physical attacks."
+    }
+  },
+  "additionalProperties": false,
+  "description": "The root of content/formulas.yaml: every balance expression the engine evaluates (ARCHITECTURE §6.2). A single set per game, so it has no id. Each value is an expression using only whitelisted variables and functions (FormulaVariables, FormulaFunctions).",
+  "required": [
+    "physical_damage",
+    "magic_damage",
+    "hit_chance",
+    "crit_chance"
+  ]
+}

@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DialogueDef",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^dialogue\\.[a-z0-9_]+$",
+      "description": "Dialogue id, e.g. dialogue.guide_intro."
+    },
+    "name": {
+      "type": "string",
+      "description": "Editor-facing name."
+    },
+    "start": {
+      "type": "string",
+      "description": "Key in Nodes of the first node."
+    },
+    "nodes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "speaker_npc_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^npc\\.[a-z0-9_]+$",
+            "description": "Speaking NPC (npc.*); null means the NPC being talked to."
+          },
+          "portrait_asset_key": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^portrait\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+            "description": "Portrait override (portrait.*); null uses the speaker's."
+          },
+          "text": {
+            "type": "string",
+            "description": "Display text."
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Node to continue to when there are no choices; null ends the dialogue."
+          },
+          "choices": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string",
+                  "description": "Display text of the choice."
+                },
+                "next": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "Node to go to; null ends the dialogue."
+                },
+                "start_quest_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "pattern": "^quest\\.[a-z0-9_]+$",
+                  "description": "Quest to start when chosen (quest.*); the server checks its prerequisites."
+                }
+              },
+              "additionalProperties": false,
+              "description": "A player choice in a dialogue node.",
+              "required": [
+                "text"
+              ]
+            },
+            "description": "Player choices. Empty means a single \"continue\"."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One line of dialogue and the player's options.",
+        "required": [
+          "text"
+        ]
+      },
+      "description": "Nodes by local node id (not namespaced; unique within this dialogue)."
+    }
+  },
+  "additionalProperties": false,
+  "description": "A dialogue graph: nodes keyed by a local node id, starting at Start.",
+  "required": [
+    "id",
+    "name",
+    "start"
+  ]
+}

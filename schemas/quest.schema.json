@@ -1,0 +1,387 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QuestDef",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^quest\\.[a-z0-9_]+$",
+      "description": "Quest id, e.g. quest.first_hunt."
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name."
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Display description."
+    },
+    "giver_npc_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^npc\\.[a-z0-9_]+$",
+      "description": "NPC that offers the quest (npc.*); null if started another way."
+    },
+    "repeatable": {
+      "type": "boolean",
+      "description": "True if the quest can be taken again after completion."
+    },
+    "prerequisites": {
+      "type": "object",
+      "properties": {
+        "min_base_level": {
+          "type": "integer",
+          "description": "Minimum base level. 0 means none."
+        },
+        "job_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^job\\.[a-z0-9_]+$"
+          },
+          "description": "Allowed current jobs (job.*). Empty means any."
+        },
+        "quest_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^quest\\.[a-z0-9_]+$"
+          },
+          "description": "Quests that must be completed first (quest.*)."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Conditions to start the quest."
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Display text for the quest log."
+          },
+          "objectives": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "type"
+              ],
+              "anyOf": [
+                {
+                  "properties": {
+                    "type": {
+                      "const": "kill"
+                    },
+                    "monster_id": {
+                      "type": "string",
+                      "pattern": "^monster\\.[a-z0-9_]+$",
+                      "description": "Monster id (monster.*)."
+                    },
+                    "count": {
+                      "type": "integer",
+                      "description": "How many kills. Default 1."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "kill: kill a number of one monster (event MonsterKilled).",
+                  "required": [
+                    "monster_id"
+                  ]
+                },
+                {
+                  "properties": {
+                    "type": {
+                      "const": "collect"
+                    },
+                    "item_id": {
+                      "type": "string",
+                      "pattern": "^item\\.[a-z0-9_]+$",
+                      "description": "Item id (item.*)."
+                    },
+                    "count": {
+                      "type": "integer",
+                      "description": "How many. Default 1."
+                    },
+                    "consume": {
+                      "type": "boolean",
+                      "description": "True to remove the items from the inventory when the step completes."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "collect: hold a number of one item (event ItemAcquired).",
+                  "required": [
+                    "item_id"
+                  ]
+                },
+                {
+                  "properties": {
+                    "type": {
+                      "const": "talk"
+                    },
+                    "npc_id": {
+                      "type": "string",
+                      "pattern": "^npc\\.[a-z0-9_]+$",
+                      "description": "NPC id (npc.*)."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "talk: talk to an NPC (event NpcTalked).",
+                  "required": [
+                    "npc_id"
+                  ]
+                },
+                {
+                  "properties": {
+                    "type": {
+                      "const": "reach"
+                    },
+                    "map_id": {
+                      "type": "string",
+                      "pattern": "^map\\.[a-z0-9_]+$",
+                      "description": "Map id (map.*)."
+                    },
+                    "x": {
+                      "type": "integer",
+                      "description": "Target cell X."
+                    },
+                    "y": {
+                      "type": "integer",
+                      "description": "Target cell Y."
+                    },
+                    "radius": {
+                      "type": "integer",
+                      "description": "Radius in cells (Chebyshev). Default 1."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "reach: stand within Radius cells of a cell on a map.",
+                  "required": [
+                    "map_id"
+                  ]
+                },
+                {
+                  "properties": {
+                    "type": {
+                      "const": "level"
+                    },
+                    "base_level": {
+                      "type": "integer",
+                      "description": "Minimum base level."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "level: reach a base level (event LevelUp)."
+                },
+                {
+                  "properties": {
+                    "type": {
+                      "const": "job"
+                    },
+                    "job_id": {
+                      "type": "string",
+                      "pattern": "^job\\.[a-z0-9_]+$",
+                      "description": "Job id (job.*)."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "job: have a job (event JobChanged).",
+                  "required": [
+                    "job_id"
+                  ]
+                },
+                {
+                  "properties": {
+                    "type": {
+                      "const": "use_item"
+                    },
+                    "item_id": {
+                      "type": "string",
+                      "pattern": "^item\\.[a-z0-9_]+$",
+                      "description": "Item id (item.*)."
+                    },
+                    "count": {
+                      "type": "integer",
+                      "description": "How many uses. Default 1."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "use_item: use a number of one item (event ItemUsed).",
+                  "required": [
+                    "item_id"
+                  ]
+                },
+                {
+                  "properties": {
+                    "type": {
+                      "const": "equip"
+                    },
+                    "item_id": {
+                      "type": "string",
+                      "pattern": "^item\\.[a-z0-9_]+$",
+                      "description": "Item id (item.*)."
+                    }
+                  },
+                  "additionalProperties": false,
+                  "description": "equip: equip an item (event ItemEquipped).",
+                  "required": [
+                    "item_id"
+                  ]
+                }
+              ],
+              "description": "One condition of a quest step (ARCHITECTURE §6.4). Objectives listen to event bus events. Selected by the type key; the table is QuestObjectives."
+            },
+            "description": "Objectives; all must be met to finish the step."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One quest step."
+      },
+      "description": "Steps in order. A step completes when all its objectives are met."
+    },
+    "rewards": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "anyOf": [
+          {
+            "properties": {
+              "type": {
+                "const": "exp"
+              },
+              "base": {
+                "type": "integer",
+                "description": "Base EXP."
+              },
+              "job": {
+                "type": "integer",
+                "description": "Job EXP."
+              }
+            },
+            "additionalProperties": false,
+            "description": "exp: base and/or job EXP."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "item"
+              },
+              "item_id": {
+                "type": "string",
+                "pattern": "^item\\.[a-z0-9_]+$",
+                "description": "Item id (item.*)."
+              },
+              "count": {
+                "type": "integer",
+                "description": "How many. Default 1."
+              }
+            },
+            "additionalProperties": false,
+            "description": "item: give items.",
+            "required": [
+              "item_id"
+            ]
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "zeny"
+              },
+              "amount": {
+                "type": "integer",
+                "description": "Amount of currency."
+              }
+            },
+            "additionalProperties": false,
+            "description": "zeny: give currency (engine id Currency)."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "skill_point"
+              },
+              "amount": {
+                "type": "integer",
+                "description": "Points given."
+              }
+            },
+            "additionalProperties": false,
+            "description": "skill_point: give unspent skill points."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "stat_point"
+              },
+              "amount": {
+                "type": "integer",
+                "description": "Points given."
+              }
+            },
+            "additionalProperties": false,
+            "description": "stat_point: give unspent stat points."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "unlock_job"
+              },
+              "job_id": {
+                "type": "string",
+                "pattern": "^job\\.[a-z0-9_]+$",
+                "description": "Job id (job.*)."
+              }
+            },
+            "additionalProperties": false,
+            "description": "unlock_job: allow a job change to JobId (see Requirements).",
+            "required": [
+              "job_id"
+            ]
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "status"
+              },
+              "status_id": {
+                "type": "string",
+                "pattern": "^status\\.[a-z0-9_]+$",
+                "description": "Status id (status.*)."
+              },
+              "duration_ms": {
+                "type": "integer",
+                "description": "Duration in milliseconds."
+              }
+            },
+            "additionalProperties": false,
+            "description": "status: apply a status to the character.",
+            "required": [
+              "status_id"
+            ]
+          }
+        ],
+        "description": "A quest reward. Selected by the type key; the table is Rewards."
+      },
+      "description": "Rewards given when the last step completes."
+    }
+  },
+  "additionalProperties": false,
+  "description": "A quest: prerequisites → steps[objectives] → rewards (ARCHITECTURE §6.4). Per-character state is {questId, stepIndex, counters}, so step order matters.",
+  "required": [
+    "id",
+    "name"
+  ]
+}

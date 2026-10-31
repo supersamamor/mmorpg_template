@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Game.Tools.Commands;
 
 const int NotImplementedExitCode = 2;
 
@@ -6,7 +7,6 @@ var root = new RootCommand("Game content and build tools");
 foreach (var (name, description) in new[]
 {
     ("validate", "Validate all content and cross-references"),
-    ("schema", "Generate JSON Schemas from the C# definitions"),
     ("stats", "Print content statistics"),
 })
 {
@@ -18,5 +18,7 @@ foreach (var (name, description) in new[]
     });
     root.Subcommands.Add(command);
 }
+
+root.Subcommands.Add(SchemaCommand.Create());
 
 return root.Parse(args).Invoke();

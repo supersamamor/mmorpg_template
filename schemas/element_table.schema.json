@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ElementTableDef",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Optional editor-facing name."
+    },
+    "multipliers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "number"
+        },
+        "propertyNames": {
+          "enum": [
+            "neutral",
+            "fire",
+            "water",
+            "earth",
+            "wind",
+            "holy",
+            "shadow",
+            "poison",
+            "ghost",
+            "undead"
+          ]
+        }
+      },
+      "propertyNames": {
+        "enum": [
+          "neutral",
+          "fire",
+          "water",
+          "earth",
+          "wind",
+          "holy",
+          "shadow",
+          "poison",
+          "ghost",
+          "undead"
+        ]
+      },
+      "description": "Attacking element → defending element → damage multiplier (1 = normal, 0 = immune, negative heals). Keys are Elements ids."
+    }
+  },
+  "additionalProperties": false,
+  "description": "Element multipliers, the root of content/elements.yaml. A single table per game, so it has no id."
+}

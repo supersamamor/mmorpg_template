@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JobDef",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^job\\.[a-z0-9_]+$",
+      "description": "Job id, e.g. job.swordsman."
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name."
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Display description."
+    },
+    "parent_job_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^job\\.[a-z0-9_]+$",
+      "description": "Job this one is changed from (job.*). Null for a starting job."
+    },
+    "requirements": {
+      "type": "object",
+      "properties": {
+        "min_base_level": {
+          "type": "integer",
+          "description": "Minimum base level. 0 means no requirement."
+        },
+        "min_job_level": {
+          "type": "integer",
+          "description": "Minimum job level in the parent job. 0 means no requirement."
+        },
+        "quest_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^quest\\.[a-z0-9_]+$"
+          },
+          "description": "Quests (quest.*) that must be completed."
+        },
+        "requires_unlock": {
+          "type": "boolean",
+          "description": "True if the job must first be unlocked by an unlock_job reward."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Conditions for changing into this job from ParentJobId."
+    },
+    "job_exp_table_id": {
+      "type": "string",
+      "pattern": "^exp\\.[a-z0-9_]+$",
+      "description": "EXP table for job levels (exp.*). Its length sets the max job level."
+    },
+    "skills": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "skill_id": {
+            "type": "string",
+            "pattern": "^skill\\.[a-z0-9_]+$",
+            "description": "Skill id (skill.*)."
+          },
+          "max_level": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Highest level learnable in this job. Null means the skill's MaxLevel."
+          },
+          "requires": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "skill_id": {
+                  "type": "string",
+                  "pattern": "^skill\\.[a-z0-9_]+$",
+                  "description": "Skill id (skill.*)."
+                },
+                "level": {
+                  "type": "integer",
+                  "description": "Minimum learned level. Default 1."
+                }
+              },
+              "additionalProperties": false,
+              "description": "A skill at a minimum level.",
+              "required": [
+                "skill_id"
+              ]
+            },
+            "description": "Skills that must be learned first, at a minimum level."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One entry in a job's skill tree.",
+        "required": [
+          "skill_id"
+        ]
+      },
+      "description": "Skills this job can learn, with per-job prerequisites."
+    },
+    "stat_bonuses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "stat": {
+            "type": "string",
+            "enum": [
+              "str",
+              "agi",
+              "vit",
+              "int",
+              "dex",
+              "luk",
+              "max_hp",
+              "max_sp",
+              "atk",
+              "matk",
+              "def",
+              "mdef",
+              "hit",
+              "flee",
+              "crit",
+              "aspd",
+              "move_speed",
+              "cast_time_mod",
+              "hp_regen",
+              "sp_regen",
+              "weight_limit"
+            ],
+            "description": "Primary or derived stat id (Stats), e.g. str, atk."
+          },
+          "op": {
+            "enum": [
+              "flat",
+              "percent",
+              "override"
+            ],
+            "description": "How the value combines with the stat."
+          },
+          "value": {
+            "type": "string",
+            "description": "Amount as a formula string, so it can be a constant (\"5\") or scaled (\"level * 2\", \"refine * 3\"). Only whitelisted formula variables are allowed."
+          }
+        },
+        "additionalProperties": false,
+        "description": "A change to one stat, from equipment, a card, a job bonus, a passive skill or a status. The engine attaches the source when it applies the modifier, so the definition has none.",
+        "required": [
+          "stat"
+        ]
+      },
+      "description": "Job bonus modifiers (ARCHITECTURE §6.1); values may scale with job_level."
+    },
+    "weapon_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "unarmed",
+          "dagger",
+          "sword_1h",
+          "sword_2h",
+          "spear",
+          "axe",
+          "mace",
+          "staff",
+          "bow",
+          "knuckle"
+        ]
+      },
+      "description": "Weapon types this job may equip (WeaponTypes). Empty means all."
+    },
+    "model_asset_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^model\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "Character body model (model.*). Rig and animations come from the theme manifest."
+    },
+    "icon_asset_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^icon\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "UI icon (icon.*)."
+    }
+  },
+  "additionalProperties": false,
+  "description": "A job (class): skill tree, job bonuses, allowed weapons and job change requirements.",
+  "required": [
+    "id",
+    "name",
+    "job_exp_table_id"
+  ]
+}

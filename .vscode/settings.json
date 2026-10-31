@@ -1,0 +1,17 @@
+{
+  "yaml.schemas": {
+    "schemas/job.schema.json": "content/jobs/**/*.yaml",
+    "schemas/skill.schema.json": "content/skills/**/*.yaml",
+    "schemas/item.schema.json": "content/items/**/*.yaml",
+    "schemas/monster.schema.json": "content/monsters/**/*.yaml",
+    "schemas/status.schema.json": "content/statuses/**/*.yaml",
+    "schemas/quest.schema.json": "content/quests/**/*.yaml",
+    "schemas/npc.schema.json": "content/npcs/**/*.yaml",
+    "schemas/dialogue.schema.json": "content/dialogues/**/*.yaml",
+    "schemas/drop_table.schema.json": "content/drops/**/*.yaml",
+    "schemas/map.schema.json": "content/maps/**/*.yaml",
+    "schemas/exp_table.schema.json": "content/exp/**/*.yaml",
+    "schemas/element_table.schema.json": "content/elements.yaml",
+    "schemas/formula_set.schema.json": "content/formulas.yaml"
+  }
+}

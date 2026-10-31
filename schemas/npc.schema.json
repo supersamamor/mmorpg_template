@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NpcDef",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^npc\\.[a-z0-9_]+$",
+      "description": "NPC id, e.g. npc.guide."
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name."
+    },
+    "title": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Display title shown under the name, e.g. \"Guide\"."
+    },
+    "dialogue_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^dialogue\\.[a-z0-9_]+$",
+      "description": "Dialogue started when a player talks to the NPC (dialogue.*)."
+    },
+    "model_asset_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^model\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "3D model (model.*)."
+    },
+    "portrait_asset_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^portrait\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "Default dialogue portrait (portrait.*)."
+    }
+  },
+  "additionalProperties": false,
+  "description": "A non-player character. Placement and facing come from the map's logic grid.",
+  "required": [
+    "id",
+    "name"
+  ]
+}

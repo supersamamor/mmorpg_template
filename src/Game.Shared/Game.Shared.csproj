@@ -3,6 +3,7 @@
     <TargetFrameworks>net10.0;netstandard2.1</TargetFrameworks>
     <TargetFramework />
     <LangVersion>9.0</LangVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
 </Project>

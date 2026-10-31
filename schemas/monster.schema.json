@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MonsterDef",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^monster\\.[a-z0-9_]+$",
+      "description": "Monster id, e.g. monster.slime."
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name."
+    },
+    "level": {
+      "type": "integer",
+      "description": "Base level (formula variable t_level / base_level)."
+    },
+    "race": {
+      "type": "string",
+      "enum": [
+        "formless",
+        "beast",
+        "plant",
+        "insect",
+        "fish",
+        "demon",
+        "undead",
+        "humanoid",
+        "dragon",
+        "angel"
+      ],
+      "description": "Race (MonsterRaces)."
+    },
+    "size": {
+      "type": "string",
+      "enum": [
+        "small",
+        "medium",
+        "large"
+      ],
+      "description": "Size (MonsterSizes)."
+    },
+    "element": {
+      "type": "string",
+      "enum": [
+        "neutral",
+        "fire",
+        "water",
+        "earth",
+        "wind",
+        "holy",
+        "shadow",
+        "poison",
+        "ghost",
+        "undead"
+      ],
+      "description": "Defending element, also its attack element (Elements)."
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      },
+      "propertyNames": {
+        "enum": [
+          "str",
+          "agi",
+          "vit",
+          "int",
+          "dex",
+          "luk",
+          "max_hp",
+          "max_sp",
+          "atk",
+          "matk",
+          "def",
+          "mdef",
+          "hit",
+          "flee",
+          "crit",
+          "aspd",
+          "move_speed",
+          "cast_time_mod",
+          "hp_regen",
+          "sp_regen",
+          "weight_limit"
+        ]
+      },
+      "description": "Stat values by stat id (Stats). Primary stats feed the formulas; a derived stat listed here (e.g. max_hp, move_speed) replaces the formula result."
+    },
+    "attack_range": {
+      "type": "integer",
+      "description": "Auto-attack range in cells. Default 1."
+    },
+    "base_exp": {
+      "type": "integer",
+      "description": "Base EXP given on kill."
+    },
+    "job_exp": {
+      "type": "integer",
+      "description": "Job EXP given on kill."
+    },
+    "drop_table_ids": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^drop\\.[a-z0-9_]+$"
+      },
+      "description": "Drop tables rolled on death (drop.*)."
+    },
+    "ai": {
+      "type": "object",
+      "properties": {
+        "aggressive": {
+          "type": "boolean",
+          "description": "True to attack players on sight; false waits until attacked."
+        },
+        "aggro_range": {
+          "type": "integer",
+          "description": "Distance in cells at which an aggressive monster notices players."
+        },
+        "chase_range": {
+          "type": "integer",
+          "description": "Distance in cells from its target beyond which the monster gives up."
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "skill_id": {
+                "type": "string",
+                "pattern": "^skill\\.[a-z0-9_]+$",
+                "description": "Skill id (skill.*)."
+              },
+              "level": {
+                "type": "integer",
+                "description": "Skill level used. Default 1."
+              },
+              "chance": {
+                "type": "number",
+                "description": "Probability 0–1 that the monster uses it when it may act and the skill is ready."
+              }
+            },
+            "additionalProperties": false,
+            "description": "A skill a monster may use.",
+            "required": [
+              "skill_id"
+            ]
+          },
+          "description": "Skills the monster may use."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Behavior settings."
+    },
+    "model_asset_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^model\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "3D model (model.*); rig and animation library come from the manifest."
+    }
+  },
+  "additionalProperties": false,
+  "description": "A monster. Server-only parts (Ai, DropTableIds) never go to the client bundle. Placement and respawn timing come from the map's logic grid, not from here.",
+  "required": [
+    "id",
+    "name",
+    "race",
+    "size",
+    "element"
+  ]
+}

@@ -1,0 +1,466 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "SkillDef",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^skill\\.[a-z0-9_]+$",
+      "description": "Skill id, e.g. skill.bash."
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name."
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Display description."
+    },
+    "max_level": {
+      "type": "integer",
+      "description": "Highest skill level. Default 1."
+    },
+    "passive": {
+      "type": "boolean",
+      "description": "True for a passive skill: no casting, only PassiveModifiers."
+    },
+    "target": {
+      "type": "object",
+      "properties": {
+        "range": {
+          "type": "integer",
+          "description": "Range in cells (Chebyshev). 0 means self."
+        },
+        "ground": {
+          "type": "boolean",
+          "description": "True to target a ground cell instead of an entity."
+        },
+        "friendly": {
+          "type": "boolean",
+          "description": "True to target allies; false (default) to target enemies."
+        }
+      },
+      "additionalProperties": false,
+      "description": "What the skill can be used on (sent to the client for targeting UI)."
+    },
+    "sp_cost": {
+      "type": "string",
+      "description": "SP cost, as a formula."
+    },
+    "cast_time_ms": {
+      "type": "string",
+      "description": "Cast time in milliseconds, as a formula (before cast_time_mod)."
+    },
+    "cooldown_ms": {
+      "type": "string",
+      "description": "Cooldown in milliseconds, as a formula."
+    },
+    "weapon_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "unarmed",
+          "dagger",
+          "sword_1h",
+          "sword_2h",
+          "spear",
+          "axe",
+          "mace",
+          "staff",
+          "bow",
+          "knuckle"
+        ]
+      },
+      "description": "Weapon types required to use the skill (WeaponTypes). Empty means any."
+    },
+    "effects": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "anyOf": [
+          {
+            "properties": {
+              "type": {
+                "const": "damage"
+              },
+              "magic": {
+                "type": "boolean",
+                "description": "True to use the magic damage formula; false (default) for physical."
+              },
+              "multiplier": {
+                "type": "string",
+                "description": "Formula scaling the base damage, e.g. \"1 + level * 0.3\". Default \"1\"."
+              },
+              "element": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "neutral",
+                  "fire",
+                  "water",
+                  "earth",
+                  "wind",
+                  "holy",
+                  "shadow",
+                  "poison",
+                  "ghost",
+                  "undead",
+                  null
+                ],
+                "description": "Element id (Elements). Null uses the attacker's attack element."
+              },
+              "hits": {
+                "type": "integer",
+                "description": "Number of hits; the total is split visually only. Default 1."
+              }
+            },
+            "additionalProperties": false,
+            "description": "damage: physical or magic damage. The base amount comes from the physical or magic damage formula in formulas.yaml, scaled by Multiplier, then the element table applies."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "heal"
+              },
+              "amount": {
+                "type": "string",
+                "description": "HP restored, as a formula."
+              }
+            },
+            "additionalProperties": false,
+            "description": "heal: restore HP."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "restore_sp"
+              },
+              "amount": {
+                "type": "string",
+                "description": "SP restored, as a formula."
+              }
+            },
+            "additionalProperties": false,
+            "description": "restore_sp: restore SP."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "apply_status"
+              },
+              "status_id": {
+                "type": "string",
+                "pattern": "^status\\.[a-z0-9_]+$",
+                "description": "Status id (status.*)."
+              },
+              "chance": {
+                "type": "string",
+                "description": "Probability 0–1 as a formula. Default \"1\" (always). The caller rolls with injected RNG."
+              },
+              "duration_ms": {
+                "type": "string",
+                "description": "Duration in milliseconds, as a formula."
+              }
+            },
+            "additionalProperties": false,
+            "description": "apply_status: apply a status with a chance and a duration.",
+            "required": [
+              "status_id"
+            ]
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "remove_status"
+              },
+              "status_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^status\\.[a-z0-9_]+$"
+                },
+                "description": "Status ids to remove."
+              },
+              "tags": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Remove every active status carrying any of these tags (Tags)."
+              }
+            },
+            "additionalProperties": false,
+            "description": "remove_status: cleanse statuses by id and/or tag."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "modify_stat"
+              },
+              "modifier": {
+                "type": "object",
+                "properties": {
+                  "stat": {
+                    "type": "string",
+                    "enum": [
+                      "str",
+                      "agi",
+                      "vit",
+                      "int",
+                      "dex",
+                      "luk",
+                      "max_hp",
+                      "max_sp",
+                      "atk",
+                      "matk",
+                      "def",
+                      "mdef",
+                      "hit",
+                      "flee",
+                      "crit",
+                      "aspd",
+                      "move_speed",
+                      "cast_time_mod",
+                      "hp_regen",
+                      "sp_regen",
+                      "weight_limit"
+                    ],
+                    "description": "Primary or derived stat id (Stats), e.g. str, atk."
+                  },
+                  "op": {
+                    "enum": [
+                      "flat",
+                      "percent",
+                      "override"
+                    ],
+                    "description": "How the value combines with the stat."
+                  },
+                  "value": {
+                    "type": "string",
+                    "description": "Amount as a formula string, so it can be a constant (\"5\") or scaled (\"level * 2\", \"refine * 3\"). Only whitelisted formula variables are allowed."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "The modifier to apply."
+              }
+            },
+            "additionalProperties": false,
+            "description": "modify_stat: a temporary stat modifier. Used in OnApply; it lasts as long as the status and is removed with it."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "knockback"
+              },
+              "cells": {
+                "type": "integer",
+                "description": "Distance in cells. Stops early at unwalkable cells."
+              }
+            },
+            "additionalProperties": false,
+            "description": "knockback: push the target away from the source."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "teleport"
+              },
+              "to_save_point": {
+                "type": "boolean",
+                "description": "Go to the character's save point; other fields are ignored."
+              },
+              "map_id": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "pattern": "^map\\.[a-z0-9_]+$",
+                "description": "Destination map id (map.*). Null means the current map."
+              },
+              "x": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Destination cell X. Null (with Y) means a random walkable cell."
+              },
+              "y": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Destination cell Y. Null (with X) means a random walkable cell."
+              }
+            },
+            "additionalProperties": false,
+            "description": "teleport: move the caster. With ToSavePoint it goes to the save point; otherwise to MapId (or the current map) at X/Y (or a random walkable cell when they are omitted)."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "summon"
+              },
+              "monster_id": {
+                "type": "string",
+                "pattern": "^monster\\.[a-z0-9_]+$",
+                "description": "Monster id (monster.*)."
+              },
+              "count": {
+                "type": "integer",
+                "description": "How many to spawn. Default 1."
+              },
+              "duration_ms": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "description": "Lifetime in milliseconds; null means until killed."
+              }
+            },
+            "additionalProperties": false,
+            "description": "summon: spawn monsters near the caster.",
+            "required": [
+              "monster_id"
+            ]
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "area"
+              },
+              "radius": {
+                "type": "integer",
+                "description": "Radius in cells (Chebyshev). 0 is the target cell only."
+              },
+              "friendly": {
+                "type": "boolean",
+                "description": "True to affect allies (heals, buffs); false (default) to affect enemies."
+              },
+              "effects": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/properties/effects/items"
+                },
+                "description": "Effects applied to each entity in the area."
+              }
+            },
+            "additionalProperties": false,
+            "description": "area: apply child effects to every valid entity within Radius cells (Chebyshev, i.e. a square) of the effect's target."
+          }
+        ],
+        "description": "One unit of gameplay behavior (ARCHITECTURE §6.3). Skills, consumables, cards and statuses are lists of effects. In content each effect is a map whose type key selects the concrete record; the discriminator → type table is Effects. Type is computed from the concrete record, so it can never disagree with the record's shape."
+      },
+      "description": "Effects applied to the target when the skill resolves."
+    },
+    "passive_modifiers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "stat": {
+            "type": "string",
+            "enum": [
+              "str",
+              "agi",
+              "vit",
+              "int",
+              "dex",
+              "luk",
+              "max_hp",
+              "max_sp",
+              "atk",
+              "matk",
+              "def",
+              "mdef",
+              "hit",
+              "flee",
+              "crit",
+              "aspd",
+              "move_speed",
+              "cast_time_mod",
+              "hp_regen",
+              "sp_regen",
+              "weight_limit"
+            ],
+            "description": "Primary or derived stat id (Stats), e.g. str, atk."
+          },
+          "op": {
+            "enum": [
+              "flat",
+              "percent",
+              "override"
+            ],
+            "description": "How the value combines with the stat."
+          },
+          "value": {
+            "type": "string",
+            "description": "Amount as a formula string, so it can be a constant (\"5\") or scaled (\"level * 2\", \"refine * 3\"). Only whitelisted formula variables are allowed."
+          }
+        },
+        "additionalProperties": false,
+        "description": "A change to one stat, from equipment, a card, a job bonus, a passive skill or a status. The engine attaches the source when it applies the modifier, so the definition has none.",
+        "required": [
+          "stat"
+        ]
+      },
+      "description": "Modifiers applied while a passive skill is learned; values may scale with level."
+    },
+    "animation_id": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "enum": [
+        "idle",
+        "walk",
+        "attack",
+        "cast",
+        "hit",
+        "die",
+        "sit",
+        "pick_up",
+        null
+      ],
+      "description": "Animation played by the user (AnimationIds), e.g. cast or attack."
+    },
+    "icon_asset_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^icon\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "UI icon (icon.*)."
+    },
+    "vfx_asset_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^vfx\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "Visual effect on the target (vfx.*)."
+    },
+    "sfx_asset_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sfx\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "Sound on use (sfx.*)."
+    }
+  },
+  "additionalProperties": false,
+  "description": "A skill. Active skills run Effects on their target; passive skills apply PassiveModifiers while learned. Costs and timings are formulas of level.",
+  "required": [
+    "id",
+    "name"
+  ]
+}

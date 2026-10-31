@@ -1,0 +1,568 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ItemDef",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^item\\.[a-z0-9_]+$",
+      "description": "Item id, e.g. item.red_potion."
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name."
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Display description."
+    },
+    "kind": {
+      "enum": [
+        "consumable",
+        "equip",
+        "card",
+        "material",
+        "quest",
+        "ammo"
+      ],
+      "description": "Item kind."
+    },
+    "weight": {
+      "type": "integer",
+      "description": "Weight per unit (counts toward weight_limit)."
+    },
+    "buy_price": {
+      "type": "integer",
+      "description": "NPC shop buy price in currency."
+    },
+    "sell_price": {
+      "type": "integer",
+      "description": "NPC shop sell price in currency."
+    },
+    "max_stack": {
+      "type": "integer",
+      "description": "Maximum units per inventory stack. Default 1 (not stackable)."
+    },
+    "icon_asset_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^icon\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "UI icon (icon.*)."
+    },
+    "ground_asset_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(model\\.|sprite\\.)[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "Visual of the item lying on the ground (model.* or sprite.*)."
+    },
+    "consumable": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "effects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "anyOf": [
+              {
+                "properties": {
+                  "type": {
+                    "const": "damage"
+                  },
+                  "magic": {
+                    "type": "boolean",
+                    "description": "True to use the magic damage formula; false (default) for physical."
+                  },
+                  "multiplier": {
+                    "type": "string",
+                    "description": "Formula scaling the base damage, e.g. \"1 + level * 0.3\". Default \"1\"."
+                  },
+                  "element": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "enum": [
+                      "neutral",
+                      "fire",
+                      "water",
+                      "earth",
+                      "wind",
+                      "holy",
+                      "shadow",
+                      "poison",
+                      "ghost",
+                      "undead",
+                      null
+                    ],
+                    "description": "Element id (Elements). Null uses the attacker's attack element."
+                  },
+                  "hits": {
+                    "type": "integer",
+                    "description": "Number of hits; the total is split visually only. Default 1."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "damage: physical or magic damage. The base amount comes from the physical or magic damage formula in formulas.yaml, scaled by Multiplier, then the element table applies."
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "heal"
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "HP restored, as a formula."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "heal: restore HP."
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "restore_sp"
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "SP restored, as a formula."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "restore_sp: restore SP."
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "apply_status"
+                  },
+                  "status_id": {
+                    "type": "string",
+                    "pattern": "^status\\.[a-z0-9_]+$",
+                    "description": "Status id (status.*)."
+                  },
+                  "chance": {
+                    "type": "string",
+                    "description": "Probability 0–1 as a formula. Default \"1\" (always). The caller rolls with injected RNG."
+                  },
+                  "duration_ms": {
+                    "type": "string",
+                    "description": "Duration in milliseconds, as a formula."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "apply_status: apply a status with a chance and a duration.",
+                "required": [
+                  "status_id"
+                ]
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "remove_status"
+                  },
+                  "status_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^status\\.[a-z0-9_]+$"
+                    },
+                    "description": "Status ids to remove."
+                  },
+                  "tags": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "Remove every active status carrying any of these tags (Tags)."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "remove_status: cleanse statuses by id and/or tag."
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "modify_stat"
+                  },
+                  "modifier": {
+                    "type": "object",
+                    "properties": {
+                      "stat": {
+                        "type": "string",
+                        "enum": [
+                          "str",
+                          "agi",
+                          "vit",
+                          "int",
+                          "dex",
+                          "luk",
+                          "max_hp",
+                          "max_sp",
+                          "atk",
+                          "matk",
+                          "def",
+                          "mdef",
+                          "hit",
+                          "flee",
+                          "crit",
+                          "aspd",
+                          "move_speed",
+                          "cast_time_mod",
+                          "hp_regen",
+                          "sp_regen",
+                          "weight_limit"
+                        ],
+                        "description": "Primary or derived stat id (Stats), e.g. str, atk."
+                      },
+                      "op": {
+                        "enum": [
+                          "flat",
+                          "percent",
+                          "override"
+                        ],
+                        "description": "How the value combines with the stat."
+                      },
+                      "value": {
+                        "type": "string",
+                        "description": "Amount as a formula string, so it can be a constant (\"5\") or scaled (\"level * 2\", \"refine * 3\"). Only whitelisted formula variables are allowed."
+                      }
+                    },
+                    "additionalProperties": false,
+                    "description": "The modifier to apply."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "modify_stat: a temporary stat modifier. Used in OnApply; it lasts as long as the status and is removed with it."
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "knockback"
+                  },
+                  "cells": {
+                    "type": "integer",
+                    "description": "Distance in cells. Stops early at unwalkable cells."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "knockback: push the target away from the source."
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "teleport"
+                  },
+                  "to_save_point": {
+                    "type": "boolean",
+                    "description": "Go to the character's save point; other fields are ignored."
+                  },
+                  "map_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ],
+                    "pattern": "^map\\.[a-z0-9_]+$",
+                    "description": "Destination map id (map.*). Null means the current map."
+                  },
+                  "x": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Destination cell X. Null (with Y) means a random walkable cell."
+                  },
+                  "y": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Destination cell Y. Null (with X) means a random walkable cell."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "teleport: move the caster. With ToSavePoint it goes to the save point; otherwise to MapId (or the current map) at X/Y (or a random walkable cell when they are omitted)."
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "summon"
+                  },
+                  "monster_id": {
+                    "type": "string",
+                    "pattern": "^monster\\.[a-z0-9_]+$",
+                    "description": "Monster id (monster.*)."
+                  },
+                  "count": {
+                    "type": "integer",
+                    "description": "How many to spawn. Default 1."
+                  },
+                  "duration_ms": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "description": "Lifetime in milliseconds; null means until killed."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "summon: spawn monsters near the caster.",
+                "required": [
+                  "monster_id"
+                ]
+              },
+              {
+                "properties": {
+                  "type": {
+                    "const": "area"
+                  },
+                  "radius": {
+                    "type": "integer",
+                    "description": "Radius in cells (Chebyshev). 0 is the target cell only."
+                  },
+                  "friendly": {
+                    "type": "boolean",
+                    "description": "True to affect allies (heals, buffs); false (default) to affect enemies."
+                  },
+                  "effects": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/properties/consumable/properties/effects/items"
+                    },
+                    "description": "Effects applied to each entity in the area."
+                  }
+                },
+                "additionalProperties": false,
+                "description": "area: apply child effects to every valid entity within Radius cells (Chebyshev, i.e. a square) of the effect's target."
+              }
+            ],
+            "description": "One unit of gameplay behavior (ARCHITECTURE §6.3). Skills, consumables, cards and statuses are lists of effects. In content each effect is a map whose type key selects the concrete record; the discriminator → type table is Effects. Type is computed from the concrete record, so it can never disagree with the record's shape."
+          },
+          "description": "Effects applied to the user."
+        },
+        "cooldown_ms": {
+          "type": "integer",
+          "description": "Cooldown in milliseconds before this item can be used again."
+        },
+        "consumed": {
+          "type": "boolean",
+          "description": "True (default) to remove one unit on use."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Consumable data; set when Kind is Consumable."
+    },
+    "equip": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "head_top",
+              "head_mid",
+              "head_low",
+              "body",
+              "weapon",
+              "shield",
+              "garment",
+              "footgear",
+              "accessory_1",
+              "accessory_2"
+            ]
+          },
+          "description": "Slots the item occupies when equipped (EquipSlots), e.g. [weapon, shield] for a two-handed weapon."
+        },
+        "weapon_type": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "unarmed",
+            "dagger",
+            "sword_1h",
+            "sword_2h",
+            "spear",
+            "axe",
+            "mace",
+            "staff",
+            "bow",
+            "knuckle",
+            null
+          ],
+          "description": "Weapon type (WeaponTypes); null for non-weapons."
+        },
+        "weapon_atk": {
+          "type": "integer",
+          "description": "Weapon attack; the formula variable weapon_atk."
+        },
+        "attack_range": {
+          "type": "integer",
+          "description": "Auto-attack range in cells for weapons. Default 1 (melee)."
+        },
+        "element": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "neutral",
+            "fire",
+            "water",
+            "earth",
+            "wind",
+            "holy",
+            "shadow",
+            "poison",
+            "ghost",
+            "undead",
+            null
+          ],
+          "description": "Attack element of a weapon (Elements); null means neutral."
+        },
+        "min_base_level": {
+          "type": "integer",
+          "description": "Minimum base level to equip. 0 means none."
+        },
+        "job_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^job\\.[a-z0-9_]+$"
+          },
+          "description": "Jobs that may equip it (job.*). Empty means all."
+        },
+        "card_slots": {
+          "type": "integer",
+          "description": "Number of card sockets."
+        },
+        "refinable": {
+          "type": "boolean",
+          "description": "True if the item can be refined (formula variable refine)."
+        },
+        "modifiers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "stat": {
+                "type": "string",
+                "enum": [
+                  "str",
+                  "agi",
+                  "vit",
+                  "int",
+                  "dex",
+                  "luk",
+                  "max_hp",
+                  "max_sp",
+                  "atk",
+                  "matk",
+                  "def",
+                  "mdef",
+                  "hit",
+                  "flee",
+                  "crit",
+                  "aspd",
+                  "move_speed",
+                  "cast_time_mod",
+                  "hp_regen",
+                  "sp_regen",
+                  "weight_limit"
+                ],
+                "description": "Primary or derived stat id (Stats), e.g. str, atk."
+              },
+              "op": {
+                "enum": [
+                  "flat",
+                  "percent",
+                  "override"
+                ],
+                "description": "How the value combines with the stat."
+              },
+              "value": {
+                "type": "string",
+                "description": "Amount as a formula string, so it can be a constant (\"5\") or scaled (\"level * 2\", \"refine * 3\"). Only whitelisted formula variables are allowed."
+              }
+            },
+            "additionalProperties": false,
+            "description": "A change to one stat, from equipment, a card, a job bonus, a passive skill or a status. The engine attaches the source when it applies the modifier, so the definition has none.",
+            "required": [
+              "stat"
+            ]
+          },
+          "description": "Modifiers while equipped; values may use refine."
+        },
+        "visual_asset_key": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^model\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+          "description": "Worn visual (model.*). The manifest entry says whether it is skinned to the rig or attached to an attach point (ARCHITECTURE §7.5). Null means no visible change."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Equipment data; set when Kind is Equip."
+    },
+    "card": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "slots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "head_top",
+              "head_mid",
+              "head_low",
+              "body",
+              "weapon",
+              "shield",
+              "garment",
+              "footgear",
+              "accessory_1",
+              "accessory_2"
+            ]
+          },
+          "description": "Equipment slots whose items may hold this card (EquipSlots)."
+        },
+        "modifiers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/properties/equip/properties/modifiers/items"
+          },
+          "description": "Modifiers while socketed in equipped gear."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Card data; set when Kind is Card."
+    }
+  },
+  "additionalProperties": false,
+  "description": "Any item. Kind-specific data lives in optional sub-blocks rather than subclasses, so YAML stays flat and the schema simple. Exactly the block matching Kind should be set (validator rule).",
+  "required": [
+    "id",
+    "name"
+  ]
+}
