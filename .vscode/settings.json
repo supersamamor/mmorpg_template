@@ -7,10 +7,10 @@
     "schemas/status.schema.json": "content/statuses/**/*.yaml",
     "schemas/quest.schema.json": "content/quests/**/*.yaml",
     "schemas/npc.schema.json": "content/npcs/**/*.yaml",
-    "schemas/dialogue.schema.json": "content/dialogues/**/*.yaml",
+    "schemas/dialogue.schema.json": "content/dialogue/**/*.yaml",
     "schemas/drop_table.schema.json": "content/drops/**/*.yaml",
     "schemas/map.schema.json": "content/maps/**/*.yaml",
-    "schemas/exp_table.schema.json": "content/exp/**/*.yaml",
+    "schemas/exp_table.schema.json": "content/exp_tables.yaml",
     "schemas/element_table.schema.json": "content/elements.yaml",
     "schemas/formula_set.schema.json": "content/formulas.yaml"
   }
