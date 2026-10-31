@@ -1,0 +1,18 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <!-- T-005 throwaway spike. Not the real client (that starts in T-206). -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- The prebuilt 4.7.2 Android template only accepts net9.0 (export error otherwise). -->
+    <TargetFramework Condition=" '$(GodotTargetPlatform)' == 'android' ">net9.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>MobileSpike</RootNamespace>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Force the netstandard2.1 build: that is the one the real client will load (ADR-001). -->
+    <ProjectReference Include="../../../src/Game.Shared/Game.Shared.csproj"
+                      SetTargetFramework="TargetFramework=netstandard2.1" />
+    <!-- SharedProbe reaches Game.Shared through reflection; keep all of it under trimming / NativeAOT. -->
+    <TrimmerRootAssembly Include="Game.Shared" />
+  </ItemGroup>
+</Project>
