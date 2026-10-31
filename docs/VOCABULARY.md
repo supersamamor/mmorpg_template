@@ -21,7 +21,40 @@ Add new terms here in the same change that introduces them.
 Ids: lowercase, `a-z0-9_`, one prefix. Display names are separate fields.
 
 ## Asset key prefixes
-`sprite.`, `icon.`, `tile.`, `anim.`, `sfx.`, `music.`, `ui.`, `font.`, `portrait.`
+| Prefix      | Asset                                              |
+|-------------|----------------------------------------------------|
+| `model.`    | 3D model (`.glb`): character, monster, equipment, prop |
+| `anim.`     | Animation library for one rig                      |
+| `scene.`    | Godot scene, e.g. a map's visual scene             |
+| `tex.`      | Standalone texture                                 |
+| `mat.`      | Material                                           |
+| `vfx.`      | Visual effect (particles, decals)                  |
+| `sprite.`   | 2D image used in the 3D world (billboard, ground marker) |
+| `icon.`     | UI icon                                            |
+| `ui.`       | Other UI art                                       |
+| `portrait.` | Dialogue portrait                                  |
+| `sfx.`      | Sound effect                                       |
+| `music.`    | Music track                                        |
+| `font.`     | Font                                               |
+
+## World units
+Distances, ranges and AoE sizes are in **cells** (1 cell = 1 world unit, Chebyshev distance).
+`move_speed` is in **cells per second**.
+
+## Directions (facing)
+`n`, `ne`, `e`, `se`, `s`, `sw`, `w`, `nw`
+
+## Cell flags
+`walkable`, `blocks_los`
+
+## Map object types
+`spawn`, `warp`, `npc`, `zone` — zone kinds: `safe`, `pvp`
+
+## Attach points
+`head`, `face`, `mouth`, `back`, `hand_r`, `hand_l`
+
+## Animation ids
+`idle`, `walk`, `attack`, `cast`, `hit`, `die`, `sit`, `pick_up`
 
 ## Primary stats
 | Id    | Name      | Primary influence                      |

@@ -5,49 +5,76 @@
 A reusable MMORPG **template**: the engine is generic, the game is data.
 Replacing `/content` and `/themes/<name>` should produce a different game with zero code changes.
 
+The game ships as a **3D** title on **Android and iOS** phones (landscape). Desktop builds
+(Windows/macOS/Linux) exist only for development and testing. Why 3D on a 2D grid, and why
+Godot: see [ADR-001](decisions/ADR-001-3d-mobile.md).
+
 ## 2. Solution layout
 
 ```
 /src
   Game.Shared      Pure domain: definition records, stat/modifier pipeline,
                    formula evaluator, effect model, combat & leveling math,
-                   message contracts. No I/O. Referenced by server, tools, client.
+                   grid math (cells, directions, LOS), message contracts.
+                   No I/O. Referenced by server, tools, client.
   Game.Content     YAML loading, registries, cross-reference validation,
-                   JSON Schema generation. Hot-reload in dev.
+                   JSON Schema generation, client bundle export. Hot-reload in dev.
   Game.Server      Host: tick loop, world/map instances, AOI, entity systems,
                    WebSocket gateway, persistence (PostgreSQL), event bus.
-  Game.Tools       CLI: `validate`, `schema`, `stats` (balance reports).
+  Game.Tools       CLI: `validate`, `schema`, `stats`, `export-client`.
 /tests
   Game.Tests       Unit + golden-value tests (xUnit).
-/client            Godot 4 C# project. Renders state, plays effects, sends intents.
-/content           Game definitions (YAML) + maps (Tiled .tmj).
-/themes/default    Art/audio/fonts + asset-manifest.json.
-/docs              This folder.
+/client            Godot 4 .NET project (3D). Renders state, plays effects, sends intents.
+  addons/map_authoring   Editor plugin: bakes + exports map logic grids.
+/content           Game definitions (YAML) + map logic grids (exported JSON).
+/themes/default    Models, animations, textures, map scenes, VFX, audio, UI, fonts
+                   + asset-manifest.json.
+/docs              This folder. Decisions in /docs/decisions (ADRs).
 ```
 
 Dependency direction: `Shared ← Content ← Server/Tools`, `Shared ← Client`.
 `Game.Shared` must never reference anything else in the solution.
 
+`Game.Shared` targets `net10.0;netstandard2.1` with C# 9. Godot's .NET runtime is older than
+.NET 10, and iOS builds are AOT-compiled and trimmed, so Shared must also avoid reflection-heavy
+code and runtime code generation. `Game.Content` is server/tools only — the client never parses YAML.
+
 ## 3. Runtime model
 
 ```
- Godot client                     .NET server (authoritative, 10 Hz)
- ───────────                      ──────────────────────────────────
- input → Intent ──WebSocket──►    Gateway → session → intent queue
+ Godot client (Android/iOS)       .NET server (authoritative, 10 Hz)
+ ──────────────────────────       ──────────────────────────────────
+ tap → Intent ──── wss ──────►    Gateway → session → intent queue
                                   Tick: drain intents → validate → systems
                                         (movement, AI, combat, status, regen,
                                          spawn, quest) → events → AOI diff
- render ◄──── Snapshot/Delta ───  Outbound per-client deltas (nearby only)
+ 3D render ◄── Snapshot/Delta ──  Outbound per-client deltas (nearby only)
 ```
 
 - **Intents in, state out.** Clients never send results.
-- **Area of Interest:** maps are split into cells; a client receives entities within N cells.
+- **3D presentation, 2D simulation.** The server simulates on a cell grid on the ground plane
+  (§4). The client turns cells into 3D positions, terrain height, animation and effects.
+- **Area of Interest:** maps are split into AOI cells; a client receives entities within N of them.
 - **Map instances:** each map runs in its own instance; warps move a character between instances.
 - **Persistence:** player state saved on interval, on map change, and on logout. Content is never in the DB.
+- **Mobile sessions are flaky** — the network layer assumes drops and app suspension (§10).
 
-## 4. Content system
+## 4. World space & movement
 
-### 4.1 Registry
+- **Cell = 1 world unit.** The logic grid lies on the X/Z plane (Godot is Y-up). Cell `(x, y)`
+  maps to world `(x + 0.5, ground_height, y + 0.5)`.
+- **8-direction movement.** A diagonal step is allowed only if both orthogonal neighbours are
+  walkable (no corner cutting) and costs √2 in pathing and in time.
+- **Facing** is one of 8 directions (VOCABULARY). The client rotates the model smoothly toward it.
+- **Speed:** derived stat `move_speed`, in cells per second.
+- **Ranges and AoE** are in cells, Chebyshev distance. **Line of sight** is a grid line test
+  over cells flagged `blocks_los`.
+- **Height is visual only.** The client places entities on the terrain by raycast. The server
+  never uses height in v1. Multi-floor maps, bridges, jumping and flying are non-goals.
+
+## 5. Content system
+
+### 5.1 Registry
 On startup, `Game.Content` loads every YAML file under `/content` into typed registries
 (`Registry<ItemDef>`, `Registry<SkillDef>`, …) keyed by string id, then runs validation:
 
@@ -56,68 +83,179 @@ On startup, `Game.Content` loads every YAML file under `/content` into typed reg
 - every referenced id exists (job → skills, quest → items/monsters/npcs, map → monsters/warps)
 - every asset key exists in the active theme's manifest
 - every formula parses and only uses known variables
+- every map has a logic grid; spawns, warps and NPCs sit on walkable cells; warp targets exist
+- every map grid was exported from the current version of its scene (§5.3)
 
 Any failure prevents startup and is reported with file + path.
 
-### 4.2 Definition types (initial)
+### 5.2 Definition types (initial)
 `JobDef`, `SkillDef`, `ItemDef` (consumable | equip | card | etc), `MonsterDef`,
 `StatusDef` (buffs/debuffs), `QuestDef`, `NpcDef`, `DialogueDef`, `DropTableDef`,
-`MapDef` (metadata; geometry from Tiled), `ExpTableDef`, `ElementTableDef`.
+`MapDef` (metadata + grid reference), `ExpTableDef`, `ElementTableDef`.
 
-### 4.3 Maps
-Authored in Tiled. Engine reads:
-- tile layers → render only (client)
-- `collision` layer → walkability grid (server)
-- object layers: `spawns`, `warps`, `npcs`, `zones` (safe/pvp), using custom properties
-  that reference content ids (e.g. `monster: monster.slime`, `count: 20`, `respawn: 10`).
+### 5.3 Maps
+A map has three parts that share its id:
 
-## 5. Core mechanics model
+| Part | Where | Used by |
+|------|-------|---------|
+| Visual scene | Godot 3D scene in the theme, by asset key (`scene.map.starter_town`) | client |
+| Logic grid | `content/maps/<name>.grid.json`, generated, committed | server, validator |
+| Metadata | `content/maps/<name>.yaml` (`MapDef`: name, scene key, music key, grid file) | all |
 
-### 5.1 Stats & modifiers
+- **Authoring:** in the Godot editor. The `map_authoring` plugin bakes walkability from the
+  scene's collision shapes (one downward ray per cell, slope limit), then the designer paints
+  overrides. Spawns, warps, NPCs and zones are marker nodes with metadata that reference content
+  ids (e.g. `monster: monster.slime`, `count: 20`, `respawn: 10`).
+- **Export:** the plugin writes the grid file: size, cell flags (bit-packed), object lists
+  `spawns`, `warps`, `npcs`, `zones`, and a hash of the source scene. `validate` fails when the
+  scene changed after the last export.
+- **Theme caveat:** a theme re-skins maps, it does not re-lay them out. A replacement scene must
+  match the existing grid, or the grid must be re-exported (that is a content change).
+
+### 5.4 Server content vs client content
+The server loads everything. The client gets only what it needs to display: names,
+descriptions, asset keys, skill targeting info, UI text. That is the **client bundle**.
+
+- `Game.Tools export-client` writes `client-content.json` from the loaded registries, plus a
+  content hash. The bundle is packed into the app.
+- Drop tables, AI, spawn data, formulas and quest internals are never in the bundle.
+- On login the server sends its content hash; a mismatch means "update required".
+
+## 6. Core mechanics model
+
+### 6.1 Stats & modifiers
 `FinalStat = (Base + ΣFlat) × (1 + ΣPercent)` evaluated in priority order.
 Modifier sources: base allocation, job bonus, equipment, cards, refine, statuses.
 Each modifier carries its source so it can be removed cleanly (unequip, buff expiry).
-Derived stats (ATK, MATK, DEF, HIT, FLEE, CRIT, ASPD, MaxHP, MaxSP) come from formulas.
+Derived stats (ATK, MATK, DEF, HIT, FLEE, CRIT, ASPD, MaxHP, MaxSP, move speed) come from formulas.
 
-### 5.2 Formulas
+### 6.2 Formulas
 Expression strings in `content/formulas.yaml`, evaluated with a sandboxed expression
 library. Variables are whitelisted (stats, levels, skill level, target stats). Compiled once at load.
 
-### 5.3 Effects
+### 6.3 Effects
 Skills, consumables, cards and statuses are lists of **effects**. Effect types are the
 only place gameplay behavior lives in code (see VOCABULARY.md). New skill = new YAML.
 New *kind* of behavior = new effect type + tests.
 
-### 5.4 Quests
+### 6.4 Quests
 State machine per quest: `prerequisites → steps[objective] → rewards`.
 Objectives listen to the event bus (`MonsterKilled`, `ItemAcquired`, `NpcTalked`, …).
 Quest state per character is persisted as `{questId, stepIndex, counters}`.
 
-### 5.5 Progression
+### 6.5 Progression
 Base level + job level, separate EXP tables. Stat points per base level and skill points
 per job level come from data. Job change requirements from `JobDef`.
 
-## 6. Theming (asset swap)
+## 7. Client
+
+### 7.1 Platforms & rendering
+- Android 8.0+ (API 26), arm64-v8a. iOS 15+, arm64. Landscape only.
+- Godot **Mobile** renderer (Vulkan / Metal). The **Compatibility** renderer (OpenGL ES 3) is
+  the fallback for Android devices with poor Vulkan drivers — T-005 decides when it is used.
+- Desktop builds use the same renderer and input code (mouse acts as touch).
+
+### 7.2 Camera
+Fixed-pitch 3/4 perspective that follows the player. Pinch (or scroll wheel) zooms within a
+clamped range; optional rotation in 45° steps. Camera numbers are client config, not content.
+
+### 7.3 Input
+- Tap ground → raycast → cell → `MoveTo` intent. A tap marker shows at once; the character
+  moves when the server confirms (≤ 1 tick).
+- Tap an entity → target it (attack / talk / pick up, by entity type).
+- Hotbar buttons → `UseSkill`. Ground-target skills: pick the skill, then tap a cell.
+- Long-press → info / context menu. A virtual joystick is backlog.
+
+### 7.4 UI
+Godot Control nodes anchored to the device **safe area** (notches, home indicator). Minimum
+touch target 48 dp (Android) / 44 pt (iOS). A UI-scale setting. Text is never baked into textures.
+
+### 7.5 Characters & equipment
+Modular 3D characters. Each body type has one shared rig. Equipment is either:
+- **skinned** to that rig (body armor, garment, footgear) — swapped as meshes, or
+- **attached** to a named attach point (weapon, shield, headgear) — a bone attachment.
+
+The item's visual asset key points to a manifest entry that says which (§8), so changing
+equipment visuals is data only.
+
+### 7.6 Animation
+Animation ids (VOCABULARY) are shared by every model on the same rig. Server events
+(`attack`, `cast`, `hit`, `die`) map to animation ids. The client may delay a damage number to
+the impact frame, but that is visual only — outcomes are already decided by the server.
+
+### 7.7 Theme mounting
+`themes/<theme>` is mounted into the Godot project at `res://themes/<theme>` (a directory
+junction/symlink in dev; copied and packed at export). Downloading themes after install is a non-goal.
+
+## 8. Theming (asset swap)
 
 `themes/<theme>/asset-manifest.json` maps asset keys to files plus metadata:
 
 ```json
 {
-  "sprite.monster.slime": { "file": "sprites/monsters/slime.png", "frame": [32, 32], "anims": { "idle": [0,3], "walk": [4,7] } },
-  "icon.item.knife":      { "file": "icons/knife.png" },
-  "sfx.hit.light":        { "file": "audio/hit_light.ogg" }
+  "model.monster.slime":    { "file": "models/monsters/slime.glb", "rig": "blob", "anims": "anim.blob" },
+  "anim.humanoid":          { "file": "anims/humanoid.glb", "rig": "humanoid",
+                              "clips": { "idle": "Idle", "walk": "Walk", "attack": "Slash", "die": "Death" } },
+  "model.equip.short_blade":{ "file": "models/weapons/short_blade.glb", "attach": "hand_r" },
+  "model.equip.leather_vest":{ "file": "models/armor/leather_vest.glb", "skinned": "humanoid" },
+  "scene.map.starter_town": { "file": "maps/starter_town.tscn" },
+  "icon.item.short_blade":  { "file": "icons/short_blade.png" },
+  "sfx.hit.light":          { "file": "audio/hit_light.ogg" }
 }
 ```
 
-Active theme is a config setting. Characters use **layered paper-doll sprites**
-(body, head, headgear, weapon, shield) each by asset key, so equipment changes visuals via data.
+Rig names are theme-internal; the validator checks that a model, its animation library and its
+skinned equipment use the same rig. Active theme is a config setting.
 
-## 7. Security baseline
+| Asset | Format |
+|-------|--------|
+| Models, rigs, animations | glTF 2.0 binary (`.glb`), authored in Blender |
+| Textures | PNG source; imported as VRAM-compressed (ASTC, ETC2 fallback) |
+| Map scenes | Godot scenes (`.tscn`) |
+| Audio | OGG Vorbis |
+| Fonts | TTF / OTF |
+
+Binary assets are stored with Git LFS.
+
+## 9. Mobile budgets
+
+These are requirements, not goals. **Reference devices:** a 2020-era mid-range Android phone
+(4 GB RAM, Adreno 610 / Mali-G52 class) and an iPhone 11. T-005 confirms or adjusts these numbers.
+
+| Budget | Value |
+|--------|-------|
+| Frame rate | 30 fps locked on reference devices; 60 fps option on high-end |
+| Draw calls | ≤ 100 in a typical scene |
+| Visible triangles | ≤ 150k |
+| Character | ≤ 5k triangles, 1 material, ≤ 1024² texture |
+| Animated characters on screen | 40 at full rate; further ones at reduced animation rate |
+| Real-time shadows | Player only by default; off on low settings |
+| App memory | ≤ 1 GB |
+| Initial install | ≤ 200 MB |
+| Network | ≤ 10 KB/s average per client with 50 visible entities |
+| Battery | No per-frame work while nothing changes; 30 fps cap in menus |
+
+## 10. Networking on mobile
+
+- **TLS required:** `wss://` everywhere except local dev. Cleartext `ws://` is allowed only in
+  debug builds (Android network-security config, iOS ATS exception).
+- **Disconnects are normal.** When a socket drops or the app is backgrounded, the server keeps
+  the character in the world for a grace period (server config), then saves and logs it out.
+- **Resume:** the client reconnects with a resume token and receives a full snapshot, then deltas.
+- **Latency:** the client renders ~2 ticks behind the newest snapshot and interpolates.
+  It tolerates cellular jitter and does not predict combat.
+- **Bandwidth:** JSON first. Switch to MessagePack if measured traffic exceeds the §9 budget.
+
+## 11. Security baseline
 - Server validates every intent (range, cooldown, SP, line of sight, ownership).
 - Rate-limit intents per session.
 - Passwords hashed (Argon2/BCrypt). Session tokens, not credentials, on the socket.
 - Item operations in DB transactions; item instances have unique ids (dupe auditing).
+- The client is untrusted (CLAUDE.md rule 11); the client bundle holds display data only.
+- Store rules: in-app account deletion (Apple and Google require it); Sign in with Apple if any
+  other third-party login is offered; iOS privacy manifest and Play data-safety form kept current.
 
-## 8. Non-goals for v1
-Sharding/multi-server, client prediction beyond movement interpolation,
-PvP balance, guild wars, cash shop, mobile client.
+## 12. Non-goals for v1
+Sharding/multi-server, client prediction beyond movement interpolation, PvP balance,
+guild wars, cash shop / in-app purchases, multi-floor maps / jumping / flying,
+downloading content or themes after install, web client, tablets-first layout, controller support.
