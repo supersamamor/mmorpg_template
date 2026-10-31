@@ -1,0 +1,37 @@
+# Dev-only database for the MMORPG template.
+# Start:  docker compose up -d      Stop: docker compose down
+# Wipe:   docker compose down -v    (deletes all character/account data)
+services:
+  postgres:
+    image: postgres:17
+    container_name: mmo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mmo
+      POSTGRES_PASSWORD: mmo_dev_password   # dev only - change for anything shared
+      POSTGRES_DB: mmo_game
+    ports:
+      - "5432:5432"
+    volumes:
+      - mmo_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mmo -d mmo_game"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Optional web UI for the DB: http://localhost:8081  (login: dev@local.test / admin)
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: mmo-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: dev@local.test
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "8081:80"
+    depends_on:
+      - postgres
+
+volumes:
+  mmo_pgdata:

@@ -1,0 +1,43 @@
+# ---------- .NET ----------
+bin/
+obj/
+*.user
+*.suo
+*.rsuser
+.vs/
+TestResults/
+*.trx
+*.coverage
+coverage*.xml
+
+# ---------- Godot ----------
+.godot/
+.import/
+export_presets.cfg
+*.translation
+/client/build/
+/client/exports/
+
+# ---------- IDEs ----------
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+*.swp
+
+# ---------- OS ----------
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ---------- Secrets / local ----------
+.env
+.env.*
+!.env.example
+appsettings.Development.local.json
+*.pfx
+*.key
+
+# ---------- Logs ----------
+logs/
+*.log

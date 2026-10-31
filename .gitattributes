@@ -1,0 +1,27 @@
+# Normalize line endings (Windows dev, Linux server/CI)
+* text=auto eol=lf
+*.ps1  text eol=crlf
+*.bat  text eol=crlf
+*.sln  text eol=crlf
+
+# Content & code: diffable text
+*.cs    text diff=csharp
+*.json  text
+*.yaml  text
+*.yml   text
+*.tmj   text
+*.tsj   text
+*.tscn  text
+*.tres  text
+*.md    text
+
+# Binary assets (consider Git LFS once the art library grows)
+*.png   binary
+*.jpg   binary
+*.webp  binary
+*.aseprite binary
+*.wav   binary
+*.ogg   binary
+*.mp3   binary
+*.ttf   binary
+*.otf   binary
