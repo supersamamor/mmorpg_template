@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Game.Shared\Game.Shared.csproj" />
+    <ProjectReference Include="..\Game.Content\Game.Content.csproj" />
+  </ItemGroup>
+</Project>

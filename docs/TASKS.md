@@ -27,7 +27,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
-| T-001 | Solution skeleton & build config | Claude Code | Sonnet 5.5 | [T-001](../tasks/prompts/T-001.md) | — | Ready | |
+| T-001 | Solution skeleton & build config | Claude Code | Sonnet 5.5 | [T-001](../tasks/prompts/T-001.md) | — | Review | |
 | T-002 | Definition records (Game.Shared) | Claude Code | Opus 5.5 | [T-002](../tasks/prompts/T-002.md) | T-001 | Ready | Core contract — review carefully |
 | T-003 | JSON Schema generation (`schema` CLI) | Claude Code | Sonnet 5.5 | [T-003](../tasks/prompts/T-003.md) | T-002 | Ready | |
 | T-004 | Sample content set (YAML) | Claude Code | Sonnet 5.5 | [T-004](../tasks/prompts/T-004.md) | T-003 | Ready | Original names only |
