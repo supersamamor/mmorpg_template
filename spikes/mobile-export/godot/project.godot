@@ -1,0 +1,33 @@
+; T-005 mobile export spike (throwaway). See docs/MOBILE_BUILD.md.
+
+config_version=5
+
+[application]
+
+config/name="T-005 Mobile Spike"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.7", "C#", "Mobile")
+; Lets the in-app "Renderer" button switch Mobile <-> Compatibility (takes effect on next launch).
+config/project_settings_override="user://override.cfg"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=0
+
+[dotnet]
+
+project/assembly_name="MobileSpike"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
+textures/vram_compression/import_etc2_astc=true

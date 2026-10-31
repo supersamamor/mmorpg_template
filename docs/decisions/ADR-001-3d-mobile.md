@@ -50,4 +50,57 @@ must be checked at that point.
   the YAML loader and must not hold server-only data.
 
 ## Spike results
-_Filled in by T-005._
+T-005, 2026-11-01. Project: `spikes/mobile-export/`. How to reproduce: [MOBILE_BUILD.md](../MOBILE_BUILD.md).
+
+### Verdict
+
+| Platform | Result | Why |
+|----------|--------|-----|
+| Android | **Pending device run** | Build exported; waiting for measurements on a physical phone. |
+| iOS | **Blocked** | No Mac available. A C# Godot project can only be exported to iOS from macOS (NativeAOT + Xcode toolchain). Nothing was measured on iOS; the AOT/trimming risk is still open. |
+
+### Versions
+- **Godot 4.7.2-stable, .NET build.** `Godot.NET.Sdk/4.7.2`. GodotSharp 4.7.2 ships for net8.0, so desktop and
+  iOS target **net8.0**; the prebuilt **Android template only accepts net9.0**, so Android targets **net9.0**
+  (conditional `TargetFramework` in the csproj). Built with the .NET 10.0.401 SDK.
+- Runtime on device: Android uses the **Mono** runtime (`UseMonoRuntime`); iOS uses **NativeAOT**
+  (`PublishAot`, trimmed) — set by the Godot SDK, not by us.
+- `Game.Shared` is referenced as its `netstandard2.1` build (`SetTargetFramework`), and rooted for the
+  trimmer (`TrimmerRootAssembly`), because the probe reaches it by reflection.
+
+### Android build (measured on the PC)
+- arm64-v8a export works from Windows with JDK 17, build-tools 35.0.1, platform android-35, no Gradle build.
+- The APK contains `Game.Shared.dll` (netstandard2.1), the Mono runtime and the pinned dev certificate.
+- **APK size: 103.9 MB debug, 102.1 MB release** (release signed with the debug key, only to measure size).
+  About 60 MB uncompressed of it is static Mono archives (`libmonosgen-2.0.a` alone is 44 MB) that the app
+  cannot use at runtime. Under the 200 MB install budget, but stripping them is the first size win.
+
+### Desktop sanity run (not a budget measurement)
+Windows 11, AMD Ryzen 7 7735U with integrated "AMD Radeon(TM) Graphics", 1280×720 window, cap 30, 40 characters (High, 4,968 tris each),
+shadows PlayerOnly, after `--autoreport` (12 s):
+
+| Renderer | avg fps (10 s) | worst frame | draw calls | triangles |
+|----------|----------------|-------------|------------|-----------|
+| Mobile (Vulkan) | 29.5 | 144.5 ms (start-up shader compile) | 98 | 216.9k |
+| Compatibility (OpenGL 3.3) | 29.1 | 150.0 ms (start-up) | 98 | 217.2k |
+
+`wss://127.0.0.1:8443` connected with certificate verification (pinned dev cert); `ws://` RTT on localhost
+was 26–33 ms because the socket is polled once per frame at 30 fps. `Game.Shared` loaded (`.NETStandard,Version=v2.1`).
+
+### Findings so far
+- **§9 is internally inconsistent:** 40 characters × the 5k-triangle character cap = 200k triangles, above the
+  150k scene cap before any terrain or props. The spike measures both 40 × ~5.0k ("High") and 40 × ~3.2k ("Low").
+  §9 needs either a ~3k character cap or a higher scene cap — decided from the device numbers.
+- **Draw calls sit right at the cap:** the test scene (40 skinned characters, 10 trees of 2 meshes, 2 batched prop
+  MultiMeshes, ground, one shadow-casting character) measured 98 draw calls. Godot does not batch separate skinned
+  meshes, so every on-screen character costs at least one draw call; map scenery must be MultiMesh-batched.
+- **`Game.Shared` has no public types yet** (T-002 in progress), so on device the probe can only prove that the
+  assembly is packaged, loads and exposes metadata. The probe already constructs a record and reads `IdPrefix`
+  once T-002 lands; re-run on device after T-002 merges.
+- **.NET 8 and .NET 9 both reach end of support on 2026-11-10**, and Godot 4.7.2 builds the client against them
+  (net8.0 desktop/iOS, net9.0 Android). Moving the client to net10.0 depends on a Godot release whose templates
+  accept it.
+- **Cleartext `ws://` is policed by the client, not the OS** (expected; confirm on device): Godot uses native
+  sockets, which Android's network-security config and iOS ATS do not cover.
+- **Command-line export hangs after writing the APK** (Godot 4.7.2, `--headless --export-*`): it must be killed.
+  CI will need a timeout + file check until this is fixed upstream.

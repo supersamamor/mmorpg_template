@@ -1,0 +1,5 @@
+<Project>
+  <!-- Throwaway spike (T-005). Stops MSBuild from importing the repo's root
+       Directory.Build.props (net10.0 default, warnings-as-errors), which would
+       fight the Godot SDK's own settings. -->
+</Project>

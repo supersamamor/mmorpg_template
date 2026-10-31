@@ -1,0 +1,8 @@
+# Export presets hold no secrets here (debug keystore lives in Godot editor settings),
+# and the spike needs them reviewable, so re-include them despite the root ignore.
+!export_presets.cfg
+
+# Build output and generated dev certificates
+builds/
+echo-server/certs/
+godot/certs/*.crt
