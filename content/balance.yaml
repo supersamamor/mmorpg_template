@@ -70,11 +70,15 @@ ai:
   repath_interval_ms: 500
   # A monster that gave up a chase walks home; if it is not home after 15 seconds (blocked, path too long), it is put back there.
   return_timeout_ms: 15000
+  # A monster that gave up and walked home heals to full on arrival, so hit-and-run cannot wear it down. Set false to keep its wounds.
+  heal_on_return: true
 death:
   # A player who respawns comes back with half of their max HP, so the first fight after a death is not a free one.
   respawn_hp_percent: 50
   # Dying costs 1% of the EXP the current level needs: a small sting, and it never takes a level away.
   exp_penalty_percent: 1
+  # A dead monster stays 2 seconds (Dead, not targetable) so clients can play the death animation, then it is removed. Its respawn timer counts from the death.
+  corpse_ms: 2000
 loot:
   # For 3 seconds after a drop only the player who dealt the most damage may pick it up; then anyone may.
   priority_ms: 3000
@@ -82,3 +86,7 @@ loot:
   lifetime_ms: 60000
   # Drops scatter onto walkable cells up to 1 cell from where the monster died, so several drops stay tappable.
   spread_radius: 1
+regen:
+  # Natural regeneration (hp_regen / sp_regen from formulas.yaml) pauses for 5 seconds after an entity deals or takes damage,
+  # so it helps between fights without making a fight itself easier.
+  out_of_combat_delay_ms: 5000

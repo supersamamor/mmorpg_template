@@ -95,7 +95,7 @@ code and runtime code generation. `Game.Content` is server/tools only — the cl
   `balance.yaml` `movement`; a search that exceeds either returns "no path" with a reason.
 - **Facing** is one of 8 directions (VOCABULARY). The client rotates the model smoothly toward it.
 - **Speed:** derived stat `move_speed`, in cells per second.
-- **Movement system** (`Game.Server/World/MovementSystem`): `MoveTo` and `StopMove` intents; the last intent per entity in a tick wins. The path is searched on the tick from the entity's current cell and a rejected `MoveTo` (reason term in `MoveRejected`) leaves a move in progress running. Each tick a walking entity advances by 100 ms at its `move_speed` (read from its stat sheet when the move starts and after every tick in which a cell was reached; an entity with no speed cannot move), in entity id order. **Entities do not block each other in v1**: they may share a cell. Reaching a cell that has a warp (only by arriving, never by spawning or standing there) stops the entity and requests the warp. Other systems see movement only through `Entity.Cell` / `Facing` and the events `MovementStarted`, `CellReached`, `MovementStopped`, `MoveRejected`.
+- **Movement system** (`Game.Server/World/MovementSystem`): `MoveTo` and `StopMove` intents; the last intent per entity in a tick wins. The path is searched on the tick from the entity's current cell and a rejected `MoveTo` (reason term in `MoveRejected`) leaves a move in progress running. Each tick a walking entity advances by 100 ms at its `move_speed` (read from its stat sheet when the move starts and after every tick in which a cell was reached; an entity with no speed cannot move), in entity id order. **Entities do not block each other in v1**: they may share a cell. Reaching a cell that has a warp (only by arriving, never by spawning or standing there) stops a **player** and requests the warp; other kinds (monsters) walk over warp cells as over any walkable cell. Other systems see movement only through `Entity.Cell` / `Facing` and the events `MovementStarted`, `CellReached`, `MovementStopped`, `MoveRejected`.
 - **Ranges and AoE** are in cells, Chebyshev distance. **Line of sight** is a grid line test
   over cells flagged `blocks_los`.
   It is a supercover walk between cell centres, symmetric, and the two end cells never block. A line that passes exactly through a
@@ -232,8 +232,10 @@ Two systems in `Game.Server/World/Monsters`, after movement in the tick (`Server
 - **Spawner.** On an instance's first tick every `spawns` entry of the grid gets `count` monsters on random walkable cells of its
   area (the instance's seeded random). A monster is a `Monster` entity with `DefinitionId` = its monster id and a stat sheet from the
   stats pipeline (primary stats as base, listed derived stats as overrides); its spawn cell is its **home** (`EntitySpawned`). Each entry
-  has `count` slots, so it never holds more. On `EntityDied` (combat) the spawner despawns the monster and refills the slot
-  `respawn_seconds` of simulated time after the tick of the death, anywhere in the area. Respawn timers always run.
+  has `count` slots, so it never holds more. On `EntityDied` (combat) the slot is freed and refilled
+  `respawn_seconds` of simulated time after the tick of the death, anywhere in the area. Respawn timers always run. The dead monster stays
+  in the world as a corpse (`Dead`, not targetable) for `death.corpse_ms` so clients can play its death animation, then the spawner
+  despawns it; the respawn timer does not wait for the corpse, so a short `respawn_seconds` may put the new monster beside the old corpse.
 - **State machine** (`AiStates`), per monster, in entity id order; numbers from `MonsterDef` (`ai.*`, `attack_range`, `aspd`) and
   `balance.yaml` `ai` (think, wander, re-path, return timeout):
 
@@ -247,6 +249,7 @@ Two systems in `Game.Server/World/Monsters`, after movement in the tick (`Server
   chase / attack ──target gone or dead · farther than chase_range from home · no path──► return (AggroLost)
   return ──home──► idle   (ignores players and hits; after return_timeout it is put on its home cell)
   ```
+  A monster back on its home cell raises `MonsterReturned`; combat then resets its damage shares and, if `ai.heal_on_return` (default true), heals it to full.
 - **The AI only decides.** It walks with `MoveTo` / `StopMove` intents (applied on the next tick) and follows the movement events; it asks
   combat to attack with the `AttackRequested` event (attacker, target, both cells, range, time). Combat (§6.7) re-checks and resolves the hit and
   publishes `DamageDealt` / `EntityDied`, which the AI and the spawner listen to. Nobody calls another system.
@@ -259,7 +262,11 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
 
 - **Vitals.** Players and monsters with a stat sheet get `Entity.Vitals` (current HP/SP) when they enter a map, full at `max_hp`; they travel
   with the entity across warps. Every tick they are clamped to a changed sheet's maxima (a higher max does not refill). HP never goes below 0.
-- **Per tick:** intents (`AttackTarget`, `StopAttack`, `Respawn`) → vitals clamp → the monster `AttackRequested` events raised last tick,
+- **Regeneration.** Each tick every living player and monster regenerates `hp_regen` / `sp_regen` points per second of simulated time (the derived
+  stats; fractions of a point are carried, so the total follows the rate whatever the tick length), never above max. Dealing or taking an
+  attack (a miss included) pauses it for `regen.out_of_combat_delay_ms`. The dead never regenerate. A monster healed back to full by it
+  forgets its damage shares, as when a hit leaves it at full HP.
+- **Per tick:** intents (`AttackTarget`, `StopAttack`, `Respawn`) → vitals clamp and regeneration → the monster `AttackRequested` events raised last tick,
   in order, each re-checked (both alive on this map, a player target not in a `safe` zone, Chebyshev distance within the request's range,
   and for a ranged attack (range above 1) line of sight between the two cells; otherwise `AttackRefused` with a reason) → player auto-attacks in entity id order → ground item expiry.
 - **Player auto-attack.** `AttackTarget` (monsters only; refused in a `safe` zone) keeps attacking until the target dies or leaves, the player
@@ -273,9 +280,9 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
 - **Hits.** Every attack goes through `CombatResolver` with one reused `AttackContext` (monster element, race and size from `MonsterDef`;
   weapon inputs 0 until equipment). HP changes by the damage, clamped to 0..max; `DamageDealt` carries amount, `hit`/`crit`/`miss` and HP left.
 - **Death** at 0 HP, in the same step: `Dead = true` (movement stops it, the router drops its intents, combat ignores it), `EntityDied`. A monster
-  is despawned and respawned by the spawner. A player stays dead on its cell until `Respawn`, then comes back with
-  `death.respawn_hp_percent` of max HP at the respawn point (the `new_character` start cell for now); on death it loses
-  `death.exp_penalty_percent` of its level's requirement, never more than its EXP (no level loss).
+  stays as a corpse for `death.corpse_ms`, is then despawned, and is respawned by the spawner. A player stays dead on its cell until `Respawn`, then comes back with
+  `death.respawn_hp_percent` of max HP at the respawn point of the map it died on (the map's `respawn` cell, else the first warp arriving on it, else the `new_character` start); on death it loses
+  `death.exp_penalty_percent` of its level's requirement, never more than its EXP (`ProgressionRules.LoseBaseExp`: no level loss).
 - **EXP.** Per monster, the HP each player took since its last full-HP moment. On death the players still on the map share `base_exp` /
   `job_exp` in proportion (largest remainder; ties to the first hitter; the shares add up exactly) through `ProgressionRules`, which raise
   `ExpGained` and `PlayerProgressed` (`LevelUp` / `JobLevelUp`); the sheet takes the new levels and job bonuses. Progression is kept per

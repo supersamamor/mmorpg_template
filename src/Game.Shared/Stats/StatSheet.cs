@@ -36,6 +36,9 @@ namespace Game.Shared.Stats
         private static readonly int[] TargetSlots = BuildSlots(FormulaSymbols.Default, FormulaVariables.TargetPrefix);
         private static readonly int BaseLevelSlot = FormulaSymbols.Default.SlotOf(FormulaVariables.BaseLevel);
         private static readonly int JobLevelSlot = FormulaSymbols.Default.SlotOf(FormulaVariables.JobLevel);
+        private static readonly int TargetBaseLevelSlot = FormulaSymbols.Default.SlotOf(FormulaVariables.TargetPrefix + FormulaVariables.BaseLevel);
+        private static readonly int TargetJobLevelSlot = FormulaSymbols.Default.SlotOf(FormulaVariables.TargetPrefix + FormulaVariables.JobLevel);
+        private static readonly int TargetLevelSlot = FormulaSymbols.Default.SlotOf(FormulaVariables.TargetLevel);
 
         private readonly DerivedStatFormulas _formulas;
         private readonly FormulaContext _context = new FormulaContext(FormulaSymbols.Default);
@@ -96,17 +99,19 @@ namespace Game.Shared.Stats
         {
             if (context == null) throw new ArgumentNullException(nameof(context));
             Refresh();
-            var prefix = asTarget ? FormulaVariables.TargetPrefix : string.Empty;
             var symbols = context.Symbols;
             if (ReferenceEquals(symbols, FormulaSymbols.Default))
             {
                 var slots = asTarget ? TargetSlots : CasterSlots;
                 for (var i = 0; i < _values.Length; i++) context[slots[i]] = _values[i];
+                context[asTarget ? TargetBaseLevelSlot : BaseLevelSlot] = Base.BaseLevel;
+                context[asTarget ? TargetJobLevelSlot : JobLevelSlot] = Base.JobLevel;
+                if (asTarget) context[TargetLevelSlot] = Base.BaseLevel;
+                return;
             }
-            else
-            {
-                for (var i = 0; i < _values.Length; i++) Set(context, prefix + StatIndex.NameOf(i), _values[i]);
-            }
+
+            var prefix = asTarget ? FormulaVariables.TargetPrefix : string.Empty;
+            for (var i = 0; i < _values.Length; i++) Set(context, prefix + StatIndex.NameOf(i), _values[i]);
             Set(context, prefix + FormulaVariables.BaseLevel, Base.BaseLevel);
             Set(context, prefix + FormulaVariables.JobLevel, Base.JobLevel);
             if (asTarget) Set(context, FormulaVariables.TargetLevel, Base.BaseLevel);

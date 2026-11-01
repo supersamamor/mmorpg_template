@@ -40,3 +40,13 @@ public sealed record AttackRequested(EntityId Attacker, EntityId Target, GridCel
     /// <inheritdoc />
     public string Name => EventNames.AttackRequested;
 }
+
+/// <summary>
+/// <c>MonsterReturned</c>: <c>Monster</c>, which had given up a chase, is back on its home <c>Cell</c> (walked there or was put back after
+/// <c>ai.return_timeout_ms</c>). Combat (T-302) reacts: the damage shares reset, and with <c>ai.heal_on_return</c> its HP is full again.
+/// </summary>
+public sealed record MonsterReturned(EntityId Monster, GridCell Cell) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.MonsterReturned;
+}

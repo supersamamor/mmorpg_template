@@ -138,7 +138,7 @@ Sizes: `small`, `medium`, `large`
 `LevelUp`, `JobLevelUp`, `JobChanged`, `SkillLearned`, `QuestStarted`,
 `QuestStepCompleted`, `QuestCompleted`, `StatusApplied`, `StatusExpired`,
 `EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`, `MovementStarted`, `CellReached`,
-`MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `AttackRequested`, `AttackRefused`, `AttackStopped`,
+`MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `MonsterReturned`, `AttackRequested`, `AttackRefused`, `AttackStopped`,
 `ExpGained`, `ExpLost`, `PlayerRespawned`, `ItemDropped`, `ItemExpired`
 
 ## Area of interest

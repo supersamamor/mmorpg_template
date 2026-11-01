@@ -174,6 +174,10 @@
         "return_timeout_ms": {
           "type": "integer",
           "description": "A returning monster that is not home after this long is put back on its home cell."
+        },
+        "heal_on_return": {
+          "type": "boolean",
+          "description": "A monster that gave up a chase and arrives home is healed to full HP when true (the damage-share table resets either way). Defaults to true: otherwise a monster could be worn down by hit-and-run."
         }
       },
       "additionalProperties": false,
@@ -189,6 +193,10 @@
         "exp_penalty_percent": {
           "type": "integer",
           "description": "Base EXP lost on death, in percent of the current base level's requirement (0 = no penalty). Rounded down; never takes EXP below 0, so a character never loses a level. Nothing is lost at the max level, where EXP is always 0."
+        },
+        "corpse_ms": {
+          "type": "integer",
+          "description": "How long a dead monster stays in the world (Dead, not targetable) before it is despawned, so clients can play its death animation. Simulated milliseconds from the tick it died in; 0 despawns it on the next tick. The monster's respawn timer counts from the death, not from the despawn."
         }
       },
       "additionalProperties": false,
@@ -212,6 +220,17 @@
       },
       "additionalProperties": false,
       "description": "Ground items a monster drops: where they land, who may take them and how long they stay."
+    },
+    "regen": {
+      "type": "object",
+      "properties": {
+        "out_of_combat_delay_ms": {
+          "type": "integer",
+          "description": "An entity that deals or takes damage does not regenerate for this many simulated milliseconds afterwards (and the dead never do)."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Natural HP and SP regeneration."
     }
   },
   "additionalProperties": false,

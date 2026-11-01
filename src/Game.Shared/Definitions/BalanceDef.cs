@@ -33,6 +33,9 @@ namespace Game.Shared.Definitions
 
         /// <summary>Ground items a monster drops: where they land, who may take them and how long they stay.</summary>
         public LootBalanceDef Loot { get; init; } = new LootBalanceDef();
+
+        /// <summary>Natural HP and SP regeneration.</summary>
+        public RegenBalanceDef Regen { get; init; } = new RegenBalanceDef();
     }
 
     /// <summary>Player death and respawn. Percentages are whole-number percents (50 means half).</summary>
@@ -46,6 +49,25 @@ namespace Game.Shared.Definitions
         /// 0, so a character never loses a level. Nothing is lost at the max level, where EXP is always 0.
         /// </summary>
         public int ExpPenaltyPercent { get; init; }
+
+        /// <summary>
+        /// How long a dead monster stays in the world (<c>Dead</c>, not targetable) before it is despawned, so clients can play its death
+        /// animation. Simulated milliseconds from the tick it died in; 0 despawns it on the next tick. The monster's respawn timer counts
+        /// from the death, not from the despawn.
+        /// </summary>
+        public int CorpseMs { get; init; }
+    }
+
+    /// <summary>
+    /// Natural regeneration of HP and SP. The rates are the derived stats <c>hp_regen</c> and <c>sp_regen</c> (points per second,
+    /// <c>formulas.yaml</c>); this is only when it pauses.
+    /// </summary>
+    public sealed record RegenBalanceDef
+    {
+        /// <summary>
+        /// An entity that deals or takes damage does not regenerate for this many simulated milliseconds afterwards (and the dead never do).
+        /// </summary>
+        public int OutOfCombatDelayMs { get; init; }
     }
 
     /// <summary>Ground items. Times are simulated milliseconds; distances are cells (Chebyshev).</summary>
@@ -86,6 +108,12 @@ namespace Game.Shared.Definitions
 
         /// <summary>A returning monster that is not home after this long is put back on its home cell.</summary>
         public int ReturnTimeoutMs { get; init; }
+
+        /// <summary>
+        /// A monster that gave up a chase and arrives home is healed to full HP when true (the damage-share table resets either way).
+        /// Defaults to true: otherwise a monster could be worn down by hit-and-run.
+        /// </summary>
+        public bool HealOnReturn { get; init; } = true;
     }
 
     /// <summary>

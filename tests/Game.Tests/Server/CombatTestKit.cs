@@ -25,13 +25,15 @@ public static class TestCombat
     /// penalty, 3 s loot priority, 10 s item lifetime, spread radius 1.
     /// </summary>
     public static BalanceDef Balance(int penaltyPercent = 10, int spreadRadius = 1, int priorityMs = 3000, int lifetimeMs = 10000,
-        int attackRange = 1)
+        int attackRange = 1, int corpseMs = 0, int? regenDelayMs = null, bool healOnReturn = true)
     {
         var sample = TestGrids.SampleContent.Balance;
         return sample with
         {
             Combat = sample.Combat with { PlayerAttackRange = attackRange, PlayerRepathIntervalMs = 300 },
-            Death = new DeathBalanceDef { RespawnHpPercent = 50, ExpPenaltyPercent = penaltyPercent },
+            Death = new DeathBalanceDef { RespawnHpPercent = 50, ExpPenaltyPercent = penaltyPercent, CorpseMs = corpseMs },
+            Regen = new RegenBalanceDef { OutOfCombatDelayMs = regenDelayMs ?? sample.Regen.OutOfCombatDelayMs },
+            Ai = sample.Ai with { HealOnReturn = healOnReturn },
             Loot = new LootBalanceDef { PriorityMs = priorityMs, LifetimeMs = lifetimeMs, SpreadRadius = spreadRadius },
             NewCharacter = sample.NewCharacter with { StartMapId = MapId, StartX = 1, StartY = 1 },
         };
@@ -40,7 +42,7 @@ public static class TestCombat
     /// <summary>A monster with fixed combat stats as overrides, so tests do not depend on the derived formulas.</summary>
     public static MonsterDef Monster(string id, int maxHp = 50, int atk = 10, int def = 0, int hit = 1000, int flee = 0, double aspd = 1,
         double speed = 4, long baseExp = 10, long jobExp = 6, string[]? drops = null, bool aggressive = false, int aggroRange = 0,
-        int attackRange = 1, string element = Elements.Neutral) => new()
+        int attackRange = 1, string element = Elements.Neutral, double hpRegen = 0, int chaseRange = 30) => new()
     {
         Id = id,
         Name = id,
@@ -51,13 +53,13 @@ public static class TestCombat
         Stats = new Dictionary<string, double>
         {
             [PrimaryStats.Agi] = 1, [DerivedStats.MaxHp] = maxHp, [DerivedStats.Atk] = atk, [DerivedStats.Def] = def, [DerivedStats.Hit] = hit,
-            [DerivedStats.Flee] = flee, [DerivedStats.Aspd] = aspd, [DerivedStats.MoveSpeed] = speed, [DerivedStats.Crit] = 0,
+            [DerivedStats.Flee] = flee, [DerivedStats.Aspd] = aspd, [DerivedStats.MoveSpeed] = speed, [DerivedStats.Crit] = 0, [DerivedStats.HpRegen] = hpRegen,
         },
         AttackRange = attackRange,
         BaseExp = baseExp,
         JobExp = jobExp,
         DropTableIds = drops ?? [],
-        Ai = new MonsterAiDef { Aggressive = aggressive, AggroRange = aggroRange, ChaseRange = 30 },
+        Ai = new MonsterAiDef { Aggressive = aggressive, AggroRange = aggroRange, ChaseRange = chaseRange },
     };
 
     /// <summary>A drop table of the given entries.</summary>
@@ -67,7 +69,8 @@ public static class TestCombat
     /// A new character's sheet (base/job level 1, start stats, start job bonuses), the way the gateway builds it, with test overrides for
     /// aspd and move speed (null keeps the formula) and optional extra overrides.
     /// </summary>
-    public static StatSheet PlayerSheet(double? aspd = 2, double? speed = 5, int? flee = null, int? maxHp = null)
+    public static StatSheet PlayerSheet(double? aspd = 2, double? speed = 5, int? flee = null, int? maxHp = null, double? hpRegen = null,
+        double? spRegen = null, int? maxSp = null)
     {
         var simulator = Simulator.Value;
         StatSheet sheet;
@@ -81,6 +84,9 @@ public static class TestCombat
         if (speed is { } s) sheet.Modifiers.Add("test", DerivedStats.MoveSpeed, ModifierOp.Override, s);
         if (flee is { } f) sheet.Modifiers.Add("test", DerivedStats.Flee, ModifierOp.Override, f);
         if (maxHp is { } h) sheet.Modifiers.Add("test", DerivedStats.MaxHp, ModifierOp.Override, h);
+        if (hpRegen is { } hr) sheet.Modifiers.Add("test", DerivedStats.HpRegen, ModifierOp.Override, hr);
+        if (spRegen is { } sr) sheet.Modifiers.Add("test", DerivedStats.SpRegen, ModifierOp.Override, sr);
+        if (maxSp is { } sp) sheet.Modifiers.Add("test", DerivedStats.MaxSp, ModifierOp.Override, sp);
         return sheet;
     }
 
@@ -102,13 +108,14 @@ public static class TestCombat
     public static MapGrid Open(int width, int height, GridSpawn[]? spawns = null, GridRect[]? safe = null) =>
         Grid(Enumerable.Repeat(new string('.', width), height).ToArray(), spawns, safe);
 
-    public static CombatContent Content(MonsterCatalog catalog, BalanceDef balance, IEnumerable<DropTableDef>? drops = null)
+    public static CombatContent Content(MonsterCatalog catalog, BalanceDef balance, IEnumerable<DropTableDef>? drops = null,
+        IReadOnlyDictionary<string, (string MapId, GridCell Cell)>? respawns = null)
     {
         var sample = TestGrids.SampleContent;
         var tables = sample.Drops.All.ToDictionary(d => d.Id, StringComparer.Ordinal);
         foreach (var d in drops ?? []) tables[d.Id] = d;
         return new CombatContent(CombatRules.Compile(sample.Formulas, sample.Elements, balance.Combat), catalog, balance, tables,
-            new ContentProgression(sample));
+            new ContentProgression(sample), respawns);
     }
 }
 
@@ -127,15 +134,15 @@ public sealed class CombatRig
 
     public CombatRig(MapGrid grid, IEnumerable<MonsterDef> monsters, BalanceDef? balance = null, IEnumerable<DropTableDef>? drops = null,
         bool ai = false, ulong seed = 1, AiBalanceDef? aiBalance = null, int bucketSize = 4, int viewRadius = 1,
-        Func<ITickSystem, ITickSystem>? wrap = null, bool aoi = false)
+        Func<ITickSystem, ITickSystem>? wrap = null, bool aoi = false, IReadOnlyDictionary<string, (string MapId, GridCell Cell)>? respawns = null)
     {
         Catalog = TestMonsters.Catalog(monsters.ToArray());
-        Content = TestCombat.Content(Catalog, balance ?? TestCombat.Balance(), drops);
+        Content = TestCombat.Content(Catalog, balance ?? TestCombat.Balance(), drops, respawns);
         wrap ??= s => s;
         var timings = aiBalance ?? TestMonsters.Ai;
         var pipeline = new SystemPipeline()
             .Add(() => wrap(new MovementSystem(TestGrids.Roomy)))
-            .Add(() => wrap(new MonsterSpawnerSystem(Catalog)));
+            .Add(() => wrap(new MonsterSpawnerSystem(Catalog, Content.Balance.Death.CorpseMs)));
         if (ai) pipeline.Add(() => wrap(new MonsterAiSystem(Catalog, timings, bucketSize, viewRadius)));
         pipeline.Add(() => wrap(new CombatSystem(Content, Progressions)));
         if (aoi) pipeline.Add(() => new AoiSystem(bucketSize, viewRadius));

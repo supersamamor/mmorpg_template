@@ -107,6 +107,22 @@ namespace Game.Shared.Progression
             return Gain(state, amount, _baseTable, true);
         }
 
+        /// <summary>
+        /// Takes base EXP away (the death penalty). Never below 0 EXP within the current level, so it never loses a level or EXP gathered
+        /// toward an earlier one; the base EXP at the max level is always 0, so nothing is lost there.
+        /// </summary>
+        /// <param name="state">The character; changed in place.</param>
+        /// <param name="amount">EXP to take; zero or negative does nothing.</param>
+        /// <returns>The EXP actually lost, between 0 and <paramref name="amount"/>.</returns>
+        public long LoseBaseExp(ProgressionState state, long amount)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            if (amount <= 0 || state.BaseExp <= 0) return 0;
+            var lost = Math.Min(amount, state.BaseExp);
+            state.BaseExp -= lost;
+            return lost;
+        }
+
         /// <summary>Adds job EXP for the current job, levelling up as many times as it pays for. See the class remarks for cap handling.</summary>
         /// <param name="state">The character; changed in place.</param>
         /// <param name="amount">EXP to add; zero or negative does nothing.</param>

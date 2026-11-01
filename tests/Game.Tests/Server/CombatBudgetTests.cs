@@ -121,6 +121,41 @@ public class CombatBudgetTests(ITestOutputHelper output)
     }
 
     [Fact]
+    public void Regenerating_a_crowd_allocates_nothing_per_tick()
+    {
+        // 300 hurt players and 100 hurt monsters, all regenerating HP and SP every tick: the cost the regeneration adds to combat.
+        var tank = TestCombat.Monster("monster.t_regen", maxHp: 100_000, hpRegen: 1);
+        var timed = new List<Timed>();
+        var rig = new CombatRig(TestCombat.Open(60, 40), [tank], wrap: s =>
+        {
+            var t = new Timed(s);
+            timed.Add(t);
+            return t;
+        });
+        var entities = new List<EntityId>();
+        for (var i = 0; i < 300; i++)
+            entities.Add(rig.AddPlayer(new GridCell(i % 60, i / 60), TestCombat.PlayerSheet(maxHp: 100_000, hpRegen: 1, spRegen: 1, maxSp: 100_000)));
+        for (var i = 0; i < 100; i++) entities.Add(rig.AddMonster(tank, new GridCell(i % 60, 10 + i / 60)));
+        rig.Ticks(2);
+        foreach (var id in entities)
+        {
+            rig.Get(id).Vitals!.Hp = 1;
+            rig.Get(id).Vitals!.Sp = 1;
+        }
+        rig.Ticks(50);
+        var combat = timed.Single(s => s.Inner is CombatSystem);
+        combat.Measure = true;
+        const int ticks = 200;
+        rig.Ticks(ticks);
+
+        var hp = rig.Get(entities[0]).Vitals!.Hp;
+        output.WriteLine($"regeneration of {entities.Count} hurt entities: combat {combat.Micros / ticks:0.0} us/tick (max {combat.MaxMicros:0} us), " +
+                         $"{combat.Bytes} B over {ticks} ticks (max {combat.MaxBytes} B per tick)");
+        hp.ShouldBeInRange(25, 27);   // it really regenerated: 1 HP/s for the 25 s since it was hurt
+        combat.MaxBytes.ShouldBe(0);
+    }
+
+    [Fact]
     public void A_steady_auto_attack_allocates_only_its_event()
     {
         var tank = TestCombat.Monster("monster.t_tank", maxHp: 1_000_000, atk: 1);
@@ -144,15 +179,13 @@ public class CombatBudgetTests(ITestOutputHelper output)
         var resolver = ResolverBytesPerHit();
         output.WriteLine($"combat tick with a hit: {hitMin} B, without: {idleMin} B; the shared resolver alone: {resolver} B per hit");
         idleMin.ShouldBe(0);
-        // Combat adds only the DamageDealt record (48 B) to what the shared CombatResolver allocates; its own path (context, vitals, damage
-        // log, timers) allocates nothing.
-        hitMin.ShouldBeLessThanOrEqualTo(resolver + 64);
+        // Combat adds only the DamageDealt record (48 B); the resolver and its own path (context, vitals, damage log, timers, regeneration)
+        // allocate nothing.
+        resolver.ShouldBe(0);
+        hitMin.ShouldBeLessThanOrEqualTo(64);
     }
 
-    /// <summary>
-    /// Bytes one <see cref="CombatResolver.Resolve"/> allocates with a reused context. Not 0 today: <c>StatSheet.WriteTo(asTarget: true)</c>
-    /// (T-104) concatenates <c>"t_" + "base_level"</c> and <c>"t_" + "job_level"</c> on every call (2 × 48 B). Reported as a follow-up.
-    /// </summary>
+    /// <summary>Bytes one <see cref="CombatResolver.Resolve"/> allocates with a reused context: 0 since T-308 cached the target-side stat slots.</summary>
     private static long ResolverBytesPerHit()
     {
         var content = TestGrids.SampleContent;
@@ -179,7 +212,7 @@ public class CombatBudgetTests(ITestOutputHelper output)
     {
         var bytes = ResolverBytesPerHit();
         output.WriteLine($"CombatResolver.Resolve: {bytes} B per hit");
-        bytes.ShouldBeLessThanOrEqualTo(96);   // the two target-level names above; must not grow
+        bytes.ShouldBe(0);
     }
 
     private static GridCell RandomCell(MapGrid grid, IRandom random)
