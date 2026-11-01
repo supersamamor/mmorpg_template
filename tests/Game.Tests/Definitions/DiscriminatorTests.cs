@@ -82,7 +82,7 @@ public class DiscriminatorTests
             {
               "id": "quest.test", "name": "Test",
               "steps": [ { "objectives": [ { "type": "kill", "monster_id": "monster.test", "count": 3 } ] } ],
-              "rewards": [ { "type": "zeny", "amount": 50 }, { "type": "unlock_job", "job_id": "job.test" } ]
+              "rewards": [ { "type": "currency", "amount": 50 }, { "type": "unlock_job", "job_id": "job.test" } ]
             }
             """;
         var quest = JsonSerializer.Deserialize<QuestDef>(json, Options)!;

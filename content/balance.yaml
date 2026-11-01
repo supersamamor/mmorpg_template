@@ -2,6 +2,8 @@
 # Tuning numbers that are not per-entity stats (ARCHITECTURE §6.5). Chances are 0-1 probabilities,
 # the same scale the hit_chance / crit_chance formulas in formulas.yaml return.
 name: Lumen Vale balance
+# What the single currency (engine id "currency") is called on screen.
+currency_name: crowns
 progression:
   # EXP curve for base levels. Its length sets the max base level (99 entries + 1 = level 99).
   base_exp_table_id: exp.base

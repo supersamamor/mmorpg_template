@@ -31,6 +31,20 @@ public sealed class MapGridRule : IValidationRule
                 RequireWalkable(grid, new GridCell(respawn.X, respawn.Y), "respawn", "respawn", (path, code, message) => context.Error(map.Id, path, code, message));
             Check(context, db, file, grid);
         }
+
+        // An unknown map is ReferenceRule's error; here only the cell on a map that has a grid.
+        foreach (var quest in db.Quests.All)
+        {
+            for (var s = 0; s < quest.Steps.Count; s++)
+            {
+                for (var o = 0; o < quest.Steps[s].Objectives.Count; o++)
+                {
+                    if (quest.Steps[s].Objectives[o] is not ReachObjective reach || !db.Grids.TryGetValue(reach.MapId, out var reachGrid)) continue;
+                    RequireWalkable(reachGrid, new GridCell(reach.X, reach.Y), $"steps[{s}].objectives[{o}]", "reach objective",
+                        (path, code, message) => context.Error(quest.Id, path, code, message));
+                }
+            }
+        }
     }
 
     private static void Check(ValidationContext context, Registry.ContentDatabase db, string file, MapGrid grid)

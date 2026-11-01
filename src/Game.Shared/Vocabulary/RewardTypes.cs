@@ -9,8 +9,8 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>item</c>: Items.</summary>
         public const string Item = "item";
 
-        /// <summary><c>zeny</c>: Currency (engine id <c>currency</c>).</summary>
-        public const string Zeny = "zeny";
+        /// <summary><c>currency</c>: Currency (engine id <c>currency</c>).</summary>
+        public const string Currency = "currency";
 
         /// <summary><c>skill_point</c>: Skill points.</summary>
         public const string SkillPoint = "skill_point";
@@ -28,7 +28,7 @@ namespace Game.Shared.Vocabulary
         public static readonly VocabularySet All = new VocabularySet(
             Exp,
             Item,
-            Zeny,
+            Currency,
             SkillPoint,
             StatPoint,
             UnlockJob,

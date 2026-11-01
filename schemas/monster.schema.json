@@ -122,7 +122,7 @@
         },
         "chase_range": {
           "type": "integer",
-          "description": "Distance in cells from its target beyond which the monster gives up."
+          "description": "Distance in cells from its home cell (not from its target) beyond which the monster gives up and returns."
         },
         "skills": {
           "type": "array",

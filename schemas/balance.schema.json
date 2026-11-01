@@ -10,6 +10,10 @@
       ],
       "description": "Optional editor-facing name."
     },
+    "currency_name": {
+      "type": "string",
+      "description": "Display name of the currency (engine id currency), as the client shows it. Cosmetic: no code reads it as logic."
+    },
     "progression": {
       "type": "object",
       "properties": {

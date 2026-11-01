@@ -403,7 +403,7 @@
               "accessory_2"
             ]
           },
-          "description": "Slots the item occupies when equipped (EquipSlots), e.g. [weapon, shield] for a two-handed weapon."
+          "description": "Slots the item fits (EquipSlots): it fits any one of the listed slots and occupies just that one when equipped, e.g. [accessory_1, accessory_2] for an accessory that may go in either."
         },
         "weapon_type": {
           "type": [

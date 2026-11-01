@@ -37,11 +37,11 @@ namespace Game.Shared.Definitions
         public int Count { get; init; } = 1;
     }
 
-    /// <summary><c>zeny</c>: give currency (engine id <see cref="Currencies.Currency"/>).</summary>
+    /// <summary><c>currency</c>: give currency (engine id <see cref="Currencies.Currency"/>).</summary>
     public sealed record CurrencyReward : RewardDef
     {
         /// <inheritdoc />
-        public override string Type => RewardTypes.Zeny;
+        public override string Type => RewardTypes.Currency;
 
         /// <summary>Amount of currency.</summary>
         public long Amount { get; init; }

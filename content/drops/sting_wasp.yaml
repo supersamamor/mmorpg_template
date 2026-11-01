@@ -4,3 +4,4 @@ name: Sting Wasp drops
 entries:
   - { item_id: item.wasp_stinger, chance: 0.45 }
   - { item_id: item.antidote, chance: 0.1 }
+  - { item_id: item.bone_dirk, chance: 0.003 }

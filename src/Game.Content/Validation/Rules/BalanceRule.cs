@@ -78,6 +78,9 @@ public sealed class BalanceRule : IValidationRule
         if (!db.Jobs.Contains(n.StartJobId))
             context.ErrorInFile(File, "new_character.start_job_id", ValidationCodes.RefMissing,
                 $"balance.yaml new_character refers to unknown job '{n.StartJobId}'.");
+        else if (!string.IsNullOrEmpty(db.Jobs.Get(n.StartJobId).ParentJobId))
+            context.ErrorInFile(File, "new_character.start_job_id", ValidationCodes.BalanceRange,
+                $"balance.yaml new_character.start_job_id '{n.StartJobId}' has a parent job; a new character starts as a root job.");
         if (!Directions.All.Contains(n.StartFacing))
             context.ErrorInFile(File, "new_character.start_facing", ValidationCodes.VocabUnknown,
                 $"balance.yaml new_character.start_facing '{n.StartFacing}' is not a direction ({string.Join(", ", Directions.All.Ordered)}).");

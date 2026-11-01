@@ -12,6 +12,9 @@ namespace Game.Shared.Definitions
         /// <summary>Optional editor-facing name.</summary>
         public string? Name { get; init; }
 
+        /// <summary>Display name of the currency (engine id <c>currency</c>), as the client shows it. Cosmetic: no code reads it as logic.</summary>
+        public string CurrencyName { get; init; } = "crowns";
+
         /// <summary>Stat point, skill point and level cap numbers.</summary>
         public ProgressionBalanceDef Progression { get; init; } = new ProgressionBalanceDef();
 

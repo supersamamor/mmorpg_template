@@ -119,6 +119,7 @@ Sizes: `small`, `medium`, `large`
 
 ## Equipment slots
 `head_top`, `head_mid`, `head_low`, `body`, `weapon`, `shield`, `garment`, `footgear`, `accessory_1`, `accessory_2`
+An item's `equip.slots` lists the slots it fits: it fits **any one** of them (an accessory listing `accessory_1` and `accessory_2` goes in either).
 
 ## Weapon types
 `unarmed`, `dagger`, `sword_1h`, `sword_2h`, `spear`, `axe`, `mace`, `staff`, `bow`, `knuckle`
@@ -130,11 +131,11 @@ Sizes: `small`, `medium`, `large`
 `kill`, `collect`, `talk`, `reach`, `level`, `job`, `use_item`, `equip`
 
 ## Reward types
-`exp`, `item`, `zeny`, `skill_point`, `stat_point`, `unlock_job`, `status`
+`exp`, `item`, `currency`, `skill_point`, `stat_point`, `unlock_job`, `status`
 
 ## Events (event bus)
 `EntitySpawned`, `EntityDied`, `MonsterKilled`, `DamageDealt`, `ItemAcquired`,
-`ItemUsed`, `ItemEquipped`, `NpcTalked`, `MapEntered`, `ZoneEntered`,
+`ItemUsed`, `ItemEquipped`, `NpcTalked`, `ZoneEntered`,
 `LevelUp`, `JobLevelUp`, `JobChanged`, `SkillLearned`, `QuestStarted`,
 `QuestStepCompleted`, `QuestCompleted`, `StatusApplied`, `StatusExpired`,
 `EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`, `MovementStarted`, `CellReached`,
@@ -174,7 +175,8 @@ does not see, `invalid_target` for itself or anything but a monster.
 In `DamageDealt`: `hit`, `crit`, `miss`
 
 ## Currency
-`zeny` (rename freely in data; engine id stays `currency`)
+Engine id `currency`; the display name is data (`currency_name` in `balance.yaml`, default "crowns").
+The reward type is also `currency`.
 
 ## Formula variables (whitelist)
 Caster: `base_level`, `job_level`, all primary & derived stat ids, `weapon_atk`, `refine`

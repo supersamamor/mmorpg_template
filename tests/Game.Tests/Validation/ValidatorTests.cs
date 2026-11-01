@@ -348,6 +348,7 @@ public class ValidatorTests : IDisposable
     [Fact]
     public void Unused_item_is_a_warning()
     {
+        Edit("drops/sting_wasp.yaml", "  - { item_id: item.bone_dirk, chance: 0.003 }\n", "");
         var issue = Single(Validate(), ValidationCodes.WarnUnusedItem);
 
         issue.Severity.ShouldBe(ValidationSeverity.Warning);

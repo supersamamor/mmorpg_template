@@ -285,6 +285,20 @@ public class GridContentTests : IDisposable
         issue.Severity.ShouldBe(ValidationSeverity.Error);
     }
 
+    [Theory]
+    [InlineData("x: 40, y: 12", "x: 30, y: 5", "not walkable")]
+    [InlineData("x: 40, y: 12", "x: 48, y: 0", "outside")]
+    public void Quest_reach_cell_must_be_walkable_on_the_maps_grid(string from, string to, string reason)
+    {
+        EditText("quests/gear_up.yaml", from, to);
+
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.GridCellBlocked);
+
+        issue.Path.ShouldBe("steps[2].objectives[0]");
+        issue.Message.ShouldContain(reason);
+        issue.Severity.ShouldBe(ValidationSeverity.Error);
+    }
+
     [Fact]
     public void Warp_on_a_non_walkable_cell()
     {
