@@ -46,7 +46,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-106 | Combat resolution (hit/crit/element/damage) | Claude Code | Opus 5.5 | [T-106](../tasks/prompts/T-106.md) | T-104, T-109 | Ready | |
 | T-107 | Golden-value tests + `stats` balance report | Claude Code | Sonnet 5.5 | [T-107](../tasks/prompts/T-107.md) | T-105, T-106 | Ready | |
 | T-108 | Independent review of Phase 0–1 | Codex | default | [T-108](../tasks/prompts/T-108.md) | T-107 | Ready | Findings → new tasks |
-| T-109 | Balance constants (`BalanceDef` + `balance.yaml`) | Claude Code | Sonnet 5.5 | [T-109](../tasks/prompts/T-109.md) | T-103 | In Progress | Added: T-105/T-106 need it |
+| T-109 | Balance constants (`BalanceDef` + `balance.yaml`) | Claude Code | Sonnet 5.5 | [T-109](../tasks/prompts/T-109.md) | T-103 | Review | Added: T-105/T-106 need it |
 
 ## Backlog (prompts written when the previous phase is Done)
 
