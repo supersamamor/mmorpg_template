@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Game.Content.Loading;
 using Game.Content.Validation;
+using Game.Shared.Formulas;
 
 namespace Game.Tests.Validation;
 
@@ -305,6 +306,30 @@ public class ValidatorTests : IDisposable
 
         ShouldBe(Single(report, ValidationCodes.WarnDialogueUnreachable), "dialogue/guide_intro.yaml", "nodes.orphan", ValidationSeverity.Warning);
         report.IsValid.ShouldBeTrue();
+    }
+
+    // ---- formulas ----------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Unknown_variable_in_item_modifier_is_an_error()
+    {
+        Edit("items/iron_blade.yaml", "value: \"1\"", "value: \"foo + 1\"");
+
+        var issue = Single(Validate(), FormulaErrorCodes.UnknownVariable);
+
+        ShouldBe(issue, "items/iron_blade.yaml", "equip.modifiers[0].value");
+        issue.Message.ShouldContain("foo");
+    }
+
+    [Fact]
+    public void Syntax_error_in_formulas_yaml_is_reported_on_that_file()
+    {
+        Edit("formulas.yaml", "physical_damage: max(1,", "physical_damage: max(1,,");
+
+        var issue = Validate().Errors.First(i => i.Path == "physical_damage");
+
+        issue.File.ShouldBe("formulas.yaml");
+        issue.Code.ShouldStartWith("formula.");
     }
 
     // ---- warnings ----------------------------------------------------------------------------------------------

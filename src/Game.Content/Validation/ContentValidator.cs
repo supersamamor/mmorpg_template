@@ -16,6 +16,7 @@ public static class ContentValidator
         new SkillTreeRule(),
         new JobChainRule(),
         new DialogueRule(),
+        new FormulaRule(),
         new FileNameRule(),
         new UnusedRule(),
     };
