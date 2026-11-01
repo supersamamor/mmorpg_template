@@ -4,7 +4,7 @@ using Game.Shared.Definitions;
 namespace Game.Content.Registry;
 
 /// <summary>
-/// The fully loaded, immutable content set: one <see cref="Registry{T}"/> per definition type plus the two
+/// The fully loaded, immutable content set: one <see cref="Registry{T}"/> per definition type plus the
 /// singleton root files. Produced by <see cref="ContentLoader.Load"/>; contains no cross-reference validation
 /// (T-102), so an id inside a definition may still point at nothing.
 /// </summary>
@@ -18,12 +18,12 @@ public sealed class ContentDatabase
         Registry<JobDef> jobs, Registry<SkillDef> skills, Registry<ItemDef> items, Registry<MonsterDef> monsters,
         Registry<StatusDef> statuses, Registry<QuestDef> quests, Registry<NpcDef> npcs, Registry<DialogueDef> dialogue,
         Registry<DropTableDef> drops, Registry<MapDef> maps, Registry<ExpTableDef> expTables,
-        FormulaSetDef formulas, ElementTableDef elements,
+        FormulaSetDef formulas, ElementTableDef elements, BalanceDef balance,
         IReadOnlyDictionary<string, SourceLocation>? sources = null)
     {
         Jobs = jobs; Skills = skills; Items = items; Monsters = monsters; Statuses = statuses; Quests = quests;
         Npcs = npcs; Dialogue = dialogue; Drops = drops; Maps = maps; ExpTables = expTables;
-        Formulas = formulas; Elements = elements;
+        Formulas = formulas; Elements = elements; Balance = balance;
         _sources = sources ?? new Dictionary<string, SourceLocation>();
         _registries = new IRegistry[] { jobs, skills, items, monsters, statuses, quests, npcs, dialogue, drops, maps, expTables };
     }
@@ -54,6 +54,9 @@ public sealed class ContentDatabase
     public FormulaSetDef Formulas { get; }
     /// <summary><c>content/elements.yaml</c>.</summary>
     public ElementTableDef Elements { get; }
+
+    /// <summary><c>content/balance.yaml</c>: progression numbers and combat clamps.</summary>
+    public BalanceDef Balance { get; }
 
     /// <summary>Every id-keyed registry, for uniform iteration.</summary>
     public IReadOnlyList<IRegistry> Registries => _registries;

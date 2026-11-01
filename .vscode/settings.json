@@ -12,6 +12,7 @@
     "schemas/map.schema.json": "content/maps/**/*.yaml",
     "schemas/exp_table.schema.json": "content/exp_tables.yaml",
     "schemas/element_table.schema.json": "content/elements.yaml",
-    "schemas/formula_set.schema.json": "content/formulas.yaml"
+    "schemas/formula_set.schema.json": "content/formulas.yaml",
+    "schemas/balance.schema.json": "content/balance.yaml"
   }
 }

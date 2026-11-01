@@ -123,4 +123,5 @@ Sizes: `small`, `medium`, `large`
 Caster: `base_level`, `job_level`, all primary & derived stat ids, `weapon_atk`, `refine`
 Target: `t_` prefix (e.g. `t_def`, `t_vit`, `t_level`)
 Skill: `level` (skill level)
+Balance-only: `stat_value` (current value of the stat being raised) is valid only in `balance.yaml` `progression.stat_point_cost`; `progression.stat_points_per_base_level` may use only `base_level`, `progression.skill_points_per_job_level` only `job_level`.
 Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`

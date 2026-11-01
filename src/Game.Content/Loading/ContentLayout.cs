@@ -25,6 +25,8 @@ public static class ContentLayout
 
     /// <summary>Root file holding the <see cref="FormulaSetDef"/>.</summary>
     public const string FormulasFile = "formulas.yaml";
+    /// <summary>Root file holding the <see cref="BalanceDef"/>.</summary>
+    public const string BalanceFile = "balance.yaml";
     /// <summary>Root file holding the <see cref="ElementTableDef"/>.</summary>
     public const string ElementsFile = "elements.yaml";
     /// <summary>Root file holding the <see cref="ExpTableDef"/> documents (one per <c>---</c> document).</summary>

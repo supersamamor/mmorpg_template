@@ -17,6 +17,7 @@ public static class ContentValidator
         new JobChainRule(),
         new DialogueRule(),
         new FormulaRule(),
+        new BalanceRule(),
         new FileNameRule(),
         new UnusedRule(),
     };
