@@ -56,12 +56,12 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-202 | Tick loop + map instances + event bus | Claude Code | Opus 5.5 | [T-202](../tasks/prompts/T-202.md) | T-201 | Review | Tier R review recommended (concurrency) |
 | T-203 | A* pathfinding + 8-direction grid movement, LOS | Claude Code | Sonnet 5.5 | [T-203](../tasks/prompts/T-203.md) | T-201 | Review | Pure `Game.Shared`; wired in by T-212 |
 | T-212 | Movement system: `MoveTo` intent → path → grid mover in the tick loop | Claude Code | Sonnet 5.5 | [T-212](../tasks/prompts/T-212.md) | T-202, T-203 | Review | |
+| T-204 | AOI grid + delta snapshots | Claude Code | Opus 5.5 | [T-204](../tasks/prompts/T-204.md) | T-202, T-212 | Ready | Adds tick phase 5; Tier R review recommended |
 
 ## Backlog (prompts written when the previous phase is Done)
 
 | ID | Phase | Task | Agent | Model | Status |
 |----|-------|------|-------|-------|--------|
-| T-204 | 2 | AOI grid + delta snapshots | Claude Code | Opus 5.5 | Backlog |
 | T-205 | 2 | WebSocket gateway (`wss`) + message contracts | Claude Code | Opus 5.5 | Backlog |
 | T-206 | 2 | Godot 3D client: map scene, camera, tap-to-move, interpolation | Claude Code | Sonnet 5.5 | Backlog |
 | T-207 | 2 | Theme mounting + asset manifest loader (glTF models, rigs, anims) | Claude Code | Sonnet 5.5 | Backlog |
