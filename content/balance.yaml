@@ -32,3 +32,8 @@ combat:
   max_crit_chance: 0.5
   # A critical hit deals 50% more damage. A formula, so it can scale later (e.g. with luk).
   crit_multiplier: "1.5"
+movement:
+  # Longest route, in cells, a path search may return (about the width of a screen of play). Longer routes are refused as "no path".
+  max_path_length: 64
+  # Nodes a single A* search may expand. Above the cell count of the largest sample map (48x32 = 1536), so no sample search is cut off.
+  max_nodes_expanded: 2048

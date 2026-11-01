@@ -69,6 +69,8 @@ public class BalanceTests : IDisposable
         balance.Combat.MaxCritChance.ShouldBe(0.5);
         Formula.Compile(balance.Combat.CritMultiplier).TryGetConstant(out var critMultiplier).ShouldBeTrue();
         critMultiplier.ShouldBe(1.5);
+        balance.Movement.MaxPathLength.ShouldBe(64);
+        balance.Movement.MaxNodesExpanded.ShouldBe(2048);
 
         var points = Formula.Compile(balance.Progression.StatPointsPerBaseLevel, FormulaSymbols.BaseLevelOnly);
         var ctx = new FormulaContext(FormulaSymbols.BaseLevelOnly);
@@ -129,6 +131,18 @@ public class BalanceTests : IDisposable
         var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);
         issue.File.ShouldBe("balance.yaml");
         issue.Path.ShouldBe("combat.max_hit_chance");
+    }
+
+    [Theory]
+    [InlineData("max_path_length: 64", "max_path_length: 0", "movement.max_path_length")]
+    [InlineData("max_nodes_expanded: 2048", "max_nodes_expanded: -5", "movement.max_nodes_expanded")]
+    public void Movement_limits_must_be_above_zero(string from, string to, string path)
+    {
+        Edit(from, to);
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);
+        issue.File.ShouldBe("balance.yaml");
+        issue.Path.ShouldBe(path);
+        issue.Line.ShouldBeGreaterThan(0);
     }
 
     [Fact]

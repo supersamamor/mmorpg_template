@@ -68,10 +68,16 @@ code and runtime code generation. `Game.Content` is server/tools only — the cl
   maps to world `(x + 0.5, ground_height, y + 0.5)`.
 - **8-direction movement.** A diagonal step is allowed only if both orthogonal neighbours are
   walkable (no corner cutting) and costs √2 in pathing and in time.
+- **Pathfinding** (`Game.Shared/World`): A* over the 8 neighbours, visited in the order n, ne, e, se, s, sw, w, nw. Costs are integers
+  (10 orthogonal, 14 diagonal) so ties never depend on floating point; among equal-`f` nodes the lower heuristic wins, then the lower
+  cell index (`y * width + x`). Paths exclude the start and include the goal. Limits (max path length, max nodes expanded) are
+  `balance.yaml` `movement`; a search that exceeds either returns "no path" with a reason.
 - **Facing** is one of 8 directions (VOCABULARY). The client rotates the model smoothly toward it.
 - **Speed:** derived stat `move_speed`, in cells per second.
 - **Ranges and AoE** are in cells, Chebyshev distance. **Line of sight** is a grid line test
   over cells flagged `blocks_los`.
+  It is a supercover walk between cell centres, symmetric, and the two end cells never block. A line that passes exactly through a
+  cell corner is blocked only if *both* cells beside that corner block; grazing a single blocking corner is allowed.
 - **Height is visual only.** The client places entities on the terrain by raycast. The server
   never uses height in v1. Multi-floor maps, bridges, jumping and flying are non-goals.
 
@@ -95,7 +101,7 @@ Any failure prevents startup and is reported with file + path.
 `JobDef`, `SkillDef`, `ItemDef` (consumable | equip | card | etc), `MonsterDef`,
 `StatusDef` (buffs/debuffs), `QuestDef`, `NpcDef`, `DialogueDef`, `DropTableDef`,
 `MapDef` (metadata + grid reference), `ExpTableDef`, `ElementTableDef`.
-Singleton root files: `FormulaSetDef` (`formulas.yaml`), `BalanceDef` (`balance.yaml`: stat/skill point rules, stat range, damage and chance clamps).
+Singleton root files: `FormulaSetDef` (`formulas.yaml`), `BalanceDef` (`balance.yaml`: stat/skill point rules, stat range, damage and chance clamps, path search limits).
 
 ### 5.3 Maps
 A map has three parts that share its id:
