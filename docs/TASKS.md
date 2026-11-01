@@ -58,6 +58,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-212 | Movement system: `MoveTo` intent → path → grid mover in the tick loop | Claude Code | Sonnet 5.5 | [T-212](../tasks/prompts/T-212.md) | T-202, T-203 | Review | |
 | T-204 | AOI grid + delta snapshots | Claude Code | Opus 5.5 | [T-204](../tasks/prompts/T-204.md) | T-202, T-212 | Review | Adds tick phase 5; Tier R review recommended |
 | T-205 | WebSocket gateway (`wss`) + message contracts | Claude Code | Opus 5.5 | [T-205](../tasks/prompts/T-205.md) | T-204 | Review | Restricted `Net/**` — approved by owner; Tier R review required |
+| T-209 | Client content bundle (`export-client`) + content hash check | Claude Code | Sonnet 5.5 | [T-209](../tasks/prompts/T-209.md) | T-205 | Ready | `Net/**` only for the hash check — approved by owner |
 
 ## Backlog (prompts written when the previous phase is Done)
 
@@ -66,7 +67,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-206 | 2 | Godot 3D client: map scene, camera, tap-to-move, interpolation | Claude Code | Sonnet 5.5 | Backlog |
 | T-207 | 2 | Theme mounting + asset manifest loader (glTF models, rigs, anims) | Claude Code | Sonnet 5.5 | Backlog |
 | T-208 | 2 | Map authoring plugin: bake walkability, markers, grid export | Claude Code | Opus 5.5 | Backlog |
-| T-209 | 2 | Client content bundle (`export-client`) + content hash check | Claude Code | Sonnet 5.5 | Backlog |
 | T-210 | 2 | Mobile session lifecycle: background, grace period, resume token | Claude Code | Opus 5.5 | Backlog |
 | T-211 | 2 | Touch input + mobile UI shell (safe area, scaling, hotbar) | Claude Code | Sonnet 5.5 | Backlog |
 | T-301 | 3 | Monster spawns, respawn, data-driven AI | Claude Code | Opus 5.5 | Backlog |
