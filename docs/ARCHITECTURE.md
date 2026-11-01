@@ -152,7 +152,7 @@ A map has three parts that share its id:
 |------|-------|---------|
 | Visual scene | Godot 3D scene in the theme, by asset key (`scene.map.starter_town`) | client |
 | Logic grid | `content/maps/<name>.grid.json`, generated, committed | server, validator |
-| Metadata | `content/maps/<name>.yaml` (`MapDef`: name, scene key, music key, grid file) | all |
+| Metadata | `content/maps/<name>.yaml` (`MapDef`: name, scene key, music key, grid file, optional `respawn` cell for players who die here) | all |
 
 - **Authoring:** in the Godot editor. The `map_authoring` plugin bakes walkability from the
   scene's collision shapes (one downward ray per cell, slope limit), then the designer paints

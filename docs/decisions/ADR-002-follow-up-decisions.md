@@ -132,12 +132,12 @@ Future task prompts must carry the decisions listed under their task id (see the
 
 ## Notes for future prompts
 When writing these prompts, copy in the decisions listed:
-- **T-206:** 65, 66, 67, 87
+- **T-206:** 65, 66, 67, 87, 102
 - **T-207:** 31
 - **T-305:** 73
-- **T-401:** 15, 68, 85
+- **T-401:** 15, 68, 85, 99 (`new_character.start_items`)
 - **T-403:** 72
-- **T-501:** 14
+- **T-501:** 14, 93
 - **T-502:** 14
 - **T-503:** 32
 - **T-602:** 12, 30
@@ -170,3 +170,22 @@ When writing these prompts, copy in the decisions listed:
 | 89 | `BannedSymbolsTests` needs the analyzer package in the NuGet cache, so it can't run fully offline (T-110) | **Decided: acceptable.** `dotnet restore` runs before tests everywhere, CI included. |
 | 90 | Schema-check `*.grid.json` against `map-grid.schema.json` (T-110) | **→ T-213:** `validate` checks grid files too, with the same error format. |
 | 91 | Three major package bumps (YamlDotNet 18, Test.Sdk 18, xunit runner 4) (T-110) | **Decided: keep.** The suite passes on them and only two one-line YamlDotNet overrides were needed. |
+
+## Addendum — T-308 and T-213 (2026-11-02)
+| # | Question (source) | Decision |
+|---|---|---|
+| 92 | `MonsterReturned` has no wire mapping (T-308) | **Decided: none needed.** Clients see the monster walk home and its HP fraction refill; the event stays server-side (sound and quests may use it later). |
+| 93 | `CombatSystem` chase uses a `-1_000_000` "never" sentinel (T-308) | **→ T-501:** replace it with an explicit flag when the effect runner reworks combat timing. It can't overflow today. |
+| 94 | ARCHITECTURE §5.3 doesn't list `MapDef.respawn` (T-308) | **Done:** added. |
+| 95 | Tick start lateness p99 is 12–32 ms after the high-resolution timer (T-213) | **Decided:** p50 dropped from ~8 ms to ~0 ms; the tail came from the other sessions building on the same machine. Re-measured by the lead after merging T-308 + T-213 (70 s run, two maps): **max start lateness 2–3 ms per 10 s window**, steady-state tick 34–55 µs avg. T-803 owns the production measurement. |
+| 96 | Ctrl+C shutdown test uses Windows console APIs; Linux path (`kill -INT`) not run (T-213) | **Decided:** the first CI run on `ubuntu-latest` verifies it. If it is flaky there, mark the Ctrl+C test Windows-only and keep the `--duration` test on both. |
+
+## Addendum — T-307 (2026-11-02)
+| # | Question (source) | Decision |
+|---|---|---|
+| 97 | A character in its grace period stops auto-attacking (T-307) | **Decided: correct.** It can't keep farming while disconnected (no AFK botting through dropped sockets), and it can still be attacked (row 36). |
+| 98 | `respawn` while alive is silently ignored (T-307) | **Decided: keep.** The request is idempotent and harmless, so no new rejection term is needed. |
+| 99 | A new character (all stats 1, points unspent, no weapon) loses one-on-one to a Gel Slime (T-307 smoke test) | **→ new T-309:** the first fight must be winnable without spending points. Tune monster content first; formula changes are proposed, not made. Starting equipment **→ T-401** (`new_character.start_items`). |
+| 100 | 62 ms combat tick on the first kill (first-run JIT in the reward path) (T-307) | **→ T-214:** the load test reports p99 after warm-up. If it is still over 50 ms, warm the hot paths at boot with a scratch instance tick. |
+| 101 | Hits are lost while a client catches up after falling behind; the following snapshot restores state (T-307) | **Decided: acceptable.** Hits are cosmetic; HP, death and drops are state and arrive in the snapshot. T-214 documents it in §10. |
+| 102 | The client receives a snapshot where its own character is already dead after a resume (T-307) | **→ T-206:** show the death screen with the respawn button straight from the snapshot. |
