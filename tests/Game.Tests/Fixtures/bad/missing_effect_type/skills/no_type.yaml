@@ -1,0 +1,4 @@
+id: skill.no_type
+name: No Type
+effects:
+  - multiplier: "1"

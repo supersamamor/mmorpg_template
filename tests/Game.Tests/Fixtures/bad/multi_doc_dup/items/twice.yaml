@@ -1,0 +1,7 @@
+id: item.twice
+name: First
+kind: material
+---
+id: item.twice
+name: Second
+kind: material

@@ -38,7 +38,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
-| T-101 | YAML loader + typed registries | Claude Code | Sonnet 5.5 | [T-101](../tasks/prompts/T-101.md) | T-004 | Ready | |
+| T-101 | YAML loader + typed registries | Claude Code | Sonnet 5.5 | [T-101](../tasks/prompts/T-101.md) | T-004 | Review | |
 | T-102 | Cross-reference validator + `validate` CLI | Claude Code | Sonnet 5.5 | [T-102](../tasks/prompts/T-102.md) | T-101 | Ready | |
 | T-103 | Formula evaluator (sandboxed, whitelisted vars) | Claude Code | Opus 5.5 | [T-103](../tasks/prompts/T-103.md) | T-101 | Ready | |
 | T-104 | Stat / modifier pipeline | Claude Code | Opus 5.5 | [T-104](../tasks/prompts/T-104.md) | T-103 | Ready | |

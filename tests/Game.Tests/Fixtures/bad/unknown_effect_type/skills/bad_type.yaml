@@ -1,0 +1,7 @@
+id: skill.bad_type
+name: Bad Type
+effects:
+  - type: damage
+    multiplier: "1"
+  - type: explode
+    radius: 3
