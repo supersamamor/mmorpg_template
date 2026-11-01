@@ -55,6 +55,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-201 | Map grid loader (`.grid.json` + MapDef: collision, spawns, warps) | Claude Code | Sonnet 5.5 | [T-201](../tasks/prompts/T-201.md) | T-101, T-102 | Review | Defines the grid format T-208 must export |
 | T-202 | Tick loop + map instances + event bus | Claude Code | Opus 5.5 | [T-202](../tasks/prompts/T-202.md) | T-201 | Review | Tier R review recommended (concurrency) |
 | T-203 | A* pathfinding + 8-direction grid movement, LOS | Claude Code | Sonnet 5.5 | [T-203](../tasks/prompts/T-203.md) | T-201 | Review | Pure `Game.Shared`; wired in by T-212 |
+| T-212 | Movement system: `MoveTo` intent → path → grid mover in the tick loop | Claude Code | Sonnet 5.5 | [T-212](../tasks/prompts/T-212.md) | T-202, T-203 | Ready | |
 
 ## Backlog (prompts written when the previous phase is Done)
 
@@ -68,7 +69,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-209 | 2 | Client content bundle (`export-client`) + content hash check | Claude Code | Sonnet 5.5 | Backlog |
 | T-210 | 2 | Mobile session lifecycle: background, grace period, resume token | Claude Code | Opus 5.5 | Backlog |
 | T-211 | 2 | Touch input + mobile UI shell (safe area, scaling, hotbar) | Claude Code | Sonnet 5.5 | Backlog |
-| T-212 | 2 | Movement system: `MoveTo` intent → path → grid mover in the tick loop (needs T-202, T-203) | Claude Code | Sonnet 5.5 | Backlog |
 | T-301 | 3 | Monster spawns, respawn, data-driven AI | Claude Code | Opus 5.5 | Backlog |
 | T-302 | 3 | Auto-attack, death, EXP distribution, drops | Claude Code | Sonnet 5.5 | Backlog |
 | T-303 | 3 | Combat presentation: animations, damage numbers, hit VFX | Claude Code | Sonnet 5.5 | Backlog |
