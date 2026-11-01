@@ -34,6 +34,7 @@ and one of them survives being backgrounded for 30 s.
 ## Phase 3 — Combat loop
 - Monster spawns/respawn, data-driven AI states, auto-attack, death, EXP, drops
 - Attack / hit / death animations and damage numbers
+- Audio: sound keys for monsters, weapons, items and map ambience; theme defaults and event sounds; client audio system (ARCHITECTURE §7.8)
 **Done when:** you can level from 1 to 10 killing monsters on a phone.
 
 ## Phase 4 — Items & equipment

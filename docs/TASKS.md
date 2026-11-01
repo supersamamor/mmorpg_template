@@ -72,6 +72,9 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-301 | 3 | Monster spawns, respawn, data-driven AI | Claude Code | Opus 5.5 | Backlog |
 | T-302 | 3 | Auto-attack, death, EXP distribution, drops | Claude Code | Sonnet 5.5 | Backlog |
 | T-303 | 3 | Combat presentation: animations, damage numbers, hit VFX | Claude Code | Sonnet 5.5 | Backlog |
+| T-304 | 3 | Audio data: optional sound keys (monsters, weapon types, items, map ambience), manifest `audio.defaults` / `audio.events`, variations + bus, validation, VOCABULARY audio buses (ARCH §7.8) | Claude Code | Sonnet 5.5 | Backlog |
+| T-305 | 3 | Client audio system: fallback resolution, music crossfade, voice pool + cooldowns, buses + volume settings, mobile background / silent switch / audio focus (needs T-207, T-304) | Claude Code | Sonnet 5.5 | Backlog |
+| T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
 | T-401 | 4 | Inventory, equip slots, weight | Claude Code | Sonnet 5.5 | Backlog |
 | T-402 | 4 | Cards, refine | Claude Code | Sonnet 5.5 | Backlog |
 | T-403 | 4 | Modular 3D equipment visuals (skinned meshes + attach points) | Claude Code | Sonnet 5.5 | Backlog |

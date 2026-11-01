@@ -255,6 +255,22 @@ the impact frame, but that is visual only — outcomes are already decided by th
 `themes/<theme>` is mounted into the Godot project at `res://themes/<theme>` (a directory
 junction/symlink in dev; copied and packed at export). Downloading themes after install is a non-goal.
 
+### 7.8 Audio
+Every sound is an **asset key** resolved by the theme (§8), so replacing a sound never touches code or content.
+
+- **Content names sounds by key, all optional:** skills (`sfx.*` on use), monsters (aggro, hit, die), weapon types (swing, impact),
+  items (use, equip), maps (music, ambience loop). A missing key is not an error: the client falls back (below).
+- **Fallbacks live in the theme:** the manifest's `audio.defaults` gives a category default (e.g. any monster's death sound,
+  any weapon impact), so a theme can sound complete with a handful of files and get more specific over time.
+- **Game events without content** (level up, quest complete, item pickup, UI tap, warp) map to keys in the manifest's
+  `audio.events` table, keyed by `EventNames` terms. A theme re-sounds them by editing one table.
+- **Variations and mix are theme data:** a sound entry may list several files (one picked at random), a volume, a pitch range,
+  and a bus (`music`, `sfx`, `ui`, `ambient`). Bus volumes are player settings.
+- **Playback:** music crossfades on map change; sound effects play from a pool with a voice cap and per-key cooldown so 30 hits in one
+  tick don't stack; sounds far outside the camera are skipped. On mobile the client pauses audio in the background, follows the iOS
+  silent switch for effects, and gives up audio focus on Android when another app plays.
+- **Validated at load:** every referenced key, default and event mapping resolves in the active theme; files are OGG.
+
 ## 8. Theming (asset swap)
 
 `themes/<theme>/asset-manifest.json` maps asset keys to files plus metadata:
@@ -302,6 +318,7 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 | Initial install | ≤ 200 MB |
 | Network | ≤ 10 KB/s average per client with 50 visible entities |
 | Battery | No per-frame work while nothing changes; 30 fps cap in menus |
+| Audio | ≤ 24 simultaneous voices; ≤ 48 MB decoded sound effects in memory; music and ambience streamed (proposed — T-803 confirms) |
 
 ## 10. Networking on mobile
 
