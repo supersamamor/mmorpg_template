@@ -1,3 +1,5 @@
+using Game.Shared.Formulas;
+
 namespace Game.Shared.Definitions
 {
     /// <summary>
@@ -83,9 +85,11 @@ namespace Game.Shared.Definitions
         public string BaseExpTableId { get; init; } = string.Empty;
 
         /// <summary>Stat points awarded on reaching a base level. Variable: <c>base_level</c> (the level just reached).</summary>
+        [Formula]
         public string StatPointsPerBaseLevel { get; init; } = string.Empty;
 
         /// <summary>Skill points awarded on reaching a job level. Variable: <c>job_level</c> (the level just reached).</summary>
+        [Formula]
         public string SkillPointsPerJobLevel { get; init; } = string.Empty;
 
         /// <summary>Stat points a new character starts with.</summary>
@@ -98,6 +102,7 @@ namespace Game.Shared.Definitions
         public int MaxStatValue { get; init; }
 
         /// <summary>Stat points needed to raise a stat by one. Variable: <c>stat_value</c> (the stat's current value, before the raise).</summary>
+        [Formula]
         public string StatPointCost { get; init; } = string.Empty;
     }
 
@@ -155,6 +160,7 @@ namespace Game.Shared.Definitions
         /// Damage multiplier on a critical hit, as a formula. Caster and <c>t_</c> variables are allowed
         /// (e.g. <c>1.5 + luk * 0.005</c>); a constant is fine.
         /// </summary>
+        [Formula]
         public string CritMultiplier { get; init; } = string.Empty;
     }
 }

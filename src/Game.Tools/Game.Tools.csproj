@@ -4,6 +4,10 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="JsonSchema.Net" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Game.Tests" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Game.Shared\Game.Shared.csproj" />

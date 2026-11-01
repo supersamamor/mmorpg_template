@@ -8,7 +8,7 @@ progression:
   # Stat points gained on reaching base level L: 3 early, then 1 more per 10 levels. About 740 points over levels 2-99.
   stat_points_per_base_level: floor(base_level / 10) + 3
   # Skill points gained on reaching job level L: one per level, so a 50-level job grants 49 points.
-  skill_points_per_job_level: 1
+  skill_points_per_job_level: "1"
   # A new character starts with a small pool so the first choices are visible right away.
   starting_stat_points: 10
   # Every primary stat starts at 1 (before job and equipment bonuses).

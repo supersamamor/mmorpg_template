@@ -364,12 +364,59 @@ public class ValidatorTests : IDisposable
     }
 
     [Fact]
-    public void Skill_in_no_job_tree_is_a_warning()
+    public void Skill_used_only_by_a_monster_does_not_warn()
     {
+        Validate().Issues.ShouldNotContain(i => i.Code == ValidationCodes.WarnSkillNoJob);
+    }
+
+    [Fact]
+    public void Skill_in_no_job_tree_and_no_monster_is_a_warning()
+    {
+        Edit("monsters/sting_wasp.yaml", "  skills:\n    - skill_id: skill.venom_sting\n      level: 1\n      chance: 0.25\n", "  skills: []\n");
+
         var issue = Single(Validate(), ValidationCodes.WarnSkillNoJob);
 
         issue.Severity.ShouldBe(ValidationSeverity.Warning);
         issue.Message.ShouldContain("skill.venom_sting");
+    }
+
+    [Fact]
+    public void Monster_no_grid_spawns_is_a_warning()
+    {
+        foreach (var grid in Directory.GetFiles(Path.Combine(_temp, "maps"), "*.grid.json"))
+            File.WriteAllText(grid, File.ReadAllText(grid).Replace("\"monster_id\": \"monster.gel_slime\"", "\"monster_id\": \"monster.mossling\""));
+
+        var issue = Single(Validate(), ValidationCodes.WarnMonsterNotSpawned);
+
+        issue.Severity.ShouldBe(ValidationSeverity.Warning);
+        issue.Message.ShouldContain("monster.gel_slime");
+    }
+
+    [Fact]
+    public void Npc_no_grid_places_is_a_warning()
+    {
+        foreach (var grid in Directory.GetFiles(Path.Combine(_temp, "maps"), "*.grid.json"))
+            File.WriteAllText(grid, File.ReadAllText(grid).Replace("\"npc_id\": \"npc.trainer\"", "\"npc_id\": \"npc.guide\""));
+
+        var issue = Single(Validate(), ValidationCodes.WarnNpcNotPlaced);
+
+        issue.Severity.ShouldBe(ValidationSeverity.Warning);
+        issue.Message.ShouldContain("npc.trainer");
+    }
+
+    [Theory]
+    [InlineData("-100", true)]
+    [InlineData("-250", true)]
+    [InlineData("-99", false)]
+    [InlineData("level * -100", false)]
+    public void Percent_modifier_of_minus_100_or_less_is_a_warning(string value, bool warns)
+    {
+        Edit("items/bone_dirk.yaml", "op: percent, value: \"5\"", $"op: percent, value: \"{value}\"");
+
+        var issues = Validate().Issues.Where(i => i.Code == ValidationCodes.WarnModifierPercentFloor).ToList();
+
+        issues.Count.ShouldBe(warns ? 1 : 0, string.Join("\n", issues));
+        if (warns) ShouldBe(issues[0], "items/bone_dirk.yaml", "equip.modifiers[0].value", ValidationSeverity.Warning);
     }
 
     // ---- plumbing ----------------------------------------------------------------------------------------------

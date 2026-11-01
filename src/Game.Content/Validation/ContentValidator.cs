@@ -22,6 +22,7 @@ public static class ContentValidator
         new FileNameRule(),
         new MapGridRule(),
         new AudioRule(),
+        new ModifierRule(),
         new UnusedRule(),
     };
 

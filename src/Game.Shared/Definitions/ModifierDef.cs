@@ -1,3 +1,5 @@
+using Game.Shared.Formulas;
+
 namespace Game.Shared.Definitions
 {
     /// <summary>
@@ -48,6 +50,7 @@ namespace Game.Shared.Definitions
         /// Amount as a formula string, so it can be a constant (<c>"5"</c>) or scaled
         /// (<c>"level * 2"</c>, <c>"refine * 3"</c>). Only whitelisted formula variables are allowed.
         /// </summary>
+        [Formula]
         public string Value { get; init; } = "0";
     }
 }

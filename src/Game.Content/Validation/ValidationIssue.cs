@@ -103,4 +103,12 @@ public static class ValidationCodes
     public const string WarnSkillNoJob = "warn.skill_no_job";
     /// <summary>Dialogue node not reachable from start (warning).</summary>
     public const string WarnDialogueUnreachable = "warn.dialogue_unreachable";
+    /// <summary>Monster spawned by no map grid and no summon effect (warning).</summary>
+    public const string WarnMonsterNotSpawned = "warn.monster_not_spawned";
+    /// <summary>NPC placed by no map grid (warning).</summary>
+    public const string WarnNpcNotPlaced = "warn.npc_not_placed";
+    /// <summary>Percent modifier with a constant value of -100 or less (warning).</summary>
+    public const string WarnModifierPercentFloor = "warn.modifier_percent_floor";
+    /// <summary>A YAML document does not match its generated JSON Schema.</summary>
+    public const string SchemaViolation = "schema.violation";
 }

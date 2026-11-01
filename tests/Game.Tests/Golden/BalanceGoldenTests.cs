@@ -2,6 +2,7 @@ using Game.Content.Loading;
 using Game.Content.Registry;
 using Game.Content.Simulation;
 using Game.Shared.Definitions;
+using Game.Tools.Reports;
 
 namespace Game.Tests.Golden;
 
@@ -101,6 +102,8 @@ public class BalanceGoldenTests
             golden.Add(prefix + "monster_hp", row.MonsterHp);
             golden.Add(prefix + "avg", row.Damage.Avg);
             golden.AddOrNull(prefix + "hits_to_kill", row.Damage.HitsToKill);
+            golden.AddOrNull(prefix + "ttk_s", StatsReport.TimeToKillSeconds(
+                row.Damage, Content.Value.Sim.Character(row.JobId, row.PlayerLevel).Sheet.Get("aspd")));
         }
         golden.AssertMatches("monster_ttk.json");
     }

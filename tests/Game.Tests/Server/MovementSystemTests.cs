@@ -12,6 +12,7 @@ namespace Game.Tests.Server;
 /// T-212: the movement system. Speed 5 cells/s at 10 Hz is exactly half a cell per tick (orthogonal), and agi 150 / 0 / 250 give the
 /// sample formulas' 5 / 3.5 / 6 cells per second (<c>min(6, 3.5 + agi * 0.01)</c>).
 /// </summary>
+[Collection(TimingCollection.Name)]
 public class MovementSystemTests
 {
     private const int Agi5 = 150;

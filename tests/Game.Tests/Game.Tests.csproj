@@ -17,5 +17,6 @@
     <ProjectReference Include="..\..\src\Game.Shared\Game.Shared.csproj" />
     <ProjectReference Include="..\..\src\Game.Content\Game.Content.csproj" />
     <ProjectReference Include="..\..\src\Game.Server\Game.Server.csproj" />
+    <ProjectReference Include="..\..\src\Game.Tools\Game.Tools.csproj" />
   </ItemGroup>
 </Project>

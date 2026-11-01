@@ -1,3 +1,4 @@
+using Game.Shared.Formulas;
 using System.Collections.Generic;
 
 namespace Game.Shared.Definitions
@@ -13,18 +14,23 @@ namespace Game.Shared.Definitions
         public string? Name { get; init; }
 
         /// <summary>Formula per derived stat id (<see cref="Vocabulary.DerivedStats"/>), e.g. <c>max_hp</c>.</summary>
+        [Formula]
         public IReadOnlyDictionary<string, string> Derived { get; init; } = Empty.Dictionary<string, string>();
 
         /// <summary>Base physical damage, used by auto-attacks and non-magic <c>damage</c> effects.</summary>
+        [Formula]
         public string PhysicalDamage { get; init; } = string.Empty;
 
         /// <summary>Base magic damage, used by magic <c>damage</c> effects.</summary>
+        [Formula]
         public string MagicDamage { get; init; } = string.Empty;
 
         /// <summary>Hit probability 0–1 for physical attacks.</summary>
+        [Formula]
         public string HitChance { get; init; } = string.Empty;
 
         /// <summary>Critical probability 0–1 for physical attacks.</summary>
+        [Formula]
         public string CritChance { get; init; } = string.Empty;
     }
 }

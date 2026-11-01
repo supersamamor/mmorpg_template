@@ -1,3 +1,4 @@
+using Game.Shared.Formulas;
 using System.Collections.Generic;
 using Game.Shared.Vocabulary;
 
@@ -31,12 +32,15 @@ namespace Game.Shared.Definitions
         public SkillTargetDef Target { get; init; } = new SkillTargetDef();
 
         /// <summary>SP cost, as a formula.</summary>
+        [Formula]
         public string SpCost { get; init; } = "0";
 
         /// <summary>Cast time in milliseconds, as a formula (before <c>cast_time_mod</c>).</summary>
+        [Formula]
         public string CastTimeMs { get; init; } = "0";
 
         /// <summary>Cooldown in milliseconds, as a formula.</summary>
+        [Formula]
         public string CooldownMs { get; init; } = "0";
 
         /// <summary>Weapon types required to use the skill (<see cref="Vocabulary.WeaponTypes"/>). Empty means any.</summary>

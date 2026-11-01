@@ -12,6 +12,7 @@ namespace Game.Tests.Network;
 /// resume with a single-use token, logout, takeover, warps while away, the brute-force guard, shutdown, and tokens kept out of the log.
 /// Time moves only through the rig's <see cref="ManualClock"/>; waits poll with a timeout.
 /// </summary>
+[Collection(TimingCollection.Name)]
 public class GatewayResumeTests
 {
     private const string TokenPattern = "^[A-Za-z0-9_-]{43}$"; // 32 bytes, base64url without padding
