@@ -15,3 +15,6 @@ ai:
   aggro_range: 0
   chase_range: 10
 model_asset_key: model.monster.rock_beetle
+sounds:
+  aggro: sfx.monster.aggro.generic
+  hit: sfx.monster.hit.generic

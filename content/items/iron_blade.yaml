@@ -8,6 +8,7 @@ buy_price: 700
 sell_price: 210
 icon_asset_key: icon.item.iron_blade
 ground_asset_key: model.prop.loot_bag
+equip_sfx: sfx.item.equip.metal
 equip:
   slots: [weapon]
   weapon_type: sword_1h

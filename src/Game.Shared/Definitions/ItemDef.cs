@@ -67,6 +67,12 @@ namespace Game.Shared.Definitions
         /// <summary>Visual of the item lying on the ground (<c>model.*</c> or <c>sprite.*</c>).</summary>
         public string? GroundAssetKey { get; init; }
 
+        /// <summary>Sound played when the item is used (<c>sfx.*</c>); falls back to the <c>item.use</c> theme default.</summary>
+        public string? UseSfx { get; init; }
+
+        /// <summary>Sound played when the item is equipped (<c>sfx.*</c>); falls back to the <c>item.equip</c> theme default.</summary>
+        public string? EquipSfx { get; init; }
+
         /// <summary>Consumable data; set when <see cref="Kind"/> is <see cref="ItemKind.Consumable"/>.</summary>
         public ItemConsumableDef? Consumable { get; init; }
 

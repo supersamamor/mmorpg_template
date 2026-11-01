@@ -136,7 +136,7 @@ public sealed class SchemaGenerator
         string? pattern = null;
         if (name == nameof(IDefinition.Id)) pattern = SchemaRules.IdPattern(declaringType);
         var isEnum = SchemaRules.Enums.TryGetValue(name, out var vocabulary);
-        if (!isEnum) pattern ??= SchemaRules.ReferencePattern(name) ?? SchemaRules.AssetKeyPattern(name);
+        if (!isEnum) pattern ??= SchemaRules.ReferencePattern(name) ?? SchemaRules.AssetKeyPattern(name) ?? SchemaRules.SoundKeyPattern(declaringType, name);
         if (pattern is not null) target["pattern"] = pattern;
         if (isEnum) target["enum"] = EnumArray(target, vocabulary!.Ordered);
 

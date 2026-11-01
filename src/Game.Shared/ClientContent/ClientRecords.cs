@@ -17,9 +17,11 @@ namespace Game.Shared.ClientContent
     /// <param name="Slots">Equipment slots occupied (equip) or accepted (card); empty for other kinds.</param>
     /// <param name="WeaponType">A <c>WeaponTypes</c> term for weapons, else null.</param>
     /// <param name="VisualAssetKey">Worn visual key (equip), or null.</param>
+    /// <param name="UseSfx">Use sound key, or null.</param>
+    /// <param name="EquipSfx">Equip sound key, or null.</param>
     public sealed record ClientItem(
         string Id, string Name, string? Description, string Kind, string? IconAssetKey, string? GroundAssetKey,
-        IReadOnlyList<string> Slots, string? WeaponType, string? VisualAssetKey);
+        IReadOnlyList<string> Slots, string? WeaponType, string? VisualAssetKey, string? UseSfx, string? EquipSfx);
 
     /// <summary>A skill's display and targeting info.</summary>
     /// <param name="Id">Skill id.</param>
@@ -85,7 +87,14 @@ namespace Game.Shared.ClientContent
     /// <param name="Id">Monster id (the <c>display_key</c> of its view records).</param>
     /// <param name="Name">Display name.</param>
     /// <param name="ModelAssetKey">Model key, or null.</param>
-    public sealed record ClientMonster(string Id, string Name, string? ModelAssetKey);
+    /// <param name="Sounds">Sound keys, or null when the monster names none.</param>
+    public sealed record ClientMonster(string Id, string Name, string? ModelAssetKey, ClientMonsterSounds? Sounds);
+
+    /// <summary>A monster's own sound keys; each may be null (the theme default then applies).</summary>
+    /// <param name="Aggro">Aggro sound key.</param>
+    /// <param name="Hit">Hit sound key.</param>
+    /// <param name="Die">Death sound key.</param>
+    public sealed record ClientMonsterSounds(string? Aggro, string? Hit, string? Die);
 
     /// <summary>An NPC's name and look.</summary>
     /// <param name="Id">NPC id.</param>
@@ -148,6 +157,7 @@ namespace Game.Shared.ClientContent
     /// <param name="Name">Display name.</param>
     /// <param name="SceneAssetKey">Scene key.</param>
     /// <param name="MusicAssetKey">Music key, or null.</param>
+    /// <param name="AmbienceAssetKey">Ambience loop key, or null.</param>
     /// <param name="Width">Width in cells.</param>
     /// <param name="Height">Height in cells.</param>
     /// <param name="Cells">Base64 of <c>Width * Height</c> bytes, row-major; bit 0 walkable, bit 1 blocks line of sight (as in the grid file).</param>
@@ -155,7 +165,7 @@ namespace Game.Shared.ClientContent
     /// <param name="Npcs">NPC placements.</param>
     /// <param name="Zones">Zones.</param>
     public sealed record ClientMap(
-        string Id, string Name, string SceneAssetKey, string? MusicAssetKey, int Width, int Height, string Cells,
+        string Id, string Name, string SceneAssetKey, string? MusicAssetKey, string? AmbienceAssetKey, int Width, int Height, string Cells,
         IReadOnlyList<ClientWarp> Warps, IReadOnlyList<ClientNpcPlacement> Npcs, IReadOnlyList<ClientZone> Zones);
 
     /// <summary>The whole client bundle (without its hash; the hash belongs to the file, see <c>ClientBundleWriter</c>).</summary>
@@ -178,6 +188,6 @@ namespace Game.Shared.ClientContent
         IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps)
     {
         /// <summary>The format this build writes and reads.</summary>
-        public const int CurrentFormatVersion = 1;
+        public const int CurrentFormatVersion = 2;
     }
 }

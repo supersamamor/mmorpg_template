@@ -9,6 +9,7 @@ sell_price: 12
 max_stack: 99
 icon_asset_key: icon.item.healing_draught
 ground_asset_key: model.prop.loot_bag
+use_sfx: sfx.item.use.potion
 consumable:
   cooldown_ms: 1000
   consumed: true

@@ -313,5 +313,122 @@
   },
   "vfx.status.swift": {
     "file": "placeholder.tscn"
+  },
+  "ambience.map.starter_meadow": {
+    "file": "placeholder.ogg"
+  },
+  "ambience.map.thistle_hollow": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.event.item_acquired": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.event.job_level_up": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.event.level_up": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.event.quest_complete": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.item.equip.cloth": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.item.equip.metal": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.item.use.potion": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.monster.aggro.generic": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.monster.aggro.wasp": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.monster.die.generic": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.monster.die.slime": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.monster.hit.generic": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.monster.hit.slime": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.ui.close": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.ui.error": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.ui.open": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.ui.tap": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.weapon.impact.blunt": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.weapon.impact.pierce": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.weapon.swing.heavy": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.weapon.swing.light": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.weapon.swing.shot": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.weapon.impact.slash": {
+    "files": ["placeholder.ogg", "placeholder.ogg", "placeholder.ogg"],
+    "volume_db": -3,
+    "pitch": [0.95, 1.05],
+    "bus": "sfx"
+  },
+  "audio": {
+    "defaults": {
+      "monster.aggro": "sfx.monster.aggro.generic",
+      "monster.hit": "sfx.monster.hit.generic",
+      "monster.die": "sfx.monster.die.generic",
+      "item.use": "sfx.item.use.potion",
+      "item.equip": "sfx.item.equip.metal",
+      "weapon.unarmed.swing": "sfx.weapon.swing.light",
+      "weapon.unarmed.impact": "sfx.weapon.impact.blunt",
+      "weapon.dagger.swing": "sfx.weapon.swing.light",
+      "weapon.dagger.impact": "sfx.weapon.impact.pierce",
+      "weapon.sword_1h.swing": "sfx.weapon.swing.light",
+      "weapon.sword_1h.impact": "sfx.weapon.impact.slash",
+      "weapon.sword_2h.swing": "sfx.weapon.swing.heavy",
+      "weapon.sword_2h.impact": "sfx.weapon.impact.slash",
+      "weapon.spear.swing": "sfx.weapon.swing.light",
+      "weapon.spear.impact": "sfx.weapon.impact.pierce",
+      "weapon.axe.swing": "sfx.weapon.swing.heavy",
+      "weapon.axe.impact": "sfx.weapon.impact.slash",
+      "weapon.mace.swing": "sfx.weapon.swing.heavy",
+      "weapon.mace.impact": "sfx.weapon.impact.blunt",
+      "weapon.staff.swing": "sfx.weapon.swing.light",
+      "weapon.staff.impact": "sfx.weapon.impact.blunt",
+      "weapon.bow.swing": "sfx.weapon.swing.shot",
+      "weapon.bow.impact": "sfx.weapon.impact.pierce",
+      "weapon.knuckle.swing": "sfx.weapon.swing.light",
+      "weapon.knuckle.impact": "sfx.weapon.impact.blunt",
+      "ui.tap": "sfx.ui.tap",
+      "ui.open": "sfx.ui.open",
+      "ui.close": "sfx.ui.close",
+      "ui.error": "sfx.ui.error"
+    },
+    "events": {
+      "LevelUp": "sfx.event.level_up",
+      "JobLevelUp": "sfx.event.job_level_up",
+      "QuestCompleted": "sfx.event.quest_complete",
+      "ItemAcquired": "sfx.event.item_acquired"
+    }
   }
 }

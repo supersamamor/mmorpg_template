@@ -20,18 +20,20 @@ public static class ContentValidator
         new BalanceRule(),
         new FileNameRule(),
         new MapGridRule(),
+        new AudioRule(),
         new UnusedRule(),
     };
 
     /// <summary>Validates with <see cref="DefaultRules"/>.</summary>
-    public static ValidationReport Validate(ContentDatabase database, string contentRoot, IReadOnlySet<string> assetKeys) =>
-        Validate(database, contentRoot, assetKeys, DefaultRules);
+    public static ValidationReport Validate(ContentDatabase database, string contentRoot, IReadOnlySet<string> assetKeys, AudioManifest? audio = null) =>
+        Validate(database, contentRoot, assetKeys, DefaultRules, audio);
 
     /// <summary>Validates with an explicit rule list (tests, or tools that add rules).</summary>
     public static ValidationReport Validate(
-        ContentDatabase database, string contentRoot, IReadOnlySet<string> assetKeys, IEnumerable<IValidationRule> rules)
+        ContentDatabase database, string contentRoot, IReadOnlySet<string> assetKeys, IEnumerable<IValidationRule> rules,
+        AudioManifest? audio = null)
     {
-        var context = new ValidationContext(database, contentRoot, assetKeys);
+        var context = new ValidationContext(database, contentRoot, assetKeys, audio);
         foreach (var rule in rules)
         {
             try { rule.Validate(context); }

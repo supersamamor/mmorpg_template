@@ -25,16 +25,16 @@ public class ClientBundleTests
 
     private static readonly Shared.ClientContent.ClientBundle Fixture = new(
         1, ["fire"], ["str"],
-        [new ClientItem("item.a", "A \"quoted\" é", null, "equip", "icon.a", null, ["weapon"], "dagger", "model.a")],
+        [new ClientItem("item.a", "A \"quoted\" é", null, "equip", "icon.a", null, ["weapon"], "dagger", "model.a", "sfx.use", null)],
         [new ClientSkill("skill.a", "Bolt", "Hits.", 3, false, 6, true, false, ClientAreaShapes.Square, 2, 500, "cast", "icon.s", null, null)],
         [new ClientJob("job.a", "Jobber", null, null, [], null, null, [new ClientJobSkill("skill.a", null, [new ClientSkillRequirement("skill.b", 2)])])],
         [new ClientStatus("status.a", "Stun", null, true, null, null)],
-        [new ClientMonster("monster.a", "Blob", "model.m")],
+        [new ClientMonster("monster.a", "Blob", "model.m", new ClientMonsterSounds(null, "sfx.hit", "sfx.die"))],
         [new ClientNpc("npc.a", "Guide", "Helper", "dialogue.a", null, null)],
         [new ClientDialogue("dialogue.a", "start", [new ClientDialogueNode("start", null, null, "Hi", null,
             [new ClientDialogueChoice("Yes", null, "quest.a")])])],
         [new ClientQuest("quest.a", "Q", null, "npc.a", ["Do it."])],
-        [new ClientMap("map.a", "Map", "scene.a", null, 2, 1, "AwM=", [new ClientWarp(new GridCell(1, 0), "map.b", new GridCell(0, 0))],
+        [new ClientMap("map.a", "Map", "scene.a", null, "ambience.a", 2, 1, "AwM=", [new ClientWarp(new GridCell(1, 0), "map.b", new GridCell(0, 0))],
             [new ClientNpcPlacement("npc.a", new GridCell(0, 0), "s")], [new ClientZone("safe", new GridRect(0, 0, 2, 1))])]);
 
     private static readonly string FixtureBody =
@@ -42,15 +42,15 @@ public class ClientBundleTests
         {"format_version":1,
         HASH
         "elements":["fire"],"stats":["str"],
-        "items":[{"id":"item.a","name":"A @U0022quoted@U0022 @U00E9","kind":"equip","icon":"icon.a","slots":["weapon"],"weapon_type":"dagger","visual":"model.a"}],
+        "items":[{"id":"item.a","name":"A @U0022quoted@U0022 @U00E9","kind":"equip","icon":"icon.a","slots":["weapon"],"weapon_type":"dagger","visual":"model.a","use_sfx":"sfx.use"}],
         "skills":[{"id":"skill.a","name":"Bolt","description":"Hits.","max_level":3,"passive":false,"range":6,"ground":true,"friendly":false,"area_shape":"square","area_radius":2,"cast_time_ms":500,"animation":"cast","icon":"icon.s"}],
         "jobs":[{"id":"job.a","name":"Jobber","skills":[{"skill":"skill.a","requires":[{"skill":"skill.b","level":2}]}]}],
         "statuses":[{"id":"status.a","name":"Stun","debuff":true}],
-        "monsters":[{"id":"monster.a","name":"Blob","model":"model.m"}],
+        "monsters":[{"id":"monster.a","name":"Blob","model":"model.m","sounds":{"hit":"sfx.hit","die":"sfx.die"}}],
         "npcs":[{"id":"npc.a","name":"Guide","title":"Helper","dialogue":"dialogue.a"}],
         "dialogues":[{"id":"dialogue.a","start":"start","nodes":[{"key":"start","text":"Hi","choices":[{"text":"Yes","quest":"quest.a"}]}]}],
         "quests":[{"id":"quest.a","name":"Q","giver":"npc.a","steps":["Do it."]}],
-        "maps":[{"id":"map.a","name":"Map","scene":"scene.a","width":2,"height":1,"cells":"AwM=",
+        "maps":[{"id":"map.a","name":"Map","scene":"scene.a","ambience":"ambience.a","width":2,"height":1,"cells":"AwM=",
         "warps":[{"cell":[1,0],"map":"map.b","target":[0,0]}],"npcs":[{"npc":"npc.a","cell":[0,0],"facing":"s"}],
         "zones":[{"kind":"safe","area":[0,0,2,1]}]}]}
         """.ReplaceLineEndings("").Replace("@U", ((char)92) + "u"); // @U stands for a JSON unicode escape
@@ -86,11 +86,12 @@ public class ClientBundleTests
             "ClientDialogue: Id,Start,Nodes",
             "ClientDialogueChoice: Text,Next,StartQuestId",
             "ClientDialogueNode: Key,SpeakerNpcId,PortraitAssetKey,Text,Next,Choices",
-            "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey",
+            "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey,UseSfx,EquipSfx",
             "ClientJob: Id,Name,Description,ParentJobId,WeaponTypes,ModelAssetKey,IconAssetKey,Skills",
             "ClientJobSkill: SkillId,MaxLevel,Requires",
-            "ClientMap: Id,Name,SceneAssetKey,MusicAssetKey,Width,Height,Cells,Warps,Npcs,Zones",
-            "ClientMonster: Id,Name,ModelAssetKey",
+            "ClientMap: Id,Name,SceneAssetKey,MusicAssetKey,AmbienceAssetKey,Width,Height,Cells,Warps,Npcs,Zones",
+            "ClientMonster: Id,Name,ModelAssetKey,Sounds",
+            "ClientMonsterSounds: Aggro,Hit,Die",
             "ClientNpc: Id,Name,Title,DialogueId,ModelAssetKey,PortraitAssetKey",
             "ClientNpcPlacement: NpcId,Cell,Facing",
             "ClientQuest: Id,Name,Description,GiverNpcId,StepTexts",
@@ -107,7 +108,7 @@ public class ClientBundleTests
     {
         using var doc = JsonDocument.Parse(Export(Content).FileBytes);
         var root = doc.RootElement;
-        root.GetProperty("format_version").GetInt32().ShouldBe(1);
+        root.GetProperty("format_version").GetInt32().ShouldBe(2);
         root.GetProperty("items").GetArrayLength().ShouldBe(Content.Items.Count);
         root.GetProperty("skills").GetArrayLength().ShouldBe(Content.Skills.Count);
         root.GetProperty("jobs").GetArrayLength().ShouldBe(Content.Jobs.Count);
@@ -268,9 +269,16 @@ public class ClientBundleTests
         // Grid scene hashes (hard rule 11) and the drop tables' item/chance pairs.
         foreach (var grid in Content.Grids.Values.Where(g => g.SourceSceneHash.Length > 0))
             text.ShouldNotContain(grid.SourceSceneHash);
-        // Monsters carry an id, a name and a model, nothing else: no numbers at all.
+        // Monsters carry an id, a name, a model and their sound keys (T-304), nothing else: no numbers at all.
         foreach (var monster in doc.RootElement.GetProperty("monsters").EnumerateArray())
-            monster.EnumerateObject().Select(p => p.Name).ShouldBe(monster.TryGetProperty("model", out _) ? ["id", "name", "model"] : ["id", "name"]);
+        {
+            monster.EnumerateObject().Select(p => p.Name).ShouldBeSubsetOf(["id", "name", "model", "sounds"]);
+            if (monster.TryGetProperty("sounds", out var sounds))
+            {
+                sounds.EnumerateObject().Select(p => p.Name).ShouldBeSubsetOf(["aggro", "hit", "die"]);
+                foreach (var sound in sounds.EnumerateObject()) sound.Value.GetString()!.ShouldStartWith("sfx.");
+            }
+        }
         // Monster numbers from the content: none of the exact stat values appears as a JSON number in the monsters section.
         text.ShouldNotContain("\"respawn");
         text.ShouldNotContain("\"spawns\"");

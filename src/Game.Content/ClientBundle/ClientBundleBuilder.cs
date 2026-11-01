@@ -22,11 +22,18 @@ public static class ClientBundleBuilder
         content.Skills.All.Select(Skill).ToList(),
         content.Jobs.All.Select(Job).ToList(),
         content.Statuses.All.Select(s => new ClientStatus(s.Id, s.Name, s.Description, s.Debuff, s.IconAssetKey, s.VfxAssetKey)).ToList(),
-        content.Monsters.All.Select(m => new ClientMonster(m.Id, m.Name, m.ModelAssetKey)).ToList(),
+        content.Monsters.All.Select(Monster).ToList(),
         content.Npcs.All.Select(n => new ClientNpc(n.Id, n.Name, n.Title, n.DialogueId, n.ModelAssetKey, n.PortraitAssetKey)).ToList(),
         content.Dialogue.All.Select(Dialogue).ToList(),
         content.Quests.All.Select(q => new ClientQuest(q.Id, q.Name, q.Description, q.GiverNpcId, q.Steps.Select(s => s.Description ?? "").ToList())).ToList(),
         content.Maps.All.Select(m => Map(m, content.GetGrid(m.Id))).ToList());
+
+    private static ClientMonster Monster(MonsterDef monster)
+    {
+        var s = monster.Sounds;
+        var sounds = s is null || (s.Aggro is null && s.Hit is null && s.Die is null) ? null : new ClientMonsterSounds(s.Aggro, s.Hit, s.Die);
+        return new ClientMonster(monster.Id, monster.Name, monster.ModelAssetKey, sounds);
+    }
 
     private static ClientItem Item(ItemDef item)
     {
@@ -34,7 +41,7 @@ public static class ClientBundleBuilder
         var kind = item.Kind.ToString().ToLowerInvariant();
         var slots = item.Equip?.Slots ?? item.Card?.Slots ?? [];
         return new ClientItem(item.Id, item.Name, item.Description, kind, item.IconAssetKey, item.GroundAssetKey,
-            slots.ToList(), item.Equip?.WeaponType, item.Equip?.VisualAssetKey);
+            slots.ToList(), item.Equip?.WeaponType, item.Equip?.VisualAssetKey, item.UseSfx, item.EquipSfx);
     }
 
     private static ClientSkill Skill(SkillDef skill)
@@ -81,7 +88,7 @@ public static class ClientBundleBuilder
                 cells[y * grid.Width + x] = flags;
             }
         }
-        return new ClientMap(map.Id, map.Name, map.SceneAssetKey, map.MusicAssetKey, grid.Width, grid.Height, Convert.ToBase64String(cells),
+        return new ClientMap(map.Id, map.Name, map.SceneAssetKey, map.MusicAssetKey, map.AmbienceAssetKey, grid.Width, grid.Height, Convert.ToBase64String(cells),
             grid.Warps.Select(w => new ClientWarp(w.Cell, w.TargetMapId, w.TargetCell)).ToList(),
             grid.Npcs.Select(n => new ClientNpcPlacement(n.NpcId, n.Cell, n.Facing)).ToList(),
             grid.Zones.Select(z => new ClientZone(z.Kind, z.Area)).ToList());

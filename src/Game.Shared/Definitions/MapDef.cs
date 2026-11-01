@@ -23,6 +23,9 @@ namespace Game.Shared.Definitions
         /// <summary>Background music (<c>music.*</c>).</summary>
         public string? MusicAssetKey { get; init; }
 
+        /// <summary>Ambience loop (<c>ambience.*</c>), played under the music.</summary>
+        public string? AmbienceAssetKey { get; init; }
+
         /// <summary>
         /// File name of the logic grid in <c>content/maps/</c>, e.g. <c>starter_town.grid.json</c>.
         /// A content file name, not an asset path.

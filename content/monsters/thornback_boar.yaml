@@ -15,3 +15,6 @@ ai:
   aggro_range: 7
   chase_range: 14
 model_asset_key: model.monster.thornback_boar
+sounds:
+  aggro: sfx.monster.aggro.generic
+  die: sfx.monster.die.generic

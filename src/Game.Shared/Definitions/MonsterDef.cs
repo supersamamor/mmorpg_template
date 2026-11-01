@@ -53,6 +53,22 @@ namespace Game.Shared.Definitions
 
         /// <summary>3D model (<c>model.*</c>); rig and animation library come from the manifest.</summary>
         public string? ModelAssetKey { get; init; }
+
+        /// <summary>Optional sounds (<c>sfx.*</c>); a missing one falls back to the theme default (ARCHITECTURE §7.8).</summary>
+        public MonsterSoundsDef? Sounds { get; init; }
+    }
+
+    /// <summary>Sounds of a monster, all optional. Asset keys only.</summary>
+    public sealed record MonsterSoundsDef
+    {
+        /// <summary>Played when the monster notices a player (<c>sfx.*</c>).</summary>
+        public string? Aggro { get; init; }
+
+        /// <summary>Played when the monster is hit (<c>sfx.*</c>).</summary>
+        public string? Hit { get; init; }
+
+        /// <summary>Played when the monster dies (<c>sfx.*</c>).</summary>
+        public string? Die { get; init; }
     }
 
     /// <summary>Monster behavior settings. Server only.</summary>

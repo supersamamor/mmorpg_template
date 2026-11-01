@@ -36,10 +36,19 @@ Ids: lowercase, `a-z0-9_`, one prefix. Display names are separate fields.
 | `sfx.`      | Sound effect                                       |
 | `music.`    | Music track                                        |
 | `font.`     | Font                                               |
+| `ambience.` | Ambience loop (a map's background sound)           |
 
 ## World units
 Distances, ranges and AoE sizes are in **cells** (1 cell = 1 world unit, Chebyshev distance).
 `move_speed` is in **cells per second**.
+
+## Audio buses
+`music`, `sfx`, `ui`, `ambient` — the bus a sound plays on (ARCHITECTURE §7.8). Without a `bus`, a manifest sound follows its key prefix: `music.` → `music`, `ambience.` → `ambient`, `sfx.` → `sfx`.
+
+## Audio default categories
+Keys of the manifest's `audio.defaults` (category → `sfx.` key): `monster.aggro`, `monster.hit`, `monster.die`, `item.use`, `item.equip`, `ui.tap`, `ui.open`, `ui.close`, `ui.error`,
+and for every weapon type: `weapon.<weapon_type>.swing`, `weapon.<weapon_type>.impact` (e.g. `weapon.dagger.swing`).
+Keys of `audio.events` are "Events (event bus)" names.
 
 ## Directions (facing)
 `n`, `ne`, `e`, `se`, `s`, `sw`, `w`, `nw`
