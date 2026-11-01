@@ -49,6 +49,7 @@ and one of them survives being backgrounded for 30 s.
 
 ## Phase 7 — Persistence & accounts
 - Auth, character slots, save/load, transactional inventory
+- Character creation: gender (male / female), skin tone, face, hairstyle, hair colour — cosmetic, content-defined (ARCHITECTURE §7.5.1)
 - Store compliance: in-app account deletion, Sign in with Apple (if social login), privacy disclosures
 
 ## Phase 8 — Tooling, live ops & release

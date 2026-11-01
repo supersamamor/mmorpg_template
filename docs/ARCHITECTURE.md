@@ -228,6 +228,24 @@ Modular 3D characters. Each body type has one shared rig. Equipment is either:
 The item's visual asset key points to a manifest entry that says which (§8), so changing
 equipment visuals is data only.
 
+### 7.5.1 Character appearance (creation)
+Chosen once at character creation; **cosmetic only** (never changes stats or rules).
+
+| Choice | Options (content) | Rendering |
+|--------|-------------------|-----------|
+| Gender | `male`, `female` — one body type and rig each | Selects the body mesh and rig; equipment visuals exist per gender where the mesh differs |
+| Skin tone | A palette of colours | Colour parameter on the body's single material (no extra material) |
+| Face | Face variants per gender | Head texture or shape variant |
+| Hairstyle | Styles per gender, by asset key | Attached to the `head` attach point |
+| Hair colour | A palette of colours | Colour parameter on the hair material |
+
+- **Data, not code:** options live in `content/appearance.yaml` (ids and asset keys). The validator checks every asset key and
+  that each face and hairstyle fits its gender's rig. Headgear can declare that it hides the hair.
+- **Server authoritative:** the server checks creation choices against `appearance.yaml` and stores them with the character.
+  A modified client cannot pick an option that does not exist.
+- **Network:** appearance is a few ids in the view record of a **snapshot / appeared** entry; deltas never repeat it.
+- **Client:** the creation screen shows a rotating 3D preview of the choices.
+
 ### 7.6 Animation
 Animation ids (VOCABULARY) are shared by every model on the same rig. Server events
 (`attack`, `cast`, `hit`, `die`) map to animation ids. The client may delay a damage number to

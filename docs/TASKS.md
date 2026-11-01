@@ -82,6 +82,10 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
 | T-702 | 7 | Persistence (EF Core + Postgres), transactional inventory | Claude Code | Opus 5.5 | Backlog |
 | T-703 | 7 | Store compliance: account deletion, Sign in with Apple, privacy disclosures | Claude Code | Sonnet 5.5 | Backlog |
+| T-704 | 7 | Appearance definitions: `appearance.yaml` (gender male/female, skin tones, faces, hairstyles, hair colours) + validation (ARCH §7.5.1) | Claude Code | Sonnet 5.5 | Backlog |
+| T-705 | 7 | Appearance on the server: checked at creation, stored with the character, sent in snapshots (needs T-701, T-702, T-704) | Claude Code | Sonnet 5.5 | Backlog |
+| T-706 | 7 | Character creation screen with rotating 3D preview (needs T-206, T-207, T-705) | Claude Code | Sonnet 5.5 | Backlog |
+| T-707 | 7 | Appearance art: 2 genders, skin tones, faces, hairstyles in the chosen art style (needs an art direction decision) | Human / artist | — | Backlog |
 | T-801 | 8 | Content hot-reload + simple editor | Claude Code | Sonnet 5.5 | Backlog |
 | T-802 | 8 | Mobile build pipeline (Android AAB, iOS on macOS CI, TestFlight / Play internal) | Claude Code | Sonnet 5.5 | Backlog |
 | T-803 | 8 | On-device performance capture vs ARCHITECTURE §9 budgets | Claude Code | Sonnet 5.5 | Backlog |
