@@ -20,6 +20,7 @@ public sealed class BalanceRule : IValidationRule
         var balance = context.Database.Balance;
         var p = balance.Progression;
         var c = balance.Combat;
+        var m = balance.Movement;
 
         if (!context.Database.ExpTables.Contains(p.BaseExpTableId))
             context.ErrorInFile(File, "progression.base_exp_table_id", ValidationCodes.RefMissing,
@@ -43,6 +44,11 @@ public sealed class BalanceRule : IValidationRule
         // Only a constant can be range-checked here; FormulaRule reports parse errors.
         if (Formula.Parse(c.CritMultiplier).Formula is { } crit && crit.TryGetConstant(out var multiplier) && multiplier < 1)
             Range(context, "combat.crit_multiplier", "must be at least 1, so a critical hit never deals less than a normal one.");
+
+        if (m.MaxPathLength <= 0)
+            Range(context, "movement.max_path_length", "must be above 0.");
+        if (m.MaxNodesExpanded <= 0)
+            Range(context, "movement.max_nodes_expanded", "must be above 0.");
     }
 
     private static void Chances(ValidationContext context, string kind, double min, double max)

@@ -80,6 +80,21 @@
       },
       "additionalProperties": false,
       "description": "Damage and chance clamps applied after the combat formulas."
+    },
+    "movement": {
+      "type": "object",
+      "properties": {
+        "max_path_length": {
+          "type": "integer",
+          "description": "Longest path, in cells (steps), a search may return; a longer route counts as \"no path\"."
+        },
+        "max_nodes_expanded": {
+          "type": "integer",
+          "description": "Most nodes a single search may expand before it gives up."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Limits on path searches (grid movement, ARCHITECTURE §4)."
     }
   },
   "additionalProperties": false,

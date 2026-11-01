@@ -15,6 +15,9 @@ namespace Game.Shared.Definitions
 
         /// <summary>Damage and chance clamps applied after the combat formulas.</summary>
         public CombatBalanceDef Combat { get; init; } = new CombatBalanceDef();
+
+        /// <summary>Limits on path searches (grid movement, ARCHITECTURE §4).</summary>
+        public MovementBalanceDef Movement { get; init; } = new MovementBalanceDef();
     }
 
     /// <summary>Progression numbers. The max base level is not stored here: it is the length of the base EXP table plus one.</summary>
@@ -40,6 +43,18 @@ namespace Game.Shared.Definitions
 
         /// <summary>Stat points needed to raise a stat by one. Variable: <c>stat_value</c> (the stat's current value, before the raise).</summary>
         public string StatPointCost { get; init; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Limits that keep one path search cheap. Both are in cells/nodes, never time, so they behave the same on every device.
+    /// </summary>
+    public sealed record MovementBalanceDef
+    {
+        /// <summary>Longest path, in cells (steps), a search may return; a longer route counts as "no path".</summary>
+        public int MaxPathLength { get; init; }
+
+        /// <summary>Most nodes a single search may expand before it gives up.</summary>
+        public int MaxNodesExpanded { get; init; }
     }
 
     /// <summary>
