@@ -216,7 +216,7 @@ public class DefinitionConstructionTests
         map.Id.ShouldStartWith(MapDef.IdPrefix);
         map.SceneAssetKey.ShouldStartWith(AssetKeyPrefixes.Scene);
         typeof(MapDef).GetProperties().Select(p => p.Name)
-            .ShouldBe(["Id", "Name", "SceneAssetKey", "MusicAssetKey", "GridFile"], ignoreOrder: true);
+            .ShouldBe(["Id", "Name", "SceneAssetKey", "MusicAssetKey", "AmbienceAssetKey", "GridFile"], ignoreOrder: true);
     }
 
     [Fact]

@@ -15,3 +15,5 @@ ai:
   aggro_range: 0
   chase_range: 9
 model_asset_key: model.monster.mossling
+sounds:
+  die: sfx.monster.die.generic

@@ -59,7 +59,22 @@ internal static class SchemaRules
         ["Portrait"] = new[] { AssetKeyPrefixes.Portrait },
         ["Vfx"] = new[] { AssetKeyPrefixes.Vfx },
         ["Sfx"] = new[] { AssetKeyPrefixes.Sfx },
+        ["Ambience"] = new[] { AssetKeyPrefixes.Ambience },
     };
+
+    /// <summary>Sound key fields whose names do not end in <c>AssetKey</c> (the YAML shape is <c>sounds.aggro</c>, <c>use_sfx</c>): (type, property) → key prefix.</summary>
+    private static readonly IReadOnlyDictionary<(Type Type, string Property), string> SoundKeys = new Dictionary<(Type, string), string>
+    {
+        [(typeof(MonsterSoundsDef), nameof(MonsterSoundsDef.Aggro))] = AssetKeyPrefixes.Sfx,
+        [(typeof(MonsterSoundsDef), nameof(MonsterSoundsDef.Hit))] = AssetKeyPrefixes.Sfx,
+        [(typeof(MonsterSoundsDef), nameof(MonsterSoundsDef.Die))] = AssetKeyPrefixes.Sfx,
+        [(typeof(ItemDef), nameof(ItemDef.UseSfx))] = AssetKeyPrefixes.Sfx,
+        [(typeof(ItemDef), nameof(ItemDef.EquipSfx))] = AssetKeyPrefixes.Sfx,
+    };
+
+    /// <summary>Pattern for a sound key field listed in <see cref="SoundKeys"/>; null for any other property.</summary>
+    public static string? SoundKeyPattern(Type declaringType, string propertyName) =>
+        SoundKeys.TryGetValue((declaringType, propertyName), out var prefix) ? KeyPattern(new[] { prefix }) : null;
 
     /// <summary>Pattern for the <c>Id</c> property of a registry definition, or null if the type has no id prefix.</summary>
     public static string? IdPattern(Type declaringType) =>
@@ -82,6 +97,11 @@ internal static class SchemaRules
         var kind = propertyName[..^"AssetKey".Length];
         if (!AssetKinds.TryGetValue(kind, out var prefixes))
             throw new InvalidOperationException($"Property '{propertyName}' looks like an asset key but has no rule in SchemaRules.AssetKinds.");
+        return KeyPattern(prefixes);
+    }
+
+    private static string KeyPattern(string[] prefixes)
+    {
         var alternation = prefixes.Length == 1 ? Escape(prefixes[0]) : "(" + string.Join("|", prefixes.Select(Escape)) + ")";
         return "^" + alternation + "[a-z0-9_]+(\\.[a-z0-9_]+)*$";
     }

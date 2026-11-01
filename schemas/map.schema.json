@@ -25,6 +25,14 @@
       "pattern": "^music\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
       "description": "Background music (music.*)."
     },
+    "ambience_asset_key": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^ambience\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "Ambience loop (ambience.*), played under the music."
+    },
     "grid_file": {
       "type": "string",
       "description": "File name of the logic grid in content/maps/, e.g. starter_town.grid.json. A content file name, not an asset path."

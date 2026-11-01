@@ -69,6 +69,14 @@ public static class ValidationCodes
     public const string GridUnknownFlags = "grid.flags_unknown";
     /// <summary>Two warps share a cell.</summary>
     public const string GridWarpDuplicate = "grid.warp_duplicate";
+    /// <summary>A sound key has the wrong prefix for where it is used.</summary>
+    public const string AudioPrefix = "audio.wrong_prefix";
+    /// <summary>A sound entry of the manifest has a malformed shape (wrong type, unknown field).</summary>
+    public const string AudioShape = "audio.shape";
+    /// <summary>A sound entry has no file, an empty list, or a file that is not <c>.ogg</c>.</summary>
+    public const string AudioFile = "audio.file";
+    /// <summary>A sound's volume or pitch is out of range.</summary>
+    public const string AudioRange = "audio.range";
     /// <summary>A rule threw; this is a validator bug, reported so it cannot pass silently.</summary>
     public const string RuleCrashed = "validator.rule_crashed";
 

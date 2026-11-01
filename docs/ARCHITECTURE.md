@@ -171,7 +171,7 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 - **Whitelist, not blacklist.** `Game.Shared/ClientContent` holds one plain record per definition type, and
   `Game.Content/ClientBundle/ClientBundleBuilder` copies each field by hand. A field added to a server definition reaches the client
   only when someone maps it there; a test fails if a client record gains a field without the table below changing.
-- **Format:** `format_version` (now `1`) is the first field. The client refuses a bundle with a version it does not know. Bump it
+- **Format:** `format_version` (now `2`; 2 added the sound keys) is the first field. The client refuses a bundle with a version it does not know. Bump it
   on any change to the bundle's shape.
 - **Canonical output:** compact JSON, UTF-8 without BOM, one final `\n`, fixed property order, lists ordered by id (dialogue nodes by key),
   integers and booleans only, non-ASCII (and `<>&'"+`) escaped as `\uXXXX`, null values left out. Two exports of the same content are byte-identical on any OS.
@@ -183,15 +183,15 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 
 | Definition | In the bundle | Never in the bundle |
 |------------|---------------|---------------------|
-| Items | id, name, description, kind, icon, ground visual, equip slots (card slots for cards), weapon type, worn visual | prices, weight, stack size, consumable effects and cooldown, weapon attack, element, level and job limits, modifiers, refine |
+| Items | id, name, description, kind, icon, ground visual, equip slots (card slots for cards), weapon type, worn visual, use and equip sound keys | prices, weight, stack size, consumable effects and cooldown, weapon attack, element, level and job limits, modifiers, refine |
 | Skills | id, name, description, max level, passive, target range / ground / friendly, area shape (`square`) and radius, cast time **only if a plain number**, animation id, icon, vfx, sfx | SP cost, cooldown and every other formula, effects and their numbers, passive modifiers, weapon requirement |
 | Jobs | id, name, description, parent job, usable weapon types, model, icon, skill tree (skill, max level, required skills) | stat bonuses, change requirements, EXP table id |
 | Statuses | id, name, description, buff or debuff, icon, vfx | effects, tick interval, stacks, tags, `prevents_*` flags |
-| Monsters | id, name, model | level, race, size, element, stats, attack range, EXP, drop table links, AI |
+| Monsters | id, name, model, sound keys (aggro, hit, die) | level, race, size, element, stats, attack range, EXP, drop table links, AI |
 | NPCs | id, name, title, dialogue id, model, portrait | — |
 | Dialogue | id, start node, nodes (speaker, portrait, text, next, choices with text / next / quest id) | — |
 | Quests | id, name, description, giver NPC, display text of each step | prerequisites, objectives and counts, rewards, repeatable flag |
-| Maps | id, name, scene, music, width, height, cell flags (`walkable`, `blocks_los`; base64, as in the grid file), warps (cell, target map, target cell), NPC placements, zones | `spawns`, `source_scene_hash` |
+| Maps | id, name, scene, music, ambience key, width, height, cell flags (`walkable`, `blocks_los`; base64, as in the grid file), warps (cell, target map, target cell), NPC placements, zones | `spawns`, `source_scene_hash` |
 | Elements, stats | element ids and stat ids, for labels | element multipliers, derived-stat formulas |
 | — | — | drop tables and chances, `formulas.yaml`, `balance.yaml`, EXP tables |
 
@@ -314,8 +314,11 @@ junction/symlink in dev; copied and packed at export). Downloading themes after 
 ### 7.8 Audio
 Every sound is an **asset key** resolved by the theme (§8), so replacing a sound never touches code or content.
 
-- **Content names sounds by key, all optional:** skills (`sfx.*` on use), monsters (aggro, hit, die), weapon types (swing, impact),
-  items (use, equip), maps (music, ambience loop). A missing key is not an error: the client falls back (below).
+- **Content names sounds by key, all optional:** skills (`sfx_asset_key`), monsters (`sounds.aggro|hit|die`), items (`use_sfx`, `equip_sfx`),
+  maps (`music_asset_key`, `ambience_asset_key`). Weapon swing and impact sounds are not content fields: weapon types are vocabulary, so
+  they are theme defaults (`weapon.<weapon_type>.swing|impact`). A missing key is not an error: the client falls back (below).
+- **Fallback order** (`AudioResolver` in `Game.Shared/Audio`, shared by the client and the tests): the key content names → the
+  theme's `audio.defaults` entry for the category → silence. Events have no content key: `audio.events` → silence.
 - **Fallbacks live in the theme:** the manifest's `audio.defaults` gives a category default (e.g. any monster's death sound,
   any weapon impact), so a theme can sound complete with a handful of files and get more specific over time.
 - **Game events without content** (level up, quest complete, item pickup, UI tap, warp) map to keys in the manifest's
@@ -325,7 +328,10 @@ Every sound is an **asset key** resolved by the theme (§8), so replacing a soun
 - **Playback:** music crossfades on map change; sound effects play from a pool with a voice cap and per-key cooldown so 30 hits in one
   tick don't stack; sounds far outside the camera are skipped. On mobile the client pauses audio in the background, follows the iOS
   silent switch for effects, and gives up audio focus on Android when another app plays.
-- **Validated at load:** every referenced key, default and event mapping resolves in the active theme; files are OGG.
+- **Validated at load** (`validate`, the `audio` rule): every sound key used by content, defaults or events exists in the manifest with the right
+  prefix (`sfx.` for monster, item, skill, default and event sounds; `music.`, `ambience.` for maps); categories, weapon types, events and buses
+  are known terms; `volume_db` is within -60 to 12; `pitch` is `[min, max]` with 0 < min ≤ max; `files` is not empty and every file ends in `.ogg`.
+  The manifest is theme data and is **not** in the client bundle; the bundle carries only the content's sound keys.
 
 ## 8. Theming (asset swap)
 
@@ -343,6 +349,24 @@ Every sound is an **asset key** resolved by the theme (§8), so replacing a soun
   "sfx.hit.light":          { "file": "audio/hit_light.ogg" }
 }
 ```
+
+**Sound entries** (`sfx.*`, `ambience.*`, `music.*`) take the plain form above or a richer one; every field except the file is optional:
+
+```json
+{
+  "sfx.weapon.impact.slash": { "files": ["audio/slash_1.ogg", "audio/slash_2.ogg"],
+                               "volume_db": -3, "pitch": [0.95, 1.05], "bus": "sfx", "loop": false },
+  "ambience.map.starter_meadow": { "file": "audio/meadow_loop.ogg", "loop": true, "bus": "ambient" },
+  "audio": {
+    "defaults": { "monster.die": "sfx.monster.die.generic", "weapon.dagger.swing": "sfx.weapon.swing.light", "ui.tap": "sfx.ui.tap" },
+    "events":   { "LevelUp": "sfx.event.level_up", "QuestCompleted": "sfx.event.quest_complete" }
+  }
+}
+```
+
+`file` or `files` (one is picked at random; not both), `volume_db` (decibels), `pitch` (`[min, max]` scale, picked at random per play), `bus`
+(VOCABULARY "Audio buses"; default follows the key prefix), `loop`. `audio.defaults` maps a category (VOCABULARY "Audio default categories") and
+`audio.events` maps an `EventNames` term to an `sfx.` key. The `audio` object is not an asset key. Replacing a sound means editing its entry or file.
 
 Rig names are theme-internal; the validator checks that a model, its animation library and its
 skinned equipment use the same rig. Active theme is a config setting.

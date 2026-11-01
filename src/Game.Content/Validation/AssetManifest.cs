@@ -17,7 +17,8 @@ public static class AssetManifest
             using var doc = JsonDocument.Parse(File.ReadAllText(manifestPath));
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
                 throw new InvalidDataException($"{manifestPath}: expected a JSON object at the top level.");
-            return doc.RootElement.EnumerateObject().Select(p => p.Name).ToHashSet(StringComparer.Ordinal);
+            // "audio" holds the sound tables (defaults, events), not an asset.
+            return doc.RootElement.EnumerateObject().Select(p => p.Name).Where(n => n != "audio").ToHashSet(StringComparer.Ordinal);
         }
         catch (JsonException e)
         {

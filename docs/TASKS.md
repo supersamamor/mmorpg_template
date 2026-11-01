@@ -66,7 +66,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
 | T-301 | Monster spawns, respawn, data-driven AI | Claude Code | Opus 5.5 | [T-301](../tasks/prompts/T-301.md) | T-201, T-204, T-212 | Review | Server-side; started before Phase 2 client work because that waits on T-005 |
-| T-304 | Audio data: sound keys, theme `audio.defaults` / `audio.events`, validation | Claude Code | Sonnet 5.5 | [T-304](../tasks/prompts/T-304.md) | T-102, T-209 | Ready | Data only; client audio system is T-305 |
+| T-304 | Audio data: sound keys, theme `audio.defaults` / `audio.events`, validation | Claude Code | Sonnet 5.5 | [T-304](../tasks/prompts/T-304.md) | T-102, T-209 | Review | Data only; client audio system is T-305 |
 
 ## Phase 7 — Persistence & accounts
 

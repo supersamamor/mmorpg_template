@@ -38,16 +38,18 @@ internal static class ValidateCommand
         // themes/ sits next to content/ in the repo layout.
         var manifest = AssetManifest.PathFor(Path.Combine(Path.GetFullPath(content), "..", "themes"), theme);
         IReadOnlySet<string> assetKeys;
+        AudioManifest audio;
         try
         {
             assetKeys = AssetManifest.LoadKeys(manifest);
+            audio = AudioManifest.Load(manifest, $"themes/{theme}/asset-manifest.json");
         }
         catch (InvalidDataException e)
         {
             return new[] { new ValidationIssue(ValidationSeverity.Error, "", 0, 0, "", ValidationCodes.ThemeManifest, e.Message) };
         }
 
-        return ContentValidator.Validate(load.Database, content, assetKeys).Issues;
+        return ContentValidator.Validate(load.Database, content, assetKeys, audio).Issues;
     }
 
     private static string FindRepoRoot()

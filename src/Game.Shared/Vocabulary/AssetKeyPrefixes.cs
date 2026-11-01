@@ -42,6 +42,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>font.</c>: Font.</summary>
         public const string Font = "font.";
 
+        /// <summary><c>ambience.</c>: Ambience loop (a map's background sound).</summary>
+        public const string Ambience = "ambience.";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             Model,
@@ -56,6 +59,7 @@ namespace Game.Shared.Vocabulary
             Portrait,
             Sfx,
             Music,
-            Font);
+            Font,
+            Ambience);
     }
 }

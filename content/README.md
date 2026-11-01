@@ -71,6 +71,12 @@ The `.txt` file has header lines, a line `---`, then one text row per grid row (
 
 Lines starting with `//` are comments. Commit the `.txt` next to the generated `.grid.json`; a test fails when they differ.
 
+## Sounds
+
+Sounds are asset keys, all optional: `sounds: { aggro, hit, die }` on monsters, `use_sfx` / `equip_sfx` on items, `ambience_asset_key` on maps (`music_asset_key` and a
+skill's `sfx_asset_key` already existed). Leave one out and the theme's `audio.defaults` supplies it; the files, variations, volume and pitch live in
+`themes/<name>/asset-manifest.json` (ARCHITECTURE §7.8 and §8).
+
 ## Client bundle
 
 `dotnet run --project src/Game.Tools -- export-client [out.json]` writes the display-only bundle the app packs, plus its content hash (default `build/client-content.json`, gitignored; `--check <file>` tests that a file is current). What is in it: ARCHITECTURE §5.4.

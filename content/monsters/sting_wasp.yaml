@@ -19,3 +19,7 @@ ai:
       level: 1
       chance: 0.25
 model_asset_key: model.monster.sting_wasp
+sounds:
+  aggro: sfx.monster.aggro.wasp
+  hit: sfx.monster.hit.generic
+  die: sfx.monster.die.generic

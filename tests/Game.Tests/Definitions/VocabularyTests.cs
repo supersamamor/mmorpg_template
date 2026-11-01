@@ -9,7 +9,9 @@ public class VocabularyTests
     public static TheoryData<string, VocabularySet, string[]> Categories => new()
     {
         { "Id namespaces", IdPrefixes.All, ["job.", "skill.", "item.", "monster.", "status.", "quest.", "npc.", "dialogue.", "map.", "drop.", "exp."] },
-        { "Asset key prefixes", AssetKeyPrefixes.All, ["model.", "anim.", "scene.", "tex.", "mat.", "vfx.", "sprite.", "icon.", "ui.", "portrait.", "sfx.", "music.", "font."] },
+        { "Asset key prefixes", AssetKeyPrefixes.All, ["model.", "anim.", "scene.", "tex.", "mat.", "vfx.", "sprite.", "icon.", "ui.", "portrait.", "sfx.", "music.", "font.", "ambience."] },
+        { "Audio buses", AudioBuses.All, ["music", "sfx", "ui", "ambient"] },
+        { "Audio default categories", AudioCategories.Fixed, ["monster.aggro", "monster.hit", "monster.die", "item.use", "item.equip", "ui.tap", "ui.open", "ui.close", "ui.error"] },
         { "Directions", Directions.All, ["n", "ne", "e", "se", "s", "sw", "w", "nw"] },
         { "Cell flags", CellFlags.All, ["walkable", "blocks_los"] },
         { "Map object types", MapObjectTypes.All, ["spawn", "warp", "npc", "zone"] },

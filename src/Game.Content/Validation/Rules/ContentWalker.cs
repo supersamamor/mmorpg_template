@@ -182,9 +182,17 @@ internal static class ContentWalker
         {
             yield return new(i.Id, "icon_asset_key", i.IconAssetKey, false);
             yield return new(i.Id, "ground_asset_key", i.GroundAssetKey, false);
+            yield return new(i.Id, "use_sfx", i.UseSfx, false);
+            yield return new(i.Id, "equip_sfx", i.EquipSfx, false);
             if (i.Equip is { } eq) yield return new(i.Id, "equip.visual_asset_key", eq.VisualAssetKey, false);
         }
-        foreach (var m in db.Monsters.All) yield return new(m.Id, "model_asset_key", m.ModelAssetKey, false);
+        foreach (var m in db.Monsters.All)
+        {
+            yield return new(m.Id, "model_asset_key", m.ModelAssetKey, false);
+            yield return new(m.Id, "sounds.aggro", m.Sounds?.Aggro, false);
+            yield return new(m.Id, "sounds.hit", m.Sounds?.Hit, false);
+            yield return new(m.Id, "sounds.die", m.Sounds?.Die, false);
+        }
         foreach (var s in db.Statuses.All)
         {
             yield return new(s.Id, "icon_asset_key", s.IconAssetKey, false);
@@ -199,6 +207,7 @@ internal static class ContentWalker
         {
             yield return new(m.Id, "scene_asset_key", m.SceneAssetKey, true);
             yield return new(m.Id, "music_asset_key", m.MusicAssetKey, false);
+            yield return new(m.Id, "ambience_asset_key", m.AmbienceAssetKey, false);
         }
         foreach (var d in db.Dialogue.All)
             foreach (var (key, node) in d.Nodes)

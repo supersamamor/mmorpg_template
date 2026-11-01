@@ -8,6 +8,7 @@ buy_price: 250
 sell_price: 75
 icon_asset_key: icon.item.padded_vest
 ground_asset_key: model.prop.loot_bag
+equip_sfx: sfx.item.equip.cloth
 equip:
   slots: [body]
   card_slots: 1

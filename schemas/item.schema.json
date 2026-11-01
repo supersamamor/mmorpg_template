@@ -62,6 +62,22 @@
       "pattern": "^(model\\.|sprite\\.)[a-z0-9_]+(\\.[a-z0-9_]+)*$",
       "description": "Visual of the item lying on the ground (model.* or sprite.*)."
     },
+    "use_sfx": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sfx\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "Sound played when the item is used (sfx.*); falls back to the item.use theme default."
+    },
+    "equip_sfx": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^sfx\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "Sound played when the item is equipped (sfx.*); falls back to the item.equip theme default."
+    },
     "consumable": {
       "type": [
         "object",

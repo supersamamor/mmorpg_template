@@ -111,6 +111,8 @@ public static class ClientBundleWriter
         if (i.Slots.Count > 0) Strings(w, "slots", i.Slots);
         Opt(w, "weapon_type", i.WeaponType);
         Opt(w, "visual", i.VisualAssetKey);
+        Opt(w, "use_sfx", i.UseSfx);
+        Opt(w, "equip_sfx", i.EquipSfx);
     }
 
     private static void Skill(Utf8JsonWriter w, ClientSkill s)
@@ -169,6 +171,14 @@ public static class ClientBundleWriter
         w.WriteString("id", m.Id);
         w.WriteString("name", m.Name);
         Opt(w, "model", m.ModelAssetKey);
+        if (m.Sounds is { } sounds)
+        {
+            w.WriteStartObject("sounds");
+            Opt(w, "aggro", sounds.Aggro);
+            Opt(w, "hit", sounds.Hit);
+            Opt(w, "die", sounds.Die);
+            w.WriteEndObject();
+        }
     }
 
     private static void Npc(Utf8JsonWriter w, ClientNpc n)
@@ -217,6 +227,7 @@ public static class ClientBundleWriter
         w.WriteString("name", m.Name);
         w.WriteString("scene", m.SceneAssetKey);
         Opt(w, "music", m.MusicAssetKey);
+        Opt(w, "ambience", m.AmbienceAssetKey);
         w.WriteNumber("width", m.Width);
         w.WriteNumber("height", m.Height);
         w.WriteString("cells", m.Cells);

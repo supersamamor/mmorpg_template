@@ -12,11 +12,12 @@ public sealed class ValidationContext
     private readonly YamlLocator _locator;
 
     /// <summary>Creates a context.</summary>
-    public ValidationContext(ContentDatabase database, string contentRoot, IReadOnlySet<string> assetKeys)
+    public ValidationContext(ContentDatabase database, string contentRoot, IReadOnlySet<string> assetKeys, AudioManifest? audio = null)
     {
         Database = database;
         ContentRoot = contentRoot;
         AssetKeys = assetKeys;
+        Audio = audio;
         _locator = new YamlLocator(contentRoot);
     }
 
@@ -28,6 +29,9 @@ public sealed class ValidationContext
 
     /// <summary>Asset keys declared in the theme's <c>asset-manifest.json</c>. Only existence is checked, not files.</summary>
     public IReadOnlySet<string> AssetKeys { get; }
+
+    /// <summary>The audio data of the theme manifest, or null when the caller did not load it (the manifest checks are then skipped).</summary>
+    public AudioManifest? Audio { get; }
 
     /// <summary>Issues reported so far.</summary>
     public IReadOnlyList<ValidationIssue> Issues => _issues;
@@ -43,6 +47,13 @@ public sealed class ValidationContext
     /// <summary>Reports an error in a singleton root file (e.g. <c>elements.yaml</c>) that has no id.</summary>
     public void ErrorInFile(string file, string path, string code, string message) =>
         AddIssue(ValidationSeverity.Error, file, null, path, code, message);
+
+    /// <summary>Reports an error in the theme manifest. <paramref name="token"/> is the key or name used to find its line.</summary>
+    public void ErrorInManifest(AudioManifest manifest, string token, string path, string code, string message)
+    {
+        var line = manifest.LineOf(token);
+        _issues.Add(new ValidationIssue(ValidationSeverity.Error, manifest.DisplayPath, line, line > 0 ? 1 : 0, path, code, message));
+    }
 
     /// <summary>Reports an error that belongs to no file.</summary>
     public void ErrorGlobal(string code, string message) =>
