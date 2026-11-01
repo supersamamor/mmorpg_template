@@ -93,6 +93,21 @@ public sealed record GatewayOptions
     /// <summary>WebSocket protocol-level ping interval (keeps NATs open; separate from the game's <c>ping</c>).</summary>
     public int KeepAliveMs { get; init; } = 15_000;
 
+    /// <summary>
+    /// How long a character stays in the world after its connection ends without <c>logout</c> (ARCHITECTURE §10): stopped, visible to others,
+    /// and resumable with its token. Then it leaves (and, from T-702, is saved).
+    /// </summary>
+    public int GracePeriodMs { get; init; } = 60_000;
+
+    /// <summary>Failed resumes one remote address may make in a burst before it is locked out (token bucket size).</summary>
+    public int ResumeFailureBurst { get; init; } = 5;
+
+    /// <summary>Failed resumes per minute an address gets back (token bucket refill rate).</summary>
+    public double ResumeFailuresPerMinute { get; init; } = 5;
+
+    /// <summary>How long an address that ran out of failed resumes may not resume at all (<c>rate_limit</c>).</summary>
+    public int ResumeLockoutMs { get; init; } = 60_000;
+
     /// <summary>The address Kestrel binds (see <see cref="BindAddress"/>); only meaningful when <see cref="Problems"/> is empty.</summary>
     public IPAddress ListenAddress =>
         BindAddress.Length > 0 && IPAddress.TryParse(BindAddress, out var address) ? address
@@ -156,6 +171,9 @@ public sealed record GatewayOptions
         if (MaxSessions < 1) problems.Add("max-sessions must be at least 1");
         if (MaxNameLength < 1) problems.Add("max-name-length must be at least 1");
         if (!(RateLimitPerSecond > 0) || RateLimitBurst < 1 || RateLimitDropsBeforeBye < 1) problems.Add("rate limits must be above 0");
+        if (GracePeriodMs < 0) problems.Add("grace-period-ms must be 0 or more");
+        if (ResumeFailureBurst < 1 || !(ResumeFailuresPerMinute > 0) || ResumeLockoutMs < 0)
+            problems.Add("resume-failure-burst and resume-failures-per-minute must be above 0, resume-lockout-ms 0 or more");
         if (SendQueueMessages < 2 || ResyncBelowMessages < 0 || ResyncBelowMessages >= SendQueueMessages)
             problems.Add("send-queue-messages must be at least 2 and resync-below-messages below it");
         return problems;

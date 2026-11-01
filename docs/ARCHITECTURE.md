@@ -353,8 +353,8 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 - **TLS required:** `wss://` everywhere except local dev. Cleartext `ws://` is allowed only in
   debug builds (Android network-security config, iOS ATS exception).
 - **Disconnects are normal.** When a socket drops or the app is backgrounded, the server keeps
-  the character in the world for a grace period (server config), then saves and logs it out.
-- **Resume:** the client reconnects with a resume token and receives a full snapshot, then deltas.
+  the character in the world for a grace period (`grace-period-ms`, server config, default 60 s), then saves (T-702) and logs it out.
+- **Resume** (T-210): the client reconnects with a resume token and receives a full snapshot, then deltas (lifecycle step 6 below).
 - **Snapshot / delta shape** (T-204): a view record is `id, kind, display_key, cell, facing, next, speed` (`next` and
   `speed` only while walking); a delta is `appeared` (records), `changed` (id + changed fields only), `disappeared` (ids), each
   ordered by entity id. A walker produces one change per cell reached, not per tick; the client interpolates from `cell` to `next`.
@@ -372,11 +372,12 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 
   | type | direction | fields |
   |------|-----------|--------|
-  | `hello` | C→S (first) | `version`, `name` (dev login stub; T-701 replaces it), `content` (the hash of the client bundle, §5.4; optional) |
+  | `hello` | C→S (first) | `version`, `content` (the hash of the client bundle, §5.4; optional in development), and exactly one of `name` (dev login stub; T-701 replaces it) and `resume` (a resume token) |
   | `move` | C→S | `cell` (a request; it may come back `rejected`) |
   | `stop` | C→S | — |
   | `ping` | C→S | `seq` |
-  | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4) |
+  | `logout` | C→S | — (leave now: `bye logout`, the character is removed on the next tick, no grace period) |
+  | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids); empty lists left out |
   | `rejected` | S→C | `intent` (`move`), `reason` (a `MoveRejected` term), `cell` |
@@ -386,7 +387,8 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   A view record is `{"id":7,"kind":"monster","display_key":"monster.x","cell":[3,4],"facing":"e","next":[4,4],"speed":3.51}`.
 - **Session lifecycle:**
   1. The client connects and must send `hello` within `hello-timeout-ms`.
-  2. The server checks the protocol version, then the content hash (T-209): a `content` that differs from the server's ends in `bye update_required`; a missing one is accepted in development (logged as a warning) and refused elsewhere. Then it checks the dev login. The dev login is development only; any other environment refuses it.
+  2. The server checks the protocol version, then the content hash (T-209): a `content` that differs from the server's ends in `bye update_required`; a missing one is accepted in development (logged as a warning) and refused elsewhere. Then it checks the dev login. The dev login is development only; any other environment refuses it. A `hello` with `resume`
+     instead of `name` goes to step 6.
   3. The server queues the character with `GameWorld.Spawn(..., initialize)` at `balance.yaml` `new_character`. On the start
      instance's tick, the initializer sets its stats (from the stats pipeline), its display key (the job id) and its view sink, and
      queues `welcome`. The AOI then sends the first `snapshot` in phase 5 of that tick, and deltas follow.
@@ -395,8 +397,36 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
      limit: messages over it are dropped and counted, and sustained flooding ends in `bye rate_limit`.
   5. Malformed JSON, an unknown type, an oversize message, a wrong version, a message before `hello`, or silence longer than
      `idle-timeout-ms` all end in `bye <reason>` and the close frame.
-  6. When the connection ends for any reason, the character is despawned on its instance's next tick. T-210 adds the grace period
-     and resume here.
+  6. **Grace period and resume** (T-210). Every `welcome` carries a **resume token** for the character.
+     - **The connection ends without `logout`** (the client closed or vanished, idle `timeout`, `too_slow`, a protocol error such as
+       `malformed` or `rate_limit`, `server_error`): the character is **not** removed. It is stopped (`StopMove`), its view is detached
+       (`AttachView` with no sink), and it stays where it is, visible to others, for `grace-period-ms`. When that ends it leaves the
+       world (T-702 saves it first). A buggy or hostile message must not delete a character, so protocol errors are no exception.
+       A character whose session ended before its `welcome` was queued (no token yet) is removed at once.
+     - **`logout`**: `bye logout`, the close frame, and the character leaves on its instance's next tick; its token stops working.
+     - **Resume:** `hello` with `resume` (the protocol version and content hash are still checked first). If the token is live, the
+       new session takes the character over wherever it is now (it may have warped since the drop): `welcome` (same `id`, current
+       `map`, a **new** token), then a full `snapshot`, then deltas. A session still playing that character (the server had not
+       noticed the drop yet) gets `bye replaced`. A character never has two sessions. An unknown, used or expired token gets
+       `bye resume_failed`. Resume works in every environment; the token check sits in `ILoginService` (T-701 plugs in there).
+     - **Abuse:** failed resumes are counted per remote address in a token bucket (`resume-failure-burst`,
+       `resume-failures-per-minute`); an address that runs out gets `bye rate_limit` and may not resume for `resume-lockout-ms`.
+     - **Shutdown:** every session gets `bye shutdown`; characters in their grace period leave too (T-702 saves them).
+     - **The token:** 256 bits from the OS CSPRNG, base64url without padding (43 characters), bound to one character, **single use and
+       rotated** (every successful resume returns a new one and the old one stops working). The server keeps only its SHA-256 and
+       compares in constant time; tokens never appear in logs (at most a 6-hex-digit fingerprint of the hash). Tokens live in server
+       memory only: **a server restart invalidates every token** (durable sessions are T-701).
+- **Client resume flow** (for T-206):
+  1. Keep the token from the latest `welcome` **in memory only** (never on disk or in preferences); replace it on every `welcome`.
+  2. On a socket drop, or when the app comes back to the foreground and the socket is gone, reconnect with backoff (e.g. 0.5 s,
+     1 s, 2 s, 4 s, capped, with jitter) and send `hello` with `resume`, `version` and `content`. Stop trying once the grace period
+     must be over.
+  3. On `welcome`: keep the new token, keep the `id`, load `map` if it changed, then replace the view with the `snapshot` that follows.
+  4. On `bye resume_failed` (or no token, e.g. the app was killed): go to the login screen. On `bye rate_limit` during a resume: same,
+     and do not retry automatically.
+  5. On `bye logout` or `bye replaced`: do not reconnect (`replaced` means the same player is on another connection).
+     On `bye update_required`: go to the store; `shutdown`: show a message and retry later with a normal login.
+  6. To leave on purpose, send `logout` and wait for `bye logout`.
 - **Back-pressure:** the sink serializes on the tick thread into a bounded per-session queue, and the socket drains that queue. When
   the queue is full, queued views are dropped and later deltas are skipped. Once the queue has drained, the session asks for a fresh
   snapshot (`RequestSnapshot`). A client that stays behind for `slow-client-timeout-ms` gets `bye too_slow`.

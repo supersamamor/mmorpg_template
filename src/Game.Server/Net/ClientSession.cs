@@ -49,6 +49,7 @@ public sealed class ClientSession : IViewSink
     private long _messagesSent;
     private string? _byeReason;
     private volatile string? _mapId;
+    private volatile bool _welcomed;
 
     internal ClientSession(Gateway gateway, WebSocket socket, string peer, long nowMs)
     {
@@ -56,14 +57,21 @@ public sealed class ClientSession : IViewSink
         _socket = socket;
         _options = gateway.Options;
         Peer = peer;
+        Address = AddressOf(peer);
         _connectedMs = nowMs;
         _lastInboundMs = nowMs;
         _bucket = new TokenBucket(_options.RateLimitPerSecond, _options.RateLimitBurst, nowMs);
         Queue = new SendQueue(_options.SendQueueMessages, _options.ResyncBelowMessages);
     }
 
-    /// <summary>Remote address, for logs.</summary>
+    /// <summary>Remote address and port, for logs.</summary>
     public string Peer { get; }
+
+    /// <summary>Remote address without the port (failed resumes are counted per address).</summary>
+    public string Address { get; }
+
+    /// <summary>True once <c>welcome</c> was queued: the client has (or is about to have) a resume token for its character.</summary>
+    public bool Welcomed => _welcomed;
 
     /// <summary>The lifecycle state.</summary>
     public SessionState State => (SessionState)Volatile.Read(ref _state);
@@ -127,16 +135,34 @@ public sealed class ClientSession : IViewSink
     }
 
     /// <summary>Called on the tick thread when the character is added to its map, before the AOI first sees it.</summary>
-    internal void OnJoinedOnTick(Entity entity, NewCharacters start)
+    /// <param name="entity">The new character.</param>
+    /// <param name="start">Where and how new characters start.</param>
+    /// <param name="token">Its first resume token, or null when the session ended before the gateway linked the character.</param>
+    internal void OnJoinedOnTick(Entity entity, NewCharacters start, string? token)
     {
         Interlocked.Exchange(ref _entity, entity.Id.Value);
         entity.Stats = start.CreateStats();
         entity.DefinitionId = start.JobId;
-        if (Closing) return; // the gateway despawns it when EntityEnteredMap is dispatched
+        if (Closing || token is null) return; // the gateway has released it; it leaves on the next tick
         _mapId = entity.MapId;
-        Post(new WelcomeMessage(ProtocolVersion.Current, entity.Id.Value, entity.MapId, TickRate.Hz, _gateway.ContentHash));
+        Post(new WelcomeMessage(ProtocolVersion.Current, entity.Id.Value, entity.MapId, TickRate.Hz, _gateway.ContentHash, token));
+        _welcomed = true;
         entity.View = this; // the AOI sends the first snapshot in this tick's phase 5, after the welcome
         Interlocked.CompareExchange(ref _state, (int)SessionState.Joined, (int)SessionState.Joining);
+    }
+
+    /// <summary>
+    /// Called by the gateway, under its link lock, when this session has taken over <paramref name="id"/> with a resume token: queues
+    /// <c>welcome</c> (with the new <paramref name="token"/>); the gateway then attaches the view, so a full snapshot follows.
+    /// </summary>
+    internal void OnResumed(EntityId id, string? displayName, string mapId, string token)
+    {
+        DisplayName = displayName;
+        _mapId = mapId;
+        Interlocked.Exchange(ref _entity, id.Value);
+        _welcomed = true; // from here a drop starts a new grace period rather than removing the character
+        Post(new WelcomeMessage(ProtocolVersion.Current, id.Value, mapId, TickRate.Hz, _gateway.ContentHash, token));
+        Interlocked.CompareExchange(ref _state, (int)SessionState.Joined, (int)SessionState.AwaitingHello);
     }
 
     /// <summary>Queues a control message (welcome, rejected, pong); a hopelessly full queue ends the session.</summary>
@@ -301,6 +327,9 @@ public sealed class ClientSession : IViewSink
             case PingMessage ping:
                 Post(new PongMessage(ping.Seq));
                 break;
+            case LogoutMessage:
+                _gateway.Logout(this);
+                break;
         }
     }
 
@@ -323,6 +352,11 @@ public sealed class ClientSession : IViewSink
         else if (!string.Equals(hello.Content, _gateway.ContentHash, StringComparison.Ordinal))
         {
             Bye(ByeReasons.UpdateRequired);
+            return;
+        }
+        if (hello.Resume is not null)
+        {
+            _gateway.Resume(this, hello);
             return;
         }
         var login = _gateway.Login.Login(hello);
@@ -387,13 +421,20 @@ public sealed class ClientSession : IViewSink
         }
     }
 
+    /// <summary>The address part of <c>address:port</c> (IPv6 addresses contain colons too, so the last one splits).</summary>
+    internal static string AddressOf(string peer)
+    {
+        var colon = peer.LastIndexOf(':');
+        return colon > 0 ? peer[..colon] : peer;
+    }
+
     /// <summary>The WebSocket close status that goes with a bye reason.</summary>
     public static WebSocketCloseStatus CloseStatusFor(string reason) => reason switch
     {
         ByeReasons.Oversize => WebSocketCloseStatus.MessageTooBig,
         ByeReasons.Shutdown or ByeReasons.ServerFull => WebSocketCloseStatus.EndpointUnavailable,
         ByeReasons.ServerError => WebSocketCloseStatus.InternalServerError,
-        ByeReasons.Timeout or ByeReasons.TooSlow => WebSocketCloseStatus.NormalClosure,
+        ByeReasons.Timeout or ByeReasons.TooSlow or ByeReasons.Logout or ByeReasons.Replaced => WebSocketCloseStatus.NormalClosure,
         _ => WebSocketCloseStatus.PolicyViolation,
     };
 }

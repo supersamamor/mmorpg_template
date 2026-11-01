@@ -12,7 +12,7 @@ namespace Game.Shared.Protocol
     /// <summary>Message type names, the <c>type</c> field of every message (VOCABULARY.md "Message types").</summary>
     public static class MessageTypes
     {
-        /// <summary><c>hello</c> (client → server, first message): protocol version and dev display name.</summary>
+        /// <summary><c>hello</c> (client → server, first message): protocol version, content hash, and a dev display name or a resume token.</summary>
         public const string Hello = "hello";
 
         /// <summary><c>move</c> (client → server): walk to a cell.</summary>
@@ -24,7 +24,10 @@ namespace Game.Shared.Protocol
         /// <summary><c>ping</c> (client → server): keep-alive and round-trip probe.</summary>
         public const string Ping = "ping";
 
-        /// <summary><c>welcome</c> (server → client): the client's entity, map and the server tick rate.</summary>
+        /// <summary><c>logout</c> (client → server): leave on purpose; the character is removed at once, without a grace period.</summary>
+        public const string Logout = "logout";
+
+        /// <summary><c>welcome</c> (server → client): the client's entity, map, the server tick rate and a new resume token.</summary>
         public const string Welcome = "welcome";
 
         /// <summary><c>snapshot</c> (server → client): everything the client sees; replaces its view (also sent on a map change).</summary>
@@ -43,7 +46,7 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Ping);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Ping, Logout);
 
         /// <summary>Types the server sends.</summary>
         public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, Pong, Bye);
@@ -97,10 +100,19 @@ namespace Game.Shared.Protocol
         /// <summary><c>server_error</c>: the server failed to handle the session.</summary>
         public const string ServerError = "server_error";
 
+        /// <summary><c>logout</c>: the client sent <c>logout</c>; its character left the world. Do not reconnect.</summary>
+        public const string Logout = "logout";
+
+        /// <summary><c>replaced</c>: another connection resumed this character (the same player on a new socket). Do not reconnect.</summary>
+        public const string Replaced = "replaced";
+
+        /// <summary><c>resume_failed</c>: the resume token is unknown, already used, or its character's grace period is over. Log in again.</summary>
+        public const string ResumeFailed = "resume_failed";
+
         /// <summary>Every bye reason.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             Timeout, BadVersion, Malformed, UnknownType, Oversize, BeforeHello, DuplicateHello, RateLimit, LoginRefused, ServerFull, TooSlow,
-            Shutdown, ServerError, UpdateRequired);
+            Shutdown, ServerError, UpdateRequired, Logout, Replaced, ResumeFailed);
     }
 
     /// <summary>Entity kinds in a view record's <c>kind</c> field (VOCABULARY.md "Entity kinds").</summary>
