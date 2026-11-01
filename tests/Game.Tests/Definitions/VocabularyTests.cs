@@ -35,7 +35,7 @@ public class VocabularyTests
         { "Monster AI states", AiStates.All, ["idle", "wander", "chase", "attack", "return"] },
         { "Aggro reasons", AggroReasons.All, ["sighted", "attacked", "target_gone", "leash", "unreachable"] },
         { "Events", EventNames.All, ["EntitySpawned", "EntityDied", "MonsterKilled", "DamageDealt", "ItemAcquired", "ItemUsed", "ItemEquipped", "NpcTalked", "MapEntered", "ZoneEntered", "LevelUp", "JobLevelUp", "JobChanged", "SkillLearned", "QuestStarted", "QuestStepCompleted", "QuestCompleted", "StatusApplied", "StatusExpired", "EntityEnteredMap", "EntityLeftMap", "WarpRejected", "MovementStarted", "CellReached", "MovementStopped", "MoveRejected", "AggroGained", "AggroLost", "AttackRequested", "AttackRefused", "AttackStopped", "ExpGained", "ExpLost", "PlayerRespawned", "ItemDropped", "ItemExpired"] },
-        { "Attack reasons", AttackReasons.All, ["attacker_dead", "target_dead", "target_gone", "out_of_range", "safe_zone", "invalid_target", "unreachable", "cancelled"] },
+        { "Attack reasons", AttackReasons.All, ["attacker_dead", "target_dead", "target_gone", "out_of_range", "no_line_of_sight", "safe_zone", "invalid_target", "unreachable", "cancelled"] },
         { "Hit results", HitResults.All, ["hit", "crit", "miss"] },
         { "Currency", Currencies.All, ["currency"] },
         { "Formula functions", FormulaFunctions.All, ["min", "max", "floor", "ceil", "round", "clamp", "pow", "sqrt"] },

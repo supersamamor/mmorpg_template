@@ -18,6 +18,12 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>out_of_range</c>: the target is farther than the attack range (Chebyshev) when the attack is resolved.</summary>
         public const string OutOfRange = "out_of_range";
 
+        /// <summary>
+        /// <c>no_line_of_sight</c>: a ranged attack (range above 1) has no line of sight from the attacker's cell to the target's
+        /// (cells flagged <c>blocks_los</c> in between). Melee (range 1) never checks it.
+        /// </summary>
+        public const string NoLineOfSight = "no_line_of_sight";
+
         /// <summary><c>safe_zone</c>: the attacking player, or the player being attacked, stands in a <c>safe</c> zone.</summary>
         public const string SafeZone = "safe_zone";
 
@@ -36,6 +42,7 @@ namespace Game.Shared.Vocabulary
             TargetDead,
             TargetGone,
             OutOfRange,
+            NoLineOfSight,
             SafeZone,
             InvalidTarget,
             Unreachable,

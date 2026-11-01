@@ -161,7 +161,7 @@ In `AggroGained`: `sighted`, `attacked`
 In `AggroLost`: `target_gone`, `leash`, `unreachable`
 
 ## Attack reasons
-In `AttackRefused` and `AttackStopped`: `attacker_dead`, `target_dead`, `target_gone`, `out_of_range`, `safe_zone`, `invalid_target`,
+In `AttackRefused` and `AttackStopped`: `attacker_dead`, `target_dead`, `target_gone`, `out_of_range`, `no_line_of_sight`, `safe_zone`, `invalid_target`,
 `unreachable`, `cancelled` (ARCHITECTURE §6.7)
 
 ## Hit results

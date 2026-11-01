@@ -260,12 +260,16 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
 - **Vitals.** Players and monsters with a stat sheet get `Entity.Vitals` (current HP/SP) when they enter a map, full at `max_hp`; they travel
   with the entity across warps. Every tick they are clamped to a changed sheet's maxima (a higher max does not refill). HP never goes below 0.
 - **Per tick:** intents (`AttackTarget`, `StopAttack`, `Respawn`) → vitals clamp → the monster `AttackRequested` events raised last tick,
-  in order, each re-checked (both alive on this map, a player target not in a `safe` zone, Chebyshev distance within the request's range;
-  otherwise `AttackRefused` with a reason) → player auto-attacks in entity id order → ground item expiry.
+  in order, each re-checked (both alive on this map, a player target not in a `safe` zone, Chebyshev distance within the request's range,
+  and for a ranged attack (range above 1) line of sight between the two cells; otherwise `AttackRefused` with a reason) → player auto-attacks in entity id order → ground item expiry.
 - **Player auto-attack.** `AttackTarget` (monsters only; refused in a `safe` zone) keeps attacking until the target dies or leaves, the player
   sends `StopAttack`, a new move order (seen as a `MovementStarted` / `MovementStopped` combat did not cause), or no path leads into range.
   The player walks in with `MoveTo` (re-path at most every `combat.player_repath_interval_ms`) and attacks at its `aspd` within
-  `combat.player_attack_range`; standing in a safe zone it neither hits nor can be hit.
+  `combat.player_attack_range`; a ranged attack also needs line of sight, and without it the player walks closer as when out of range.
+  Standing in a safe zone it neither hits nor can be hit.
+- **Disconnected characters fight on.** A character in its disconnect grace period (§10) is an ordinary player entity: it stops
+  walking but can still be attacked and killed (disconnecting is no escape), stays dead, and a resumed session sees it dead and sends
+  `Respawn`. Combat has no special case for it.
 - **Hits.** Every attack goes through `CombatResolver` with one reused `AttackContext` (monster element, race and size from `MonsterDef`;
   weapon inputs 0 until equipment). HP changes by the damage, clamped to 0..max; `DamageDealt` carries amount, `hit`/`crit`/`miss` and HP left.
 - **Death** at 0 HP, in the same step: `Dead = true` (movement stops it, the router drops its intents, combat ignores it), `EntityDied`. A monster

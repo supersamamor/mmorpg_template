@@ -1,4 +1,5 @@
 using Game.Server.World;
+using Game.Server.World.Aoi;
 using Game.Server.World.Combat;
 using Game.Server.World.Monsters;
 using Game.Shared.Definitions;
@@ -259,5 +260,101 @@ public class CombatSystemTests
         rig.TickUntil(() => rig.Of<DamageDealt>().Any(d => d.Source == monster), 200, "the monster hits back");
         rig.Of<AggroGained>().ShouldContain(a => a.Monster == monster && a.Target == player && a.Reason == AggroReasons.Attacked);
         rig.Hp(player).ShouldBeLessThan(rig.Get(player).Vitals!.MaxHp);
+    }
+
+    // ---- line of sight -------------------------------------------------------------------------------------------------------------
+
+    private static readonly string[] Wall =
+    [
+        "..........",
+        "....#.....",
+        "....#.....",
+        "....#.....",
+        "..........",
+    ];
+
+    [Fact]
+    public void A_ranged_monster_request_without_line_of_sight_is_refused()
+    {
+        var archer = TestCombat.Monster("monster.t_archer", attackRange: 3);
+        var (rig, monster, player) = Pair(archer, new GridCell(6, 2), new GridCell(3, 2), TestCombat.Grid(Wall));
+        rig.Request(monster, player, range: 3);   // the wall at x = 4 is between them
+        rig.Ticks(2);
+        rig.Of<DamageDealt>().ShouldBeEmpty();
+        rig.Of<AttackRefused>().ShouldHaveSingleItem().ShouldBe(new AttackRefused(monster, player, AttackReasons.NoLineOfSight));
+        rig.Combat.RefusedCount(AttackReasons.NoLineOfSight).ShouldBe(1);
+
+        rig.Get(player).Cell = new GridCell(4, 4);   // below the end of the wall: in sight
+        LineOfSight.HasLineOfSight(rig.Instance.Grid, new GridCell(6, 2), new GridCell(4, 4)).ShouldBeTrue();
+        rig.Request(monster, player, range: 3);
+        rig.Ticks(2);
+        rig.Of<DamageDealt>().ShouldHaveSingleItem().Source.ShouldBe(monster);
+    }
+
+    [Fact]
+    public void Melee_skips_the_line_of_sight_check()
+    {
+        // Diagonal neighbours with both corner cells blocking: no line of sight, but range 1 does not ask.
+        string[] rows =
+        [
+            ".#..",
+            "#...",
+            "....",
+        ];
+        var (rig, monster, player) = Pair(Slime, new GridCell(0, 0), new GridCell(1, 1), TestCombat.Grid(rows));
+        LineOfSight.HasLineOfSight(rig.Instance.Grid, new GridCell(0, 0), new GridCell(1, 1)).ShouldBeFalse();
+        rig.Request(monster, player);
+        rig.Ticks(2);
+        rig.Of<AttackRefused>().ShouldBeEmpty();
+        rig.Of<DamageDealt>().ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public void A_ranged_player_without_line_of_sight_walks_closer_until_it_has_it()
+    {
+        var rig = new CombatRig(TestCombat.Grid(Wall), [Tank], TestCombat.Balance(attackRange: 3));
+        var monster = rig.AddMonster(Tank, new GridCell(6, 2));
+        var player = rig.AddPlayer(new GridCell(3, 2));   // in range (3) but the wall hides the target
+        rig.Ticks();
+        rig.Send(new AttackTarget(player, monster));
+        rig.TickUntil(() => rig.Of<DamageDealt>().Any(), 100, "first hit");
+
+        var from = rig.Get(player).Cell;
+        from.ShouldNotBe(new GridCell(3, 2));
+        GridDistance.Chebyshev(from, new GridCell(6, 2)).ShouldBeLessThanOrEqualTo(3);
+        LineOfSight.HasLineOfSight(rig.Instance.Grid, from, new GridCell(6, 2)).ShouldBeTrue();
+        rig.Of<MovementStarted>().ShouldContain(m => m.Entity == player);
+        rig.Of<AttackStopped>().ShouldBeEmpty();
+        rig.Of<AttackRefused>().ShouldBeEmpty();
+    }
+
+    // ---- disconnect grace period ---------------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void A_character_in_its_grace_period_can_still_be_hit_and_killed()
+    {
+        var biter = TestCombat.Monster("monster.t_biter", maxHp: 10_000, atk: 40, aspd: 2, aggressive: true, aggroRange: 6);
+        var rig = new CombatRig(TestCombat.Open(16, 10, [TestMonsters.Spawn(biter, 8, 5)]), [biter], ai: true, aoi: true);
+        var sink = new RecordingSink();
+        var player = rig.AddPlayer(new GridCell(4, 5));
+        rig.Ticks();
+        rig.Send(new AttachView(player, sink));
+        rig.Ticks();
+        rig.Get(player).View.ShouldBe(sink);
+
+        // The session drops: the gateway starts the grace period exactly like this (Gateway.StartGrace): stop, detach the view.
+        rig.Send(new StopMove(player));
+        rig.Send(new AttachView(player, null));
+        rig.Ticks();
+        rig.Get(player).View.ShouldBeNull();
+
+        rig.TickUntil(() => rig.Get(player).Dead, 300, "the monster kills the disconnected character");
+        rig.Of<DamageDealt>().Where(d => d.Target == player).Sum(d => d.Amount).ShouldBeGreaterThan(0);
+        rig.Of<EntityDied>().ShouldContain(d => d.Entity == player);
+        rig.Ticks(30);
+        rig.Get(player).Dead.ShouldBeTrue();   // stays dead; a resumed session sees that and sends Respawn
+        rig.Send(new Respawn(player));
+        rig.Ticks();
+        rig.Get(player).Dead.ShouldBeFalse();
     }
 }

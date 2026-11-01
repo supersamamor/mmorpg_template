@@ -18,7 +18,7 @@ namespace Game.Server.World.Combat;
 /// </summary>
 /// <remarks>
 /// <para><b>Per tick</b>, in this order: the intents (in arrival order); vitals clamped to changed stat sheets; the monster attack requests
-/// buffered from the last tick's events (in raise order); player auto-attacks (in entity id order); ground item expiry. A killing hit
+/// buffered from the last tick's events (in raise order; a ranged one also needs line of sight); player auto-attacks (in entity id order); ground item expiry. A killing hit
 /// handles the death at once (<see cref="Entity.Dead"/>, <see cref="EntityDied"/>, EXP, drops), so later attacks in the same tick already
 /// see the target dead. All randomness is the instance's <see cref="TickContext.Random"/>, through the resolver and the drop rolls.</para>
 /// <para><b>Talks to other systems only through intents and events</b> (hard rule 7): walks players with <see cref="MoveTo"/> /
@@ -150,6 +150,9 @@ public sealed class CombatSystem : ITickSystem
         foreach (var entity in instance.Entities) Track(entity);
     }
 
+    /// <summary>Melee (range 1 or less) needs no line of sight; a ranged attack needs it from cell to cell (ARCHITECTURE §4).</summary>
+    private bool InSight(GridCell from, GridCell to, int range) => range <= 1 || LineOfSight.HasLineOfSight(_instance!.Grid, from, to);
+
     private bool InSafeZone(GridCell cell)
     {
         var grid = _instance!.Grid;
@@ -268,7 +271,10 @@ public sealed class CombatSystem : ITickSystem
         _resolving.Clear();
     }
 
-    /// <summary>Re-checks a monster's request on the tick it is resolved: both alive here, the target hittable, within the request's range.</summary>
+    /// <summary>
+    /// Re-checks a monster's request on the tick it is resolved: both alive here, the target hittable, within the request's range, and for a
+    /// ranged attack with line of sight.
+    /// </summary>
     private string? Check(AttackRequested request, out Combatant? attacker, out Combatant? target)
     {
         target = null;
@@ -278,6 +284,7 @@ public sealed class CombatSystem : ITickSystem
         if (target.Entity == attacker.Entity) return AttackReasons.InvalidTarget;
         if (target.Entity.Kind == EntityKind.Player && InSafeZone(target.Entity.Cell)) return AttackReasons.SafeZone;
         if (GridDistance.Chebyshev(attacker.Entity.Cell, target.Entity.Cell) > request.Range) return AttackReasons.OutOfRange;
+        if (!InSight(attacker.Entity.Cell, target.Entity.Cell, request.Range)) return AttackReasons.NoLineOfSight;
         return null;
     }
 
@@ -304,7 +311,8 @@ public sealed class CombatSystem : ITickSystem
         if (!_combatants.TryGetValue(player.Id.Value, out var self)) return End(context, chase, AttackReasons.AttackerDead);
 
         var range = _content.Balance.Combat.PlayerAttackRange;
-        if (GridDistance.Chebyshev(player.Cell, target.Entity.Cell) <= range)
+        // Out of range or, for a ranged attack, out of sight: walk closer (toward the target's cell) the same way.
+        if (GridDistance.Chebyshev(player.Cell, target.Entity.Cell) <= range && InSight(player.Cell, target.Entity.Cell, range))
         {
             if (chase.Goal is not null && (chase.Walking || chase.MovePending(_tick))) Stop(context, chase);
             player.Facing = GridDirection.Facing(player.Cell, target.Entity.Cell) ?? player.Facing;

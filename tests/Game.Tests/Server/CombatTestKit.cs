@@ -1,6 +1,7 @@
 using Game.Content.Simulation;
 using Game.Server.Events;
 using Game.Server.World;
+using Game.Server.World.Aoi;
 using Game.Server.World.Combat;
 using Game.Server.World.Monsters;
 using Game.Shared.Combat;
@@ -23,12 +24,13 @@ public static class TestCombat
     /// The sample balance with test numbers: range 1, re-path every 300 ms, respawn with 50% HP at (1, 1) of the test map, a 10% death
     /// penalty, 3 s loot priority, 10 s item lifetime, spread radius 1.
     /// </summary>
-    public static BalanceDef Balance(int penaltyPercent = 10, int spreadRadius = 1, int priorityMs = 3000, int lifetimeMs = 10000)
+    public static BalanceDef Balance(int penaltyPercent = 10, int spreadRadius = 1, int priorityMs = 3000, int lifetimeMs = 10000,
+        int attackRange = 1)
     {
         var sample = TestGrids.SampleContent.Balance;
         return sample with
         {
-            Combat = sample.Combat with { PlayerAttackRange = 1, PlayerRepathIntervalMs = 300 },
+            Combat = sample.Combat with { PlayerAttackRange = attackRange, PlayerRepathIntervalMs = 300 },
             Death = new DeathBalanceDef { RespawnHpPercent = 50, ExpPenaltyPercent = penaltyPercent },
             Loot = new LootBalanceDef { PriorityMs = priorityMs, LifetimeMs = lifetimeMs, SpreadRadius = spreadRadius },
             NewCharacter = sample.NewCharacter with { StartMapId = MapId, StartX = 1, StartY = 1 },
@@ -125,7 +127,7 @@ public sealed class CombatRig
 
     public CombatRig(MapGrid grid, IEnumerable<MonsterDef> monsters, BalanceDef? balance = null, IEnumerable<DropTableDef>? drops = null,
         bool ai = false, ulong seed = 1, AiBalanceDef? aiBalance = null, int bucketSize = 4, int viewRadius = 1,
-        Func<ITickSystem, ITickSystem>? wrap = null)
+        Func<ITickSystem, ITickSystem>? wrap = null, bool aoi = false)
     {
         Catalog = TestMonsters.Catalog(monsters.ToArray());
         Content = TestCombat.Content(Catalog, balance ?? TestCombat.Balance(), drops);
@@ -136,6 +138,7 @@ public sealed class CombatRig
             .Add(() => wrap(new MonsterSpawnerSystem(Catalog)));
         if (ai) pipeline.Add(() => wrap(new MonsterAiSystem(Catalog, timings, bucketSize, viewRadius)));
         pipeline.Add(() => wrap(new CombatSystem(Content, Progressions)));
+        if (aoi) pipeline.Add(() => new AoiSystem(bucketSize, viewRadius));
         World = new GameWorld([grid], pipeline, seed, new ManualClock(), Log);
         Instance.Events.SubscribeAll(e => Events.Add((Instance.TickNumber, e)));
     }
