@@ -66,6 +66,13 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
 | T-301 | Monster spawns, respawn, data-driven AI | Claude Code | Opus 5.5 | [T-301](../tasks/prompts/T-301.md) | T-201, T-204, T-212 | Ready | Server-side; started before Phase 2 client work because that waits on T-005 |
+| T-304 | Audio data: sound keys, theme `audio.defaults` / `audio.events`, validation | Claude Code | Sonnet 5.5 | [T-304](../tasks/prompts/T-304.md) | T-102, T-209 | Ready | Data only; client audio system is T-305 |
+
+## Phase 7 — Persistence & accounts
+
+| ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
+|----|------|-------|-------|--------|------------|--------|-------|
+| T-704 | Appearance definitions: `appearance.yaml` (gender male/female, skin, faces, hair) + validation | Claude Code | Sonnet 5.5 | [T-704](../tasks/prompts/T-704.md) | T-102, T-209 | Ready | Data only, started early; server flow is T-705 |
 
 ## Backlog (prompts written when the previous phase is Done)
 
@@ -77,7 +84,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-211 | 2 | Touch input + mobile UI shell (safe area, scaling, hotbar) | Claude Code | Sonnet 5.5 | Backlog |
 | T-302 | 3 | Auto-attack, death, EXP distribution, drops | Claude Code | Sonnet 5.5 | Backlog |
 | T-303 | 3 | Combat presentation: animations, damage numbers, hit VFX | Claude Code | Sonnet 5.5 | Backlog |
-| T-304 | 3 | Audio data: optional sound keys (monsters, weapon types, items, map ambience), manifest `audio.defaults` / `audio.events`, variations + bus, validation, VOCABULARY audio buses (ARCH §7.8) | Claude Code | Sonnet 5.5 | Backlog |
 | T-305 | 3 | Client audio system: fallback resolution, music crossfade, voice pool + cooldowns, buses + volume settings, mobile background / silent switch / audio focus (needs T-207, T-304) | Claude Code | Sonnet 5.5 | Backlog |
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
 | T-401 | 4 | Inventory, equip slots, weight | Claude Code | Sonnet 5.5 | Backlog |
@@ -90,7 +96,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
 | T-702 | 7 | Persistence (EF Core + Postgres), transactional inventory | Claude Code | Opus 5.5 | Backlog |
 | T-703 | 7 | Store compliance: account deletion, Sign in with Apple, privacy disclosures | Claude Code | Sonnet 5.5 | Backlog |
-| T-704 | 7 | Appearance definitions: `appearance.yaml` (gender male/female, skin tones, faces, hairstyles, hair colours) + validation (ARCH §7.5.1) | Claude Code | Sonnet 5.5 | Backlog |
 | T-705 | 7 | Appearance on the server: checked at creation, stored with the character, sent in snapshots (needs T-701, T-702, T-704) | Claude Code | Sonnet 5.5 | Backlog |
 | T-706 | 7 | Character creation screen with rotating 3D preview (needs T-206, T-207, T-705) | Claude Code | Sonnet 5.5 | Backlog |
 | T-707 | 7 | Appearance art: 2 genders, skin tones, faces, hairstyles in the chosen art style (needs an art direction decision) | Human / artist | — | Backlog |
