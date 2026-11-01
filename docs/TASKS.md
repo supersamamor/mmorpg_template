@@ -32,7 +32,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-003 | JSON Schema generation (`schema` CLI) | Claude Code | Sonnet 5.5 | [T-003](../tasks/prompts/T-003.md) | T-002 | Review | |
 | T-004 | Sample content set (YAML) | Claude Code | Sonnet 5.5 | [T-004](../tasks/prompts/T-004.md) | T-003 | Review | Original names only |
 | T-005 | Mobile export spike (Godot .NET → Android + iOS) | Claude Code | Opus 5.5 | [T-005](../tasks/prompts/T-005.md) | T-001 | In Progress | Engine go/no-go (ADR-001). iOS half needs a Mac |
-| T-006 | Update prereqs script for 3D mobile (Blender, Android SDK/JDK, Git LFS + `.gitattributes`) | Claude Code | Sonnet 5.5 | — | — | Backlog | Drop Tiled/Pixelorama |
+| T-006 | Update prereqs script for 3D mobile (Blender, Android SDK/JDK, Git LFS + `.gitattributes`) | Claude Code | Sonnet 5.5 | [T-006](../tasks/prompts/T-006.md) | — | Ready | Drop Tiled/Pixelorama; edits the script only, never runs it |
 
 ## Phase 1 — Headless simulation
 
@@ -61,6 +61,12 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-209 | Client content bundle (`export-client`) + content hash check | Claude Code | Sonnet 5.5 | [T-209](../tasks/prompts/T-209.md) | T-205 | Review | `Net/**` only for the hash check — approved by owner |
 | T-210 | Mobile session lifecycle: background, grace period, resume token | Claude Code | Opus 5.5 | [T-210](../tasks/prompts/T-210.md) | T-205, T-209 | Ready | Restricted `Net/**` — approved by owner; Tier R review required |
 
+## Phase 3 — Combat loop
+
+| ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
+|----|------|-------|-------|--------|------------|--------|-------|
+| T-301 | Monster spawns, respawn, data-driven AI | Claude Code | Opus 5.5 | [T-301](../tasks/prompts/T-301.md) | T-201, T-204, T-212 | Ready | Server-side; started before Phase 2 client work because that waits on T-005 |
+
 ## Backlog (prompts written when the previous phase is Done)
 
 | ID | Phase | Task | Agent | Model | Status |
@@ -69,7 +75,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-207 | 2 | Theme mounting + asset manifest loader (glTF models, rigs, anims) | Claude Code | Sonnet 5.5 | Backlog |
 | T-208 | 2 | Map authoring plugin: bake walkability, markers, grid export | Claude Code | Opus 5.5 | Backlog |
 | T-211 | 2 | Touch input + mobile UI shell (safe area, scaling, hotbar) | Claude Code | Sonnet 5.5 | Backlog |
-| T-301 | 3 | Monster spawns, respawn, data-driven AI | Claude Code | Opus 5.5 | Backlog |
 | T-302 | 3 | Auto-attack, death, EXP distribution, drops | Claude Code | Sonnet 5.5 | Backlog |
 | T-303 | 3 | Combat presentation: animations, damage numbers, hit VFX | Claude Code | Sonnet 5.5 | Backlog |
 | T-304 | 3 | Audio data: optional sound keys (monsters, weapon types, items, map ambience), manifest `audio.defaults` / `audio.events`, variations + bus, validation, VOCABULARY audio buses (ARCH §7.8) | Claude Code | Sonnet 5.5 | Backlog |
