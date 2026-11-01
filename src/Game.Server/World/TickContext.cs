@@ -33,6 +33,9 @@ public sealed class TickContext
     /// <summary>The instance's random source. The only randomness a system may use.</summary>
     public IRandom Random => _instance.Random;
 
+    /// <summary>The server log. For problems worth an operator's attention; never for per-tick chatter.</summary>
+    public IServerLog Log => _instance.Log;
+
     /// <summary>The intents routed to the system currently running, in arrival order. Owning entities exist and are not dead.</summary>
     public IReadOnlyList<IIntent> Intents { get; internal set; } = NoIntents;
 

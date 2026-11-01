@@ -65,10 +65,20 @@ code and runtime code generation. `Game.Content` is server/tools only — the cl
      here and joins the target instance in the target's next tick; an unwalkable target cell rejects it.
   4. **Events** raised this tick are dispatched on the instance's event bus in raise order. Events published by
      handlers wait for the next tick.
+  5. **Outbound:** systems that implement `IOutboundPhase` (the AOI) see the tick's final state and send each observer
+     what changed near it. Events published here wait for the next tick.
 - **Intents in, state out.** Clients never send results.
 - **3D presentation, 2D simulation.** The server simulates on a cell grid on the ground plane
   (§4). The client turns cells into 3D positions, terrain height, animation and effects.
-- **Area of Interest:** maps are split into AOI cells; a client receives entities within N of them.
+- **Area of Interest** (`Game.Server/World/Aoi`): each map is split into square AOI buckets of `balance.yaml` `aoi.bucket_size`
+  cells. An **observer** (an entity with a view sink, `Entity.View`) sees every entity whose bucket is within `aoi.view_radius`
+  buckets (Chebyshev) of its own, itself included. In phase 5 the AOI compares every entity with what observers were last told
+  (one pass, O(entities)) and moves it between buckets when it crosses a boundary; walking state comes from the movement events.
+  An observer whose window of buckets had no change this tick costs a few array reads; otherwise its visible set is gathered
+  and merged with the last one (O(visible)). It gets a **snapshot** when it starts observing, arrives on a map (warps included)
+  or sends `RequestSnapshot`, and otherwise at most one **delta** per tick, none when nothing in view changed. The sink
+  (`IViewSink`, implemented by the gateway) is called on the tick thread: it copies or serializes and queues, never does I/O;
+  one that throws is logged and detached.
 - **Map instances:** each map runs in its own instance; warps move a character between instances.
 - **Persistence:** player state saved on interval, on map change, and on logout. Content is never in the DB.
 - **Mobile sessions are flaky** — the network layer assumes drops and app suspension (§10).
@@ -282,6 +292,9 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 - **Disconnects are normal.** When a socket drops or the app is backgrounded, the server keeps
   the character in the world for a grace period (server config), then saves and logs it out.
 - **Resume:** the client reconnects with a resume token and receives a full snapshot, then deltas.
+- **Snapshot / delta shape** (T-204): a view record is `id, kind, display_key, cell, facing, next, speed` (`next` and
+  `speed` only while walking); a delta is `appeared` (records), `changed` (id + changed fields only), `disappeared` (ids), each
+  ordered by entity id. A walker produces one change per cell reached, not per tick; the client interpolates from `cell` to `next`.
 - **Latency:** the client renders ~2 ticks behind the newest snapshot and interpolates.
   It tolerates cellular jitter and does not predict combat.
 - **Bandwidth:** JSON first. Switch to MessagePack if measured traffic exceeds the §9 budget.

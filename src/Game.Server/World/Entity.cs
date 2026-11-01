@@ -67,6 +67,21 @@ public sealed class Entity
     /// creates the entity, on the instance's tick; systems read derived values from it (movement reads <c>move_speed</c>).
     /// </summary>
     public StatSheet? Stats { get; set; }
+
+    /// <summary>
+    /// The content id the client shows this entity as (a <c>monster.*</c> or <c>npc.*</c> id it looks up in its display bundle), or null
+    /// when there is none (players, for now). Sent to observers in the entity's view record; set by whoever creates the entity, on the
+    /// instance's tick.
+    /// </summary>
+    public string? DefinitionId { get; set; }
+
+    /// <summary>
+    /// Where this entity's view of the world goes, or null for an entity nobody watches through. An entity with a sink is an
+    /// <em>observer</em>: the AOI phase sends it a snapshot when the sink is set (or changes, or the entity arrives on a map) and a delta
+    /// after every tick in which something it sees changed. The sink travels with the entity across warps. Set it on the instance's
+    /// tick only (from another thread, send an <see cref="Aoi.AttachView"/> intent).
+    /// </summary>
+    public Aoi.IViewSink? View { get; set; }
 }
 
 /// <summary>Thread-safe, monotonically increasing id source shared by every instance of one <see cref="GameWorld"/>.</summary>

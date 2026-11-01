@@ -118,6 +118,14 @@ Sizes: `small`, `medium`, `large`
 `EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`, `MovementStarted`, `CellReached`,
 `MovementStopped`, `MoveRejected`
 
+## Area of interest
+**Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
+`aoi.bucket_size` cells; an observer sees the buckets within `aoi.view_radius` of its own. **Snapshot**: an observer's full view.
+**Delta**: one tick's `appeared` / `changed` / `disappeared`.
+
+## View fields
+In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`, `speed`, `display_key`
+
 ## Movement reasons
 In `MoveRejected`: `out_of_bounds`, `not_walkable`, `start_not_walkable`, `no_path`, `path_too_long`, `search_limit`, `no_speed`
 In `MovementStopped`: `arrived`, `cancelled`, `warped`, `died`, `no_speed`

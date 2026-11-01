@@ -2,6 +2,7 @@ using Game.Content.Loading;
 using Game.Content.Registry;
 using Game.Content.Validation;
 using Game.Server.World;
+using Game.Server.World.Aoi;
 
 namespace Game.Server.Hosting;
 
@@ -92,12 +93,17 @@ public static class ContentBoot
 /// <summary>Builds the systems every map instance runs, in tick order, from loaded content.</summary>
 public static class ServerPipeline
 {
-    /// <summary>Movement is first, so later systems (AOI, combat) see this tick's positions.</summary>
+    /// <summary>
+    /// Movement is first, so later systems (combat) see this tick's positions. The AOI does its work in phase 5 (outbound), after every
+    /// system, so its place in the list only orders its intents; it is last.
+    /// </summary>
     public static SystemPipeline Create(ContentDatabase content)
     {
         var balance = content.Balance;
         MovementSystem.Create(balance); // fails now, at boot, if the movement limits are unusable
+        AoiSystem.Create(balance);      // likewise for the AOI numbers
         return new SystemPipeline()
-            .Add(() => MovementSystem.Create(balance));
+            .Add(() => MovementSystem.Create(balance))
+            .Add(() => AoiSystem.Create(balance));
     }
 }

@@ -71,6 +71,8 @@ public class BalanceTests : IDisposable
         critMultiplier.ShouldBe(1.5);
         balance.Movement.MaxPathLength.ShouldBe(64);
         balance.Movement.MaxNodesExpanded.ShouldBe(2048);
+        balance.Aoi.BucketSize.ShouldBe(6);
+        balance.Aoi.ViewRadius.ShouldBe(2);
 
         var points = Formula.Compile(balance.Progression.StatPointsPerBaseLevel, FormulaSymbols.BaseLevelOnly);
         var ctx = new FormulaContext(FormulaSymbols.BaseLevelOnly);
@@ -137,6 +139,18 @@ public class BalanceTests : IDisposable
     [InlineData("max_path_length: 64", "max_path_length: 0", "movement.max_path_length")]
     [InlineData("max_nodes_expanded: 2048", "max_nodes_expanded: -5", "movement.max_nodes_expanded")]
     public void Movement_limits_must_be_above_zero(string from, string to, string path)
+    {
+        Edit(from, to);
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);
+        issue.File.ShouldBe("balance.yaml");
+        issue.Path.ShouldBe(path);
+        issue.Line.ShouldBeGreaterThan(0);
+    }
+
+    [Theory]
+    [InlineData("bucket_size: 6", "bucket_size: 0", "aoi.bucket_size")]
+    [InlineData("view_radius: 2", "view_radius: -1", "aoi.view_radius")]
+    public void Aoi_numbers_must_be_above_zero(string from, string to, string path)
     {
         Edit(from, to);
         var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);

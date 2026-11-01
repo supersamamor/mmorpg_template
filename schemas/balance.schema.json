@@ -95,6 +95,21 @@
       },
       "additionalProperties": false,
       "description": "Limits on path searches (grid movement, ARCHITECTURE §4)."
+    },
+    "aoi": {
+      "type": "object",
+      "properties": {
+        "bucket_size": {
+          "type": "integer",
+          "description": "Side of one AOI bucket, in cells."
+        },
+        "view_radius": {
+          "type": "integer",
+          "description": "How many buckets around its own an observer sees (Chebyshev distance in buckets)."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Area of interest: which entities each observer is sent (ARCHITECTURE §3)."
     }
   },
   "additionalProperties": false,

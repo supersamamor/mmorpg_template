@@ -49,6 +49,11 @@ public sealed class BalanceRule : IValidationRule
             Range(context, "movement.max_path_length", "must be above 0.");
         if (m.MaxNodesExpanded <= 0)
             Range(context, "movement.max_nodes_expanded", "must be above 0.");
+
+        if (balance.Aoi.BucketSize <= 0)
+            Range(context, "aoi.bucket_size", "must be above 0.");
+        if (balance.Aoi.ViewRadius <= 0)
+            Range(context, "aoi.view_radius", "must be above 0.");
     }
 
     private static void Chances(ValidationContext context, string kind, double min, double max)

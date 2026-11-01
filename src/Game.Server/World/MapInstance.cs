@@ -1,4 +1,5 @@
 using Game.Server.Events;
+using Game.Server.World.Aoi;
 using Game.Shared.Random;
 using Game.Shared.Time;
 using Game.Shared.World;
@@ -40,7 +41,8 @@ public sealed class InstanceCounters
 /// <remarks>
 /// Tick phases (ARCHITECTURE §3): 1. drain intents and the structural inbox, route intents to their systems;
 /// 2. run systems in registration order; 3. apply structural changes (inbox first, then the systems' requests, each in
-/// order); 4. dispatch this tick's events in raise order.
+/// order); 4. dispatch this tick's events in raise order;
+/// 5. outbound: systems that implement <see cref="IOutboundPhase"/> (the AOI) see the final state and send each observer its view.
 /// </remarks>
 public sealed class MapInstance
 {
@@ -48,6 +50,7 @@ public sealed class MapInstance
     public const int SlowSystemWarnMs = TickRate.IntervalMs / 2;
 
     private readonly IReadOnlyList<ITickSystem> _systems;
+    private readonly IOutboundPhase[] _outbound;
     private readonly Dictionary<Type, int> _routes = new();
     private readonly List<IIntent>[] _routed;
     private readonly IClock _clock;
@@ -67,6 +70,7 @@ public sealed class MapInstance
         World = world;
         Grid = grid;
         _systems = systems;
+        _outbound = systems.OfType<IOutboundPhase>().ToArray();
         Random = random;
         _clock = clock;
         _log = log;
@@ -93,6 +97,9 @@ public sealed class MapInstance
     /// <summary>This instance's random source (one PCG32 stream per instance).</summary>
     public IRandom Random { get; }
 
+    /// <summary>The log this instance reports to.</summary>
+    internal IServerLog Log => _log;
+
     /// <summary>This instance's event bus.</summary>
     public EventBus Events { get; }
 
@@ -117,7 +124,7 @@ public sealed class MapInstance
     /// <summary>Queues an intent for the next tick. Thread-safe. Prefer <see cref="GameWorld.TryEnqueue"/>, which finds the instance.</summary>
     public EnqueueResult TryEnqueue(IIntent intent) => _intents.TryEnqueue(intent);
 
-    /// <summary>Runs one tick (all four phases). Never throws because of a system or event handler.</summary>
+    /// <summary>Runs one tick (all five phases). Never throws because of a system or event handler.</summary>
     public void Tick()
     {
         var tick = TickNumber;
@@ -137,6 +144,9 @@ public sealed class MapInstance
 
         // Phase 4: events raised this tick, in raise order. Handlers that publish queue for the next tick.
         Events.Dispatch();
+
+        // Phase 5: outbound. The state is final for this tick; observers are told what changed near them.
+        foreach (var outbound in _outbound) RunOutbound(outbound, tick);
 
         _drained.Clear();
         _inboxDrained.Clear();
@@ -187,6 +197,20 @@ public sealed class MapInstance
         var elapsed = _clock.NowMilliseconds - start;
         if (elapsed > SlowSystemWarnMs)
             _log.Warn($"[{MapId}] tick {tick}: system '{system.Name}' took {elapsed} ms (warn above {SlowSystemWarnMs} ms).");
+    }
+
+    private void RunOutbound(IOutboundPhase outbound, long tick)
+    {
+        _context.Intents = [];
+        try
+        {
+            outbound.Outbound(_context);
+        }
+        catch (Exception ex)
+        {
+            Counters.SystemErrors++;
+            _log.Error($"[{MapId}] tick {tick}: the outbound phase of '{(outbound as ITickSystem)?.Name ?? outbound.GetType().Name}' threw; continuing.", ex);
+        }
     }
 
     private void Apply(StructuralChange change, long tick)

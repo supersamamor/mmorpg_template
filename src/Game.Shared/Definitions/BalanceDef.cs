@@ -18,6 +18,9 @@ namespace Game.Shared.Definitions
 
         /// <summary>Limits on path searches (grid movement, ARCHITECTURE §4).</summary>
         public MovementBalanceDef Movement { get; init; } = new MovementBalanceDef();
+
+        /// <summary>Area of interest: which entities each observer is sent (ARCHITECTURE §3).</summary>
+        public AoiBalanceDef Aoi { get; init; } = new AoiBalanceDef();
     }
 
     /// <summary>Progression numbers. The max base level is not stored here: it is the length of the base EXP table plus one.</summary>
@@ -55,6 +58,20 @@ namespace Game.Shared.Definitions
 
         /// <summary>Most nodes a single search may expand before it gives up.</summary>
         public int MaxNodesExpanded { get; init; }
+    }
+
+    /// <summary>
+    /// Area-of-interest numbers. The map is split into square buckets of <see cref="BucketSize"/> cells; an observer sees every entity
+    /// whose bucket is within <see cref="ViewRadius"/> buckets (Chebyshev) of its own, so it sees at least
+    /// <c>view_radius * bucket_size</c> cells in every direction.
+    /// </summary>
+    public sealed record AoiBalanceDef
+    {
+        /// <summary>Side of one AOI bucket, in cells.</summary>
+        public int BucketSize { get; init; }
+
+        /// <summary>How many buckets around its own an observer sees (Chebyshev distance in buckets).</summary>
+        public int ViewRadius { get; init; }
     }
 
     /// <summary>

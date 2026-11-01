@@ -536,7 +536,7 @@ public class MovementSystemTests
         Should.Throw<ArgumentOutOfRangeException>(() => new MovementSystem(new PathLimits(0, 10)));
         Should.Throw<ArgumentOutOfRangeException>(() => new MovementSystem(new PathLimits(10, 0)));
         var content = TestGrids.SampleContent;
-        Game.Server.Hosting.ServerPipeline.Create(content).Count.ShouldBe(1);
+        Game.Server.Hosting.ServerPipeline.Create(content).Build().OfType<MovementSystem>().Count().ShouldBe(1);   // T-204: other systems join the pipeline
     }
 
     // ---- determinism ----

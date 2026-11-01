@@ -37,3 +37,11 @@ movement:
   max_path_length: 64
   # Nodes a single A* search may expand. Above the cell count of the largest sample map (48x32 = 1536), so no sample search is cut off.
   max_nodes_expanded: 2048
+aoi:
+  # Side of one area-of-interest bucket, in cells. A landscape phone with the fixed 3/4 camera shows about 22 x 13 cells at the
+  # default zoom (about 11 cells from the player to the side edges, 7 to the top and bottom). Small buckets keep the seen area
+  # close to the screen; 6 cells puts the sample maps at 8 x 6 (starter_meadow) and 4 x 3 (thistle_hollow) buckets.
+  bucket_size: 6
+  # Buckets seen around the observer's own. An observer sees at least view_radius * bucket_size = 12 cells in every direction
+  # (just past the 11-cell screen edge) and at most 17, so entities appear a little before they walk on screen.
+  view_radius: 2
