@@ -23,6 +23,12 @@ public static class ContentLayout
         ["maps"] = typeof(MapDef),
     };
 
+    /// <summary>Folder that holds map metadata (<c>*.yaml</c>) and the logic grids named by <c>MapDef.GridFile</c>.</summary>
+    public const string MapsFolder = "maps";
+
+    /// <summary>Content-root-relative path of a grid file name, e.g. <c>maps/starter_meadow.grid.json</c>.</summary>
+    public static string GridPath(string gridFile) => MapsFolder + "/" + gridFile;
+
     /// <summary>Root file holding the <see cref="FormulaSetDef"/>.</summary>
     public const string FormulasFile = "formulas.yaml";
     /// <summary>Root file holding the <see cref="BalanceDef"/>.</summary>

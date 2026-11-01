@@ -10,6 +10,7 @@
     "schemas/dialogue.schema.json": "content/dialogue/**/*.yaml",
     "schemas/drop_table.schema.json": "content/drops/**/*.yaml",
     "schemas/map.schema.json": "content/maps/**/*.yaml",
+    "schemas/map-grid.schema.json": "content/maps/**/*.grid.json",
     "schemas/exp_table.schema.json": "content/exp_tables.yaml",
     "schemas/element_table.schema.json": "content/elements.yaml",
     "schemas/formula_set.schema.json": "content/formulas.yaml",

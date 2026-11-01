@@ -5,6 +5,7 @@ using System.Text.Json.Schema;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
 using Game.Shared.Definitions;
+using Game.Shared.World;
 
 namespace Game.Content.Schema;
 
@@ -26,6 +27,7 @@ public sealed class SchemaGenerator
         ("dialogue", typeof(DialogueDef)),
         ("drop_table", typeof(DropTableDef)),
         ("map", typeof(MapDef)),
+        ("map-grid", typeof(MapGridFile)),
         ("exp_table", typeof(ExpTableDef)),
         ("element_table", typeof(ElementTableDef)),
         ("formula_set", typeof(FormulaSetDef)),

@@ -113,6 +113,23 @@ A map has three parts that share its id:
 - **Export:** the plugin writes the grid file: size, cell flags (bit-packed), object lists
   `spawns`, `warps`, `npcs`, `zones`, and a hash of the source scene. `validate` fails when the
   scene changed after the last export.
+- **Grid file format** (`MapGridFile`, schema `schemas/map-grid.schema.json`, `format_version` 1; the loader rejects other versions).
+  Cell `(0, 0)` is the north-west corner, `+x` is east, `+y` is south, so cell `(x, y)` maps to world `(x + 0.5, y + 0.5)` as in §4.
+  Anything outside the grid is not walkable and blocks line of sight.
+
+  | Key | Type | Meaning |
+  |-----|------|---------|
+  | `format_version` | int | `1` |
+  | `map_id` | string | must equal the `MapDef` that names the file |
+  | `width`, `height` | int | 1 to 4096 |
+  | `cells` | string | base64 of `width * height` bytes, row-major (`index = y * width + x`). Bit `i` is the `i`-th term of `CellFlags.All`: bit 0 `walkable`, bit 1 `blocks_los`; other bits must be 0 |
+  | `source_scene_hash` | string | hash of the exported Godot scene; may be empty; stored, not yet checked (T-208) |
+  | `spawns[]` | object | `monster_id`, `area {x, y, w, h}`, `count` (≥ 1), `respawn_seconds` (≥ 0) |
+  | `warps[]` | object | `cell {x, y}`, `target_map_id` (may be this map), `target_cell {x, y}` |
+  | `npcs[]` | object | `npc_id`, `cell {x, y}`, `facing` (a `Directions` term) |
+  | `zones[]` | object | `kind` (a `ZoneKinds` term), `area {x, y, w, h}` |
+
+  Runtime access is the immutable `MapGrid` (`Game.Shared/World`), exposed by `ContentDatabase.GetGrid(mapId)`.
 - **Theme caveat:** a theme re-skins maps, it does not re-lay them out. A replacement scene must
   match the existing grid, or the grid must be re-exported (that is a content change).
 

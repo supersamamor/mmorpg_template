@@ -19,6 +19,7 @@ public static class ContentValidator
         new FormulaRule(),
         new BalanceRule(),
         new FileNameRule(),
+        new MapGridRule(),
         new UnusedRule(),
     };
 

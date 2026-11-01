@@ -58,7 +58,7 @@ public class ContentLoaderTests
         db.Npcs.Count.ShouldBe(2);
         db.Dialogue.Count.ShouldBe(2);
         db.Drops.Count.ShouldBe(8);
-        db.Maps.Count.ShouldBe(1);
+        db.Maps.Count.ShouldBe(2);
         db.ExpTables.Count.ShouldBe(3);
     }
 

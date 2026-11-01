@@ -1,0 +1,228 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MapGridFile",
+  "type": "object",
+  "properties": {
+    "format_version": {
+      "type": "integer",
+      "description": "Format version; starts at 1. The loader rejects any version it does not know."
+    },
+    "map_id": {
+      "type": "string",
+      "pattern": "^map\\.[a-z0-9_]+$",
+      "description": "Id of the map this grid belongs to (map.*); must equal the id of the MapDef that names the file."
+    },
+    "width": {
+      "type": "integer",
+      "description": "Columns, 1 to 4096."
+    },
+    "height": {
+      "type": "integer",
+      "description": "Rows, 1 to 4096."
+    },
+    "cells": {
+      "type": "string",
+      "description": "Base64 of one byte per cell, row-major (index = y * width + x). Bit i is the i-th term of CellFlags.All (bit 0 walkable, bit 1 blocks_los); other bits must be 0."
+    },
+    "source_scene_hash": {
+      "type": "string",
+      "description": "Hash of the Godot scene the grid was exported from. Empty until the exporter exists (T-208); stored, not checked."
+    },
+    "spawns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "monster_id": {
+            "type": "string",
+            "pattern": "^monster\\.[a-z0-9_]+$",
+            "description": "Monster to spawn (monster.*)."
+          },
+          "area": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "description": "Column of the north-west cell."
+              },
+              "y": {
+                "type": "integer",
+                "description": "Row of the north-west cell."
+              },
+              "w": {
+                "type": "integer",
+                "description": "Width in cells."
+              },
+              "h": {
+                "type": "integer",
+                "description": "Height in cells."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Cells monsters may spawn on (only walkable ones are used)."
+          },
+          "count": {
+            "type": "integer",
+            "description": "How many monsters the area holds; at least 1."
+          },
+          "respawn_seconds": {
+            "type": "number",
+            "description": "Seconds before a killed monster is replaced; 0 or more."
+          }
+        },
+        "additionalProperties": false,
+        "description": "A monster spawn area: Count monsters kept alive inside Area.",
+        "required": [
+          "monster_id"
+        ]
+      },
+      "description": "Monster spawn areas (map object type spawn)."
+    },
+    "warps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "cell": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "description": "Column, counted from the west edge."
+              },
+              "y": {
+                "type": "integer",
+                "description": "Row, counted from the north edge."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Cell that triggers the warp; must be walkable. At most one warp per cell."
+          },
+          "target_map_id": {
+            "type": "string",
+            "pattern": "^map\\.[a-z0-9_]+$",
+            "description": "Destination map (map.*)."
+          },
+          "target_cell": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "description": "Column, counted from the west edge."
+              },
+              "y": {
+                "type": "integer",
+                "description": "Row, counted from the north edge."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Arrival cell on the destination map; must be walkable there."
+          }
+        },
+        "additionalProperties": false,
+        "description": "A warp from Cell on this map to TargetCell on TargetMapId (which may be this map).",
+        "required": [
+          "target_map_id"
+        ]
+      },
+      "description": "Warps (map object type warp)."
+    },
+    "npcs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "npc_id": {
+            "type": "string",
+            "pattern": "^npc\\.[a-z0-9_]+$",
+            "description": "NPC definition (npc.*)."
+          },
+          "cell": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "description": "Column, counted from the west edge."
+              },
+              "y": {
+                "type": "integer",
+                "description": "Row, counted from the north edge."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Cell the NPC stands on; must be walkable."
+          },
+          "facing": {
+            "type": "string",
+            "enum": [
+              "n",
+              "ne",
+              "e",
+              "se",
+              "s",
+              "sw",
+              "w",
+              "nw"
+            ],
+            "description": "Direction the NPC faces (a Directions term)."
+          }
+        },
+        "additionalProperties": false,
+        "description": "An NPC placement.",
+        "required": [
+          "npc_id",
+          "facing"
+        ]
+      },
+      "description": "NPC placements (map object type npc)."
+    },
+    "zones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "Zone kind (a ZoneKinds term)."
+          },
+          "area": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "description": "Column of the north-west cell."
+              },
+              "y": {
+                "type": "integer",
+                "description": "Row of the north-west cell."
+              },
+              "w": {
+                "type": "integer",
+                "description": "Width in cells."
+              },
+              "h": {
+                "type": "integer",
+                "description": "Height in cells."
+              }
+            },
+            "additionalProperties": false,
+            "description": "Cells covered."
+          }
+        },
+        "additionalProperties": false,
+        "description": "A rule zone.",
+        "required": [
+          "kind"
+        ]
+      },
+      "description": "Rule zones (map object type zone)."
+    }
+  },
+  "additionalProperties": false,
+  "description": "The on-disk logic grid of one map: content/maps/<name>.grid.json (ARCHITECTURE §5.3). Written by the Godot exporter (T-208) or the grid from-ascii tool; read by the content loader and turned into a MapGrid. JSON keys are the snake_case names of these members.",
+  "required": [
+    "map_id",
+    "cells",
+    "source_scene_hash"
+  ]
+}

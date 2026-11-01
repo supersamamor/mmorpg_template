@@ -239,6 +239,9 @@
   "music.map.starter_meadow": {
     "file": "placeholder.ogg"
   },
+  "music.map.thistle_hollow": {
+    "file": "placeholder.ogg"
+  },
   "portrait.npc.guide": {
     "file": "placeholder.png"
   },
@@ -246,6 +249,9 @@
     "file": "placeholder.png"
   },
   "scene.map.starter_meadow": {
+    "file": "placeholder.tscn"
+  },
+  "scene.map.thistle_hollow": {
     "file": "placeholder.tscn"
   },
   "sfx.skill.buff": {

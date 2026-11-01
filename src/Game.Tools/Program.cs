@@ -5,5 +5,6 @@ var root = new RootCommand("Game content and build tools");
 root.Subcommands.Add(SchemaCommand.Create());
 root.Subcommands.Add(ValidateCommand.Create());
 root.Subcommands.Add(StatsCommand.Create());
+root.Subcommands.Add(GridCommand.Create());
 
 return root.Parse(args).Invoke();

@@ -59,6 +59,16 @@ public static class ValidationCodes
     public const string DialogueDangling = "dialogue.dangling";
     /// <summary>A number in <c>balance.yaml</c> is out of range or inconsistent with another.</summary>
     public const string BalanceRange = "balance.range";
+    /// <summary>A warp, warp target or NPC is on a cell that is out of bounds or not walkable.</summary>
+    public const string GridCellBlocked = "grid.cell_blocked";
+    /// <summary>A spawn or zone rectangle is out of bounds, empty, or (spawns) has no walkable cell.</summary>
+    public const string GridRect = "grid.rect_invalid";
+    /// <summary>A spawn count or respawn time is out of range.</summary>
+    public const string GridValueRange = "grid.value_range";
+    /// <summary>Cells carry flag bits that are not in <c>CellFlags</c>.</summary>
+    public const string GridUnknownFlags = "grid.flags_unknown";
+    /// <summary>Two warps share a cell.</summary>
+    public const string GridWarpDuplicate = "grid.warp_duplicate";
     /// <summary>A rule threw; this is a validator bug, reported so it cannot pass silently.</summary>
     public const string RuleCrashed = "validator.rule_crashed";
 

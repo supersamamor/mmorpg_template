@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Game.Content.Registry;
 using Game.Shared.Definitions;
+using Game.Shared.World;
 using YamlDotNet.Core;
 using YamlDotNet.Core.Events;
 using YamlDotNet.RepresentationModel;
@@ -59,11 +60,23 @@ public static class ContentLoader
                 .OrderBy(e => e.File, StringComparer.Ordinal).ThenBy(e => e.Line).ThenBy(e => e.Column).ToList());
         }
 
+        var grids = new Dictionary<string, MapGrid>(StringComparer.Ordinal);
+        foreach (var map in maps)
+        {
+            var grid = GridLoader.Load(ctx.Root, map, ctx.Sources[map.Id], errors);
+            if (grid != null) grids.Add(map.Id, grid);
+        }
+        if (errors.Count > 0)
+        {
+            return new LoadResult(null, errors
+                .OrderBy(e => e.File, StringComparer.Ordinal).ThenBy(e => e.Line).ThenBy(e => e.Column).ToList());
+        }
+
         var db = new ContentDatabase(
             new Registry<JobDef>(jobs), new Registry<SkillDef>(skills), new Registry<ItemDef>(items),
             new Registry<MonsterDef>(monsters), new Registry<StatusDef>(statuses), new Registry<QuestDef>(quests),
             new Registry<NpcDef>(npcs), new Registry<DialogueDef>(dialogue), new Registry<DropTableDef>(drops),
-            new Registry<MapDef>(maps), new Registry<ExpTableDef>(expTables), formulas!, elements!, balance!, ctx.Sources);
+            new Registry<MapDef>(maps), new Registry<ExpTableDef>(expTables), formulas!, elements!, balance!, ctx.Sources, grids);
         return new LoadResult(db, errors);
     }
 
@@ -78,6 +91,8 @@ public static class ContentLoader
             _root = root;
             _errors = errors;
         }
+
+        public string Root => _root;
 
         public Dictionary<string, SourceLocation> Sources { get; } = new(StringComparer.Ordinal);
 

@@ -43,6 +43,18 @@ public static class ContentErrorCodes
     public const string InvalidValue = "yaml.invalid_value";
     /// <summary>A document with no content.</summary>
     public const string EmptyDocument = "yaml.empty";
+    /// <summary><c>MapDef.GridFile</c> is not a bare file name.</summary>
+    public const string GridFileName = "grid.file_name";
+    /// <summary>The grid file named by a map does not exist.</summary>
+    public const string GridMissing = "grid.missing";
+    /// <summary>The grid file could not be read.</summary>
+    public const string GridUnreadable = "grid.unreadable";
+    /// <summary>The grid file is not valid JSON, has the wrong shape, bad base64 or the wrong number of cells.</summary>
+    public const string GridMalformed = "grid.malformed";
+    /// <summary>The grid file's <c>format_version</c> is not one this build reads.</summary>
+    public const string GridVersion = "grid.version";
+    /// <summary>The grid file's <c>map_id</c> is not the map that names it.</summary>
+    public const string GridMapId = "grid.map_id";
     /// <summary>A single-document root file holds several documents.</summary>
     public const string ExtraDocument = "yaml.extra_document";
     /// <summary>The <c>id</c> is missing or empty.</summary>

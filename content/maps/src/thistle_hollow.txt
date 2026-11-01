@@ -1,0 +1,21 @@
+// Source of thistle_hollow.grid.json. Regenerate:
+//   dotnet run --project src/Game.Tools -- grid from-ascii content/maps/src/thistle_hollow.txt content/maps/thistle_hollow.grid.json
+// Stopgap until the Godot map_authoring exporter (T-208) writes this file.
+map: map.thistle_hollow
+spawn: monster.gel_slime 8 3 9 8 4 10
+warp: 1 7 map.starter_meadow 45 16
+---
+####################
+#..................#
+#..................#
+#...##.............#
+#...##.............#
+#..................#
+#..................#
+#..................#
+#..................#
+#............~~~...#
+#............~~~...#
+#..................#
+#..................#
+####################

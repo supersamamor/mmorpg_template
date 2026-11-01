@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../../schemas/map.schema.json
+id: map.thistle_hollow
+name: Thistle Hollow
+scene_asset_key: scene.map.thistle_hollow
+music_asset_key: music.map.thistle_hollow
+# Generated logic grid; source: src/thistle_hollow.txt (until the map_authoring exporter, T-208).
+grid_file: thistle_hollow.grid.json

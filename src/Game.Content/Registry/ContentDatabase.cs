@@ -1,5 +1,6 @@
 using Game.Content.Loading;
 using Game.Shared.Definitions;
+using Game.Shared.World;
 
 namespace Game.Content.Registry;
 
@@ -19,12 +20,14 @@ public sealed class ContentDatabase
         Registry<StatusDef> statuses, Registry<QuestDef> quests, Registry<NpcDef> npcs, Registry<DialogueDef> dialogue,
         Registry<DropTableDef> drops, Registry<MapDef> maps, Registry<ExpTableDef> expTables,
         FormulaSetDef formulas, ElementTableDef elements, BalanceDef balance,
-        IReadOnlyDictionary<string, SourceLocation>? sources = null)
+        IReadOnlyDictionary<string, SourceLocation>? sources = null,
+        IReadOnlyDictionary<string, MapGrid>? grids = null)
     {
         Jobs = jobs; Skills = skills; Items = items; Monsters = monsters; Statuses = statuses; Quests = quests;
         Npcs = npcs; Dialogue = dialogue; Drops = drops; Maps = maps; ExpTables = expTables;
         Formulas = formulas; Elements = elements; Balance = balance;
         _sources = sources ?? new Dictionary<string, SourceLocation>();
+        Grids = grids ?? new Dictionary<string, MapGrid>();
         _registries = new IRegistry[] { jobs, skills, items, monsters, statuses, quests, npcs, dialogue, drops, maps, expTables };
     }
 
@@ -57,6 +60,13 @@ public sealed class ContentDatabase
 
     /// <summary><c>content/balance.yaml</c>: progression numbers and combat clamps.</summary>
     public BalanceDef Balance { get; }
+
+    /// <summary>Logic grid of every map, by map id. The loader guarantees one per entry of <see cref="Maps"/>.</summary>
+    public IReadOnlyDictionary<string, MapGrid> Grids { get; }
+
+    /// <summary>The logic grid of a map; throws <see cref="KeyNotFoundException"/> for an unknown map id.</summary>
+    public MapGrid GetGrid(string mapId) =>
+        Grids.TryGetValue(mapId, out var grid) ? grid : throw new KeyNotFoundException($"No logic grid for map '{mapId}'.");
 
     /// <summary>Every id-keyed registry, for uniform iteration.</summary>
     public IReadOnlyList<IRegistry> Registries => _registries;
