@@ -1,3 +1,4 @@
+using Game.Shared.Formulas;
 using System.Collections.Generic;
 using Game.Shared.Vocabulary;
 
@@ -28,6 +29,7 @@ namespace Game.Shared.Definitions
         public bool Magic { get; init; }
 
         /// <summary>Formula scaling the base damage, e.g. <c>"1 + level * 0.3"</c>. Default <c>"1"</c>.</summary>
+        [Formula]
         public string Multiplier { get; init; } = "1";
 
         /// <summary>Element id (<see cref="Elements"/>). Null uses the attacker's attack element.</summary>
@@ -44,6 +46,7 @@ namespace Game.Shared.Definitions
         public override string Type => EffectTypes.Heal;
 
         /// <summary>HP restored, as a formula.</summary>
+        [Formula]
         public string Amount { get; init; } = "0";
     }
 
@@ -54,6 +57,7 @@ namespace Game.Shared.Definitions
         public override string Type => EffectTypes.RestoreSp;
 
         /// <summary>SP restored, as a formula.</summary>
+        [Formula]
         public string Amount { get; init; } = "0";
     }
 
@@ -67,9 +71,11 @@ namespace Game.Shared.Definitions
         public string StatusId { get; init; } = string.Empty;
 
         /// <summary>Probability 0–1 as a formula. Default <c>"1"</c> (always). The caller rolls with injected RNG.</summary>
+        [Formula]
         public string Chance { get; init; } = "1";
 
         /// <summary>Duration in milliseconds, as a formula.</summary>
+        [Formula]
         public string DurationMs { get; init; } = "0";
     }
 

@@ -13,6 +13,7 @@ namespace Game.Tests.Server;
 /// T-204 budget checks (ARCHITECTURE §9): bytes per second for one observer with ~50 visible walkers, and the outbound phase's cost
 /// with 500 entities and 100 observers. Both use the sample <c>balance.yaml</c> <c>aoi</c> numbers. They log; they do not assert wall time.
 /// </summary>
+[Collection(TimingCollection.Name)]
 public class AoiBudgetTests(ITestOutputHelper output)
 {
     /// <summary>Wraps the AOI to time and count allocations of phase 5 alone.</summary>

@@ -37,6 +37,8 @@ internal static class YamlSetup
 
         public override string GetEnumName(Type enumType, string name) => _inner.GetEnumName(enumType, name);
         public override string GetEnumValue(object enumValue) => _inner.GetEnumValue(enumValue);
+        public override bool HasParseMethod(Type type) => _inner.HasParseMethod(type);
+        public override object? Parse(string value, Type type) => _inner.Parse(value, type);
 
         public override IEnumerable<IPropertyDescriptor> GetProperties(Type type, object? container)
         {

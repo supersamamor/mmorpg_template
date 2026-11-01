@@ -12,6 +12,7 @@ namespace Game.Tests.Formulas;
 /// Compiles every formula string in /content. Stands in for the load-time FormulaRule until the
 /// T-102 validation framework lands.
 /// </summary>
+[Collection(TimingCollection.Name)]
 public class SampleContentFormulaTests(ITestOutputHelper output)
 {
     private static readonly Lazy<ContentDatabase> Db = new(() =>

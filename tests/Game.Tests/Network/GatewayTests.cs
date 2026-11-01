@@ -10,6 +10,7 @@ using Game.Tests.World;
 namespace Game.Tests.Network;
 
 /// <summary>The gateway end to end over real loopback WebSockets (T-205): join, walk, see others, every bye, back-pressure, warps.</summary>
+[Collection(TimingCollection.Name)]
 public class GatewayTests
 {
     [Fact]

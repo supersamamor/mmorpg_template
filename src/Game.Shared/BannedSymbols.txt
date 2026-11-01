@@ -1,0 +1,16 @@
+# Rule 8 (CLAUDE.md): Game.Shared is deterministic and does no I/O. Time and randomness are injected.
+# Enforced by Microsoft.CodeAnalysis.BannedApiAnalyzers (RS0030, an error through TreatWarningsAsErrors).
+P:System.DateTime.Now;Game.Shared must not read the clock; take an IClock (Time/) instead.
+P:System.DateTime.UtcNow;Game.Shared must not read the clock; take an IClock (Time/) instead.
+P:System.DateTime.Today;Game.Shared must not read the clock; take an IClock (Time/) instead.
+P:System.DateTimeOffset.Now;Game.Shared must not read the clock; take an IClock (Time/) instead.
+P:System.DateTimeOffset.UtcNow;Game.Shared must not read the clock; take an IClock (Time/) instead.
+P:System.Environment.TickCount;Game.Shared must not read the clock; take an IClock (Time/) instead.
+P:System.Environment.TickCount64;Game.Shared must not read the clock; take an IClock (Time/) instead.
+T:System.Diagnostics.Stopwatch;Game.Shared must not measure real time; take an IClock (Time/) instead.
+M:System.Random.#ctor;Game.Shared must not create System.Random; take an IRandom (Random/) instead.
+M:System.Random.#ctor(System.Int32);Game.Shared must not create System.Random; take an IRandom (Random/) instead.
+P:System.Random.Shared;Game.Shared must not use the shared System.Random; take an IRandom (Random/) instead.
+M:System.Guid.NewGuid;Game.Shared must not generate random ids; ids come from the caller (IRandom or the persistence layer).
+T:System.IO.File;Game.Shared does no I/O; loading and saving belong to Game.Content, Game.Server or the client.
+T:System.IO.Directory;Game.Shared does no I/O; loading and saving belong to Game.Content, Game.Server or the client.

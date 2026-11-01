@@ -7,6 +7,7 @@ namespace Game.Tests.World;
 /// T-203 budget (CLAUDE.md rule 12): a worst-case search on the largest sample map. Allocations are asserted (they are
 /// deterministic); time is only logged because wall clock flakes when test classes run in parallel.
 /// </summary>
+[Collection(TimingCollection.Name)]
 public class PathfinderBudgetTests
 {
     private readonly ITestOutputHelper _output;

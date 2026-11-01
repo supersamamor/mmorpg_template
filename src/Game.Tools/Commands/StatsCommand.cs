@@ -15,7 +15,7 @@ namespace Game.Tools.Commands;
 /// </summary>
 internal static class StatsCommand
 {
-    public static Command Create()
+    internal static Command Create()
     {
         var content = new Option<DirectoryInfo?>("--content") { Description = "Content directory (default: <repo>/content)" };
         var job = new Option<string?>("--job") { Description = "Job id, e.g. job.warden" };
@@ -53,7 +53,7 @@ internal static class StatsCommand
             IReadOnlyList<ReportTable> tables;
             if (monstersMode)
             {
-                tables = StatsReport.ForMonsters(MonsterTtk.Compute(sim));
+                tables = StatsReport.ForMonsters(sim, MonsterTtk.Compute(sim));
             }
             else
             {

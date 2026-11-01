@@ -6,4 +6,15 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
+  <!-- iOS builds are ahead-of-time compiled and trimmed: the analyzers run on the net10.0 target (they are not available for netstandard2.1). -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <IsAotCompatible>true</IsAotCompatible>
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+    <EnableAotAnalyzer>true</EnableAotAnalyzer>
+    <EnableSingleFileAnalyzer>true</EnableSingleFileAnalyzer>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.BannedApiAnalyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="BannedSymbols.txt" />
+  </ItemGroup>
 </Project>

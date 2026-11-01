@@ -42,6 +42,15 @@ Dependency direction: `Shared ← Content ← Server/Tools/Admin`, `Shared ← C
 .NET 10, and iOS builds are AOT-compiled and trimmed, so Shared must also avoid reflection-heavy
 code and runtime code generation. `Game.Content` is server/tools only — the client never parses YAML.
 
+**Machine-enforced rules (CI).** `.github/workflows/ci.yml` runs on every push and pull request, on Windows and Linux, with the SDK
+from `global.json`: restore, `dotnet build` with warnings as errors, `dotnet test`, `validate`, `schema` followed by
+`git diff --exit-code schemas/` (stale schemas fail), and `export-client --check content/client-content.reference.json --allow-missing`
+(fails when the client bundle differs from the committed reference; before a reference is committed it prints the current hash and passes).
+Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.BannedApiAnalyzers` with `src/Game.Shared/BannedSymbols.txt`
+(clock, `Random`, `Guid.NewGuid`, `Stopwatch`, `File` and `Directory` are errors) and the AOT/trim analyzers on its `net10.0` target.
+`validate` also checks every YAML document against its generated `schemas/*.schema.json`; the JSON Schema library is referenced by
+`Game.Tools` only. Formula-string properties carry `[Formula]`, and a test fails when `FormulaSources` and the markers disagree.
+
 ## 3. Runtime model
 
 ```

@@ -12,6 +12,7 @@ namespace Game.Tests.Server;
 /// T-301 cost: the spawner + AI on the sample meadow with its full spawn list, with ~20 players walking around and with every monster
 /// dormant (no players). Logs wall time per tick; asserts only that allocation per tick stays bounded after warm-up.
 /// </summary>
+[Collection(TimingCollection.Name)]
 public class MonsterBudgetTests(ITestOutputHelper output)
 {
     /// <summary>Times and counts allocations of one system's tick.</summary>

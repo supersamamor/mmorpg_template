@@ -8,10 +8,10 @@ namespace Game.Tests.Network;
 /// <summary>
 /// T-205 measurement (ARCHITECTURE §9, ≤ 10 KB/s per client with 50 visible entities): 50 real loopback clients join the start map and
 /// keep walking around the start cell, so each sees the other 49 walk. Logs the bytes per second each client receives on the wire and the
-/// tick-thread cost of the gateway's view sinks. Logs; does not assert wall time. Runs on its own (not in parallel with other tests): 50 sockets and
+/// tick-thread cost of the gateway's view sinks. Logs; does not assert wall time. Runs in the TimingCollection (not in parallel with other tests): 50 sockets and
 /// their threads would skew both its numbers and other tests' timings.
 /// </summary>
-[Collection(nameof(GatewayBudgetTests))]
+[Collection(TimingCollection.Name)]
 public class GatewayBudgetTests(ITestOutputHelper output)
 {
     private const int Clients = 50;
@@ -88,5 +88,3 @@ public class GatewayBudgetTests(ITestOutputHelper output)
     }
 }
 
-[CollectionDefinition(nameof(GatewayBudgetTests), DisableParallelization = true)]
-public sealed class GatewayBudgetCollection;

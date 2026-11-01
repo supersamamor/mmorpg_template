@@ -5,8 +5,9 @@ using Game.Content.Loading;
 namespace Game.Tools.Commands;
 
 /// <summary>
-/// <c>export-client [out] [--content &lt;dir&gt;] [--check &lt;file&gt;]</c>: writes the client bundle (display data only, ARCHITECTURE §5.4) and
-/// prints its content hash. <c>--check</c> writes nothing; it exits 1 when the file differs from what the current content produces.
+/// <c>export-client [out] [--content &lt;dir&gt;] [--check &lt;file&gt; [--allow-missing]]</c>: writes the client bundle (display data only, ARCHITECTURE §5.4) and
+/// prints its content hash. <c>--check</c> writes nothing; it exits 1 when the file differs from what the current content produces, or does not exist
+/// (unless <c>--allow-missing</c>: then it prints the hash and exits 0, for CI before a reference bundle is committed).
 /// </summary>
 internal static class ExportClientCommand
 {
@@ -17,12 +18,13 @@ internal static class ExportClientCommand
         var outArgument = new Argument<FileInfo?>("out") { Description = $"Output file (default: {DefaultOutput})", Arity = ArgumentArity.ZeroOrOne };
         var contentOption = new Option<DirectoryInfo?>("--content") { Description = "Content directory (default: <repo>/content)" };
         var checkOption = new Option<FileInfo?>("--check") { Description = "Do not write; exit 1 if this bundle file is stale" };
-        var command = new Command("export-client", "Write the client content bundle and its content hash") { outArgument, contentOption, checkOption };
-        command.SetAction(parse => Run(parse.GetValue(outArgument), parse.GetValue(contentOption), parse.GetValue(checkOption)));
+        var allowMissing = new Option<bool>("--allow-missing") { Description = "With --check: a missing file is not a failure; print the current hash instead" };
+        var command = new Command("export-client", "Write the client content bundle and its content hash") { outArgument, contentOption, checkOption, allowMissing };
+        command.SetAction(parse => Run(parse.GetValue(outArgument), parse.GetValue(contentOption), parse.GetValue(checkOption), parse.GetValue(allowMissing)));
         return command;
     }
 
-    private static int Run(FileInfo? output, DirectoryInfo? contentDir, FileInfo? check)
+    private static int Run(FileInfo? output, DirectoryInfo? contentDir, FileInfo? check, bool allowMissing)
     {
         var content = contentDir?.FullName ?? Path.Combine(FindRepoRoot(), "content");
         var load = ContentLoader.Load(content);
@@ -38,6 +40,11 @@ internal static class ExportClientCommand
         {
             if (!check.Exists)
             {
+                if (allowMissing)
+                {
+                    Console.WriteLine($"no reference at {check.FullName}; current hash: {file.Hash}");
+                    return 0;
+                }
                 Console.Error.WriteLine($"{check.FullName} does not exist; expected hash {file.Hash}.");
                 return 1;
             }

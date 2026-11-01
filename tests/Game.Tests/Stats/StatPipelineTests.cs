@@ -9,6 +9,7 @@ namespace Game.Tests.StatPipeline; // not Game.Tests.Stats: that would shadow Vo
 /// The §6.1 pipeline on small hand-written formula sets: stacking, removal, override precedence,
 /// caching/versioning, derived ordering and load errors.
 /// </summary>
+[Collection(TimingCollection.Name)]
 public class StatPipelineTests
 {
     private static StatSheet Sheet(params (string Stat, string Formula)[] derived)

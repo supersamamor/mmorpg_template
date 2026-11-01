@@ -1,0 +1,59 @@
+name: CI
+
+# The checks a human runs before merging (CLAUDE.md "Working style"), run by a machine on every push and pull request.
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test:
+    name: build, test and validate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false # no step needs the binary art
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: |
+            **/*.csproj
+            Directory.Packages.props
+
+      - name: Restore
+        run: dotnet restore Game.sln
+
+      # Warnings are errors through Directory.Build.props (TreatWarningsAsErrors); the flag keeps that true even if the props change.
+      - name: Build
+        run: dotnet build Game.sln --no-restore --configuration Release -warnaserror
+
+      - name: Test
+        run: dotnet test Game.sln --no-build --configuration Release
+
+      - name: Validate content
+        run: dotnet run --no-build --configuration Release --project src/Game.Tools -- validate
+
+      # The schemas are generated from the C# definitions and committed. A diff means someone changed a definition and forgot to run `schema`.
+      - name: Generate schemas
+        run: dotnet run --no-build --configuration Release --project src/Game.Tools -- schema
+
+      - name: Schemas are up to date
+        run: git diff --exit-code -- schemas/
+
+      # Compares the client bundle the content produces now with the committed reference content/client-content.reference.json.
+      # Until that file is committed the step prints the current hash and passes (--allow-missing); once it exists, a difference fails.
+      - name: Client bundle matches the reference
+        run: dotnet run --no-build --configuration Release --project src/Game.Tools -- export-client --check content/client-content.reference.json --allow-missing
