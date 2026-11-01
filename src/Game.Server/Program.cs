@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using Game.Content.ClientExport;
+using Game.Content.Loading;
 using Game.Content.Validation;
 using Game.Server.Hosting;
 using Game.Server.Net;
@@ -48,7 +49,7 @@ var seed = options.Seed ?? (ulong)Random.Shared.NextInt64();
 var clock = new SystemClock();
 var pipeline = ServerPipeline.Create(content); // more systems plug in in ServerPipeline: spawns (T-301), combat, ...
 var world = new GameWorld(content.Grids.Values, pipeline, seed, clock, log);
-var runners = world.Instances.Select(i => new InstanceRunner(i, clock, log)).ToList();
+var runners = world.Instances.Select(i => new InstanceRunner(i, clock, log, !options.LegacyTimer)).ToList();
 var contentHash = ClientBundleExporter.Hash(content); // the display bundle's hash: a client packed with another one must update (ARCHITECTURE §5.4)
 log.Info($"Content hash: {contentHash}");
 var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log, contentHash); // subscribes to instance events: before ticking

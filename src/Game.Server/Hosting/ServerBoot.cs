@@ -1,6 +1,4 @@
-using Game.Content.Loading;
 using Game.Content.Registry;
-using Game.Content.Validation;
 using Game.Server.World;
 using Game.Server.World.Aoi;
 using Game.Server.World.Combat;
@@ -16,7 +14,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
 {
     /// <summary>Usage text.</summary>
     public const string Usage =
-        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--net-<name> <value> ...]";
+        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--net-<name> <value> ...]";
 
     /// <summary>The environment name that enables development mode (plain ws:// on loopback, the dev login).</summary>
     public const string DevelopmentName = "Development";
@@ -28,6 +26,9 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
     /// development; anything else is treated as production.
     /// </summary>
     public string? Environment { get; init; }
+
+    /// <summary><c>--legacy-timer</c>: keep the ordinary wait on Windows too, to measure what the high-resolution timer buys.</summary>
+    public bool LegacyTimer { get; init; }
 
     /// <summary>The <c>--net-</c> options and their values, in order, for <see cref="Game.Server.Net.GatewayOptions.Parse"/>.</summary>
     public IReadOnlyList<string> NetArgs { get; init; } = NoArgs;
@@ -44,6 +45,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         ulong? seed = null;
         double? duration = null;
         string? environment = null;
+        var legacyTimer = false;
         var net = new List<string>();
         error = null;
         for (var i = 0; i < args.Length; i++)
@@ -58,6 +60,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                     case "--seed": seed = ulong.Parse(Value()); break;
                     case "--duration": duration = double.Parse(Value(), System.Globalization.CultureInfo.InvariantCulture); break;
                     case "--environment": environment = Value(); break;
+                    case "--legacy-timer": legacyTimer = true; break;
                     case var _ when arg.StartsWith(Game.Server.Net.GatewayOptions.ArgPrefix, StringComparison.Ordinal):
                         net.Add(arg);
                         net.Add(Value());
@@ -77,6 +80,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         return new ServerOptions(content ?? DefaultContentDir(), theme, seed, duration)
         {
             Environment = environment,
+            LegacyTimer = legacyTimer,
             NetArgs = net.Count == 0 ? NoArgs : net,
         };
     }
@@ -89,39 +93,6 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         for (var dir = new DirectoryInfo(Directory.GetCurrentDirectory()); dir is not null; dir = dir.Parent)
             if (File.Exists(Path.Combine(dir.FullName, "Game.sln"))) return Path.Combine(dir.FullName, "content");
         return local;
-    }
-}
-
-/// <summary>Loads and validates content the same way <c>Game.Tools validate</c> does.</summary>
-public static class ContentBoot
-{
-    /// <summary>
-    /// Loads <paramref name="contentDir"/> and validates it against the theme's asset manifest (<c>themes/</c> next to
-    /// <c>content/</c>). Returns the database when there are no errors; <paramref name="issues"/> also holds warnings.
-    /// </summary>
-    public static ContentDatabase? Load(string contentDir, string theme, out IReadOnlyList<ValidationIssue> issues)
-    {
-        var load = ContentLoader.Load(contentDir);
-        if (load.Database is null)
-        {
-            issues = ValidationReportFormatter.FromLoadErrors(load.Errors);
-            return null;
-        }
-
-        var manifest = AssetManifest.PathFor(Path.Combine(Path.GetFullPath(contentDir), "..", "themes"), theme);
-        IReadOnlySet<string> assetKeys;
-        try
-        {
-            assetKeys = AssetManifest.LoadKeys(manifest);
-        }
-        catch (InvalidDataException e)
-        {
-            issues = [new ValidationIssue(ValidationSeverity.Error, "", 0, 0, "", ValidationCodes.ThemeManifest, e.Message)];
-            return null;
-        }
-
-        issues = ContentValidator.Validate(load.Database, contentDir, assetKeys).Issues;
-        return issues.Any(i => i.Severity == ValidationSeverity.Error) ? null : load.Database;
     }
 }
 

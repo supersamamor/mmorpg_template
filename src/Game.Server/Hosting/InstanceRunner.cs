@@ -21,9 +21,18 @@ public sealed class InstanceRunner
     private readonly TickStatsWindow _window = new();
     private Thread? _thread;
 
-    /// <summary>Creates a runner; call <see cref="Start"/> to begin ticking.</summary>
-    public InstanceRunner(MapInstance instance, IClock clock, IServerLog log)
+    /// <summary>Start lateness is logged as p50 / p99 over this many ticks.</summary>
+    public const int LatenessWindowTicks = 600;
+
+    private readonly bool _preciseTimer;
+
+    /// <summary>
+    /// Creates a runner; call <see cref="Start"/> to begin ticking. <paramref name="preciseTimer"/> false keeps the ordinary wait on every
+    /// platform (used to measure what the high-resolution timer buys).
+    /// </summary>
+    public InstanceRunner(MapInstance instance, IClock clock, IServerLog log, bool preciseTimer = true)
     {
+        _preciseTimer = preciseTimer;
         Instance = instance;
         _clock = clock;
         _log = log;
@@ -55,14 +64,30 @@ public sealed class InstanceRunner
         var token = _stop.Token;
         var pacer = new TickPacer(_clock.NowMilliseconds);
         var lifetime = new TickStatsWindow();
+        using var waiter = TickWaiter.Create(_preciseTimer);
+        var lateness = new LatenessWindow(LatenessWindowTicks);
+        var timerName = waiter.Precise ? "high-resolution timer" : "ordinary wait";
+        var startTimestamp = Stopwatch.GetTimestamp();   // the pacer's slot 0, on the high-resolution counter
+        var intervalTimestamps = Stopwatch.Frequency * pacer.IntervalMs / 1000;
         var lastReport = _clock.NowMilliseconds;
         while (!token.IsCancellationRequested)
         {
+            var consumedBefore = pacer.SlotsConsumed;
             var step = pacer.Next(_clock.NowMilliseconds);
             if (step.Run == 0)
             {
-                token.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(step.WaitMs));
+                var due = startTimestamp + consumedBefore * intervalTimestamps;
+                if (waiter.Precise && due > Stopwatch.GetTimestamp()) waiter.WaitUntil(due, token);
+                else token.WaitHandle.WaitOne(TimeSpan.FromMilliseconds(Math.Max(1, step.WaitMs)));
                 continue;
+            }
+
+            var firstDue = startTimestamp + (consumedBefore + step.Skipped) * intervalTimestamps;
+            var lateMicros = Math.Max(0, (long)Stopwatch.GetElapsedTime(firstDue).TotalMicroseconds);
+            if (lateness.Add(lateMicros))
+            {
+                var (n, p50, p99, max) = lateness.TakeAndReset();
+                _log.Info($"[{Instance.MapId}] tick start lateness over {n} ticks ({timerName}): p50 {p50 / 1000.0:0.00} ms, p99 {p99 / 1000.0:0.00} ms, max {max / 1000.0:0.00} ms");
             }
 
             _window.AddStep(step);

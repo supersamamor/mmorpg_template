@@ -88,6 +88,17 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
   or sends `RequestSnapshot`, and otherwise at most one **delta** per tick, none when nothing in view changed. The sink
   (`IViewSink`, implemented by the gateway) is called on the tick thread: it copies or serializes and queues, never does I/O;
   one that throws is logged and detached.
+- **Tick timing and stats.** A tick's start is scheduled against the instance's start time, never against the previous tick, so a late
+  wake-up does not push later ticks back; simulated time still comes from the tick count. On Windows the wait uses a high-resolution
+  waitable timer (`CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`) up to 1 ms before the due time and spins for the rest, because an ordinary
+  `WaitOne(ms)` wakes on the ~15.6 ms system timer period; other operating systems keep the ordinary wait (`--legacy-timer` forces it
+  on Windows, to measure the difference). Each runner logs start lateness (p50 / p99 / max) every 600 ticks. Each `MapInstance` records
+  its tick durations in a fixed 600-sample ring (`TickTimings`, no allocation per tick); `GetStats()` returns an immutable
+  `InstanceStats` (p50 / p99 / max of the window, lifetime max, tick number, counters) that is safe to read from another thread. The
+  admin panel (T-804/T-805) reads it; there is no endpoint yet.
+- **One content boot.** `ContentBoot` (`Game.Content/Loading`) loads the content and runs every validation rule, including the theme
+  manifest's asset keys and audio data. The server calls it at start and refuses to run on an error, printing the same lines
+  `Game.Tools validate` prints; `validate` adds only the JSON Schema check (YAML documents and `maps/*.grid.json`).
 - **Map instances:** each map runs in its own instance; warps move a character between instances.
 - **Persistence:** player state saved on interval, on map change, and on logout. Content is never in the DB.
 - **Mobile sessions are flaky** — the network layer assumes drops and app suspension (§10).
