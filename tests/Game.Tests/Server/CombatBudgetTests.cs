@@ -16,6 +16,7 @@ namespace Game.Tests.Server;
 /// T-302 cost: the combat system on the sample meadow with its full spawn list (and the spawner and AI), ~20 players fighting monsters.
 /// Logs wall time per tick; asserts only that allocation per tick stays bounded after warm-up and that a hit allocates nothing.
 /// </summary>
+[Collection(TimingCollection.Name)]
 public class CombatBudgetTests(ITestOutputHelper output)
 {
     private sealed class Timed(ITickSystem inner) : ITickSystem, IWrappedSystem

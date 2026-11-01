@@ -132,7 +132,7 @@ Future task prompts must carry the decisions listed under their task id (see the
 
 ## Notes for future prompts
 When writing these prompts, copy in the decisions listed:
-- **T-206:** 65, 66, 67
+- **T-206:** 65, 66, 67, 87
 - **T-207:** 31
 - **T-305:** 73
 - **T-401:** 15, 68, 85
@@ -161,3 +161,12 @@ When writing these prompts, copy in the decisions listed:
 | 84 | Ground items are skipped by the AOI until they have a wire kind (T-302) | **→ T-307:** add the `item` kind term and remove the skip. |
 | 85 | Pickup and the progression store (T-302) | **→ T-401** (pickup uses `LootRules.MayPickUp` and despawns the item) and **→ T-702** (persist the in-memory progression store). |
 | 86 | Rare drop chances 0.5–2% (T-302 drop audit) | **Decided: keep.** They are plausible for v1; the balance pass revisits them with real play data. |
+
+## Addendum — T-110 (2026-11-02)
+| # | Question (source) | Decision |
+|---|---|---|
+| 87 | Commit `content/client-content.reference.json` now so CI compares bundles (T-110) | **Decided: not yet.** No app packs a bundle yet, and a committed reference would make every content change in a parallel task conflict. **→ T-206** commits it in the change that first packs the bundle into the client; until then CI's `--allow-missing` step only prints the hash. |
+| 88 | Does the CI NuGet cache key work on a real run (T-110) | **Decided:** checked on the first push to GitHub, which is the owner's call; nothing to build. |
+| 89 | `BannedSymbolsTests` needs the analyzer package in the NuGet cache, so it can't run fully offline (T-110) | **Decided: acceptable.** `dotnet restore` runs before tests everywhere, CI included. |
+| 90 | Schema-check `*.grid.json` against `map-grid.schema.json` (T-110) | **→ T-213:** `validate` checks grid files too, with the same error format. |
+| 91 | Three major package bumps (YamlDotNet 18, Test.Sdk 18, xunit runner 4) (T-110) | **Decided: keep.** The suite passes on them and only two one-line YamlDotNet overrides were needed. |
