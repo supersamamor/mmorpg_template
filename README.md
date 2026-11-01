@@ -6,22 +6,33 @@ items, monsters, quests and art are all data that can be swapped without code ch
 
 ## Prerequisites (Windows)
 
-1. Start **Docker Desktop**.
+1. Start **Docker Desktop** (not installed by the script).
 2. From the repo root, in PowerShell:
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\setup-prereqs.ps1
    ```
 3. Open a **new** terminal so PATH updates apply.
 
-Installs (via winget, skips what's already present): .NET 10 SDK, Godot 4 (.NET build),
-Tiled, Git, VS Code + extensions, Pixelorama. Starts PostgreSQL + pgAdmin from
-`docker-compose.yml`.
+The script installs these via winget (already-installed ones are skipped), runs `git lfs install`,
+starts PostgreSQL + pgAdmin from `docker-compose.yml`, and prints the manual steps left:
 
-> **The script predates the switch to 3D mobile** ([ADR-001](docs/decisions/ADR-001-3d-mobile.md)).
-> Until T-006 updates it, also install by hand: **Blender**, **Android Studio** (Android SDK +
-> JDK 17), and **Git LFS**. Tiled and Pixelorama are no longer needed.
-> **iOS builds need a Mac with Xcode** and an Apple Developer account; T-005 documents the steps
-> in `docs/MOBILE_BUILD.md`.
+| Tool | Why |
+|------|-----|
+| .NET 10 SDK | server, tools, tests; builds the client's C# |
+| Godot 4 (.NET build) | the 3D mobile client |
+| Git, **Git LFS** | source control; binary art (glTF, textures, audio, fonts) is stored in LFS, see `.gitattributes` |
+| VS Code + extensions | editor (C# Dev Kit, Godot tools, YAML, Docker) |
+| **Blender** | authoring and exporting rigged glTF models |
+| **JDK 17** (Microsoft OpenJDK) | Godot's Android export; the version pinned in `docs/MOBILE_BUILD.md` |
+| **Android Studio** | its SDK Manager installs the Android SDK, build-tools and platform-tools |
+
+After the script, finish the Android setup by hand (accept licences, install SDK packages,
+point Godot at the SDK and JDK, debug keystore): [`docs/MOBILE_BUILD.md`](docs/MOBILE_BUILD.md) §1–2.
+**iOS builds need a Mac with Xcode** and an Apple ID or Developer account (`docs/MOBILE_BUILD.md` §5).
+
+> **Git LFS:** the remote you push to must support LFS (GitHub does, with quota limits). Run
+> `git lfs install` once per machine (the script does). Binaries committed before LFS was enabled stay
+> as ordinary git objects; they are not converted.
 
 | Service    | Address                | Credentials (dev only)          |
 |------------|------------------------|---------------------------------|
@@ -66,6 +77,6 @@ docker compose down -v    # stop and WIPE all data
 
 ## Status
 
-- [x] Prerequisites (desktop; mobile tooling pending T-006)
+- [x] Prerequisites (desktop and mobile tooling)
 - [~] Phase 0 — Contracts & docs (docs done; solution skeleton, then mobile export spike)
 - [ ] Phase 1 — Headless simulation

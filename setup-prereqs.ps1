@@ -24,10 +24,15 @@ Write-Ok "winget available"
 $packages = @(
     @{ Id = "Microsoft.DotNet.SDK.10";        Name = ".NET 10 SDK" },
     @{ Id = "GodotEngine.GodotEngine.Mono";   Name = "Godot 4 (.NET / C# build)" },
-    @{ Id = "Tiled.Tiled";                    Name = "Tiled map editor" },
     @{ Id = "Git.Git";                        Name = "Git" },
+    @{ Id = "GitHub.GitLFS";                  Name = "Git LFS (binary art storage)" },
     @{ Id = "Microsoft.VisualStudioCode";     Name = "VS Code" },
-    @{ Id = "OramaInteractive.Pixelorama";    Name = "Pixelorama (free pixel-art editor)" }
+    @{ Id = "BlenderFoundation.Blender";      Name = "Blender (glTF models and animation)" },
+    # JDK 17 is the version docs/MOBILE_BUILD.md pins for Godot 4.7's Android export.
+    @{ Id = "Microsoft.OpenJDK.17";           Name = "JDK 17 (Android export)" },
+    # Android Studio is used instead of the command-line tools because winget has no
+    # package for the latter. Its SDK Manager installs the SDK into %LOCALAPPDATA%\Android\Sdk.
+    @{ Id = "Google.AndroidStudio";           Name = "Android Studio (Android SDK Manager)" }
     # @{ Id = "JetBrains.Rider";              Name = "JetBrains Rider (optional IDE)" }
 )
 
@@ -56,6 +61,18 @@ if (Get-Command code -ErrorAction SilentlyContinue) {
     ) | ForEach-Object { code --install-extension $_ --force | Out-Null; Write-Ok $_ }
 } else {
     Write-Warn "'code' not on PATH yet - open a new terminal and re-run this script to add extensions."
+}
+
+# --- 2b. Git LFS (user-level hooks, idempotent) -------------
+Write-Step "Git LFS"
+$env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+            [System.Environment]::GetEnvironmentVariable("Path","User")
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    git lfs install
+    if ($LASTEXITCODE -eq 0) { Write-Ok "git lfs install done" }
+    else { Write-Warn "git lfs not available yet - open a new terminal and re-run." }
+} else {
+    Write-Warn "git not on PATH yet - open a new terminal and re-run to enable Git LFS."
 }
 
 # --- 3. Docker check + PostgreSQL ---------------------------
@@ -90,6 +107,19 @@ if (Get-Command dotnet -ErrorAction SilentlyContinue) {
 
 if (Get-Command git -ErrorAction SilentlyContinue) { Write-Ok (git --version) } else { Write-Warn "git not on PATH (open a new terminal)" }
 
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    $lfs = git lfs version 2>$null
+    if ($LASTEXITCODE -eq 0) { Write-Ok $lfs } else { Write-Warn "git lfs not available (open a new terminal)" }
+}
+if (Get-Command blender -ErrorAction SilentlyContinue) { Write-Ok "Blender on PATH" }
+else { Write-Warn "blender not on PATH - normal on Windows; start it from the Start menu" }
+
+$javaHome = Get-ChildItem "$env:ProgramFiles\Microsoft" -Directory -Filter "jdk-17*" -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($javaHome) { Write-Ok "JDK 17: $($javaHome.FullName)" } else { Write-Warn "JDK 17 not found under $env:ProgramFiles\Microsoft" }
+
+$sdk = Join-Path $env:LOCALAPPDATA "Android\Sdk"
+if (Test-Path $sdk) { Write-Ok "Android SDK: $sdk" } else { Write-Warn "Android SDK not installed yet - see manual step 1 below" }
+
 $godot = Get-Command godot* -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($godot) { Write-Ok "Godot found: $($godot.Name)" }
 else { Write-Warn "Godot alias not on PATH - it's a portable zip; find it via: winget list GodotEngine" }
@@ -98,5 +128,19 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     $pg = docker ps --filter "name=mmo-postgres" --format "{{.Status}}"
     if ($pg) { Write-Ok "mmo-postgres: $pg" } else { Write-Warn "mmo-postgres container not running" }
 }
+
+Write-Step "Manual steps this script cannot do (details: docs/MOBILE_BUILD.md)"
+Write-Host @"
+  1. Android Studio: start it once and finish the setup wizard, then SDK Manager:
+     install platform android-35, build-tools 35.0.1, platform-tools and
+     'Android SDK Command-line Tools'. SDK folder: $env:LOCALAPPDATA\Android\Sdk
+     (docs/MOBILE_BUILD.md 2.2)
+  2. Accept the Android SDK licences: sdkmanager --licenses (docs/MOBILE_BUILD.md 2.2)
+  3. Godot: install the .NET export templates (docs/MOBILE_BUILD.md 1) and set
+     Editor Settings > Export > Android > Java SDK Path (the JDK 17 folder) and
+     Android SDK Path (docs/MOBILE_BUILD.md 2.3)
+  4. Create or let Godot generate the debug keystore (docs/MOBILE_BUILD.md 2.3)
+  5. iOS builds need a Mac with Xcode (docs/MOBILE_BUILD.md 5)
+"@
 
 Write-Host "`nDone. Open a NEW terminal so PATH changes take effect." -ForegroundColor Cyan
