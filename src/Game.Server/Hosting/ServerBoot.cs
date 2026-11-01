@@ -107,8 +107,9 @@ public static class ServerPipeline
     /// positions movement just produced, and a death it causes is seen by the spawner and the AI in phase 4 of the same tick. The AOI does
     /// its work in phase 5 (outbound), after every system, so its place in the list only orders its intents; it is last.
     /// </summary>
-    /// <remarks>Player progression lives in one in-memory store shared by every instance (persistence is T-702).</remarks>
-    public static SystemPipeline Create(ContentDatabase content)
+    /// <remarks>Player progression lives in one in-memory store shared by every instance (persistence is T-702); pass it in to read it from
+    /// elsewhere too (the gateway's own <c>exp</c> messages).</remarks>
+    public static SystemPipeline Create(ContentDatabase content, IPlayerProgressionStore? progressions = null)
     {
         var balance = content.Balance;
         var monsters = MonsterCatalog.From(content);
@@ -116,7 +117,7 @@ public static class ServerPipeline
         MonsterAiSystem.Create(monsters, balance); // likewise for the AI timings
         AoiSystem.Create(balance);                 // and the AOI numbers
         var combat = CombatContent.From(content, monsters);   // and the combat, death and loot numbers
-        var progressions = new InMemoryProgressionStore();
+        progressions ??= new InMemoryProgressionStore();
         return new SystemPipeline()
             .Add(() => MovementSystem.Create(balance))
             .Add(() => new MonsterSpawnerSystem(monsters, balance.Death.CorpseMs))

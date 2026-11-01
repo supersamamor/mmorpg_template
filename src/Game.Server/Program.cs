@@ -5,6 +5,7 @@ using Game.Content.Validation;
 using Game.Server.Hosting;
 using Game.Server.Net;
 using Game.Server.World;
+using Game.Server.World.Combat;
 
 var options = ServerOptions.Parse(args, out var argError);
 if (options is null)
@@ -47,12 +48,14 @@ if (content is null)
 // The seed only feeds the simulation's PCG32 streams; it is logged so a run can be replayed.
 var seed = options.Seed ?? (ulong)Random.Shared.NextInt64();
 var clock = new SystemClock();
-var pipeline = ServerPipeline.Create(content); // more systems plug in in ServerPipeline: spawns (T-301), combat, ...
+var progressions = new InMemoryProgressionStore(); // combat writes it; the gateway reads it for each player's own exp messages
+var pipeline = ServerPipeline.Create(content, progressions); // more systems plug in in ServerPipeline: spawns (T-301), combat, ...
 var world = new GameWorld(content.Grids.Values, pipeline, seed, clock, log);
 var runners = world.Instances.Select(i => new InstanceRunner(i, clock, log, !options.LegacyTimer)).ToList();
 var contentHash = ClientBundleExporter.Hash(content); // the display bundle's hash: a client packed with another one must update (ARCHITECTURE §5.4)
 log.Info($"Content hash: {contentHash}");
-var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log, contentHash); // subscribes to instance events: before ticking
+var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log, contentHash,
+    progress: new OwnProgress(content, progressions)); // subscribes to instance events: before ticking
 
 GatewayHost host;
 try

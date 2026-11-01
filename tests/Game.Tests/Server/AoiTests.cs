@@ -118,18 +118,123 @@ public class AoiTests
     }
 
     [Fact]
-    public void Ground_items_are_not_shown_to_observers_yet()
+    public void Ground_items_are_shown_with_their_quantity_and_their_loot_owner_only_while_the_priority_lasts()
+    {
+        var rig = new AoiRig();
+        var (o, sink) = rig.AddObserver(C(1, 1));
+        rig.Ticks();
+        // Ticks are 100 ms apart: the item joins on tick 1 (100 ms) with priority until 400 ms, so the owner is cleared on tick 4.
+        var item = rig.World.Spawn(EntityKind.Item, "map.a", C(2, 2), Directions.S, e =>
+        {
+            e.DefinitionId = "item.test";
+            e.GroundItem = new Game.Server.World.Combat.GroundItem("item.test", 3, new EntityId(99), o, 100, 400, 60_000);
+        });
+        rig.Ticks(6);
+
+        sink.Bodies.ShouldBe(["snap map.a #1", "+#2", "~#2[mine]"]);
+        sink.Deltas[0].Tick.ShouldBe(1);
+        sink.Deltas[0].Appeared.Single().ShouldBe(new EntityView(item, EntityKind.Item, "item.test", C(2, 2), Directions.S, null, 0, -1, false, 3, o));
+        sink.Deltas[1].Tick.ShouldBe(4);
+        sink.Deltas[1].Changed.Single().View.LootOwner.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Hp_shows_as_a_percentage_that_changes_only_when_it_moves_and_the_dead_flag_follows_the_entity()
     {
         var rig = new AoiRig();
         var (_, sink) = rig.AddObserver(C(1, 1));
-        rig.Add(C(2, 2), key: "item.test", kind: EntityKind.Item, agi: null);
+        var monster = rig.Add(C(2, 2), key: "monster.test");
         rig.Ticks();
-        var npc = rig.Add(C(3, 3), key: "npc.test", kind: EntityKind.Npc);
-        rig.Ticks(3);
+        sink.Snapshots.Single().Entities.Single(v => v.Id == monster).HpPercent.ShouldBe(-1);   // no vitals: no bar
+        var vitals = Fight(rig, monster);
+        rig.Ticks();
+        sink.Deltas.Single().Changed.Single().View.HpPercent.ShouldBe(100);
 
-        sink.Bodies.ShouldBe(["snap map.a #1", "+#3"]);   // the item (#2) never appears; the AOI still sees later entities
-        sink.Snapshots.Single().Entities.ShouldAllBe(v => v.Kind != EntityKind.Item);
-        sink.Deltas.Single().Appeared.Single().Id.ShouldBe(npc);
+        vitals.Hp = vitals.MaxHp - 1;                // hurt by 1: never shown as full
+        rig.Ticks();
+        vitals.Hp = vitals.MaxHp - 1;                // the same: nothing to send
+        rig.Ticks();
+        vitals.Hp = 0;
+        rig.Get(monster).Dead = true;
+        rig.Ticks();
+
+        sink.Bodies.Skip(1).ShouldBe(["~#2[hp]", "~#2[hp]", "~#2[hp,dead]"]);   // the bar appears, drops by one point, empties
+        sink.Deltas[1].Changed.Single().View.HpPercent.ShouldBe(HpBar.Percent(vitals.MaxHp - 1, vitals.MaxHp));
+        sink.Deltas[1].Changed.Single().View.HpPercent.ShouldBeInRange(1, 99);
+        sink.Deltas[2].Changed.Single().View.ShouldBe(sink.Deltas[2].Changed.Single().View with { HpPercent = 0, Dead = true });
+    }
+
+    [Fact]
+    public void Hp_percent_is_rounded_but_never_0_while_alive_nor_100_while_hurt()
+    {
+        HpBar.Percent(1, 1000).ShouldBe(1);
+        HpBar.Percent(999, 1000).ShouldBe(99);
+        HpBar.Percent(37, 100).ShouldBe(37);
+        HpBar.Percent(1, 3).ShouldBe(33);
+        HpBar.Percent(2, 3).ShouldBe(67);
+        HpBar.Percent(0, 50).ShouldBe(0);
+        HpBar.Percent(50, 50).ShouldBe(100);
+        HpBar.Percent(5, 0).ShouldBe(0);
+    }
+
+    [Fact]
+    public void Own_exact_vitals_go_only_to_their_owner_in_the_snapshot_and_when_they_change()
+    {
+        var rig = new AoiRig();
+        var (me, mine) = rig.AddObserver(C(1, 1));
+        var (other, theirs) = rig.AddObserver(C(2, 1));
+        rig.Ticks();
+        mine.Snapshots.Single().Vitals.ShouldBeNull();
+        var myVitals = Fight(rig, me);
+        var theirVitals = Fight(rig, other);
+        rig.Ticks();
+        var full = new OwnVitals(myVitals.MaxHp, myVitals.MaxHp, myVitals.MaxSp, myVitals.MaxSp);
+        mine.Deltas[^1].Vitals.ShouldBe(full);
+        theirs.Deltas[^1].Vitals.ShouldBe(new OwnVitals(theirVitals.MaxHp, theirVitals.MaxHp, theirVitals.MaxSp, theirVitals.MaxSp));
+        mine.Bodies[^1].ShouldBe($"~#1[hp] ~#2[hp] hp{full.Hp}/{full.MaxHp}");   // others see the bar appear, not the numbers
+
+        var theirCount = theirs.Count;
+        myVitals.Sp = 0;                             // SP is not in the shared record: only the owner hears of it
+        rig.Ticks();
+        mine.Bodies[^1].ShouldBe($"hp{full.Hp}/{full.MaxHp}");
+        mine.Deltas[^1].Vitals!.Value.Sp.ShouldBe(0);
+        theirs.Count.ShouldBe(theirCount);
+        var myCount = mine.Count;
+        rig.Ticks();
+        mine.Count.ShouldBe(myCount);                // unchanged vitals are not repeated
+
+        rig.Send(new RequestSnapshot(me));
+        rig.Ticks();
+        mine.Snapshots[^1].Vitals.ShouldBe(full with { Sp = 0 });
+    }
+
+    [Fact]
+    public void Hits_go_to_every_observer_that_sees_the_attacker_or_the_target_even_when_nothing_else_changed()
+    {
+        var rig = new AoiRig();
+        var (_, near) = rig.AddObserver(C(1, 1));
+        var (_, far) = rig.AddObserver(C(20, 12));
+        var a = rig.Add(C(3, 3), key: "monster.a");
+        var b = rig.Add(C(7, 7), key: "monster.b");
+        var c = rig.Add(C(16, 12), key: "monster.c");   // out of near's view, in far's (buckets of 4, radius 1)
+        rig.Ticks(2);
+
+        rig.A.Events.Publish(new DamageDealt(a, b, 0, HitResults.Miss, 10));   // changes nothing visible
+        rig.A.Events.Publish(new DamageDealt(c, b, 4, HitResults.Hit, 6));     // near sees only the target
+        rig.Ticks();
+
+        near.Bodies[^1].ShouldBe("!#3>#4 !#5>#4");
+        near.Deltas[^1].Hits!.ShouldBe([new HitView(a, b, 0, HitResults.Miss), new HitView(c, b, 4, HitResults.Hit)]);
+        far.Bodies[^1].ShouldBe("!#5>#4");
+        rig.Ticks();
+        near.Deltas.Count.ShouldBe(1);                 // hits are per tick: nothing repeats
+    }
+
+    /// <summary>Gives an entity vitals (the combat system does this in the real pipeline).</summary>
+    private static Game.Server.World.Combat.Vitals Fight(AoiRig rig, EntityId id)
+    {
+        var entity = rig.Get(id);
+        return entity.Vitals = new Game.Server.World.Combat.Vitals(entity.Stats!);
     }
 
     [Fact]

@@ -4,6 +4,8 @@ using System.Net.WebSockets;
 using Game.Server.Hosting;
 using Game.Server.World;
 using Game.Server.World.Aoi;
+using Game.Server.World.Combat;
+using Game.Shared.Progression;
 using Game.Shared.Protocol;
 using Game.Shared.Time;
 using Game.Shared.World;
@@ -81,9 +83,10 @@ public sealed class GatewayStats
 /// socket listener: <see cref="GatewayHost"/> accepts connections and calls <see cref="RunSessionAsync"/>.
 /// </summary>
 /// <remarks>
-/// Create it before the instances start ticking: the constructor subscribes to every instance's event bus (<c>MoveRejected</c> →
-/// <c>rejected</c>; <c>EntityEnteredMap</c> / <c>EntityLeftMap</c> to track characters). Those handlers run on tick threads and only look
-/// up a session, queue bytes or queue intents.
+/// Create it before the instances start ticking: the constructor subscribes to every instance's event bus (<c>MoveRejected</c> and a
+/// player's <c>AttackRefused</c> → <c>rejected</c>; the owner-only combat messages from <c>AttackStopped</c>, <c>EntityDied</c>,
+/// <c>PlayerRespawned</c>, <c>ExpGained</c>, <c>ExpLost</c> and <c>PlayerProgressed</c>; <c>EntityEnteredMap</c> / <c>EntityLeftMap</c> to track
+/// characters). Those handlers run on tick threads and only look up a session, read its character's progression, queue bytes or queue intents.
 /// <para>Every change to which session plays a character (join, resume and takeover, drop, logout, end of the grace period, shutdown)
 /// happens under one lock, so a character never has two sessions and a resume never races its own expiry.</para>
 /// </remarks>
@@ -102,7 +105,7 @@ public sealed class Gateway
 
     /// <summary>Creates the gateway for <paramref name="world"/> and subscribes to its instances' events.</summary>
     public Gateway(GameWorld world, NewCharacters start, GatewayOptions options, IClock clock, IServerLog log, string contentHash, ILoginService? login = null,
-        ResumeTokens? tokens = null)
+        ResumeTokens? tokens = null, OwnProgress? progress = null)
     {
         _world = world;
         _start = start;
@@ -112,15 +115,31 @@ public sealed class Gateway
         ContentHash = contentHash;
         Tokens = tokens ?? new ResumeTokens();
         Login = login ?? new DevLogin(options.Development, options.MaxNameLength, Tokens);
+        Progress = progress;
         _resumeGuard = new ResumeGuard(options);
         if (!world.TryGetInstance(start.MapId, out _)) throw new ArgumentException($"No instance for the start map '{start.MapId}'.", nameof(start));
         foreach (var instance in world.Instances)
         {
-            instance.Events.Subscribe<MoveRejected>(OnMoveRejected);
-            instance.Events.Subscribe<EntityEnteredMap>(OnEnteredMap);
-            instance.Events.Subscribe<EntityLeftMap>(OnLeftMap);
+            var events = instance.Events;
+            events.Subscribe<MoveRejected>(OnMoveRejected);
+            events.Subscribe<EntityEnteredMap>(OnEnteredMap);
+            events.Subscribe<EntityLeftMap>(OnLeftMap);
+            // Combat, owner only (ARCHITECTURE §10): what happened to the player's own character.
+            events.Subscribe<AttackRefused>(e => Owner(e.Attacker)?.Post(new RejectedMessage(MessageTypes.Attack, e.Reason, null, e.Target.Value)));
+            events.Subscribe<AttackStopped>(e => Owner(e.Attacker)?.Post(new AttackStoppedMessage(e.Target.Value, e.Reason)));
+            events.Subscribe<EntityDied>(e =>
+            {
+                if (e.Kind == EntityKind.Player) Owner(e.Entity)?.Post(new YouDiedMessage(e.Killer?.Value));
+            });
+            events.Subscribe<PlayerRespawned>(e => Owner(e.Player)?.Post(new RespawnedMessage(e.MapId, e.Cell, e.Hp)));
+            events.Subscribe<ExpGained>(e => PostExp(e.Player));
+            events.Subscribe<ExpLost>(e => PostExp(e.Player));
+            events.Subscribe<PlayerProgressed>(OnProgressed);
         }
     }
+
+    /// <summary>Where players' <c>exp</c> messages come from, or null when the gateway sends none (tests without combat).</summary>
+    public OwnProgress? Progress { get; }
 
     /// <summary>The options it runs with.</summary>
     public GatewayOptions Options { get; }
@@ -334,6 +353,7 @@ public sealed class Gateway
         link.Session = null;
         link.GraceEndsMs = Clock.NowMilliseconds + Options.GracePeriodMs;
         Enqueue(new StopMove(link.Character));
+        Enqueue(new StopAttack(link.Character));   // a dropped player does not farm on: stopped means stopped (it can still be attacked)
         Enqueue(new AttachView(link.Character, null));
         Log.Info($"[net] '{link.DisplayName}' ({link.Character}) waits {Options.GracePeriodMs} ms for a resume.");
     }
@@ -368,10 +388,22 @@ public sealed class Gateway
         }
     }
 
-    private void OnMoveRejected(MoveRejected e)
+    private void OnMoveRejected(MoveRejected e) => Owner(e.Entity)?.Post(new RejectedMessage(MessageTypes.Move, e.Reason, e.Target));
+
+    /// <summary>The session playing <paramref name="character"/> right now, or null (not a player, or in its grace period).</summary>
+    private ClientSession? Owner(EntityId character) => _links.TryGetValue(character, out var link) ? link.Session : null;
+
+    /// <summary>Tick thread of the player's instance (the only thread that touches its progression).</summary>
+    internal void PostExp(EntityId player)
     {
-        if (_links.TryGetValue(e.Entity, out var link) && link.Session is { } session)
-            session.Post(new RejectedMessage(MessageTypes.Move, e.Reason, e.Target));
+        if (Progress?.For(player) is { } exp) Owner(player)?.Post(exp);
+    }
+
+    private void OnProgressed(PlayerProgressed e)
+    {
+        if (Owner(e.Player) is not { } session) return;
+        if (e.Change is LevelUp up) session.Post(new LevelUpMessage(up.NewLevel, null));
+        else if (e.Change is JobLevelUp jobUp) session.Post(new LevelUpMessage(null, jobUp.NewLevel));
     }
 
     private void OnEnteredMap(EntityEnteredMap e)

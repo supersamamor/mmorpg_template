@@ -21,6 +21,15 @@ namespace Game.Shared.Protocol
         /// <summary><c>stop</c> (client → server): stop walking at the next cell.</summary>
         public const string Stop = "stop";
 
+        /// <summary><c>attack</c> (client → server): auto-attack an entity in view.</summary>
+        public const string Attack = "attack";
+
+        /// <summary><c>stop_attack</c> (client → server): stop auto-attacking.</summary>
+        public const string StopAttack = "stop_attack";
+
+        /// <summary><c>respawn</c> (client → server): a dead character comes back at the respawn point.</summary>
+        public const string Respawn = "respawn";
+
         /// <summary><c>ping</c> (client → server): keep-alive and round-trip probe.</summary>
         public const string Ping = "ping";
 
@@ -39,6 +48,21 @@ namespace Game.Shared.Protocol
         /// <summary><c>rejected</c> (server → client): an intent was refused.</summary>
         public const string Rejected = "rejected";
 
+        /// <summary><c>attack_stopped</c> (server → client, owner only): the client's auto-attack ended.</summary>
+        public const string AttackStopped = "attack_stopped";
+
+        /// <summary><c>exp</c> (server → client, owner only): levels and EXP with the next requirements.</summary>
+        public const string Exp = "exp";
+
+        /// <summary><c>level_up</c> (server → client, owner only): a base or job level was reached.</summary>
+        public const string LevelUp = "level_up";
+
+        /// <summary><c>you_died</c> (server → client, owner only): the character died.</summary>
+        public const string YouDied = "you_died";
+
+        /// <summary><c>respawned</c> (server → client, owner only): the character came back after <c>respawn</c>.</summary>
+        public const string Respawned = "respawned";
+
         /// <summary><c>pong</c> (server → client): answer to <c>ping</c>.</summary>
         public const string Pong = "pong";
 
@@ -46,10 +70,10 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Ping, Logout);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);
@@ -127,7 +151,10 @@ namespace Game.Shared.Protocol
         /// <summary><c>npc</c>.</summary>
         public const string Npc = "npc";
 
+        /// <summary><c>item</c>: an item lying on the ground (a monster's drop); its <c>display_key</c> is the item id.</summary>
+        public const string Item = "item";
+
         /// <summary>Every kind.</summary>
-        public static readonly VocabularySet All = new VocabularySet(Player, Monster, Npc);
+        public static readonly VocabularySet All = new VocabularySet(Player, Monster, Npc, Item);
     }
 }

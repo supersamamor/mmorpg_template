@@ -119,6 +119,10 @@ internal sealed class AoiEntry
     public string Facing = string.Empty;
     public GridCell? Next;
     public double Speed;
+    public int HpPercent = -1;
+    public bool Dead;
+    public int Quantity;
+    public EntityId? LootOwner;
 
     // Fields that changed in ChangedTick.
     public long ChangedTick = -1;
@@ -130,7 +134,7 @@ internal sealed class AoiEntry
 
     public ObserverState? Observer;
 
-    public EntityView ToView() => new(Entity.Id, Entity.Kind, DisplayKey, Cell, Facing, Next, Speed);
+    public EntityView ToView() => new(Entity.Id, Entity.Kind, DisplayKey, Cell, Facing, Next, Speed, HpPercent, Dead, Quantity, LootOwner);
 }
 
 /// <summary>What one observer currently knows: the entities of its last snapshot or delta, by entity id.</summary>
@@ -143,4 +147,5 @@ internal sealed class ObserverState
     public List<AoiEntry> Scratch = new();
     public int WindowBucket = -1;
     public bool SnapshotPending = true;
+    public OwnVitals? Vitals;   // the own HP/SP last sent
 }

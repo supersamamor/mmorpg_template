@@ -7,6 +7,7 @@ using Game.Content.Registry;
 using Game.Server.Hosting;
 using Game.Server.Net;
 using Game.Server.World;
+using Game.Server.World.Combat;
 using Game.Shared.Protocol;
 using Game.Shared.World;
 using Game.Tests.Server;
@@ -38,9 +39,10 @@ public sealed class GatewayRig : IAsyncDisposable
     {
         var clock = new SystemClock();
         ContentHash = ClientBundleExporter.Hash(Content);
-        World = new GameWorld(Content.Grids.Values, ServerPipeline.Create(Content), 1, clock, Log);
+        var progressions = new InMemoryProgressionStore();
+        World = new GameWorld(Content.Grids.Values, ServerPipeline.Create(Content, progressions), 1, clock, Log);
         Start = new NewCharacters(Content);
-        Gateway = new Gateway(World, Start, options, Clock, Log, ContentHash);
+        Gateway = new Gateway(World, Start, options, Clock, Log, ContentHash, progress: new OwnProgress(Content, progressions));
         _runners = World.Instances.Select(i => new InstanceRunner(i, clock, Log)).ToList();
     }
 
@@ -49,7 +51,9 @@ public sealed class GatewayRig : IAsyncDisposable
     public Uri Endpoint => Host.Endpoint;
 
     /// <summary>Starts a rig. <paramref name="tls"/> generates a throw-away self-signed certificate (never stored in the repo).</summary>
-    public static async Task<GatewayRig> StartAsync(Func<GatewayOptions, GatewayOptions>? configure = null, bool development = true, bool tls = false)
+    /// <param name="setupWorld">Runs before the instances start ticking (subscribe to their events here).</param>
+    public static async Task<GatewayRig> StartAsync(Func<GatewayOptions, GatewayOptions>? configure = null, bool development = true, bool tls = false,
+        Action<GameWorld>? setupWorld = null)
     {
         var options = new GatewayOptions { Development = development, BindAddress = "127.0.0.1", Port = 0, SweepIntervalMs = 10, CloseTimeoutMs = 1_000 };
         string? certificate = null;
@@ -61,6 +65,7 @@ public sealed class GatewayRig : IAsyncDisposable
         }
         if (configure is not null) options = configure(options);
         var rig = new GatewayRig(options) { _certificateFile = certificate };
+        setupWorld?.Invoke(rig.World);
         rig._host = await GatewayHost.StartAsync(rig.Gateway, name => name == options.CertificatePasswordEnv ? CertificatePassword : null);
         foreach (var runner in rig._runners) runner.Start();
         rig.Gateway.Start();
@@ -311,11 +316,26 @@ public sealed class TestClient : IDisposable
                     if ((c.Fields & ChangedFields.Next) != 0) r = r with { Next = c.Next };
                     if ((c.Fields & ChangedFields.Speed) != 0) r = r with { Speed = c.Speed };
                     if ((c.Fields & ChangedFields.DisplayKey) != 0) r = r with { DisplayKey = c.DisplayKey };
+                    if ((c.Fields & ChangedFields.Hp) != 0) r = r with { Hp = c.Hp };
+                    if ((c.Fields & ChangedFields.Dead) != 0) r = r with { Dead = c.Dead };
+                    if ((c.Fields & ChangedFields.Mine) != 0) r = r with { Mine = c.Mine };
                     _view[c.Id] = r;
                 }
                 foreach (var id in d.Disappeared) _view.Remove(id);
                 break;
         }
+    }
+
+    /// <summary>Every hit in every delta so far, in order.</summary>
+    public List<HitRecord> Hits
+    {
+        get { lock (_messages) return _messages.OfType<DeltaMessage>().SelectMany(d => d.Hits ?? []).ToList(); }
+    }
+
+    /// <summary>A copy of every record in view.</summary>
+    public List<EntityRecord> View
+    {
+        get { lock (_messages) return _view.Values.ToList(); }
     }
 }
 

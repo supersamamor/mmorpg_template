@@ -35,8 +35,10 @@ public sealed record AttachView(EntityId Entity, IViewSink? Sink) : IIntent;
 /// what observers were last told (cell, facing, next cell, speed, display key) and moves it between <see cref="AoiGrid"/> buckets when its cell
 /// crosses a boundary. That catches every change, including a system that turns an entity without an event, costs O(entities) per tick,
 /// and needs no knowledge of which system moved what. Events are used only for what the entity does not carry: whether it is walking
-/// and at what speed (<c>MovementStarted</c>, <c>CellReached</c>, <c>MovementStopped</c>), and same-map warps (<c>EntityEnteredMap</c>),
-/// which give the warper a fresh snapshot.</para>
+/// and at what speed (<c>MovementStarted</c>, <c>CellReached</c>, <c>MovementStopped</c>), same-map warps (<c>EntityEnteredMap</c>),
+/// which give the warper a fresh snapshot, and the tick's attacks (<c>DamageDealt</c>), which go into the <c>hits</c> of every observer that
+/// sees the attacker or the target. HP is read from <see cref="Entity.Vitals"/> as a percentage (a change only when the percentage moves),
+/// so others never learn exact HP; the observer's own exact vitals ride along when they change.</para>
 /// <para>Per observer, the window's buckets are checked for a change this tick; only then is the visible set gathered, sorted by id and
 /// merged with the last one, so the cost is O(observers × window) for quiet views and O(observers × visible) for busy ones, never
 /// O(entities × observers). Allocation after warm-up: none per tick (entries are created when an entity joins, observer state when an
@@ -54,6 +56,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
     private readonly List<EntityId> _snapshotIds = new();
     private readonly ViewSnapshot _snapshot = new();
     private readonly ViewDelta _delta = new();
+    private readonly List<HitView> _hits = new();           // this tick's DamageDealt, in raise order
     private AoiGrid? _grid;
     private EventBus? _subscribed;
 
@@ -108,7 +111,13 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         Subscribe(instance);
         if (_grid is null || !ReferenceEquals(_grid.Grid, instance.Grid)) _grid = new AoiGrid(instance.Grid, _bucketSize, _viewRadius);
 
-        Sweep(instance, tick);
+        Sweep(instance, tick, context.SimTimeMs);
+        // A hit is news for whoever sees either side, even when it changed nothing visible (a miss, a scratch within the same percent).
+        foreach (var hit in _hits)
+        {
+            if (_byId.TryGetValue(hit.Attacker.Value, out var attacker)) _grid.Touch(attacker.Bucket, tick);
+            if (_byId.TryGetValue(hit.Target.Value, out var target)) _grid.Touch(target.Bucket, tick);
+        }
 
         foreach (var id in _snapshotIds)
             if (_byId.TryGetValue(id.Value, out var entry) && entry.Observer is { } observer) observer.SnapshotPending = true;
@@ -122,6 +131,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
             Send(context, entry, tick);
         }
         ObserverCount = observers;
+        _hits.Clear();
     }
 
     private void Subscribe(MapInstance instance)
@@ -132,7 +142,10 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         _subscribed.Subscribe<CellReached>(OnCellReached);
         _subscribed.Subscribe<MovementStopped>(OnMovementStopped);
         _subscribed.Subscribe<EntityEnteredMap>(OnEnteredMap);
+        _subscribed.Subscribe<DamageDealt>(OnDamageDealt);
     }
+
+    private void OnDamageDealt(DamageDealt e) => _hits.Add(new HitView(e.Source, e.Target, e.Amount, e.Result));
 
     private void OnMovementStarted(MovementStarted e)
     {
@@ -161,33 +174,30 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
     private static double SpeedOf(Entity entity) => entity.Stats?.Get(MoveSpeedStat) ?? 0;
 
     /// <summary>Brings every entry up to date with its entity, buckets included; adds newcomers and drops entities that left.</summary>
-    private void Sweep(MapInstance instance, long tick)
+    private void Sweep(MapInstance instance, long tick, long nowMs)
     {
         var grid = _grid!;
         var entities = instance.Entities;
-        var shown = 0;
         for (var i = 0; i < entities.Count; i++)
         {
             var entity = entities[i];
-            if (entity.Kind == EntityKind.Item) continue;   // ground items are not on the wire yet (T-302 follow-up)
-            shown++;
             if (!_byId.TryGetValue(entity.Id.Value, out var entry))
             {
                 entry = new AoiEntry(entity);
-                Read(entry, out entry.DisplayKey, out entry.Cell, out entry.Facing, out entry.Next, out entry.Speed);
+                Store(entry, Read(entry, nowMs));
                 _byId.Add(entry.Id, entry);
                 InsertSorted(entry);
                 grid.Add(entry, grid.BucketOf(entry.Cell), tick);
             }
             else
             {
-                Update(grid, entry, tick);
+                Update(grid, entry, tick, nowMs);
             }
             entry.SeenTick = tick;
             SyncObserver(entry);
         }
 
-        if (_entries.Count == shown) return;
+        if (_entries.Count == entities.Count) return;
         var kept = 0;
         for (var i = 0; i < _entries.Count; i++)
         {
@@ -204,41 +214,62 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         _entries.RemoveRange(kept, _entries.Count - kept);
     }
 
-    private static void Read(AoiEntry entry, out string? displayKey, out GridCell cell, out string facing, out GridCell? next, out double speed)
+    /// <summary>The entity as observers should see it now. A ground item's loot owner is shown only while its priority lasts.</summary>
+    private static EntityView Read(AoiEntry entry, long nowMs)
     {
         var entity = entry.Entity;
-        displayKey = entity.DefinitionId;
-        cell = entity.Cell;
-        facing = entity.Facing;
-        next = null;
-        speed = 0;
+        var cell = entity.Cell;
+        var facing = entity.Facing;
+        GridCell? next = null;
+        double speed = 0;
         if (entry.Walking && GridDirection.TryGetStep(facing, out var dx, out var dy))
         {
             next = new GridCell(cell.X + dx, cell.Y + dy);
             speed = entry.WalkSpeed;
         }
+        var hp = entity.Vitals is { } vitals ? HpBar.Percent(vitals.Hp, vitals.MaxHp) : -1;
+        var quantity = 0;
+        EntityId? owner = null;
+        if (entity.GroundItem is { } item)
+        {
+            quantity = item.Quantity;
+            if (nowMs < item.OwnerUntilMs) owner = item.Owner;
+        }
+        return new EntityView(entity.Id, entity.Kind, entity.DefinitionId, cell, facing, next, speed, hp, entity.Dead, quantity, owner);
     }
 
-    private static void Update(AoiGrid grid, AoiEntry entry, long tick)
+    private static void Store(AoiEntry entry, in EntityView v)
     {
-        Read(entry, out var displayKey, out var cell, out var facing, out var next, out var speed);
+        entry.DisplayKey = v.DisplayKey;
+        entry.Cell = v.Cell;
+        entry.Facing = v.Facing;
+        entry.Next = v.Next;
+        entry.Speed = v.Speed;
+        entry.HpPercent = v.HpPercent;
+        entry.Dead = v.Dead;
+        entry.Quantity = v.Quantity;
+        entry.LootOwner = v.LootOwner;
+    }
+
+    private static void Update(AoiGrid grid, AoiEntry entry, long tick, long nowMs)
+    {
+        var v = Read(entry, nowMs);
         var changed = ViewFields.None;
-        if (!string.Equals(displayKey, entry.DisplayKey, StringComparison.Ordinal)) changed |= ViewFields.DisplayKey;
-        if (!Same(cell, entry.Cell)) changed |= ViewFields.Cell;
-        if (!string.Equals(facing, entry.Facing, StringComparison.Ordinal)) changed |= ViewFields.Facing;
-        if (next.HasValue != entry.Next.HasValue || (next.HasValue && !Same(next.Value, entry.Next!.Value))) changed |= ViewFields.Next;
-        if (speed != entry.Speed) changed |= ViewFields.Speed;
+        if (!string.Equals(v.DisplayKey, entry.DisplayKey, StringComparison.Ordinal)) changed |= ViewFields.DisplayKey;
+        if (!Same(v.Cell, entry.Cell)) changed |= ViewFields.Cell;
+        if (!string.Equals(v.Facing, entry.Facing, StringComparison.Ordinal)) changed |= ViewFields.Facing;
+        if (v.Next.HasValue != entry.Next.HasValue || (v.Next.HasValue && !Same(v.Next.Value, entry.Next!.Value))) changed |= ViewFields.Next;
+        if (v.Speed != entry.Speed) changed |= ViewFields.Speed;
+        if (v.HpPercent != entry.HpPercent) changed |= ViewFields.Hp;
+        if (v.Dead != entry.Dead) changed |= ViewFields.Dead;
+        if (v.LootOwner != entry.LootOwner) changed |= ViewFields.Mine;
         if (changed == ViewFields.None) return;
 
-        entry.DisplayKey = displayKey;
-        entry.Cell = cell;
-        entry.Facing = facing;
-        entry.Next = next;
-        entry.Speed = speed;
+        Store(entry, v);   // the quantity of a ground item never changes, so it has no field of its own
         entry.Changed = changed;
         entry.ChangedTick = tick;
 
-        var bucket = grid.BucketOf(cell);
+        var bucket = grid.BucketOf(v.Cell);
         if (bucket == entry.Bucket)
         {
             grid.Touch(bucket, tick);
@@ -266,7 +297,10 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
     {
         var grid = _grid!;
         var observer = entry.Observer!;
-        if (!observer.SnapshotPending && entry.Bucket == observer.WindowBucket && !grid.WindowTouched(entry.Bucket, tick)) return;
+        OwnVitals? vitals = entry.Entity.Vitals is { } v ? new OwnVitals(v.Hp, v.MaxHp, v.Sp, v.MaxSp) : null;
+        var vitalsChanged = vitals != observer.Vitals;
+        if (!observer.SnapshotPending && !vitalsChanged && entry.Bucket == observer.WindowBucket && !grid.WindowTouched(entry.Bucket, tick)) return;
+        observer.Vitals = vitals;
 
         observer.WindowBucket = entry.Bucket;
         var visible = observer.Scratch;
@@ -284,6 +318,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
             snapshot.Tick = tick;
             snapshot.MapId = context.Instance.MapId;
             snapshot.Observer = entry.Entity.Id;
+            snapshot.Vitals = vitals;
             snapshot.EntityList.Clear();
             foreach (var seen in visible) snapshot.EntityList.Add(seen.ToView());
             if (Deliver(context, entry, snapshot, null)) SnapshotsSent++;
@@ -314,6 +349,9 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
                 j++;
             }
         }
+        foreach (var hit in _hits)
+            if (Sees(visible, hit.Attacker.Value) || Sees(visible, hit.Target.Value)) delta.HitList.Add(hit);
+        if (vitalsChanged) delta.Vitals = vitals;
         if (delta.IsEmpty) return;
         delta.Tick = tick;
         delta.MapId = context.Instance.MapId;
@@ -337,6 +375,21 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
             context.Log.Error($"[{context.Instance.MapId}] tick {context.TickNumber}: the view sink of {entry.Entity.Id} threw; detached it.", ex);
             return false;
         }
+    }
+
+    /// <summary>Is <paramref name="id"/> among <paramref name="visible"/> (sorted by id)?</summary>
+    private static bool Sees(List<AoiEntry> visible, long id)
+    {
+        int lo = 0, hi = visible.Count - 1;
+        while (lo <= hi)
+        {
+            var mid = (lo + hi) >>> 1;
+            var at = visible[mid].Id;
+            if (at == id) return true;
+            if (at < id) lo = mid + 1;
+            else hi = mid - 1;
+        }
+        return false;
     }
 
     private void InsertSorted(AoiEntry entry)

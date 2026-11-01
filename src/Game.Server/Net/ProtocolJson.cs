@@ -39,7 +39,7 @@ public static class ProtocolJson
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ClientMessage>(ByeReasons.Malformed);
             string? type = null, name = null, content = null, resume = null;
             int? version = null;
-            long? seq = null;
+            long? seq = null, target = null;
             GridCell? cell = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
@@ -53,6 +53,7 @@ public static class ProtocolJson
                     case "content": content = String(ref reader); break;
                     case "resume": resume = String(ref reader); break;
                     case "seq": seq = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var s) ? s : throw Bad(); break;
+                    case "target": target = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var t) ? t : throw Bad(); break;
                     case "cell": cell = Cell(ref reader); break;
                     default: reader.Skip(); break;
                 }
@@ -65,6 +66,9 @@ public static class ProtocolJson
                 MessageTypes.Hello => version is { } ver && (name is null) != (resume is null) ? new HelloMessage(ver, name, content, resume) : null,
                 MessageTypes.Move => cell is { } c ? new MoveMessage(c) : null,
                 MessageTypes.Stop => new StopMessage(),
+                MessageTypes.Attack => target is { } id ? new AttackMessage(id) : null,
+                MessageTypes.StopAttack => new StopAttackMessage(),
+                MessageTypes.Respawn => new RespawnMessage(),
                 MessageTypes.Logout => new LogoutMessage(),
                 MessageTypes.Ping => seq is { } n ? new PingMessage(n) : null,
                 null => null,
@@ -103,6 +107,9 @@ public static class ProtocolJson
             case MoveMessage move:
                 WriteCell(w, "cell", move.Cell);
                 break;
+            case AttackMessage attack:
+                w.WriteNumber("target", attack.Target);
+                break;
             case PingMessage ping:
                 w.WriteNumber("seq", ping.Seq);
                 break;
@@ -133,21 +140,22 @@ public static class ProtocolJson
                 w.WriteString("map", snapshot.MapId);
                 w.WriteNumber("id", snapshot.Id);
                 w.WriteStartArray("entities");
-                foreach (var e in snapshot.Entities) WriteRecord(w, e.Id, e.Kind, e.DisplayKey, e.Cell, e.Facing, e.Next, e.Speed);
+                foreach (var e in snapshot.Entities) WriteRecord(w, e);
                 w.WriteEndArray();
+                if (snapshot.Vitals is { } own) WriteVitals(w, own.Hp, own.MaxHp, own.Sp, own.MaxSp);
                 break;
             case DeltaMessage delta:
                 w.WriteNumber("tick", delta.Tick);
                 if (delta.Appeared.Count > 0)
                 {
                     w.WriteStartArray("appeared");
-                    foreach (var e in delta.Appeared) WriteRecord(w, e.Id, e.Kind, e.DisplayKey, e.Cell, e.Facing, e.Next, e.Speed);
+                    foreach (var e in delta.Appeared) WriteRecord(w, e);
                     w.WriteEndArray();
                 }
                 if (delta.Changed.Count > 0)
                 {
                     w.WriteStartArray("changed");
-                    foreach (var c in delta.Changed) WriteChange(w, c.Id, c.Fields, c.Cell, c.Facing, c.Next, c.Speed, c.DisplayKey);
+                    foreach (var c in delta.Changed) WriteChange(w, c.Id, c.Fields, c.Cell, c.Facing, c.Next, c.Speed, c.DisplayKey, c.Hp, c.Dead, c.Mine);
                     w.WriteEndArray();
                 }
                 if (delta.Disappeared.Count > 0)
@@ -156,11 +164,43 @@ public static class ProtocolJson
                     foreach (var id in delta.Disappeared) w.WriteNumberValue(id);
                     w.WriteEndArray();
                 }
+                if (delta.Hits is { Count: > 0 } hits)
+                {
+                    w.WriteStartArray("hits");
+                    foreach (var h in hits) WriteHit(w, h.Attacker, h.Target, h.Amount, h.Result);
+                    w.WriteEndArray();
+                }
+                if (delta.Vitals is { } vitals) WriteVitals(w, vitals.Hp, vitals.MaxHp, vitals.Sp, vitals.MaxSp);
                 break;
             case RejectedMessage rejected:
                 w.WriteString("intent", rejected.Intent);
                 w.WriteString("reason", rejected.Reason);
                 if (rejected.Cell is { } cell) WriteCell(w, "cell", cell);
+                if (rejected.Target is { } target) w.WriteNumber("target", target);
+                break;
+            case AttackStoppedMessage stopped:
+                w.WriteNumber("target", stopped.Target);
+                w.WriteString("reason", stopped.Reason);
+                break;
+            case ExpMessage exp:
+                w.WriteNumber("base_level", exp.BaseLevel);
+                w.WriteNumber("base_exp", exp.BaseExp);
+                w.WriteNumber("base_next", exp.BaseNext);
+                w.WriteNumber("job_level", exp.JobLevel);
+                w.WriteNumber("job_exp", exp.JobExp);
+                w.WriteNumber("job_next", exp.JobNext);
+                break;
+            case LevelUpMessage level:
+                if (level.BaseLevel is { } baseLevel) w.WriteNumber("base_level", baseLevel);
+                if (level.JobLevel is { } jobLevel) w.WriteNumber("job_level", jobLevel);
+                break;
+            case YouDiedMessage died:
+                if (died.Killer is { } killer) w.WriteNumber("killer", killer);
+                break;
+            case RespawnedMessage respawned:
+                w.WriteString("map", respawned.MapId);
+                WriteCell(w, "cell", respawned.Cell);
+                w.WriteNumber("hp", respawned.Hp);
                 break;
             case PongMessage pong:
                 w.WriteNumber("seq", pong.Seq);
@@ -196,12 +236,16 @@ public static class ProtocolJson
             var reader = new Utf8JsonReader(utf8);
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ServerMessage>(ByeReasons.Malformed);
             string? type = null, map = null, intent = null, reason = null, content = null, token = null;
-            long tick = 0, id = 0, seq = 0;
-            int version = 0, tickRate = 0;
+            long tick = 0, id = 0, seq = 0, baseExp = 0, baseNext = 0, jobExp = 0, jobNext = 0;
+            long? target = null, killer = null;
+            int version = 0, tickRate = 0, hp = 0;
+            int? baseLevel = null, jobLevel = null;
             GridCell? cell = null;
+            VitalsRecord? vitals = null;
             var entities = new List<EntityRecord>();
             var changed = new List<ChangeRecord>();
             var gone = new List<long>();
+            List<HitRecord>? hits = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var key = reader.GetString();
@@ -229,15 +273,31 @@ public static class ProtocolJson
                         if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
                         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray) gone.Add(reader.GetInt64());
                         break;
+                    case "hits": hits = ReadHits(ref reader); break;
+                    case "vitals": vitals = ReadVitals(ref reader); break;
+                    case "target": target = reader.GetInt64(); break;
+                    case "killer": killer = reader.GetInt64(); break;
+                    case "hp": hp = reader.GetInt32(); break;
+                    case "base_level": baseLevel = reader.GetInt32(); break;
+                    case "base_exp": baseExp = reader.GetInt64(); break;
+                    case "base_next": baseNext = reader.GetInt64(); break;
+                    case "job_level": jobLevel = reader.GetInt32(); break;
+                    case "job_exp": jobExp = reader.GetInt64(); break;
+                    case "job_next": jobNext = reader.GetInt64(); break;
                     default: reader.Skip(); break;
                 }
             }
             ServerMessage? message = type switch
             {
                 MessageTypes.Welcome => map is null ? null : new WelcomeMessage(version, id, map, tickRate, content, token),
-                MessageTypes.Snapshot => map is null ? null : new SnapshotMessage(tick, map, id, entities),
-                MessageTypes.Delta => new DeltaMessage(tick, entities, changed, gone),
-                MessageTypes.Rejected => intent is null || reason is null ? null : new RejectedMessage(intent, reason, cell),
+                MessageTypes.Snapshot => map is null ? null : new SnapshotMessage(tick, map, id, entities, vitals),
+                MessageTypes.Delta => new DeltaMessage(tick, entities, changed, gone, hits, vitals),
+                MessageTypes.Rejected => intent is null || reason is null ? null : new RejectedMessage(intent, reason, cell, target),
+                MessageTypes.AttackStopped => target is null || reason is null ? null : new AttackStoppedMessage(target.Value, reason),
+                MessageTypes.Exp => baseLevel is null || jobLevel is null ? null : new ExpMessage(baseLevel.Value, baseExp, baseNext, jobLevel.Value, jobExp, jobNext),
+                MessageTypes.LevelUp => (baseLevel is null) == (jobLevel is null) ? null : new LevelUpMessage(baseLevel, jobLevel),
+                MessageTypes.YouDied => new YouDiedMessage(killer),
+                MessageTypes.Respawned => map is null || cell is null ? null : new RespawnedMessage(map, cell.Value, hp),
                 MessageTypes.Pong => new PongMessage(seq),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason),
                 null => null,
@@ -257,7 +317,11 @@ public static class ProtocolJson
 
     // ---- shared pieces (also used by ViewMessageWriter) ----
 
-    internal static void WriteRecord(Utf8JsonWriter w, long id, string kind, string? displayKey, GridCell cell, string facing, GridCell? next, double speed)
+    private static void WriteRecord(Utf8JsonWriter w, EntityRecord e) =>
+        WriteRecord(w, e.Id, e.Kind, e.DisplayKey, e.Cell, e.Facing, e.Next, e.Speed, e.Hp, e.Dead, e.Quantity, e.Mine);
+
+    internal static void WriteRecord(Utf8JsonWriter w, long id, string kind, string? displayKey, GridCell cell, string facing, GridCell? next, double speed,
+        double? hp, bool dead, int quantity, bool? mine)
     {
         w.WriteStartObject();
         w.WriteNumber("id", id);
@@ -267,10 +331,35 @@ public static class ProtocolJson
         w.WriteString("facing", facing);
         if (next is { } n) WriteCell(w, "next", n);
         if (speed != 0) w.WriteNumber("speed", Round(speed));
+        if (hp is { } fraction) w.WriteNumber("hp", Round(fraction));
+        if (dead) w.WriteBoolean("dead", true);
+        if (quantity != 0) w.WriteNumber("quantity", quantity);
+        if (mine is { } m) w.WriteBoolean("mine", m);
         w.WriteEndObject();
     }
 
-    internal static void WriteChange(Utf8JsonWriter w, long id, ChangedFields fields, GridCell cell, string? facing, GridCell? next, double speed, string? displayKey)
+    internal static void WriteHit(Utf8JsonWriter w, long attacker, long target, int amount, string result)
+    {
+        w.WriteStartArray();
+        w.WriteNumberValue(attacker);
+        w.WriteNumberValue(target);
+        w.WriteNumberValue(amount);
+        w.WriteStringValue(result);
+        w.WriteEndArray();
+    }
+
+    internal static void WriteVitals(Utf8JsonWriter w, int hp, int maxHp, int sp, int maxSp)
+    {
+        w.WriteStartObject("vitals");
+        w.WriteNumber("hp", hp);
+        w.WriteNumber("max_hp", maxHp);
+        w.WriteNumber("sp", sp);
+        w.WriteNumber("max_sp", maxSp);
+        w.WriteEndObject();
+    }
+
+    internal static void WriteChange(Utf8JsonWriter w, long id, ChangedFields fields, GridCell cell, string? facing, GridCell? next, double speed, string? displayKey,
+        double hp, bool dead, bool mine)
     {
         w.WriteStartObject();
         w.WriteNumber("id", id);
@@ -287,6 +376,9 @@ public static class ProtocolJson
             if (displayKey is null) w.WriteNull("display_key");
             else w.WriteString("display_key", displayKey);
         }
+        if ((fields & ChangedFields.Hp) != 0) w.WriteNumber("hp", Round(hp));
+        if ((fields & ChangedFields.Dead) != 0) w.WriteBoolean("dead", dead);
+        if ((fields & ChangedFields.Mine) != 0) w.WriteBoolean("mine", mine);
         w.WriteEndObject();
     }
 
@@ -298,7 +390,7 @@ public static class ProtocolJson
         w.WriteEndArray();
     }
 
-    /// <summary>Speeds go out with two decimals: enough to time a step, and short.</summary>
+    /// <summary>Speeds and HP fractions go out with two decimals: enough to time a step or draw a bar, and short.</summary>
     internal static double Round(double speed) => Math.Round(speed, 2, MidpointRounding.AwayFromZero);
 
     private static void ReadArray(ref Utf8JsonReader reader, List<EntityRecord> into)
@@ -311,6 +403,10 @@ public static class ProtocolJson
             GridCell cell = default;
             GridCell? next = null;
             double speed = 0;
+            double? hp = null;
+            var dead = false;
+            var quantity = 0;
+            bool? mine = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var name = reader.GetString();
@@ -324,10 +420,14 @@ public static class ProtocolJson
                     case "facing": facing = String(ref reader); break;
                     case "next": next = Cell(ref reader); break;
                     case "speed": speed = reader.GetDouble(); break;
+                    case "hp": hp = reader.GetDouble(); break;
+                    case "dead": dead = reader.GetBoolean(); break;
+                    case "quantity": quantity = reader.GetInt32(); break;
+                    case "mine": mine = reader.GetBoolean(); break;
                     default: reader.Skip(); break;
                 }
             }
-            into.Add(new EntityRecord(id, kind ?? throw Bad(), key, cell, facing ?? throw Bad(), next, speed));
+            into.Add(new EntityRecord(id, kind ?? throw Bad(), key, cell, facing ?? throw Bad(), next, speed, hp, dead, quantity, mine));
         }
     }
 
@@ -341,7 +441,8 @@ public static class ProtocolJson
             string? facing = null, key = null;
             GridCell cell = default;
             GridCell? next = null;
-            double speed = 0;
+            double speed = 0, hp = 0;
+            bool dead = false, mine = false;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var name = reader.GetString();
@@ -354,11 +455,55 @@ public static class ProtocolJson
                     case "next": next = Cell(ref reader); fields |= ChangedFields.Next; break;
                     case "speed": speed = reader.GetDouble(); fields |= ChangedFields.Speed; break;
                     case "display_key": key = String(ref reader); fields |= ChangedFields.DisplayKey; break;
+                    case "hp": hp = reader.GetDouble(); fields |= ChangedFields.Hp; break;
+                    case "dead": dead = reader.GetBoolean(); fields |= ChangedFields.Dead; break;
+                    case "mine": mine = reader.GetBoolean(); fields |= ChangedFields.Mine; break;
                     default: reader.Skip(); break;
                 }
             }
-            into.Add(new ChangeRecord(id, fields, cell, facing, next, speed, key));
+            into.Add(new ChangeRecord(id, fields, cell, facing, next, speed, key, hp, dead, mine));
         }
+    }
+
+    /// <summary><c>[[attacker,target,amount,"result"],...]</c>.</summary>
+    private static List<HitRecord> ReadHits(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+        var hits = new List<HitRecord>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.StartArray)
+        {
+            reader.Read();
+            var attacker = reader.GetInt64();
+            reader.Read();
+            var target = reader.GetInt64();
+            reader.Read();
+            var amount = reader.GetInt32();
+            reader.Read();
+            var result = String(ref reader) ?? throw Bad();
+            if (!reader.Read() || reader.TokenType != JsonTokenType.EndArray) throw Bad();
+            hits.Add(new HitRecord(attacker, target, amount, result));
+        }
+        return hits;
+    }
+
+    private static VitalsRecord ReadVitals(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject) throw Bad();
+        int hp = 0, maxHp = 0, sp = 0, maxSp = 0;
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var name = reader.GetString();
+            reader.Read();
+            switch (name)
+            {
+                case "hp": hp = reader.GetInt32(); break;
+                case "max_hp": maxHp = reader.GetInt32(); break;
+                case "sp": sp = reader.GetInt32(); break;
+                case "max_sp": maxSp = reader.GetInt32(); break;
+                default: reader.Skip(); break;
+            }
+        }
+        return new VitalsRecord(hp, maxHp, sp, maxSp);
     }
 
     /// <summary>A string, or null for a JSON null; anything else is malformed.</summary>
