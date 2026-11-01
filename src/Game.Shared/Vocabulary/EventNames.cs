@@ -69,6 +69,18 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>WarpRejected</c>: a warp was refused (unknown map or unwalkable target cell); the entity stayed.</summary>
         public const string WarpRejected = "WarpRejected";
 
+        /// <summary><c>MovementStarted</c>: an entity began walking a new path (also when it is re-pathed mid-walk).</summary>
+        public const string MovementStarted = "MovementStarted";
+
+        /// <summary><c>CellReached</c>: a walking entity fully reached a cell.</summary>
+        public const string CellReached = "CellReached";
+
+        /// <summary><c>MovementStopped</c>: an entity stopped walking, with a reason.</summary>
+        public const string MovementStopped = "MovementStopped";
+
+        /// <summary><c>MoveRejected</c>: a move request was refused, with a reason; the entity did not change course.</summary>
+        public const string MoveRejected = "MoveRejected";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -92,6 +104,10 @@ namespace Game.Shared.Vocabulary
             StatusExpired,
             EntityEnteredMap,
             EntityLeftMap,
-            WarpRejected);
+            WarpRejected,
+            MovementStarted,
+            CellReached,
+            MovementStopped,
+            MoveRejected);
     }
 }

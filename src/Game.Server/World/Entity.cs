@@ -1,3 +1,4 @@
+using Game.Shared.Stats;
 using Game.Shared.World;
 
 namespace Game.Server.World;
@@ -60,6 +61,12 @@ public sealed class Entity
     /// Being dead does not remove it; despawning does.
     /// </summary>
     public bool Dead { get; set; }
+
+    /// <summary>
+    /// The entity's stats, or null for an entity that has none (it then has no <c>move_speed</c> and cannot walk). Set by whoever
+    /// creates the entity, on the instance's tick; systems read derived values from it (movement reads <c>move_speed</c>).
+    /// </summary>
+    public StatSheet? Stats { get; set; }
 }
 
 /// <summary>Thread-safe, monotonically increasing id source shared by every instance of one <see cref="GameWorld"/>.</summary>

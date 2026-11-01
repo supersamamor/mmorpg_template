@@ -34,3 +34,31 @@ public sealed record WarpRejected(EntityId Entity, string FromMapId, string Targ
     /// <inheritdoc />
     public string Name => EventNames.WarpRejected;
 }
+
+/// <summary><c>MovementStarted</c>: raised when a move begins or is re-pathed; <c>PathLength</c> is the number of cells to walk.</summary>
+public sealed record MovementStarted(EntityId Entity, GridCell From, GridCell Goal, int PathLength) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.MovementStarted;
+}
+
+/// <summary><c>CellReached</c>: a walking entity fully reached <c>Cell</c>, coming from the adjacent <c>From</c>, now facing <c>Facing</c>.</summary>
+public sealed record CellReached(EntityId Entity, GridCell From, GridCell Cell, string Facing) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.CellReached;
+}
+
+/// <summary><c>MovementStopped</c>: a move ended at <c>Cell</c> for a <see cref="MovementReasons"/> term.</summary>
+public sealed record MovementStopped(EntityId Entity, GridCell Cell, string Reason) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.MovementStopped;
+}
+
+/// <summary><c>MoveRejected</c>: a <see cref="MoveTo"/> was refused for a <see cref="MovementReasons"/> term; the entity did not change course.</summary>
+public sealed record MoveRejected(EntityId Entity, GridCell Target, string Reason) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.MoveRejected;
+}

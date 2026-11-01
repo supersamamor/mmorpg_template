@@ -115,7 +115,12 @@ Sizes: `small`, `medium`, `large`
 `ItemUsed`, `ItemEquipped`, `NpcTalked`, `MapEntered`, `ZoneEntered`,
 `LevelUp`, `JobLevelUp`, `JobChanged`, `SkillLearned`, `QuestStarted`,
 `QuestStepCompleted`, `QuestCompleted`, `StatusApplied`, `StatusExpired`,
-`EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`
+`EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`, `MovementStarted`, `CellReached`,
+`MovementStopped`, `MoveRejected`
+
+## Movement reasons
+In `MoveRejected`: `out_of_bounds`, `not_walkable`, `start_not_walkable`, `no_path`, `path_too_long`, `search_limit`, `no_speed`
+In `MovementStopped`: `arrived`, `cancelled`, `warped`, `died`, `no_speed`
 
 ## Currency
 `zeny` (rename freely in data; engine id stays `currency`)

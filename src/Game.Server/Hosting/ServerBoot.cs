@@ -1,6 +1,7 @@
 using Game.Content.Loading;
 using Game.Content.Registry;
 using Game.Content.Validation;
+using Game.Server.World;
 
 namespace Game.Server.Hosting;
 
@@ -85,5 +86,18 @@ public static class ContentBoot
 
         issues = ContentValidator.Validate(load.Database, contentDir, assetKeys).Issues;
         return issues.Any(i => i.Severity == ValidationSeverity.Error) ? null : load.Database;
+    }
+}
+
+/// <summary>Builds the systems every map instance runs, in tick order, from loaded content.</summary>
+public static class ServerPipeline
+{
+    /// <summary>Movement is first, so later systems (AOI, combat) see this tick's positions.</summary>
+    public static SystemPipeline Create(ContentDatabase content)
+    {
+        var balance = content.Balance;
+        MovementSystem.Create(balance); // fails now, at boot, if the movement limits are unusable
+        return new SystemPipeline()
+            .Add(() => MovementSystem.Create(balance));
     }
 }

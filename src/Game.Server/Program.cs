@@ -24,7 +24,7 @@ if (content is null)
 // The seed only feeds the simulation's PCG32 streams; it is logged so a run can be replayed.
 var seed = options.Seed ?? (ulong)Random.Shared.NextInt64();
 var clock = new SystemClock();
-var pipeline = new SystemPipeline(); // systems plug in here: movement (T-212), AOI (T-204), spawns (T-301)
+var pipeline = ServerPipeline.Create(content); // more systems plug in in ServerPipeline: AOI (T-204), spawns (T-301)
 var world = new GameWorld(content.Grids.Values, pipeline, seed, clock, log);
 var runners = world.Instances.Select(i => new InstanceRunner(i, clock, log)).ToList();
 

@@ -85,6 +85,7 @@ code and runtime code generation. `Game.Content` is server/tools only — the cl
   `balance.yaml` `movement`; a search that exceeds either returns "no path" with a reason.
 - **Facing** is one of 8 directions (VOCABULARY). The client rotates the model smoothly toward it.
 - **Speed:** derived stat `move_speed`, in cells per second.
+- **Movement system** (`Game.Server/World/MovementSystem`): `MoveTo` and `StopMove` intents; the last intent per entity in a tick wins. The path is searched on the tick from the entity's current cell and a rejected `MoveTo` (reason term in `MoveRejected`) leaves a move in progress running. Each tick a walking entity advances by 100 ms at its `move_speed` (read from its stat sheet when the move starts and after every tick in which a cell was reached; an entity with no speed cannot move), in entity id order. **Entities do not block each other in v1**: they may share a cell. Reaching a cell that has a warp (only by arriving, never by spawning or standing there) stops the entity and requests the warp. Other systems see movement only through `Entity.Cell` / `Facing` and the events `MovementStarted`, `CellReached`, `MovementStopped`, `MoveRejected`.
 - **Ranges and AoE** are in cells, Chebyshev distance. **Line of sight** is a grid line test
   over cells flagged `blocks_los`.
   It is a supercover walk between cell centres, symmetric, and the two end cells never block. A line that passes exactly through a
