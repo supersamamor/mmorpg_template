@@ -74,6 +74,7 @@ docker compose down -v    # stop and WIPE all data
 - [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - [`docs/TASKS.md`](docs/TASKS.md) — task tracker: agent, model, prompt, status per task
 - [`docs/decisions/ADR-001-3d-mobile.md`](docs/decisions/ADR-001-3d-mobile.md) — why 3D on a grid, why Godot, fallback plan
+- [`docs/decisions/ADR-002-follow-up-decisions.md`](docs/decisions/ADR-002-follow-up-decisions.md) — every open question and follow-up from T-001 … T-704, decided
 
 ## Status
 

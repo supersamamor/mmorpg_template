@@ -33,6 +33,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-004 | Sample content set (YAML) | Claude Code | Sonnet 5.5 | [T-004](../tasks/prompts/T-004.md) | T-003 | Review | Original names only |
 | T-005 | Mobile export spike (Godot .NET → Android + iOS) | Claude Code | Opus 5.5 | [T-005](../tasks/prompts/T-005.md) | T-001 | In Progress | Engine go/no-go (ADR-001). iOS half needs a Mac |
 | T-006 | Update prereqs script for 3D mobile (Blender, Android SDK/JDK, Git LFS + `.gitattributes`) | Claude Code | Sonnet 5.5 | [T-006](../tasks/prompts/T-006.md) | — | Review | Drop Tiled/Pixelorama; edits the script only, never runs it |
+| T-007 | Prereqs script: Android SDK licences + pinned packages via `sdkmanager` | Claude Code | Sonnet 5.5 | [T-007](../tasks/prompts/T-007.md) | T-006 | Ready | ADR-002 #75 |
 
 ## Phase 1 — Headless simulation
 
@@ -47,6 +48,8 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-107 | Golden-value tests + `stats` balance report | Claude Code | Sonnet 5.5 | [T-107](../tasks/prompts/T-107.md) | T-105, T-106 | Review | |
 | T-108 | Independent review of Phase 0–1 | Codex | default | [T-108](../tasks/prompts/T-108.md) | T-107 | Ready | Findings → new tasks |
 | T-109 | Balance constants (`BalanceDef` + `balance.yaml`) | Claude Code | Sonnet 5.5 | [T-109](../tasks/prompts/T-109.md) | T-103 | Review | Added: T-105/T-106 need it |
+| T-110 | Tooling guardrails: CI workflow, banned-API + AOT analyzers on `Game.Shared`, schema-checked `validate`, `[Formula]` marker | Claude Code | Sonnet 5.5 | [T-110](../tasks/prompts/T-110.md) | T-102, T-103, T-107, T-209 | Ready | ADR-002 #2–9, 17, 19, 23 |
+| T-111 | Vocabulary + content hygiene: `zeny` → `currency` (original name), drop `MapEntered`, start-job and reach-cell checks, Twin Strike level 1 | Claude Code | Sonnet 5.5 | [T-111](../tasks/prompts/T-111.md) | T-302, T-110 | Ready | Starts after T-302 and T-110 merge; ADR-002 #11–22, 29 |
 
 ## Phase 2 — World slice
 
@@ -60,6 +63,8 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-205 | WebSocket gateway (`wss`) + message contracts | Claude Code | Opus 5.5 | [T-205](../tasks/prompts/T-205.md) | T-204 | Review | Restricted `Net/**` — approved by owner; Tier R review required |
 | T-209 | Client content bundle (`export-client`) + content hash check | Claude Code | Sonnet 5.5 | [T-209](../tasks/prompts/T-209.md) | T-205 | Review | `Net/**` only for the hash check — approved by owner |
 | T-210 | Mobile session lifecycle: background, grace period, resume token | Claude Code | Opus 5.5 | [T-210](../tasks/prompts/T-210.md) | T-205, T-209 | Review | Restricted `Net/**` — approved by owner; Tier R review required |
+| T-213 | Server boot + tick hygiene: shared content boot (with audio checks), Windows high-res tick timer, tick p50/p99 stats, AOI crowd + Ctrl+C tests | Claude Code | Sonnet 5.5 | [T-213](../tasks/prompts/T-213.md) | T-302 | Ready | Starts after T-302 merges; ADR-002 #47–52 |
+| T-214 | Gateway hardening: resume-token ack, grace cap, load test, permessage-deflate if it pays | Claude Code | Opus 5.5 | [T-214](../tasks/prompts/T-214.md) | T-210, T-307 | Ready | **Restricted `Net/**` — needs owner approval**; ADR-002 #55–59 |
 
 ## Phase 3 — Combat loop
 
@@ -68,6 +73,8 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-301 | Monster spawns, respawn, data-driven AI | Claude Code | Opus 5.5 | [T-301](../tasks/prompts/T-301.md) | T-201, T-204, T-212 | Review | Server-side; started before Phase 2 client work because that waits on T-005 |
 | T-304 | Audio data: sound keys, theme `audio.defaults` / `audio.events`, validation | Claude Code | Sonnet 5.5 | [T-304](../tasks/prompts/T-304.md) | T-102, T-209 | Review | Data only; client audio system is T-305 |
 | T-302 | Auto-attack, death, EXP distribution, drops | Claude Code | Opus 5.5 | [T-302](../tasks/prompts/T-302.md) | T-105, T-106, T-301 | Ready | Server world only; wire side (attack messages, HP and ground items in views) is a follow-up in `Net/**` |
+| T-307 | Combat over the wire: attack/respawn messages, HP fraction + dead flag + ground items in views, hits batch, own EXP/HP | Claude Code | Opus 5.5 | [T-307](../tasks/prompts/T-307.md) | T-302, T-205, T-204 | Ready | **Restricted `Net/**` — needs owner approval**; ADR-002 #60 |
+| T-308 | Combat + AI polish: HP/SP regen, heal on return, corpse time, only players trigger warps | Claude Code | Sonnet 5.5 | [T-308](../tasks/prompts/T-308.md) | T-302 | Ready | Starts after T-302 merges; ADR-002 #37–39 |
 
 ## Phase 7 — Persistence & accounts
 
@@ -83,6 +90,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-207 | 2 | Theme mounting + asset manifest loader (glTF models, rigs, anims) | Claude Code | Sonnet 5.5 | Backlog |
 | T-208 | 2 | Map authoring plugin: bake walkability, markers, grid export | Claude Code | Opus 5.5 | Backlog |
 | T-211 | 2 | Touch input + mobile UI shell (safe area, scaling, hotbar) | Claude Code | Sonnet 5.5 | Backlog |
+| T-216 | 2 | Client build hardening: refuse `ws://` outside debug, strip unused APK libs, CI export job with timeout, move to net10 when Godot supports it (needs T-005) | Claude Code | Sonnet 5.5 | Backlog |
 | T-303 | 3 | Combat presentation: animations, damage numbers, hit VFX | Claude Code | Sonnet 5.5 | Backlog |
 | T-305 | 3 | Client audio system: fallback resolution, music crossfade, voice pool + cooldowns, buses + volume settings, mobile background / silent switch / audio focus (needs T-207, T-304) | Claude Code | Sonnet 5.5 | Backlog |
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
@@ -91,6 +99,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-403 | 4 | Modular 3D equipment visuals (skinned meshes + attach points) | Claude Code | Sonnet 5.5 | Backlog |
 | T-501 | 5 | Effect runner + statuses | Claude Code | Opus 5.5 | Backlog |
 | T-502 | 5 | Skill trees, job change, cast/cooldown | Claude Code | Sonnet 5.5 | Backlog |
+| T-503 | 5 | Stat and skill reset (respec) as an item or NPC service, data-driven cost | Claude Code | Sonnet 5.5 | Backlog |
 | T-601 | 6 | Dialogue graphs + NPC interaction | Claude Code | Sonnet 5.5 | Backlog |
 | T-602 | 6 | Quest state machine on event bus | Claude Code | Opus 5.5 | Backlog |
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
@@ -105,6 +114,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-804 | 8 | Admin API in server: admin commands via tick loop, role checks, audit log (ARCH §12) | Claude Code | Opus 5.5 | Backlog |
 | T-805 | 8 | `Game.Admin` web panel: SSO + roles, player lookup, server status, audit search | Claude Code | Sonnet 5.5 | Backlog |
 | T-806 | 8 | Moderation & support: kick/mute/ban, item/currency restore, announcements, maintenance, deletion/export queue | Claude Code | Sonnet 5.5 | Backlog |
+| T-807 | 8 | Local Docker stack (server + Postgres, compose) and a Windows desktop client build for end-to-end play on one PC | Claude Code | Sonnet 5.5 | Backlog |
 | T-901 | 9 | Chat: map, whisper, party and guild channels; rate limit + moderation hooks (mute from T-806) | Claude Code | Sonnet 5.5 | Backlog |
 | T-902 | 9 | Party: invite/leave/leader, member HP list + minimap, EXP share formula in `formulas.yaml`, shared quest kill credit via event bus | Claude Code | Opus 5.5 | Backlog |
 | T-903 | 9 | Player trade: two-step confirm, atomic transactional swap, dupe-safe (rule 10) | Claude Code | Opus 5.5 | Backlog |

@@ -123,7 +123,7 @@ Any failure prevents startup and is reported with file + path.
 `JobDef`, `SkillDef`, `ItemDef` (consumable | equip | card | etc), `MonsterDef`,
 `StatusDef` (buffs/debuffs), `QuestDef`, `NpcDef`, `DialogueDef`, `DropTableDef`,
 `MapDef` (metadata + grid reference), `ExpTableDef`, `ElementTableDef`.
-Singleton root files: `FormulaSetDef` (`formulas.yaml`), `BalanceDef` (`balance.yaml`: stat/skill point rules, stat range, damage and chance clamps, path search limits). `AppearanceDef` (`appearance.yaml`: character-creation options, cosmetic only, §7.5.1).
+Singleton root files: `FormulaSetDef` (`formulas.yaml`), `BalanceDef` (`balance.yaml`: stat/skill point rules, stat range, damage and chance clamps, movement and path search limits, AOI bucket size and view radius, new-character start, monster AI timings). `AppearanceDef` (`appearance.yaml`: character-creation options, cosmetic only, §7.5.1).
 
 ### 5.3 Maps
 A map has three parts that share its id:
@@ -392,7 +392,7 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 | Frame rate | 30 fps locked on reference devices; 60 fps option on high-end |
 | Draw calls | ≤ 100 in a typical scene |
 | Visible triangles | ≤ 150k |
-| Character | ≤ 5k triangles, 1 material, ≤ 1024² texture |
+| Character | LOD0 ≤ 5k triangles (the nearest 8 characters), LOD1 ≤ 2k triangles (everyone else); 1 material, ≤ 1024² texture. Worst case 8 × 5k + 32 × 2k = 104k, leaving ≥ 45k of the 150k for map, props and VFX (ADR-002) |
 | Animated characters on screen | 40 at full rate; further ones at reduced animation rate |
 | Real-time shadows | Player only by default; off on low settings |
 | App memory | ≤ 1 GB |
