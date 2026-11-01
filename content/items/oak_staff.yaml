@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.oak_staff
+name: Oak Staff
+description: A knotted staff that focuses magic.
+kind: equip
+weight: 50
+buy_price: 650
+sell_price: 195
+icon_asset_key: icon.item.oak_staff
+ground_asset_key: model.prop.loot_bag
+equip:
+  slots: [weapon]
+  weapon_type: staff
+  weapon_atk: 15
+  attack_range: 1
+  element: earth
+  min_base_level: 5
+  job_ids: [job.spellbinder]
+  card_slots: 1
+  refinable: true
+  modifiers:
+    - { stat: matk, op: flat, value: 10 + refine * 3 }
+    - { stat: int, op: flat, value: "2" }
+  visual_asset_key: model.equip.oak_staff

@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../../schemas/npc.schema.json
+id: npc.trainer
+name: Captain Brannoc
+title: Warden Trainer
+dialogue_id: dialogue.trainer_intro
+model_asset_key: model.npc.trainer
+portrait_asset_key: portrait.npc.trainer

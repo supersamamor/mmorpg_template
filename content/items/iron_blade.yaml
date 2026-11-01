@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.iron_blade
+name: Iron Blade
+description: A plain, honest one-handed sword.
+kind: equip
+weight: 80
+buy_price: 700
+sell_price: 210
+icon_asset_key: icon.item.iron_blade
+ground_asset_key: model.prop.loot_bag
+equip:
+  slots: [weapon]
+  weapon_type: sword_1h
+  weapon_atk: 38
+  attack_range: 1
+  min_base_level: 8
+  job_ids: [job.warden]
+  card_slots: 1
+  refinable: true
+  modifiers:
+    - { stat: str, op: flat, value: "1" }
+  visual_asset_key: model.equip.iron_blade

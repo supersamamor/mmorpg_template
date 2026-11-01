@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.healing_draught
+name: Healing Draught
+description: A bitter red tonic that restores HP.
+kind: consumable
+weight: 5
+buy_price: 40
+sell_price: 12
+max_stack: 99
+icon_asset_key: icon.item.healing_draught
+ground_asset_key: model.prop.loot_bag
+consumable:
+  cooldown_ms: 1000
+  consumed: true
+  effects:
+    - type: heal
+      amount: "80"

@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.focus_tonic
+name: Focus Tonic
+description: A minty blue tonic that restores SP.
+kind: consumable
+weight: 5
+buy_price: 60
+sell_price: 18
+max_stack: 99
+icon_asset_key: icon.item.focus_tonic
+ground_asset_key: model.prop.loot_bag
+consumable:
+  cooldown_ms: 1000
+  effects:
+    - type: restore_sp
+      amount: "40"

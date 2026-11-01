@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=../../schemas/job.schema.json
+id: job.spellbinder
+name: Spellbinder
+description: A scholar of the old tongues who shapes flame and mana from a safe distance.
+parent_job_id: job.novice
+requirements:
+  min_base_level: 5
+  min_job_level: 5
+job_exp_table_id: exp.job
+skills:
+  - skill_id: skill.ember_bolt
+    max_level: 10
+  - skill_id: skill.mana_font
+    max_level: 5
+    requires:
+      - skill_id: skill.ember_bolt
+        level: 2
+  - skill_id: skill.cleanse
+    max_level: 1
+  - skill_id: skill.call_seedling
+    max_level: 3
+stat_bonuses:
+  - stat: max_sp
+    op: percent
+    value: job_level * 0.5
+  - stat: int
+    op: flat
+    value: floor(job_level / 10)
+weapon_types: [unarmed, dagger, staff]
+model_asset_key: model.char.spellbinder
+icon_asset_key: icon.job.spellbinder

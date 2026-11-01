@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.padded_vest
+name: Padded Vest
+description: Quilted cloth armour that turns aside glancing blows.
+kind: equip
+weight: 40
+buy_price: 250
+sell_price: 75
+icon_asset_key: icon.item.padded_vest
+ground_asset_key: model.prop.loot_bag
+equip:
+  slots: [body]
+  card_slots: 1
+  refinable: true
+  modifiers:
+    - { stat: def, op: flat, value: 4 + refine * 2 }
+  visual_asset_key: model.equip.padded_vest

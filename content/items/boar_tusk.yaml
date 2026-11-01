@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.boar_tusk
+name: Boar Tusk
+description: A curved tusk from a thornback boar.
+kind: material
+weight: 5
+sell_price: 45
+max_stack: 999
+icon_asset_key: icon.item.boar_tusk
+ground_asset_key: model.prop.loot_bag

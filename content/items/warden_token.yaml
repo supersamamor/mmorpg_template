@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.warden_token
+name: Warden Token
+description: Proof that you passed the Warden's trial. Cannot be sold.
+kind: quest
+weight: 0
+icon_asset_key: icon.item.warden_token
+ground_asset_key: model.prop.loot_bag

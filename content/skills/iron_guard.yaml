@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.iron_guard
+name: Iron Guard
+description: Harden your stance, raising DEF for a while.
+max_level: 3
+target: { range: 0, ground: false, friendly: true }
+sp_cost: 12 + level * 3
+cast_time_ms: "0"
+cooldown_ms: "30000"
+effects:
+  - type: apply_status
+    status_id: status.iron_skin
+    duration_ms: 15000 + level * 5000
+animation_id: cast
+icon_asset_key: icon.skill.iron_guard
+vfx_asset_key: vfx.skill.buff
+sfx_asset_key: sfx.skill.buff

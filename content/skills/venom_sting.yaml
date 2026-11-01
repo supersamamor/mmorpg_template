@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.venom_sting
+name: Venom Sting
+description: Monster skill. A jab that may poison the target.
+max_level: 1
+target: { range: 1, ground: false, friendly: false }
+sp_cost: "0"
+cast_time_ms: "300"
+cooldown_ms: "5000"
+effects:
+  - type: damage
+    multiplier: "1.2"
+    element: poison
+  - type: apply_status
+    status_id: status.poison
+    chance: "0.35"
+    duration_ms: "8000"
+animation_id: attack
+vfx_asset_key: vfx.skill.sting
+sfx_asset_key: sfx.skill.slash

@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.wooden_buckler
+name: Wooden Buckler
+description: A small round shield.
+kind: equip
+weight: 30
+buy_price: 200
+sell_price: 60
+icon_asset_key: icon.item.wooden_buckler
+ground_asset_key: model.prop.loot_bag
+equip:
+  slots: [shield]
+  job_ids: [job.warden, job.novice]
+  refinable: true
+  modifiers:
+    - { stat: def, op: flat, value: 2 + refine }
+    - { stat: flee, op: flat, value: "-3" }
+  visual_asset_key: model.equip.wooden_buckler

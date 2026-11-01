@@ -1,1 +1,311 @@
-{}
+{
+  "anim.humanoid": {
+    "file": "placeholder.glb",
+    "rig": "humanoid",
+    "clips": {
+      "idle": "Idle",
+      "walk": "Walk",
+      "attack": "Attack",
+      "hit": "Hit",
+      "die": "Die",
+      "cast": "Cast",
+      "sit": "Sit",
+      "pick_up": "PickUp"
+    }
+  },
+  "anim.blob": {
+    "file": "placeholder.glb",
+    "rig": "blob",
+    "clips": {
+      "idle": "Idle",
+      "walk": "Walk",
+      "attack": "Attack",
+      "hit": "Hit",
+      "die": "Die"
+    }
+  },
+  "anim.sprout": {
+    "file": "placeholder.glb",
+    "rig": "sprout",
+    "clips": {
+      "idle": "Idle",
+      "walk": "Walk",
+      "attack": "Attack",
+      "hit": "Hit",
+      "die": "Die"
+    }
+  },
+  "anim.insect": {
+    "file": "placeholder.glb",
+    "rig": "insect",
+    "clips": {
+      "idle": "Idle",
+      "walk": "Walk",
+      "attack": "Attack",
+      "hit": "Hit",
+      "die": "Die"
+    }
+  },
+  "anim.quadruped": {
+    "file": "placeholder.glb",
+    "rig": "quadruped",
+    "clips": {
+      "idle": "Idle",
+      "walk": "Walk",
+      "attack": "Attack",
+      "hit": "Hit",
+      "die": "Die"
+    }
+  },
+  "icon.item.antidote": {
+    "file": "placeholder.png"
+  },
+  "icon.item.beetle_shell": {
+    "file": "placeholder.png"
+  },
+  "icon.item.boar_tusk": {
+    "file": "placeholder.png"
+  },
+  "icon.item.bone_dirk": {
+    "file": "placeholder.png"
+  },
+  "icon.item.focus_tonic": {
+    "file": "placeholder.png"
+  },
+  "icon.item.gel_glob": {
+    "file": "placeholder.png"
+  },
+  "icon.item.gelcap_card": {
+    "file": "placeholder.png"
+  },
+  "icon.item.healing_draught": {
+    "file": "placeholder.png"
+  },
+  "icon.item.iron_blade": {
+    "file": "placeholder.png"
+  },
+  "icon.item.leather_cap": {
+    "file": "placeholder.png"
+  },
+  "icon.item.mossy_fiber": {
+    "file": "placeholder.png"
+  },
+  "icon.item.oak_staff": {
+    "file": "placeholder.png"
+  },
+  "icon.item.padded_vest": {
+    "file": "placeholder.png"
+  },
+  "icon.item.swift_elixir": {
+    "file": "placeholder.png"
+  },
+  "icon.item.warden_token": {
+    "file": "placeholder.png"
+  },
+  "icon.item.wasp_stinger": {
+    "file": "placeholder.png"
+  },
+  "icon.item.wooden_buckler": {
+    "file": "placeholder.png"
+  },
+  "icon.job.novice": {
+    "file": "placeholder.png"
+  },
+  "icon.job.spellbinder": {
+    "file": "placeholder.png"
+  },
+  "icon.job.warden": {
+    "file": "placeholder.png"
+  },
+  "icon.skill.call_seedling": {
+    "file": "placeholder.png"
+  },
+  "icon.skill.cleanse": {
+    "file": "placeholder.png"
+  },
+  "icon.skill.ember_bolt": {
+    "file": "placeholder.png"
+  },
+  "icon.skill.iron_guard": {
+    "file": "placeholder.png"
+  },
+  "icon.skill.mana_font": {
+    "file": "placeholder.png"
+  },
+  "icon.skill.return_home": {
+    "file": "placeholder.png"
+  },
+  "icon.skill.second_wind": {
+    "file": "placeholder.png"
+  },
+  "icon.skill.shockwave": {
+    "file": "placeholder.png"
+  },
+  "icon.skill.tough_body": {
+    "file": "placeholder.png"
+  },
+  "icon.skill.twin_strike": {
+    "file": "placeholder.png"
+  },
+  "icon.status.iron_skin": {
+    "file": "placeholder.png"
+  },
+  "icon.status.poison": {
+    "file": "placeholder.png"
+  },
+  "icon.status.stun": {
+    "file": "placeholder.png"
+  },
+  "icon.status.swift": {
+    "file": "placeholder.png"
+  },
+  "model.char.spellbinder": {
+    "file": "placeholder.glb",
+    "rig": "humanoid",
+    "anims": "anim.humanoid"
+  },
+  "model.char.wanderer": {
+    "file": "placeholder.glb",
+    "rig": "humanoid",
+    "anims": "anim.humanoid"
+  },
+  "model.char.warden": {
+    "file": "placeholder.glb",
+    "rig": "humanoid",
+    "anims": "anim.humanoid"
+  },
+  "model.equip.bone_dirk": {
+    "file": "placeholder.glb",
+    "attach": "hand_r"
+  },
+  "model.equip.iron_blade": {
+    "file": "placeholder.glb",
+    "attach": "hand_r"
+  },
+  "model.equip.leather_cap": {
+    "file": "placeholder.glb",
+    "attach": "head"
+  },
+  "model.equip.oak_staff": {
+    "file": "placeholder.glb",
+    "attach": "hand_r"
+  },
+  "model.equip.padded_vest": {
+    "file": "placeholder.glb",
+    "skinned": "humanoid"
+  },
+  "model.equip.wooden_buckler": {
+    "file": "placeholder.glb",
+    "attach": "hand_l"
+  },
+  "model.monster.gel_slime": {
+    "file": "placeholder.glb",
+    "rig": "blob",
+    "anims": "anim.blob"
+  },
+  "model.monster.mossling": {
+    "file": "placeholder.glb",
+    "rig": "sprout",
+    "anims": "anim.sprout"
+  },
+  "model.monster.rock_beetle": {
+    "file": "placeholder.glb",
+    "rig": "insect",
+    "anims": "anim.insect"
+  },
+  "model.monster.sting_wasp": {
+    "file": "placeholder.glb",
+    "rig": "insect",
+    "anims": "anim.insect"
+  },
+  "model.monster.thornback_boar": {
+    "file": "placeholder.glb",
+    "rig": "quadruped",
+    "anims": "anim.quadruped"
+  },
+  "model.npc.guide": {
+    "file": "placeholder.glb",
+    "rig": "humanoid",
+    "anims": "anim.humanoid"
+  },
+  "model.npc.trainer": {
+    "file": "placeholder.glb",
+    "rig": "humanoid",
+    "anims": "anim.humanoid"
+  },
+  "model.prop.loot_bag": {
+    "file": "placeholder.glb"
+  },
+  "music.map.starter_meadow": {
+    "file": "placeholder.ogg"
+  },
+  "portrait.npc.guide": {
+    "file": "placeholder.png"
+  },
+  "portrait.npc.trainer": {
+    "file": "placeholder.png"
+  },
+  "scene.map.starter_meadow": {
+    "file": "placeholder.tscn"
+  },
+  "sfx.skill.buff": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.skill.fire": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.skill.heal": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.skill.slam": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.skill.slash": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.skill.summon": {
+    "file": "placeholder.ogg"
+  },
+  "sfx.skill.warp": {
+    "file": "placeholder.ogg"
+  },
+  "vfx.skill.buff": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.skill.ember_bolt": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.skill.heal": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.skill.mana_font": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.skill.shockwave": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.skill.slash": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.skill.sting": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.skill.summon": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.skill.warp": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.status.iron_skin": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.status.poison": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.status.stun": {
+    "file": "placeholder.tscn"
+  },
+  "vfx.status.swift": {
+    "file": "placeholder.tscn"
+  }
+}

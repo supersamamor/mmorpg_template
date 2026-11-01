@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.mana_font
+name: Mana Font
+description: Open a well of mana on a cell; allies standing in it regain SP.
+max_level: 5
+target: { range: 5, ground: true, friendly: true }
+sp_cost: 20 + level * 4
+cast_time_ms: "2000"
+cooldown_ms: "20000"
+effects:
+  - type: area
+    radius: 2
+    friendly: true
+    effects:
+      - type: restore_sp
+        amount: 10 + level * 5
+animation_id: cast
+icon_asset_key: icon.skill.mana_font
+vfx_asset_key: vfx.skill.mana_font
+sfx_asset_key: sfx.skill.buff

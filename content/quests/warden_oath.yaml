@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../schemas/quest.schema.json
+id: quest.warden_oath
+name: The Warden's Oath
+description: Change your job to Warden and swear the oath.
+giver_npc_id: npc.trainer
+repeatable: false
+prerequisites:
+  quest_ids: [quest.warden_trial]
+steps:
+  - description: Become a Warden.
+    objectives:
+      - { type: job, job_id: job.warden }
+rewards:
+  - { type: exp, base: 100, job: 100 }
+  - { type: item, item_id: item.wooden_buckler }

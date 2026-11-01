@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.cleanse
+name: Cleanse
+description: Wash away poison and stuns from an ally.
+max_level: 1
+target: { range: 5, ground: false, friendly: true }
+sp_cost: "15"
+cast_time_ms: "1000"
+cooldown_ms: "10000"
+effects:
+  - type: remove_status
+    status_ids: [status.stun]
+    tags: [poison]
+animation_id: cast
+icon_asset_key: icon.skill.cleanse
+vfx_asset_key: vfx.skill.heal
+sfx_asset_key: sfx.skill.heal

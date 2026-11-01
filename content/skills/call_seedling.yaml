@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.call_seedling
+name: Call Seedling
+description: Summon two helper seedlings that fight for a short time.
+max_level: 3
+target: { range: 3, ground: true, friendly: false }
+sp_cost: 25 + level * 5
+cast_time_ms: "2500"
+cooldown_ms: "45000"
+effects:
+  - type: summon
+    monster_id: monster.mossling
+    count: 2
+    duration_ms: 30000
+animation_id: cast
+icon_asset_key: icon.skill.call_seedling
+vfx_asset_key: vfx.skill.summon
+sfx_asset_key: sfx.skill.summon

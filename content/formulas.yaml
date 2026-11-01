@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../schemas/formula_set.schema.json
+# Balance expressions (ARCHITECTURE §6.2). Whitelisted variables only (VOCABULARY.md):
+#   caster: base_level, job_level, str agi vit int dex luk, derived stats, weapon_atk, refine
+#   target: t_ prefix (t_def, t_mdef, t_flee, t_luk, ...)
+# Derived formulas below use only primary stats and levels, so evaluation order does not matter.
+# Units: aspd = attacks per second; move_speed = cells per second; hp_regen / sp_regen = points per second;
+# cast_time_mod = multiplier on cast time (1 = unchanged); crit = percent chance before the target's luk.
+name: Default formulas
+derived:
+  max_hp: floor((40 + base_level * 8) * (1 + vit * 0.01))
+  max_sp: floor((10 + base_level * 3) * (1 + int * 0.01))
+  atk: str + floor(dex / 5) + floor(luk / 5) + floor(base_level / 4)
+  matk: floor(int * 1.5) + floor(base_level / 4)
+  def: floor(vit / 2) + floor(base_level / 5)
+  mdef: floor(int / 3) + floor(vit / 5)
+  hit: base_level + dex + 10
+  flee: base_level + agi + 10
+  crit: 1 + luk * 0.3
+  aspd: min(3, 1 + agi * 0.01 + dex * 0.002)
+  move_speed: min(6, 3.5 + agi * 0.01)
+  cast_time_mod: clamp(1 - dex / 150, 0.2, 1)
+  hp_regen: 0.2 + vit * 0.05 + base_level * 0.02
+  sp_regen: 0.1 + int * 0.03 + base_level * 0.01
+  weight_limit: 2000 + str * 30 + base_level * 10
+physical_damage: max(1, floor((atk + weapon_atk + refine * 2) * 100 / (100 + t_def * 3)))
+magic_damage: max(1, floor(matk * 100 / (100 + t_mdef * 3)))
+hit_chance: clamp((hit - t_flee + 80) / 100, 0.05, 0.95)
+crit_chance: clamp((crit - t_luk * 0.2) / 100, 0, 0.5)

@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/status.schema.json
+id: status.poison
+name: Poison
+description: Loses HP every second and has reduced DEF.
+debuff: true
+tags: [poison]
+max_stacks: 1
+on_apply:
+  - type: modify_stat
+    modifier: { stat: def, op: percent, value: "-25" }
+tick_interval_ms: 1000
+on_tick:
+  - type: damage
+    multiplier: "0.15"
+    element: poison
+icon_asset_key: icon.status.poison
+vfx_asset_key: vfx.status.poison

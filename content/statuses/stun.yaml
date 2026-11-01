@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=../../schemas/status.schema.json
+id: status.stun
+name: Stun
+description: Dazed and unable to act.
+debuff: true
+tags: [control]
+prevents_move: true
+prevents_attack: true
+prevents_skills: true
+icon_asset_key: icon.status.stun
+vfx_asset_key: vfx.status.stun

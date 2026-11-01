@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=../../schemas/drop_table.schema.json
+id: drop.tier3_supplies
+name: Tier 3 shared supplies (levels 9-10)
+entries:
+  - { item_id: item.healing_draught, chance: 0.12, min: 1, max: 2 }
+  - { item_id: item.focus_tonic, chance: 0.06 }
+  - { item_id: item.swift_elixir, chance: 0.02 }

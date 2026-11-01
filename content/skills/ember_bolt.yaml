@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.ember_bolt
+name: Ember Bolt
+description: Hurl a bolt of flame at a distant enemy.
+max_level: 10
+target: { range: 7, ground: false, friendly: false }
+sp_cost: 8 + level * 2
+cast_time_ms: 800 + level * 100
+cooldown_ms: "500"
+weapon_types: [staff, dagger, unarmed]
+effects:
+  - type: damage
+    magic: true
+    multiplier: 0.9 + level * 0.15
+    element: fire
+animation_id: cast
+icon_asset_key: icon.skill.ember_bolt
+vfx_asset_key: vfx.skill.ember_bolt
+sfx_asset_key: sfx.skill.fire

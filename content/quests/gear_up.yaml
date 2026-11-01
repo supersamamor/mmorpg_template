@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../schemas/quest.schema.json
+id: quest.gear_up
+name: Gear Up
+description: Learn the basics of equipment, potions and exploring the meadow.
+giver_npc_id: npc.guide
+repeatable: false
+prerequisites:
+  min_base_level: 2
+  quest_ids: [quest.first_hunt]
+steps:
+  - description: Equip a Leather Cap.
+    objectives:
+      - { type: equip, item_id: item.leather_cap }
+  - description: Drink a Healing Draught.
+    objectives:
+      - { type: use_item, item_id: item.healing_draught, count: 1 }
+  - description: Walk to the old stone circle.
+    objectives:
+      - { type: reach, map_id: map.starter_meadow, x: 40, y: 12, radius: 2 }
+rewards:
+  - { type: item, item_id: item.swift_elixir, count: 2 }
+  - { type: skill_point, amount: 1 }
+  - { type: stat_point, amount: 3 }
+  - { type: status, status_id: status.swift, duration_ms: 120000 }

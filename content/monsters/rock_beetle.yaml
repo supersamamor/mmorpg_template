@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/monster.schema.json
+id: monster.rock_beetle
+name: Rock Beetle
+level: 7
+race: insect
+size: medium
+element: earth
+stats: { str: 16, agi: 5, vit: 18, int: 2, dex: 9, luk: 3, max_hp: 320, atk: 30, def: 12, mdef: 3, move_speed: 2 }
+attack_range: 1
+base_exp: 70
+job_exp: 45
+drop_table_ids: [drop.rock_beetle, drop.tier2_supplies]
+ai:
+  aggressive: false
+  aggro_range: 0
+  chase_range: 10
+model_asset_key: model.monster.rock_beetle

@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.leather_cap
+name: Leather Cap
+description: Keeps the sun and the odd stray pebble off your head.
+kind: equip
+weight: 10
+buy_price: 120
+sell_price: 36
+icon_asset_key: icon.item.leather_cap
+ground_asset_key: model.prop.loot_bag
+equip:
+  slots: [head_top]
+  card_slots: 0
+  modifiers:
+    - { stat: def, op: flat, value: "1" }
+    - { stat: mdef, op: flat, value: "1" }
+  visual_asset_key: model.equip.leather_cap

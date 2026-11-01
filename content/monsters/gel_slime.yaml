@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/monster.schema.json
+id: monster.gel_slime
+name: Gel Slime
+level: 1
+race: formless
+size: small
+element: water
+stats: { str: 3, agi: 1, vit: 2, int: 1, dex: 2, luk: 1, max_hp: 35, atk: 6, def: 0, mdef: 0, move_speed: 1.5 }
+attack_range: 1
+base_exp: 6
+job_exp: 4
+drop_table_ids: [drop.gel_slime, drop.tier1_supplies]
+ai:
+  aggressive: false
+  aggro_range: 0
+  chase_range: 8
+model_asset_key: model.monster.gel_slime

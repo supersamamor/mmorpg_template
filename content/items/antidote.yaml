@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.antidote
+name: Antidote
+description: Cures poison.
+kind: consumable
+weight: 3
+buy_price: 30
+sell_price: 9
+max_stack: 99
+icon_asset_key: icon.item.antidote
+ground_asset_key: model.prop.loot_bag
+consumable:
+  cooldown_ms: 500
+  effects:
+    - type: remove_status
+      tags: [poison]

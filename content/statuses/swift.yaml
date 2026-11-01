@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=../../schemas/status.schema.json
+id: status.swift
+name: Swift
+description: Lightfooted; move and attack faster.
+debuff: false
+tags: [buff]
+max_stacks: 1
+on_apply:
+  - type: modify_stat
+    modifier: { stat: move_speed, op: flat, value: "1" }
+  - type: modify_stat
+    modifier: { stat: aspd, op: percent, value: "15" }
+icon_asset_key: icon.status.swift
+vfx_asset_key: vfx.status.swift

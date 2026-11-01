@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=../../schemas/dialogue.schema.json
+id: dialogue.guide_intro
+name: Guide introduction
+start: greet
+nodes:
+  greet:
+    speaker_npc_id: npc.guide
+    text: Welcome to the Lumen Vale, traveller. The meadow is crawling with slimes. Care to help thin them out?
+    choices:
+      - text: Sure, I'll hunt some slimes.
+        next: accepted
+        start_quest_id: quest.first_hunt
+      - text: I've finished the hunt.
+        next: report
+      - text: Anything else I can do?
+        next: more_work
+        start_quest_id: quest.gear_up
+      - text: Not right now.
+        next: null
+  accepted:
+    text: Bring me five slimes' worth of trouble, and three globs of gel as proof. Then come talk to me again.
+    next: null
+  report:
+    text: Excellent work! Take this as thanks for keeping the meadow safe.
+    next: null
+  more_work:
+    text: Equip a leather cap, drink a healing draught, then walk to the old stone circle in the north of the meadow.
+    next: null

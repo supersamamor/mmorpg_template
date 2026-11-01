@@ -1,0 +1,115 @@
+# yaml-language-server: $schema=../schemas/element_table.schema.json
+# Attacking element -> defending element -> damage multiplier (1 = normal, 0 = immune, negative heals).
+# Rows are attackers, columns are defenders; every pair is listed explicitly.
+name: Default element table
+multipliers:
+  neutral:
+    neutral: 1
+    fire: 1
+    water: 1
+    earth: 1
+    wind: 1
+    holy: 1
+    shadow: 1
+    poison: 1
+    ghost: 0.25
+    undead: 1
+  fire:
+    neutral: 1
+    fire: 0.5
+    water: 0.5
+    earth: 1
+    wind: 1.5
+    holy: 1
+    shadow: 1
+    poison: 1.25
+    ghost: 1
+    undead: 1.25
+  water:
+    neutral: 1
+    fire: 1.5
+    water: 0.5
+    earth: 0.5
+    wind: 1
+    holy: 1
+    shadow: 1
+    poison: 1
+    ghost: 1
+    undead: 1
+  earth:
+    neutral: 1
+    fire: 1
+    water: 1.5
+    earth: 0.5
+    wind: 0.5
+    holy: 1
+    shadow: 1
+    poison: 1
+    ghost: 1
+    undead: 1
+  wind:
+    neutral: 1
+    fire: 0.5
+    water: 1
+    earth: 1.5
+    wind: 0.5
+    holy: 1
+    shadow: 1
+    poison: 1
+    ghost: 1
+    undead: 1
+  holy:
+    neutral: 1
+    fire: 1
+    water: 1
+    earth: 1
+    wind: 1
+    holy: 0
+    shadow: 1.5
+    poison: 1
+    ghost: 1.5
+    undead: 2
+  shadow:
+    neutral: 1
+    fire: 1
+    water: 1
+    earth: 1
+    wind: 1
+    holy: 1.5
+    shadow: 0.5
+    poison: 1
+    ghost: 0.5
+    undead: 0
+  poison:
+    neutral: 1
+    fire: 1
+    water: 1
+    earth: 1
+    wind: 1
+    holy: 0.5
+    shadow: 1
+    poison: 0
+    ghost: 1
+    undead: 0.5
+  ghost:
+    neutral: 0.25
+    fire: 1
+    water: 1
+    earth: 1
+    wind: 1
+    holy: 0.75
+    shadow: 1
+    poison: 1
+    ghost: 1.5
+    undead: 1
+  undead:
+    neutral: 1
+    fire: 1
+    water: 1
+    earth: 1
+    wind: 1
+    holy: 0.5
+    shadow: 1
+    poison: 1
+    ghost: 1
+    undead: 0.5

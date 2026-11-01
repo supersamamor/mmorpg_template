@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.second_wind
+name: Second Wind
+description: Catch your breath and recover a little HP.
+max_level: 5
+target: { range: 0, ground: false, friendly: true }
+sp_cost: 6 + level * 2
+cast_time_ms: "0"
+cooldown_ms: 8000 - level * 500
+effects:
+  - type: heal
+    amount: 20 + level * 15 + int
+animation_id: sit
+icon_asset_key: icon.skill.second_wind
+vfx_asset_key: vfx.skill.heal
+sfx_asset_key: sfx.skill.heal

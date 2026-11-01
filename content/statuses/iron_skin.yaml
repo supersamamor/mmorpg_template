@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=../../schemas/status.schema.json
+id: status.iron_skin
+name: Iron Skin
+description: Skin hardened like metal, raising DEF and slowing movement slightly.
+debuff: false
+tags: [buff]
+on_apply:
+  - type: modify_stat
+    modifier: { stat: def, op: percent, value: "30" }
+  - type: modify_stat
+    modifier: { stat: move_speed, op: percent, value: "-10" }
+icon_asset_key: icon.status.iron_skin
+vfx_asset_key: vfx.status.iron_skin

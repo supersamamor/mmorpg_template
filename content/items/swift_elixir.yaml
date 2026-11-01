@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.swift_elixir
+name: Swift Elixir
+description: Grants the Swift status for a minute.
+kind: consumable
+weight: 5
+buy_price: 120
+sell_price: 36
+max_stack: 20
+icon_asset_key: icon.item.swift_elixir
+ground_asset_key: model.prop.loot_bag
+consumable:
+  cooldown_ms: 2000
+  effects:
+    - type: apply_status
+      status_id: status.swift
+      duration_ms: "60000"

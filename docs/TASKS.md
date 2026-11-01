@@ -30,7 +30,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-001 | Solution skeleton & build config | Claude Code | Sonnet 5.5 | [T-001](../tasks/prompts/T-001.md) | — | Review | |
 | T-002 | Definition records (Game.Shared) | Claude Code | Opus 5.5 | [T-002](../tasks/prompts/T-002.md) | T-001 | Review | Core contract — review carefully |
 | T-003 | JSON Schema generation (`schema` CLI) | Claude Code | Sonnet 5.5 | [T-003](../tasks/prompts/T-003.md) | T-002 | Review | |
-| T-004 | Sample content set (YAML) | Claude Code | Sonnet 5.5 | [T-004](../tasks/prompts/T-004.md) | T-003 | Ready | Original names only |
+| T-004 | Sample content set (YAML) | Claude Code | Sonnet 5.5 | [T-004](../tasks/prompts/T-004.md) | T-003 | Review | Original names only |
 | T-005 | Mobile export spike (Godot .NET → Android + iOS) | Claude Code | Opus 5.5 | [T-005](../tasks/prompts/T-005.md) | T-001 | In Progress | Engine go/no-go (ADR-001). iOS half needs a Mac |
 | T-006 | Update prereqs script for 3D mobile (Blender, Android SDK/JDK, Git LFS + `.gitattributes`) | Claude Code | Sonnet 5.5 | — | — | Backlog | Drop Tiled/Pixelorama |
 

@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=../../schemas/quest.schema.json
+id: quest.warden_trial
+name: The Warden's Trial
+description: Prove yourself to Captain Brannoc.
+giver_npc_id: npc.trainer
+repeatable: false
+prerequisites:
+  min_base_level: 5
+  job_ids: [job.novice]
+steps:
+  - description: Reach base level 10.
+    objectives:
+      - { type: level, base_level: 10 }
+  - description: Defeat 3 Sting Wasps.
+    objectives:
+      - { type: kill, monster_id: monster.sting_wasp, count: 3 }
+  - description: Report to Captain Brannoc.
+    objectives:
+      - { type: talk, npc_id: npc.trainer }
+rewards:
+  - { type: exp, base: 300, job: 150 }
+  - { type: item, item_id: item.warden_token }
+  - { type: unlock_job, job_id: job.warden }

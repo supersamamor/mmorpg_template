@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../schemas/job.schema.json
+id: job.novice
+name: Wanderer
+description: A newcomer to the Lumen Vale. Can learn a little of everything, master of nothing.
+parent_job_id: null
+job_exp_table_id: exp.job_novice
+skills:
+  - skill_id: skill.second_wind
+    max_level: 5
+  - skill_id: skill.return_home
+    max_level: 1
+stat_bonuses: []
+weapon_types: [unarmed, dagger]
+model_asset_key: model.char.wanderer
+icon_asset_key: icon.job.novice

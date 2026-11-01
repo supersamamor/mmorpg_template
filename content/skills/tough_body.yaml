@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.tough_body
+name: Tough Body
+description: Permanently raises max HP and HP regeneration.
+max_level: 5
+passive: true
+sp_cost: "0"
+cast_time_ms: "0"
+cooldown_ms: "0"
+passive_modifiers:
+  - stat: max_hp
+    op: percent
+    value: level * 2
+  - stat: hp_regen
+    op: flat
+    value: level * 0.1
+icon_asset_key: icon.skill.tough_body

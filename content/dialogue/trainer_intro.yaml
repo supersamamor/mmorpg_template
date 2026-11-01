@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=../../schemas/dialogue.schema.json
+id: dialogue.trainer_intro
+name: Warden trainer introduction
+start: greet
+nodes:
+  greet:
+    speaker_npc_id: npc.trainer
+    text: Think you have what it takes to stand on the wall? Prove it.
+    choices:
+      - text: I'm ready for the trial.
+        next: trial
+        start_quest_id: quest.warden_trial
+      - text: I have taken the Warden's path.
+        next: oath
+        start_quest_id: quest.warden_oath
+      - text: Maybe later.
+        next: null
+  trial:
+    text: Reach level ten and cull three sting wasps. Then I will vouch for you.
+    next: null
+  oath:
+    text: Then swear the oath and wear the token with pride.
+    next: null

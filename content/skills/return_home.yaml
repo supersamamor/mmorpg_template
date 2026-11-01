@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.return_home
+name: Return Home
+description: Warp back to your save point.
+max_level: 1
+target: { range: 0, ground: false, friendly: true }
+sp_cost: "20"
+cast_time_ms: "3000"
+cooldown_ms: "60000"
+effects:
+  - type: teleport
+    to_save_point: true
+animation_id: cast
+icon_asset_key: icon.skill.return_home
+vfx_asset_key: vfx.skill.warp
+sfx_asset_key: sfx.skill.warp

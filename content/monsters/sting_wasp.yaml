@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=../../schemas/monster.schema.json
+id: monster.sting_wasp
+name: Sting Wasp
+level: 5
+race: insect
+size: small
+element: wind
+stats: { str: 9, agi: 14, vit: 6, int: 3, dex: 12, luk: 5, max_hp: 140, atk: 18, def: 3, mdef: 2, move_speed: 3.5 }
+attack_range: 1
+base_exp: 34
+job_exp: 22
+drop_table_ids: [drop.sting_wasp, drop.tier2_supplies]
+ai:
+  aggressive: true
+  aggro_range: 6
+  chase_range: 12
+  skills:
+    - skill_id: skill.venom_sting
+      level: 1
+      chance: 0.25
+model_asset_key: model.monster.sting_wasp

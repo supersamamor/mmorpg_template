@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../schemas/quest.schema.json
+id: quest.first_hunt
+name: First Hunt
+description: Thin out the gel slimes in the meadow, then report back to Odalys.
+giver_npc_id: npc.guide
+repeatable: false
+prerequisites:
+  min_base_level: 1
+steps:
+  - description: Defeat 5 Gel Slimes and collect 3 Gel Globs.
+    objectives:
+      - { type: kill, monster_id: monster.gel_slime, count: 5 }
+      - { type: collect, item_id: item.gel_glob, count: 3, consume: true }
+  - description: Report back to Odalys.
+    objectives:
+      - { type: talk, npc_id: npc.guide }
+rewards:
+  - { type: exp, base: 40, job: 25 }
+  - { type: item, item_id: item.healing_draught, count: 5 }
+  - { type: zeny, amount: 150 }

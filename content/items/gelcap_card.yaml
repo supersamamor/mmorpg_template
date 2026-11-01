@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.gelcap_card
+name: Gelcap Card
+description: Socket into armour or a shield to gain extra max HP.
+kind: card
+weight: 1
+buy_price: 0
+sell_price: 500
+icon_asset_key: icon.item.gelcap_card
+ground_asset_key: model.prop.loot_bag
+card:
+  slots: [body, shield]
+  modifiers:
+    - { stat: max_hp, op: percent, value: "8" }

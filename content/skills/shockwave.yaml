@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.shockwave
+name: Shockwave
+description: Slam the ground, hurling nearby enemies back and sometimes stunning them.
+max_level: 5
+target: { range: 0, ground: false, friendly: false }
+sp_cost: 14 + level * 2
+cast_time_ms: "500"
+cooldown_ms: "6000"
+weapon_types: [sword_1h, sword_2h, axe, mace]
+effects:
+  - type: area
+    radius: 2
+    effects:
+      - type: damage
+        multiplier: 0.8 + level * 0.2
+        element: earth
+      - type: knockback
+        cells: 2
+      - type: apply_status
+        status_id: status.stun
+        chance: 0.1 + level * 0.05
+        duration_ms: "1500"
+animation_id: attack
+icon_asset_key: icon.skill.shockwave
+vfx_asset_key: vfx.skill.shockwave
+sfx_asset_key: sfx.skill.slam

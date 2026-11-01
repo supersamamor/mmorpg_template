@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.bone_dirk
+name: Bone Dirk
+description: A short blade carved from beast bone. Every wanderer starts with one.
+kind: equip
+weight: 30
+buy_price: 100
+sell_price: 30
+icon_asset_key: icon.item.bone_dirk
+ground_asset_key: model.prop.loot_bag
+equip:
+  slots: [weapon]
+  weapon_type: dagger
+  weapon_atk: 12
+  attack_range: 1
+  card_slots: 0
+  refinable: true
+  modifiers:
+    - { stat: aspd, op: percent, value: "5" }
+  visual_asset_key: model.equip.bone_dirk

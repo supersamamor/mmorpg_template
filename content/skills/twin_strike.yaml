@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.twin_strike
+name: Twin Strike
+description: Two quick cuts in one motion.
+max_level: 5
+target: { range: 1, ground: false, friendly: false }
+sp_cost: 8 + level
+cast_time_ms: "0"
+cooldown_ms: "1500"
+weapon_types: [dagger, sword_1h, axe]
+effects:
+  - type: damage
+    multiplier: 0.6 + level * 0.1
+    hits: 2
+animation_id: attack
+icon_asset_key: icon.skill.twin_strike
+vfx_asset_key: vfx.skill.slash
+sfx_asset_key: sfx.skill.slash

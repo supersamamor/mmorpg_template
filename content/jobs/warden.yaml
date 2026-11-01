@@ -1,0 +1,33 @@
+# yaml-language-server: $schema=../../schemas/job.schema.json
+id: job.warden
+name: Warden
+description: A frontline guardian who protects the vale with blade and buckler.
+parent_job_id: job.novice
+requirements:
+  min_base_level: 10
+  min_job_level: 8
+  quest_ids: [quest.warden_trial]
+  requires_unlock: true
+job_exp_table_id: exp.job
+skills:
+  - skill_id: skill.twin_strike
+    max_level: 5
+  - skill_id: skill.shockwave
+    max_level: 5
+    requires:
+      - skill_id: skill.twin_strike
+        level: 3
+  - skill_id: skill.iron_guard
+    max_level: 3
+  - skill_id: skill.tough_body
+    max_level: 5
+stat_bonuses:
+  - stat: max_hp
+    op: percent
+    value: job_level * 0.5
+  - stat: vit
+    op: flat
+    value: floor(job_level / 10)
+weapon_types: [unarmed, dagger, sword_1h, sword_2h, axe, mace]
+model_asset_key: model.char.warden
+icon_asset_key: icon.job.warden

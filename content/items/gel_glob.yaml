@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.gel_glob
+name: Gel Glob
+description: A wobbly blob of slime. Crafters pay a few coins for it.
+kind: material
+weight: 1
+sell_price: 4
+max_stack: 999
+icon_asset_key: icon.item.gel_glob
+ground_asset_key: model.prop.loot_bag
