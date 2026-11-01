@@ -15,13 +15,19 @@
 *.tres  text
 *.md    text
 
-# Binary assets (consider Git LFS once the art library grows)
-*.png   binary
-*.jpg   binary
-*.webp  binary
-*.aseprite binary
-*.wav   binary
-*.ogg   binary
-*.mp3   binary
-*.ttf   binary
-*.otf   binary
+# Binary art and audio: Git LFS (the remote must support LFS; see README)
+*.glb   filter=lfs diff=lfs merge=lfs -text
+*.gltf  text
+*.bin   filter=lfs diff=lfs merge=lfs -text
+*.blend filter=lfs diff=lfs merge=lfs -text
+*.fbx   filter=lfs diff=lfs merge=lfs -text
+*.png   filter=lfs diff=lfs merge=lfs -text
+*.jpg   filter=lfs diff=lfs merge=lfs -text
+*.webp  filter=lfs diff=lfs merge=lfs -text
+*.ktx2  filter=lfs diff=lfs merge=lfs -text
+*.exr   filter=lfs diff=lfs merge=lfs -text
+*.ogg   filter=lfs diff=lfs merge=lfs -text
+*.wav   filter=lfs diff=lfs merge=lfs -text
+*.mp3   filter=lfs diff=lfs merge=lfs -text
+*.ttf   filter=lfs diff=lfs merge=lfs -text
+*.otf   filter=lfs diff=lfs merge=lfs -text
