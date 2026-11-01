@@ -32,7 +32,7 @@ public class GatewayBudgetTests(ITestOutputHelper output)
         }
 
         var clients = await Task.WhenAll(Enumerable.Range(0, Clients).Select(i => rig.JoinAsync("walker" + i)));
-        await Poll.UntilAsync(() => clients.Min(c => c.SeenIds.Count), n => n == Clients, "everyone sees everyone");
+        await Poll.UntilAsync(() => clients.Min(c => c.SeenPlayers), n => n == Clients, "everyone sees everyone");
 
         using var stop = new CancellationTokenSource();
         var walking = Task.Run(async () =>
@@ -59,7 +59,7 @@ public class GatewayBudgetTests(ITestOutputHelper output)
         var visible = new List<int>();
         while (Stopwatch.GetElapsedTime(started).TotalMilliseconds < MeasureMs)
         {
-            visible.Add(clients[0].SeenIds.Count);
+            visible.Add(clients[0].SeenPlayers);
             await Task.Delay(250);
         }
         var seconds = Stopwatch.GetElapsedTime(started).TotalSeconds;
@@ -74,7 +74,7 @@ public class GatewayBudgetTests(ITestOutputHelper output)
 
         var resyncs = rig.Gateway.Sessions.Sum(s => s.Queue.Resyncs);
         output.WriteLine($"{Clients} clients walking within 5 cells of {rig.Start.Cell} on {rig.Start.MapId}; measured {seconds:0.0} s, {ticks} ticks");
-        output.WriteLine($"visible entities per client: avg {visible.Average():0.0}, min {visible.Min()}");
+        output.WriteLine($"visible players per client: avg {visible.Average():0.0}, min {visible.Min()}");
         output.WriteLine($"wire bytes/s per client (payload + WebSocket header): avg {perClient.Average():0.00} KB/s, " +
                          $"min {perClient[0]:0.00}, median {perClient[perClient.Count / 2]:0.00}, max {perClient[^1]:0.00} KB/s (budget 10 KB/s)");
         output.WriteLine($"messages per client: {frames / (double)Clients / seconds:0.0}/s, {payload / (double)frames:0} bytes average");

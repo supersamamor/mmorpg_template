@@ -139,6 +139,37 @@
       },
       "additionalProperties": false,
       "description": "Where and as what a newly created character starts (the server's player join, T-205)."
+    },
+    "ai": {
+      "type": "object",
+      "properties": {
+        "think_interval_ms": {
+          "type": "integer",
+          "description": "How often an awake aggressive monster looks for a player to attack."
+        },
+        "wander_pause_min_ms": {
+          "type": "integer",
+          "description": "Shortest pause an idle monster waits before it wanders again."
+        },
+        "wander_pause_max_ms": {
+          "type": "integer",
+          "description": "Longest pause an idle monster waits before it wanders again (picked uniformly between min and max)."
+        },
+        "wander_radius": {
+          "type": "integer",
+          "description": "How far from its home cell (Chebyshev, in cells) a wandering monster may walk."
+        },
+        "repath_interval_ms": {
+          "type": "integer",
+          "description": "Shortest time between two path searches of a chasing or returning monster."
+        },
+        "return_timeout_ms": {
+          "type": "integer",
+          "description": "A returning monster that is not home after this long is put back on its home cell."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Monster behavior timings shared by every monster (ARCHITECTURE §6.6); per-monster ranges are in MonsterAiDef."
     }
   },
   "additionalProperties": false,

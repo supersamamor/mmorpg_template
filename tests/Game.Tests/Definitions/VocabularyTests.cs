@@ -28,7 +28,9 @@ public class VocabularyTests
         { "Item kinds", ItemKinds.All, ["consumable", "equip", "card", "material", "quest", "ammo"] },
         { "Quest objective types", QuestObjectiveTypes.All, ["kill", "collect", "talk", "reach", "level", "job", "use_item", "equip"] },
         { "Reward types", RewardTypes.All, ["exp", "item", "zeny", "skill_point", "stat_point", "unlock_job", "status"] },
-        { "Events", EventNames.All, ["EntitySpawned", "EntityDied", "MonsterKilled", "DamageDealt", "ItemAcquired", "ItemUsed", "ItemEquipped", "NpcTalked", "MapEntered", "ZoneEntered", "LevelUp", "JobLevelUp", "JobChanged", "SkillLearned", "QuestStarted", "QuestStepCompleted", "QuestCompleted", "StatusApplied", "StatusExpired", "EntityEnteredMap", "EntityLeftMap", "WarpRejected", "MovementStarted", "CellReached", "MovementStopped", "MoveRejected"] },
+        { "Monster AI states", AiStates.All, ["idle", "wander", "chase", "attack", "return"] },
+        { "Aggro reasons", AggroReasons.All, ["sighted", "attacked", "target_gone", "leash", "unreachable"] },
+        { "Events", EventNames.All, ["EntitySpawned", "EntityDied", "MonsterKilled", "DamageDealt", "ItemAcquired", "ItemUsed", "ItemEquipped", "NpcTalked", "MapEntered", "ZoneEntered", "LevelUp", "JobLevelUp", "JobChanged", "SkillLearned", "QuestStarted", "QuestStepCompleted", "QuestCompleted", "StatusApplied", "StatusExpired", "EntityEnteredMap", "EntityLeftMap", "WarpRejected", "MovementStarted", "CellReached", "MovementStopped", "MoveRejected", "AggroGained", "AggroLost", "AttackRequested"] },
         { "Currency", Currencies.All, ["currency"] },
         { "Formula functions", FormulaFunctions.All, ["min", "max", "floor", "ceil", "round", "clamp", "pow", "sqrt"] },
     };

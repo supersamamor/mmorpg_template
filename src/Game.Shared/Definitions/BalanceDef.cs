@@ -24,6 +24,34 @@ namespace Game.Shared.Definitions
 
         /// <summary>Where and as what a newly created character starts (the server's player join, T-205).</summary>
         public NewCharacterBalanceDef NewCharacter { get; init; } = new NewCharacterBalanceDef();
+
+        /// <summary>Monster behavior timings shared by every monster (ARCHITECTURE §6.6); per-monster ranges are in <see cref="MonsterAiDef"/>.</summary>
+        public AiBalanceDef Ai { get; init; } = new AiBalanceDef();
+    }
+
+    /// <summary>
+    /// Monster AI timings and distances that are the same for every monster. Times are simulated milliseconds (the 10 Hz tick rounds them up
+    /// to whole ticks), distances are cells. Per-monster numbers (aggressive, aggro and chase range, attack range, aspd) are monster data.
+    /// </summary>
+    public sealed record AiBalanceDef
+    {
+        /// <summary>How often an awake aggressive monster looks for a player to attack.</summary>
+        public int ThinkIntervalMs { get; init; }
+
+        /// <summary>Shortest pause an idle monster waits before it wanders again.</summary>
+        public int WanderPauseMinMs { get; init; }
+
+        /// <summary>Longest pause an idle monster waits before it wanders again (picked uniformly between min and max).</summary>
+        public int WanderPauseMaxMs { get; init; }
+
+        /// <summary>How far from its home cell (Chebyshev, in cells) a wandering monster may walk.</summary>
+        public int WanderRadius { get; init; }
+
+        /// <summary>Shortest time between two path searches of a chasing or returning monster.</summary>
+        public int RepathIntervalMs { get; init; }
+
+        /// <summary>A returning monster that is not home after this long is put back on its home cell.</summary>
+        public int ReturnTimeoutMs { get; init; }
     }
 
     /// <summary>

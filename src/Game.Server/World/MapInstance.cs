@@ -59,6 +59,7 @@ public sealed class MapInstance
     private readonly TickContext _context;
     private readonly Dictionary<EntityId, Entity> _entities = new();
     private readonly List<Entity> _ordered = new();
+    private readonly List<Entity> _players = new();
     private readonly List<StructuralChange> _deferred = new();
     private readonly object _inboxLock = new();
     private List<StructuralChange> _inbox = new();
@@ -117,6 +118,12 @@ public sealed class MapInstance
 
     /// <summary>Entities in the order they were added. Read only from this instance's tick (or when it is not running).</summary>
     public IReadOnlyList<Entity> Entities => _ordered;
+
+    /// <summary>
+    /// The entities of kind <see cref="EntityKind.Player"/>, in the order they were added: a small read-only index so systems that care only about
+    /// players near something (monster AI) never walk every entity. Same threading rule as <see cref="Entities"/>.
+    /// </summary>
+    public IReadOnlyList<Entity> Players => _players;
 
     /// <summary>Looks up an entity of this instance. Same threading rule as <see cref="Entities"/>.</summary>
     public bool TryGetEntity(EntityId id, out Entity entity) => _entities.TryGetValue(id, out entity!);
@@ -239,6 +246,7 @@ public sealed class MapInstance
             return;
         }
         _ordered.Add(entity);
+        if (entity.Kind == EntityKind.Player) _players.Add(entity);
         entity.MapId = MapId;
         World.SetLocation(entity.Id, this);
         if (initialize is not null)
@@ -304,6 +312,7 @@ public sealed class MapInstance
     {
         if (!_entities.Remove(id, out entity!)) return false;
         _ordered.Remove(entity);
+        if (entity.Kind == EntityKind.Player) _players.Remove(entity);
         return true;
     }
 

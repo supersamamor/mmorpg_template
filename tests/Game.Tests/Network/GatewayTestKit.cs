@@ -194,6 +194,12 @@ public sealed class TestClient : IDisposable
         get { lock (_messages) return _view.Keys.ToList(); }
     }
 
+    /// <summary>How many players it sees (itself included): the sample maps also have monsters (T-301).</summary>
+    public int SeenPlayers
+    {
+        get { lock (_messages) return _view.Values.Count(r => r.Kind == EntityKinds.Player); }
+    }
+
     public Task SendAsync(ClientMessage message) => SendRawAsync(ProtocolJson.ToBytes(message));
 
     public Task SendRawAsync(string text) => SendRawAsync(Encoding.UTF8.GetBytes(text));

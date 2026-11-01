@@ -116,7 +116,7 @@ Sizes: `small`, `medium`, `large`
 `LevelUp`, `JobLevelUp`, `JobChanged`, `SkillLearned`, `QuestStarted`,
 `QuestStepCompleted`, `QuestCompleted`, `StatusApplied`, `StatusExpired`,
 `EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`, `MovementStarted`, `CellReached`,
-`MovementStopped`, `MoveRejected`
+`MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `AttackRequested`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -129,6 +129,13 @@ In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`,
 ## Movement reasons
 In `MoveRejected`: `out_of_bounds`, `not_walkable`, `start_not_walkable`, `no_path`, `path_too_long`, `search_limit`, `no_speed`
 In `MovementStopped`: `arrived`, `cancelled`, `warped`, `died`, `no_speed`
+
+## Monster AI states
+`idle`, `wander`, `chase`, `attack`, `return` (ARCHITECTURE §6.6)
+
+## Aggro reasons
+In `AggroGained`: `sighted`, `attacked`
+In `AggroLost`: `target_gone`, `leash`, `unreachable`
 
 ## Currency
 `zeny` (rename freely in data; engine id stays `currency`)

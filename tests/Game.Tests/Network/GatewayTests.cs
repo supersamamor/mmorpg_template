@@ -189,7 +189,7 @@ public class GatewayTests
         (await client.WaitForByeAsync()).ShouldBe(reason, what);
         client.CloseStatus.ShouldBe(ClientSession.CloseStatusFor(reason));
         client.Messages.Count.ShouldBe(1, "bye is the only message");
-        rig.World.LocationOf(new EntityId(1)).ShouldBeNull("nobody was spawned");
+        rig.World.Instances.Sum(i => i.Players.Count).ShouldBe(0, "nobody was spawned");   // the sample maps' monsters take the first ids (T-301)
     }
 
     [Fact]

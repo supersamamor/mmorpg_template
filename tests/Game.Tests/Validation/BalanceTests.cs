@@ -73,6 +73,12 @@ public class BalanceTests : IDisposable
         balance.Movement.MaxNodesExpanded.ShouldBe(2048);
         balance.Aoi.BucketSize.ShouldBe(6);
         balance.Aoi.ViewRadius.ShouldBe(2);
+        balance.Ai.ThinkIntervalMs.ShouldBe(300);
+        balance.Ai.WanderPauseMinMs.ShouldBe(4000);
+        balance.Ai.WanderPauseMaxMs.ShouldBe(10000);
+        balance.Ai.WanderRadius.ShouldBe(4);
+        balance.Ai.RepathIntervalMs.ShouldBe(500);
+        balance.Ai.ReturnTimeoutMs.ShouldBe(15000);
 
         var points = Formula.Compile(balance.Progression.StatPointsPerBaseLevel, FormulaSymbols.BaseLevelOnly);
         var ctx = new FormulaContext(FormulaSymbols.BaseLevelOnly);
@@ -151,6 +157,23 @@ public class BalanceTests : IDisposable
     [InlineData("bucket_size: 6", "bucket_size: 0", "aoi.bucket_size")]
     [InlineData("view_radius: 2", "view_radius: -1", "aoi.view_radius")]
     public void Aoi_numbers_must_be_above_zero(string from, string to, string path)
+    {
+        Edit(from, to);
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);
+        issue.File.ShouldBe("balance.yaml");
+        issue.Path.ShouldBe(path);
+        issue.Line.ShouldBeGreaterThan(0);
+    }
+
+    [Theory]
+    [InlineData("think_interval_ms: 300", "think_interval_ms: 0", "ai.think_interval_ms")]
+    [InlineData("wander_pause_min_ms: 4000", "wander_pause_min_ms: -1", "ai.wander_pause_min_ms")]
+    [InlineData("wander_pause_max_ms: 10000", "wander_pause_max_ms: 0", "ai.wander_pause_max_ms")]
+    [InlineData("wander_pause_max_ms: 10000", "wander_pause_max_ms: 3000", "ai.wander_pause_max_ms")] // below the min
+    [InlineData("wander_radius: 4", "wander_radius: 0", "ai.wander_radius")]
+    [InlineData("repath_interval_ms: 500", "repath_interval_ms: 0", "ai.repath_interval_ms")]
+    [InlineData("return_timeout_ms: 15000", "return_timeout_ms: -5", "ai.return_timeout_ms")]
+    public void Ai_timings_must_be_above_zero_and_ordered(string from, string to, string path)
     {
         Edit(from, to);
         var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);

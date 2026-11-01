@@ -8,7 +8,7 @@ namespace Game.Server.World;
 /// <summary>
 /// What a system sees during one tick of one instance. Reused across ticks; do not keep it or its
 /// <see cref="Intents"/> list after <see cref="ITickSystem.Tick"/> returns. Structural requests
-/// (<see cref="Spawn"/>, <see cref="Despawn"/>, <see cref="Warp"/>) are queued and applied in tick phase 3, after every
+/// (<see cref="Spawn(EntityKind, GridCell, string)"/>, <see cref="Despawn"/>, <see cref="Warp"/>) are queued and applied in tick phase 3, after every
 /// system has run, in request order.
 /// </summary>
 public sealed class TickContext
@@ -46,10 +46,17 @@ public sealed class TickContext
     /// Allocates an id and queues a new entity on this instance's map; it appears in phase 3. Throws
     /// <see cref="ArgumentException"/> if the cell is not walkable or the facing is not a <c>Directions</c> term.
     /// </summary>
-    public EntityId Spawn(EntityKind kind, GridCell cell, string facing)
+    public EntityId Spawn(EntityKind kind, GridCell cell, string facing) => Spawn(kind, cell, facing, null);
+
+    /// <summary>
+    /// Like <see cref="Spawn(EntityKind, GridCell, string)"/>, and <paramref name="initialize"/> runs when the entity is added (phase 3), before
+    /// <c>EntityEnteredMap</c> and before any system or the AOI sees it: the place to set <see cref="Entity.Stats"/> and
+    /// <see cref="Entity.DefinitionId"/>. An initializer that throws is logged and the entity joins as it is.
+    /// </summary>
+    public EntityId Spawn(EntityKind kind, GridCell cell, string facing, Action<Entity>? initialize)
     {
         var entity = _instance.World.CreateEntity(kind, _instance.MapId, cell, facing);
-        _instance.Defer(new StructuralChange.Add(entity, MapChangeReason.Spawn));
+        _instance.Defer(new StructuralChange.Add(entity, MapChangeReason.Spawn, initialize));
         return entity.Id;
     }
 
