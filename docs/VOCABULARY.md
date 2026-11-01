@@ -138,7 +138,8 @@ Sizes: `small`, `medium`, `large`
 `LevelUp`, `JobLevelUp`, `JobChanged`, `SkillLearned`, `QuestStarted`,
 `QuestStepCompleted`, `QuestCompleted`, `StatusApplied`, `StatusExpired`,
 `EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`, `MovementStarted`, `CellReached`,
-`MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `AttackRequested`
+`MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `AttackRequested`, `AttackRefused`, `AttackStopped`,
+`ExpGained`, `ExpLost`, `PlayerRespawned`, `ItemDropped`, `ItemExpired`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -158,6 +159,13 @@ In `MovementStopped`: `arrived`, `cancelled`, `warped`, `died`, `no_speed`
 ## Aggro reasons
 In `AggroGained`: `sighted`, `attacked`
 In `AggroLost`: `target_gone`, `leash`, `unreachable`
+
+## Attack reasons
+In `AttackRefused` and `AttackStopped`: `attacker_dead`, `target_dead`, `target_gone`, `out_of_range`, `no_line_of_sight`, `safe_zone`, `invalid_target`,
+`unreachable`, `cancelled` (ARCHITECTURE §6.7)
+
+## Hit results
+In `DamageDealt`: `hit`, `crit`, `miss`
 
 ## Currency
 `zeny` (rename freely in data; engine id stays `currency`)
@@ -185,4 +193,5 @@ The client reconnects after neither. `resume_failed`: the token in `hello` `resu
 A `rejected` message carries a "Movement reasons" (`MoveRejected`) term instead; the session goes on.
 
 ## Entity kinds
-In a view record's `kind`: `player`, `monster`, `npc`
+In a view record's `kind`: `player`, `monster`, `npc`.
+Server only (not on the wire yet): `item`, a ground item a monster dropped (`EntityKind.Item`).

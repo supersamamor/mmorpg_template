@@ -15,7 +15,7 @@ public sealed class InstanceCounters
     /// <summary>Intents dropped because their entity is not in this instance (never was, left, or still in flight).</summary>
     public long IntentsDroppedUnknownEntity { get; internal set; }
 
-    /// <summary>Intents dropped because their entity is <see cref="Entity.Dead"/>.</summary>
+    /// <summary>Intents dropped because their entity is <see cref="Entity.Dead"/> (except <see cref="IDeadEntityIntent"/>s).</summary>
     public long IntentsDroppedDeadEntity { get; internal set; }
 
     /// <summary>Intents dropped because no system owns their type.</summary>
@@ -176,7 +176,7 @@ public sealed class MapInstance
     {
         if (!_entities.TryGetValue(intent.Entity, out var entity))
             Counters.IntentsDroppedUnknownEntity++;
-        else if (entity.Dead)
+        else if (entity.Dead && intent is not IDeadEntityIntent)
             Counters.IntentsDroppedDeadEntity++;
         else if (!_routes.TryGetValue(intent.GetType(), out var index))
             Counters.IntentsDroppedUnrouted++;

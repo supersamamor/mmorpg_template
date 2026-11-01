@@ -227,7 +227,7 @@ per job level, stat point cost, the stat range and combat clamps come from `bala
 (`BalanceDef`); the max base level is the base EXP table length + 1. Job change requirements from `JobDef`.
 
 ### 6.6 Monster AI
-Two systems in `Game.Server/World/Monsters`, after movement in the tick (`ServerPipeline`: movement, `monster_spawner`, `monster_ai`, …, AOI).
+Two systems in `Game.Server/World/Monsters`, after movement in the tick (`ServerPipeline`: movement, `monster_spawner`, `monster_ai`, `combat`, AOI).
 
 - **Spawner.** On an instance's first tick every `spawns` entry of the grid gets `count` monsters on random walkable cells of its
   area (the instance's seeded random). A monster is a `Monster` entity with `DefinitionId` = its monster id and a stat sheet from the
@@ -248,11 +248,42 @@ Two systems in `Game.Server/World/Monsters`, after movement in the tick (`Server
   return ──home──► idle   (ignores players and hits; after return_timeout it is put on its home cell)
   ```
 - **The AI only decides.** It walks with `MoveTo` / `StopMove` intents (applied on the next tick) and follows the movement events; it asks
-  combat to attack with the `AttackRequested` event (attacker, target, both cells, range, time). Combat resolves the hit and publishes
-  `DamageDealt` / `EntityDied`, which the AI and the spawner listen to. Nobody calls another system.
+  combat to attack with the `AttackRequested` event (attacker, target, both cells, range, time). Combat (§6.7) re-checks and resolves the hit and
+  publishes `DamageDealt` / `EntityDied`, which the AI and the spawner listen to. Nobody calls another system.
 - **Dormancy.** An `idle` or `wander` monster that no player could be seeing (no player's AOI window, `aoi.view_radius` buckets of
   `aoi.bucket_size`, covers its bucket) does nothing. Players come from the instance's player list (`MapInstance.Players`), bucketed once per
   AI tick, so the cost is O(players) plus a few bucket reads per awake monster, never O(entities). A dormant map allocates nothing per tick.
+
+### 6.7 Combat loop
+One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers from `MonsterDef` and `balance.yaml` `combat`, `death`, `loot`.
+
+- **Vitals.** Players and monsters with a stat sheet get `Entity.Vitals` (current HP/SP) when they enter a map, full at `max_hp`; they travel
+  with the entity across warps. Every tick they are clamped to a changed sheet's maxima (a higher max does not refill). HP never goes below 0.
+- **Per tick:** intents (`AttackTarget`, `StopAttack`, `Respawn`) → vitals clamp → the monster `AttackRequested` events raised last tick,
+  in order, each re-checked (both alive on this map, a player target not in a `safe` zone, Chebyshev distance within the request's range,
+  and for a ranged attack (range above 1) line of sight between the two cells; otherwise `AttackRefused` with a reason) → player auto-attacks in entity id order → ground item expiry.
+- **Player auto-attack.** `AttackTarget` (monsters only; refused in a `safe` zone) keeps attacking until the target dies or leaves, the player
+  sends `StopAttack`, a new move order (seen as a `MovementStarted` / `MovementStopped` combat did not cause), or no path leads into range.
+  The player walks in with `MoveTo` (re-path at most every `combat.player_repath_interval_ms`) and attacks at its `aspd` within
+  `combat.player_attack_range`; a ranged attack also needs line of sight, and without it the player walks closer as when out of range.
+  Standing in a safe zone it neither hits nor can be hit.
+- **Disconnected characters fight on.** A character in its disconnect grace period (§10) is an ordinary player entity: it stops
+  walking but can still be attacked and killed (disconnecting is no escape), stays dead, and a resumed session sees it dead and sends
+  `Respawn`. Combat has no special case for it.
+- **Hits.** Every attack goes through `CombatResolver` with one reused `AttackContext` (monster element, race and size from `MonsterDef`;
+  weapon inputs 0 until equipment). HP changes by the damage, clamped to 0..max; `DamageDealt` carries amount, `hit`/`crit`/`miss` and HP left.
+- **Death** at 0 HP, in the same step: `Dead = true` (movement stops it, the router drops its intents, combat ignores it), `EntityDied`. A monster
+  is despawned and respawned by the spawner. A player stays dead on its cell until `Respawn`, then comes back with
+  `death.respawn_hp_percent` of max HP at the respawn point (the `new_character` start cell for now); on death it loses
+  `death.exp_penalty_percent` of its level's requirement, never more than its EXP (no level loss).
+- **EXP.** Per monster, the HP each player took since its last full-HP moment. On death the players still on the map share `base_exp` /
+  `job_exp` in proportion (largest remainder; ties to the first hitter; the shares add up exactly) through `ProgressionRules`, which raise
+  `ExpGained` and `PlayerProgressed` (`LevelUp` / `JobLevelUp`); the sheet takes the new levels and job bonuses. Progression is kept per
+  character in an `IPlayerProgressionStore` shared by all instances (in memory until persistence).
+- **Drops.** Each `drop_table_ids` table rolls every entry on its own (`chance`, then a quantity in `min..max`) with the instance random.
+  Each drop is an `EntityKind.Item` entity on a random walkable cell within `loot.spread_radius` of the death cell (`ItemDropped`); for
+  `loot.priority_ms` only the top damager may take it (`LootRules.MayPickUp`), and after `loot.lifetime_ms` it is despawned
+  (`ItemExpired`). Ground items are not shown to clients yet (the AOI skips them).
 
 ## 7. Client
 

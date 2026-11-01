@@ -73,9 +73,9 @@ public class MonsterSpawnerTests
         first.Count.ShouldBe(2);
 
         var deathTick = rig.Instance.TickNumber;
-        rig.Instance.Events.Publish(new EntityDied(first[0], null));
-        rig.Instance.Events.Publish(new EntityDied(first[0], null));             // a duplicate
-        rig.Instance.Events.Publish(new EntityDied(new EntityId(9999), null));   // not ours
+        rig.Instance.Events.Publish(new EntityDied(first[0], null, EntityKind.Monster, null, default));
+        rig.Instance.Events.Publish(new EntityDied(first[0], null, EntityKind.Monster, null, default));             // a duplicate
+        rig.Instance.Events.Publish(new EntityDied(new EntityId(9999), null, EntityKind.Monster, null, default));   // not ours
         rig.Ticks(2);   // handled in the first tick, despawned in the second
         rig.MonsterEntities.Select(m => m.Id).ShouldBe([first[1]]);
         rig.Ai.Count.ShouldBe(1);
@@ -107,7 +107,7 @@ public class MonsterSpawnerTests
         var def = TestMonsters.Passive;
         var rig = new MonsterRig(TestMonsters.Open(8, 8, TestMonsters.Spawn(def, 1, 1, 2, 2, respawnSeconds: 0)), [def]);
         rig.Ticks();
-        rig.Instance.Events.Publish(new EntityDied(rig.Monster.Id, null));
+        rig.Instance.Events.Publish(new EntityDied(rig.Monster.Id, null, EntityKind.Monster, null, default));
         rig.Ticks(2);
         rig.MonsterEntities.Count.ShouldBe(1);
         rig.Spawner.Spawned.ShouldBe(2);

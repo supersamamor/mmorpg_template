@@ -6,7 +6,7 @@ namespace Game.Content.Validation.Rules;
 
 /// <summary>
 /// Sanity checks on <c>balance.yaml</c>: ranges are ordered and non-negative, chances stay within 0–1,
-/// the primary stat range holds its starting value, AI timings are above 0, the base EXP table exists, and a new character starts on a walkable
+/// the primary stat range holds its starting value, AI timings are above 0, the combat loop's death and loot numbers are in range, the base EXP table exists, and a new character starts on a walkable
 /// cell of an existing map in an existing job.
 /// Formulas are checked by <see cref="FormulaRule"/>.
 /// </summary>
@@ -58,7 +58,14 @@ public sealed class BalanceRule : IValidationRule
         if (balance.Aoi.ViewRadius <= 0)
             Range(context, "aoi.view_radius", "must be above 0.");
 
+        if (c.PlayerAttackRange < 1)
+            Range(context, "combat.player_attack_range", "must be at least 1.");
+        if (c.PlayerRepathIntervalMs <= 0)
+            Range(context, "combat.player_repath_interval_ms", "must be above 0.");
+
         Ai(context, balance.Ai);
+        Death(context, balance.Death);
+        Loot(context, balance.Loot);
         NewCharacter(context, balance.NewCharacter);
     }
 
@@ -104,6 +111,26 @@ public sealed class BalanceRule : IValidationRule
             Range(context, "ai.repath_interval_ms", "must be above 0.");
         if (a.ReturnTimeoutMs <= 0)
             Range(context, "ai.return_timeout_ms", "must be above 0.");
+    }
+
+    /// <summary>The respawn HP share is 1–100 percent and the EXP penalty 0–100 percent.</summary>
+    private static void Death(ValidationContext context, DeathBalanceDef d)
+    {
+        if (d.RespawnHpPercent < 1 || d.RespawnHpPercent > 100)
+            Range(context, "death.respawn_hp_percent", "must be between 1 and 100.");
+        if (d.ExpPenaltyPercent < 0 || d.ExpPenaltyPercent > 100)
+            Range(context, "death.exp_penalty_percent", "must be between 0 and 100.");
+    }
+
+    /// <summary>Loot priority is not negative, ground items live above 0 ms, and the spread radius is not negative.</summary>
+    private static void Loot(ValidationContext context, LootBalanceDef l)
+    {
+        if (l.PriorityMs < 0)
+            Range(context, "loot.priority_ms", "must not be negative.");
+        if (l.LifetimeMs <= 0)
+            Range(context, "loot.lifetime_ms", "must be above 0.");
+        if (l.SpreadRadius < 0)
+            Range(context, "loot.spread_radius", "must not be negative.");
     }
 
     private static void Chances(ValidationContext context, string kind, double min, double max)

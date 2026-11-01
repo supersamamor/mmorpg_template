@@ -90,6 +90,27 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>AttackRequested</c>: a monster decided to auto-attack its target; combat resolves it.</summary>
         public const string AttackRequested = "AttackRequested";
 
+        /// <summary><c>AttackRefused</c>: an attack request or intent was dropped (reason: an <c>AttackReasons</c> term).</summary>
+        public const string AttackRefused = "AttackRefused";
+
+        /// <summary><c>AttackStopped</c>: a player's auto-attack ended (reason: an <c>AttackReasons</c> term).</summary>
+        public const string AttackStopped = "AttackStopped";
+
+        /// <summary><c>ExpGained</c>: a player earned base and job EXP from a kill.</summary>
+        public const string ExpGained = "ExpGained";
+
+        /// <summary><c>ExpLost</c>: a player lost base EXP on death.</summary>
+        public const string ExpLost = "ExpLost";
+
+        /// <summary><c>PlayerRespawned</c>: a dead player came back at the respawn point.</summary>
+        public const string PlayerRespawned = "PlayerRespawned";
+
+        /// <summary><c>ItemDropped</c>: a monster's drop became a ground item.</summary>
+        public const string ItemDropped = "ItemDropped";
+
+        /// <summary><c>ItemExpired</c>: a ground item disappeared after its lifetime.</summary>
+        public const string ItemExpired = "ItemExpired";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -120,6 +141,13 @@ namespace Game.Shared.Vocabulary
             MoveRejected,
             AggroGained,
             AggroLost,
-            AttackRequested);
+            AttackRequested,
+            AttackRefused,
+            AttackStopped,
+            ExpGained,
+            ExpLost,
+            PlayerRespawned,
+            ItemDropped,
+            ItemExpired);
     }
 }

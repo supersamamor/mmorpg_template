@@ -36,7 +36,8 @@ public sealed class TickContext
     /// <summary>The server log. For problems worth an operator's attention; never for per-tick chatter.</summary>
     public IServerLog Log => _instance.Log;
 
-    /// <summary>The intents routed to the system currently running, in arrival order. Owning entities exist and are not dead.</summary>
+    /// <summary>The intents routed to the system currently running, in arrival order. Owning entities exist and are not dead
+    /// (<see cref="IDeadEntityIntent"/>s excepted).</summary>
     public IReadOnlyList<IIntent> Intents { get; internal set; } = NoIntents;
 
     /// <summary>Queues an event; it is dispatched in phase 4 of this tick.</summary>

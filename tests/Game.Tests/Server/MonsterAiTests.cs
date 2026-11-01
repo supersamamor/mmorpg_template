@@ -92,7 +92,7 @@ public class MonsterAiTests
         rig.Of<AttackRequested>().ShouldBeEmpty();
 
         var monster = rig.Monster.Id;
-        rig.Instance.Events.Publish(new DamageDealt(player, monster, 3));
+        rig.Instance.Events.Publish(new DamageDealt(player, monster, 3, HitResults.Hit, 10));
         rig.Ticks(2);   // dispatched at the end of the first tick, acted on in the second
         rig.Of<AggroGained>().Single().ShouldBe(new AggroGained(monster, player, AggroReasons.Attacked));
         rig.State(monster).ShouldBe(AiStates.Attack);
@@ -174,7 +174,7 @@ public class MonsterAiTests
         rig.TickUntil(() => rig.State(monster.Id) == AiStates.Idle, 300, "home");
         monster.Cell.ShouldBe(Home);
         rig.TimedOf<AggroGained>().Count(e => e.Tick > lost).ShouldBe(0);
-        rig.Instance.Events.Publish(new DamageDealt(player, monster.Id, 1));   // at home it listens again
+        rig.Instance.Events.Publish(new DamageDealt(player, monster.Id, 1, HitResults.Hit, 10));   // at home it listens again
         rig.TickUntil(() => rig.TimedOf<AggroGained>().Any(e => e.Tick > lost), 10, "re-aggro");
     }
 
@@ -185,12 +185,12 @@ public class MonsterAiTests
         var rig = Rig(def, width: 32, viewRadius: 10);
         var monster = rig.Monster;
         var player = rig.AddPlayer(new GridCell(7, 5));
-        rig.Instance.Events.Publish(new DamageDealt(player, monster.Id, 1));
+        rig.Instance.Events.Publish(new DamageDealt(player, monster.Id, 1, HitResults.Hit, 10));
         rig.Ticks(2);
         rig.State(monster.Id).ShouldBe(AiStates.Chase);
         rig.Send(new MoveTo(player, new GridCell(20, 5)));
         rig.TickUntil(() => rig.State(monster.Id) == AiStates.Return, 100, "leash");
-        rig.Instance.Events.Publish(new DamageDealt(player, monster.Id, 1));
+        rig.Instance.Events.Publish(new DamageDealt(player, monster.Id, 1, HitResults.Hit, 10));
         rig.Ticks(2);
         rig.State(monster.Id).ShouldBe(AiStates.Return);
         rig.Of<AggroGained>().Count.ShouldBe(1);
@@ -240,7 +240,7 @@ public class MonsterAiTests
         var rig = Rig(def, rows: rows);
         var monster = rig.Monster;
         var player = rig.AddPlayer(new GridCell(12, 5));   // across a wall that splits the map
-        rig.Instance.Events.Publish(new DamageDealt(player, monster.Id, 1));
+        rig.Instance.Events.Publish(new DamageDealt(player, monster.Id, 1, HitResults.Hit, 10));
         rig.TickUntil(() => rig.Of<AggroLost>().Count > 0, 20, "give up");
         rig.Of<AggroLost>().Single().Reason.ShouldBe(AggroReasons.Unreachable);
         rig.Of<MoveRejected>().ShouldContain(r => r.Entity == monster.Id && r.Reason == MovementReasons.NoPath);
@@ -254,7 +254,7 @@ public class MonsterAiTests
         var rig = Rig(def, ai);
         var monster = rig.Monster;
         var player = rig.AddPlayer(new GridCell(9, 5));
-        rig.Instance.Events.Publish(new DamageDealt(player, monster.Id, 1));
+        rig.Instance.Events.Publish(new DamageDealt(player, monster.Id, 1, HitResults.Hit, 10));
         rig.TickUntil(() => rig.State(monster.Id) == AiStates.Return, 200, "leash");
         rig.TickUntil(() => rig.State(monster.Id) == AiStates.Idle, 20, "warped home");
         monster.Cell.ShouldBe(Home);

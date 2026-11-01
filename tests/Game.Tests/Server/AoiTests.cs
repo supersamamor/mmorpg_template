@@ -118,6 +118,21 @@ public class AoiTests
     }
 
     [Fact]
+    public void Ground_items_are_not_shown_to_observers_yet()
+    {
+        var rig = new AoiRig();
+        var (_, sink) = rig.AddObserver(C(1, 1));
+        rig.Add(C(2, 2), key: "item.test", kind: EntityKind.Item, agi: null);
+        rig.Ticks();
+        var npc = rig.Add(C(3, 3), key: "npc.test", kind: EntityKind.Npc);
+        rig.Ticks(3);
+
+        sink.Bodies.ShouldBe(["snap map.a #1", "+#3"]);   // the item (#2) never appears; the AOI still sees later entities
+        sink.Snapshots.Single().Entities.ShouldAllBe(v => v.Kind != EntityKind.Item);
+        sink.Deltas.Single().Appeared.Single().Id.ShouldBe(npc);
+    }
+
+    [Fact]
     public void Spawns_appear_and_despawns_disappear()
     {
         var rig = new AoiRig();

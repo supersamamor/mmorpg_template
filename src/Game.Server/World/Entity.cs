@@ -1,3 +1,4 @@
+using Game.Server.World.Combat;
 using Game.Shared.Stats;
 using Game.Shared.World;
 
@@ -21,6 +22,12 @@ public enum EntityKind
 
     /// <summary>A non-player character.</summary>
     Npc,
+
+    /// <summary>
+    /// An item lying on the ground (a monster's drop): <see cref="Entity.DefinitionId"/> is the item id and <see cref="Entity.GroundItem"/> the
+    /// quantity, loot priority and expiry. Server only for now: the AOI does not show ground items to clients yet.
+    /// </summary>
+    Item,
 }
 
 /// <summary>
@@ -82,6 +89,15 @@ public sealed class Entity
     /// tick only (from another thread, send an <see cref="Aoi.AttachView"/> intent).
     /// </summary>
     public Aoi.IViewSink? View { get; set; }
+
+    /// <summary>
+    /// Current HP and SP of a combat-capable entity (player, monster), or null for one that cannot fight. Set and changed only by combat, on
+    /// the instance's tick; it lives on the entity so it travels with it across warps and any system (the AOI, later regen) can read it.
+    /// </summary>
+    public Vitals? Vitals { get; set; }
+
+    /// <summary>Quantity, loot priority and expiry of an <see cref="EntityKind.Item"/> entity; null for every other kind. Set by combat.</summary>
+    public GroundItem? GroundItem { get; set; }
 }
 
 /// <summary>Thread-safe, monotonically increasing id source shared by every instance of one <see cref="GameWorld"/>.</summary>

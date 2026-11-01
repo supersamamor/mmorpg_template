@@ -79,6 +79,13 @@ public class BalanceTests : IDisposable
         balance.Ai.WanderRadius.ShouldBe(4);
         balance.Ai.RepathIntervalMs.ShouldBe(500);
         balance.Ai.ReturnTimeoutMs.ShouldBe(15000);
+        balance.Combat.PlayerAttackRange.ShouldBe(1);
+        balance.Combat.PlayerRepathIntervalMs.ShouldBe(500);
+        balance.Death.RespawnHpPercent.ShouldBe(50);
+        balance.Death.ExpPenaltyPercent.ShouldBe(1);
+        balance.Loot.PriorityMs.ShouldBe(3000);
+        balance.Loot.LifetimeMs.ShouldBe(60000);
+        balance.Loot.SpreadRadius.ShouldBe(1);
 
         var points = Formula.Compile(balance.Progression.StatPointsPerBaseLevel, FormulaSymbols.BaseLevelOnly);
         var ctx = new FormulaContext(FormulaSymbols.BaseLevelOnly);
@@ -171,7 +178,7 @@ public class BalanceTests : IDisposable
     [InlineData("wander_pause_max_ms: 10000", "wander_pause_max_ms: 0", "ai.wander_pause_max_ms")]
     [InlineData("wander_pause_max_ms: 10000", "wander_pause_max_ms: 3000", "ai.wander_pause_max_ms")] // below the min
     [InlineData("wander_radius: 4", "wander_radius: 0", "ai.wander_radius")]
-    [InlineData("repath_interval_ms: 500", "repath_interval_ms: 0", "ai.repath_interval_ms")]
+    [InlineData(" repath_interval_ms: 500", " repath_interval_ms: 0", "ai.repath_interval_ms")]   // the space keeps player_repath_interval_ms out
     [InlineData("return_timeout_ms: 15000", "return_timeout_ms: -5", "ai.return_timeout_ms")]
     public void Ai_timings_must_be_above_zero_and_ordered(string from, string to, string path)
     {
@@ -180,6 +187,35 @@ public class BalanceTests : IDisposable
         issue.File.ShouldBe("balance.yaml");
         issue.Path.ShouldBe(path);
         issue.Line.ShouldBeGreaterThan(0);
+    }
+
+    [Theory]
+    [InlineData("player_attack_range: 1", "player_attack_range: 0", "combat.player_attack_range")]
+    [InlineData("player_repath_interval_ms: 500", "player_repath_interval_ms: 0", "combat.player_repath_interval_ms")]
+    [InlineData("respawn_hp_percent: 50", "respawn_hp_percent: 0", "death.respawn_hp_percent")]
+    [InlineData("respawn_hp_percent: 50", "respawn_hp_percent: 101", "death.respawn_hp_percent")]
+    [InlineData("exp_penalty_percent: 1", "exp_penalty_percent: -1", "death.exp_penalty_percent")]
+    [InlineData("exp_penalty_percent: 1", "exp_penalty_percent: 150", "death.exp_penalty_percent")]
+    [InlineData("priority_ms: 3000", "priority_ms: -1", "loot.priority_ms")]
+    [InlineData("lifetime_ms: 60000", "lifetime_ms: 0", "loot.lifetime_ms")]
+    [InlineData("spread_radius: 1", "spread_radius: -2", "loot.spread_radius")]
+    public void Combat_loop_numbers_are_range_checked(string from, string to, string path)
+    {
+        Edit(from, to);
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);
+        issue.File.ShouldBe("balance.yaml");
+        issue.Path.ShouldBe(path);
+        issue.Line.ShouldBeGreaterThan(0);
+    }
+
+    [Theory]
+    [InlineData("exp_penalty_percent: 1", "exp_penalty_percent: 0")]
+    [InlineData("priority_ms: 3000", "priority_ms: 0")]
+    [InlineData("spread_radius: 1", "spread_radius: 0")]
+    public void Zero_penalty_priority_and_spread_are_allowed(string from, string to)
+    {
+        Edit(from, to);
+        Validate().Issues.ShouldNotContain(i => i.Code == ValidationCodes.BalanceRange);
     }
 
     [Fact]
