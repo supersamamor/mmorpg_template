@@ -1,7 +1,14 @@
+[CmdletBinding()]
+param(
+    # Skip the sdkmanager step (Android SDK packages and licences).
+    [switch]$SkipAndroid
+)
+
 # ============================================================
 #  MMORPG Template - Prerequisites Installer (Windows)
 #  Run in PowerShell:  powershell -ExecutionPolicy Bypass -File .\setup-prereqs.ps1
 #  Re-runnable: already-installed packages are skipped.
+#  -SkipAndroid : do not install Android SDK packages / accept licences.
 # ============================================================
 
 $ErrorActionPreference = "Continue"
@@ -95,6 +102,58 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
     Write-Warn "docker command not found on PATH."
 }
 
+# --- 3b. Android SDK packages and licences -------------------
+# Pinned to docs/MOBILE_BUILD.md 2.2. Needs the SDK command-line tools (installed through Android Studio).
+$androidSdk = Join-Path $env:LOCALAPPDATA "Android\Sdk"
+$androidState = "skipped (-SkipAndroid)"
+if (-not $SkipAndroid) {
+    Write-Step "Android SDK packages and licences (sdkmanager)"
+    $sdkmanager = Join-Path $androidSdk "cmdline-tools\latest\bin\sdkmanager.bat"
+    $jdk = Get-ChildItem "$env:ProgramFiles\Microsoft" -Directory -Filter "jdk-17*" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not (Test-Path $sdkmanager)) {
+        $androidState = "command-line tools missing"
+        Write-Warn "sdkmanager not found at $sdkmanager"
+        Write-Warn "Open Android Studio, finish the setup wizard, then SDK Manager > SDK Tools > tick"
+        Write-Warn "'Android SDK Command-line Tools (latest)' > Apply. Then re-run this script."
+    } elseif (-not $jdk) {
+        $androidState = "JDK 17 missing"
+        Write-Warn "JDK 17 not found under $env:ProgramFiles\Microsoft - re-run once it is installed."
+    } else {
+        $androidPackages = @(
+            @{ Sdkmanager = "platforms;android-35";    Dir = "platforms\android-35" },
+            @{ Sdkmanager = "build-tools;35.0.1";      Dir = "build-tools\35.0.1" },
+            @{ Sdkmanager = "platform-tools";          Dir = "platform-tools\package.xml" }
+        )
+        $missing = @($androidPackages | Where-Object { -not (Test-Path (Join-Path $androidSdk $_.Dir)) })
+        $savedJavaHome = $env:JAVA_HOME
+        $env:JAVA_HOME = $jdk.FullName    # this process only
+        try {
+            # Newer sdkmanager builds say --licenses is deprecated, so decide by the accepted-licence file.
+            $licFile = Join-Path $androidSdk "licenses\android-sdk-license"
+            if (Test-Path $licFile) { Write-Ok "SDK licences already accepted" }
+            else {
+                # 'y' answers every prompt.
+                (@("y") * 30) | & $sdkmanager "--sdk_root=$androidSdk" --licenses 2>&1 | Out-Null
+                if (Test-Path $licFile) { Write-Ok "SDK licences accepted" }
+                else { Write-Warn "Could not confirm licence acceptance ($licFile missing)" }
+            }
+
+            if ($missing.Count -eq 0) {
+                Write-Ok "android-35, build-tools 35.0.1, platform-tools already installed - skipping"
+                $androidState = "up to date"
+            } else {
+                $names = $missing | ForEach-Object { $_.Sdkmanager }
+                Write-Host "    Installing: $($names -join ', ')"
+                & $sdkmanager "--sdk_root=$androidSdk" @names
+                if ($LASTEXITCODE -eq 0) { Write-Ok "Installed"; $androidState = "installed" }
+                else { Write-Warn "sdkmanager exit code $LASTEXITCODE"; $androidState = "sdkmanager failed" }
+            }
+        } finally {
+            $env:JAVA_HOME = $savedJavaHome
+        }
+    }
+}
+
 # --- 4. Verify ----------------------------------------------
 Write-Step "Verification"
 $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
@@ -118,7 +177,7 @@ $javaHome = Get-ChildItem "$env:ProgramFiles\Microsoft" -Directory -Filter "jdk-
 if ($javaHome) { Write-Ok "JDK 17: $($javaHome.FullName)" } else { Write-Warn "JDK 17 not found under $env:ProgramFiles\Microsoft" }
 
 $sdk = Join-Path $env:LOCALAPPDATA "Android\Sdk"
-if (Test-Path $sdk) { Write-Ok "Android SDK: $sdk" } else { Write-Warn "Android SDK not installed yet - see manual step 1 below" }
+if (Test-Path $sdk) { Write-Ok "Android SDK: $sdk" } else { Write-Warn "Android SDK not installed yet - see the manual steps below" }
 
 $godot = Get-Command godot* -ErrorAction SilentlyContinue | Select-Object -First 1
 if ($godot) { Write-Ok "Godot found: $($godot.Name)" }
@@ -130,17 +189,18 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
 }
 
 Write-Step "Manual steps this script cannot do (details: docs/MOBILE_BUILD.md)"
+$androidStep = switch ($androidState) {
+    "command-line tools missing" { "Android Studio: start it once, finish the setup wizard, then SDK Manager > SDK Tools >`n     'Android SDK Command-line Tools (latest)'. Re-run this script; it then installs android-35,`n     build-tools 35.0.1, platform-tools and accepts the licences (docs/MOBILE_BUILD.md 2.2)" }
+    "skipped (-SkipAndroid)"     { "Android SDK packages and licences were skipped (-SkipAndroid); re-run without it (docs/MOBILE_BUILD.md 2.2)" }
+    default                      { "Android SDK: $androidState (packages and licences are automated; docs/MOBILE_BUILD.md 2.2)" }
+}
 Write-Host @"
-  1. Android Studio: start it once and finish the setup wizard, then SDK Manager:
-     install platform android-35, build-tools 35.0.1, platform-tools and
-     'Android SDK Command-line Tools'. SDK folder: $env:LOCALAPPDATA\Android\Sdk
-     (docs/MOBILE_BUILD.md 2.2)
-  2. Accept the Android SDK licences: sdkmanager --licenses (docs/MOBILE_BUILD.md 2.2)
-  3. Godot: install the .NET export templates (docs/MOBILE_BUILD.md 1) and set
+  1. $androidStep
+  2. Godot: install the .NET export templates (docs/MOBILE_BUILD.md 1) and set
      Editor Settings > Export > Android > Java SDK Path (the JDK 17 folder) and
      Android SDK Path (docs/MOBILE_BUILD.md 2.3)
-  4. Create or let Godot generate the debug keystore (docs/MOBILE_BUILD.md 2.3)
-  5. iOS builds need a Mac with Xcode (docs/MOBILE_BUILD.md 5)
+  3. Create or let Godot generate the debug keystore (docs/MOBILE_BUILD.md 2.3)
+  4. iOS builds need a Mac with Xcode (docs/MOBILE_BUILD.md 5)
 "@
 
 Write-Host "`nDone. Open a NEW terminal so PATH changes take effect." -ForegroundColor Cyan

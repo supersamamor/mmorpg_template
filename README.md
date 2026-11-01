@@ -14,7 +14,9 @@ items, monsters, quests and art are all data that can be swapped without code ch
 3. Open a **new** terminal so PATH updates apply.
 
 The script installs these via winget (already-installed ones are skipped), runs `git lfs install`,
-starts PostgreSQL + pgAdmin from `docker-compose.yml`, and prints the manual steps left:
+starts PostgreSQL + pgAdmin from `docker-compose.yml`, installs the pinned Android SDK packages and
+accepts the SDK licences (when the SDK command-line tools exist; skip with `-SkipAndroid`), and prints the
+manual steps left:
 
 | Tool | Why |
 |------|-----|
@@ -24,10 +26,12 @@ starts PostgreSQL + pgAdmin from `docker-compose.yml`, and prints the manual ste
 | VS Code + extensions | editor (C# Dev Kit, Godot tools, YAML, Docker) |
 | **Blender** | authoring and exporting rigged glTF models |
 | **JDK 17** (Microsoft OpenJDK) | Godot's Android export; the version pinned in `docs/MOBILE_BUILD.md` |
-| **Android Studio** | its SDK Manager installs the Android SDK, build-tools and platform-tools |
+| **Android Studio** | provides the SDK command-line tools; the script then runs `sdkmanager` for android-35, build-tools 35.0.1, platform-tools and the licences |
 
-After the script, finish the Android setup by hand (accept licences, install SDK packages,
-point Godot at the SDK and JDK, debug keystore): [`docs/MOBILE_BUILD.md`](docs/MOBILE_BUILD.md) §1–2.
+Android first run: open Android Studio once, finish the wizard, then SDK Manager > SDK Tools > tick
+"Android SDK Command-line Tools (latest)" and re-run the script; it installs the pinned packages and accepts
+the licences. What stays manual: pointing Godot at the SDK and JDK and the debug keystore:
+[`docs/MOBILE_BUILD.md`](docs/MOBILE_BUILD.md) §1–2.
 **iOS builds need a Mac with Xcode** and an Apple ID or Developer account (`docs/MOBILE_BUILD.md` §5).
 
 > **Git LFS:** the remote you push to must support LFS (GitHub does, with quota limits). Run

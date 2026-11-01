@@ -33,7 +33,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-004 | Sample content set (YAML) | Claude Code | Sonnet 5.5 | [T-004](../tasks/prompts/T-004.md) | T-003 | Review | Original names only |
 | T-005 | Mobile export spike (Godot .NET → Android + iOS) | Claude Code | Opus 5.5 | [T-005](../tasks/prompts/T-005.md) | T-001 | In Progress | Engine go/no-go (ADR-001). iOS half needs a Mac |
 | T-006 | Update prereqs script for 3D mobile (Blender, Android SDK/JDK, Git LFS + `.gitattributes`) | Claude Code | Sonnet 5.5 | [T-006](../tasks/prompts/T-006.md) | — | Review | Drop Tiled/Pixelorama; edits the script only, never runs it |
-| T-007 | Prereqs script: Android SDK licences + pinned packages via `sdkmanager` | Claude Code | Sonnet 5.5 | [T-007](../tasks/prompts/T-007.md) | T-006 | Ready | ADR-002 #75 |
+| T-007 | Prereqs script: Android SDK licences + pinned packages via `sdkmanager` | Claude Code | Sonnet 5.5 | [T-007](../tasks/prompts/T-007.md) | T-006 | Review | ADR-002 #75 |
 
 ## Phase 1 — Headless simulation
 

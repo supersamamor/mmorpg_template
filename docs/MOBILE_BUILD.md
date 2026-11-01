@@ -43,13 +43,23 @@ Non-.NET templates do not work for a C# project; the folder name must end in `.m
 winget install --id Microsoft.OpenJDK.17 -e
 ```
 
-### 2.2 Android SDK (command-line tools only, no Android Studio needed)
+### 2.2 Android SDK packages and licences
 
-1. Download the Windows "command line tools only" zip from
-   <https://developer.android.com/studio#command-line-tools-only> and check its SHA-1 against
-   `https://dl.google.com/android/repository/repository2-3.xml`.
-2. Unzip it so that this path exists: `%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest\bin\sdkmanager.bat`.
-3. Install the packages (newer `sdkmanager` versions use `/` in package names; older ones use `;`):
+`setup-prereqs.ps1` does this step for you. It installs Android Studio, and once the SDK command-line tools exist at
+`%LOCALAPPDATA%\Android\Sdk\cmdline-tools\latest\bin\sdkmanager.bat` it accepts the licences and installs the pinned
+packages (android-35, build-tools 35.0.1, platform-tools) with the JDK 17 from §2.1. Re-running is safe: installed
+packages are skipped. `-SkipAndroid` leaves this step out.
+
+First time on a machine:
+1. Open Android Studio once and finish the setup wizard.
+2. SDK Manager > SDK Tools > tick **Android SDK Command-line Tools (latest)** > Apply.
+3. Re-run `setup-prereqs.ps1`.
+
+Without Android Studio you can unzip Google's "command line tools only" package
+(<https://developer.android.com/studio#command-line-tools-only>, check its SHA-1 against
+`https://dl.google.com/android/repository/repository2-3.xml`) into `...\Sdk\cmdline-tools\latest\` and re-run the script.
+
+The script's commands, if you want them by hand (newer `sdkmanager` versions use `/` in package names; older ones use `;`):
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Microsoft\jdk-17.0.21.21-hotspot"   # adjust to your JDK folder
