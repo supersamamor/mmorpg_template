@@ -64,7 +64,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-209 | Client content bundle (`export-client`) + content hash check | Claude Code | Sonnet 5.5 | [T-209](../tasks/prompts/T-209.md) | T-205 | Review | `Net/**` only for the hash check — approved by owner |
 | T-210 | Mobile session lifecycle: background, grace period, resume token | Claude Code | Opus 5.5 | [T-210](../tasks/prompts/T-210.md) | T-205, T-209 | Review | Restricted `Net/**` — approved by owner; Tier R review required |
 | T-213 | Server boot + tick hygiene: shared content boot (with audio checks), Windows high-res tick timer, tick p50/p99 stats, AOI crowd + Ctrl+C tests | Claude Code | Sonnet 5.5 | [T-213](../tasks/prompts/T-213.md) | T-302 | Ready | Starts after T-302 merges; ADR-002 #47–52 |
-| T-214 | Gateway hardening: resume-token ack, grace cap, load test, permessage-deflate if it pays | Claude Code | Opus 5.5 | [T-214](../tasks/prompts/T-214.md) | T-210, T-307 | Ready | **Restricted `Net/**` — needs owner approval**; ADR-002 #55–59 |
+| T-214 | Gateway hardening: resume-token ack, grace cap, load test, permessage-deflate if it pays | Claude Code | Opus 5.5 | [T-214](../tasks/prompts/T-214.md) | T-210, T-307 | Ready | Restricted `Net/**` — **approved by owner 2026-11-02**; ADR-002 #55–59 |
 
 ## Phase 3 — Combat loop
 
@@ -73,7 +73,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-301 | Monster spawns, respawn, data-driven AI | Claude Code | Opus 5.5 | [T-301](../tasks/prompts/T-301.md) | T-201, T-204, T-212 | Review | Server-side; started before Phase 2 client work because that waits on T-005 |
 | T-304 | Audio data: sound keys, theme `audio.defaults` / `audio.events`, validation | Claude Code | Sonnet 5.5 | [T-304](../tasks/prompts/T-304.md) | T-102, T-209 | Review | Data only; client audio system is T-305 |
 | T-302 | Auto-attack, death, EXP distribution, drops | Claude Code | Opus 5.5 | [T-302](../tasks/prompts/T-302.md) | T-105, T-106, T-301 | Ready | Server world only; wire side (attack messages, HP and ground items in views) is a follow-up in `Net/**` |
-| T-307 | Combat over the wire: attack/respawn messages, HP fraction + dead flag + ground items in views, hits batch, own EXP/HP | Claude Code | Opus 5.5 | [T-307](../tasks/prompts/T-307.md) | T-302, T-205, T-204 | Ready | **Restricted `Net/**` — needs owner approval**; ADR-002 #60 |
+| T-307 | Combat over the wire: attack/respawn messages, HP fraction + dead flag + ground items in views, hits batch, own EXP/HP | Claude Code | Opus 5.5 | [T-307](../tasks/prompts/T-307.md) | T-302, T-205, T-204 | Ready | Restricted `Net/**` — **approved by owner 2026-11-02**; ADR-002 #60 |
 | T-308 | Combat + AI polish: HP/SP regen, heal on return, corpse time, only players trigger warps | Claude Code | Sonnet 5.5 | [T-308](../tasks/prompts/T-308.md) | T-302 | Ready | Starts after T-302 merges; ADR-002 #37–39 |
 
 ## Phase 7 — Persistence & accounts
