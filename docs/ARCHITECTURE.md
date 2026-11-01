@@ -472,3 +472,10 @@ Staff browser ──HTTPS + SSO──► Game.Admin (ASP.NET Core, Blazor Server
 Sharding/multi-server, client prediction beyond movement interpolation, PvP balance,
 guild wars, cash shop / in-app purchases, multi-floor maps / jumping / flying,
 downloading content or themes after install, web client, tablets-first layout, controller support.
+
+**Planned for v2: guild war.** Not built in v1, but v1 must not block it:
+- The combat resolver stays target-agnostic: a player can be a target exactly like a monster (no monster-only shortcuts).
+- The `pvp` zone kind stays in the grid format; PvP rules switch on by zone, never by hardcoded map ids.
+- Guild membership (T-904) is a server-side relation other systems can query through events, so a war system can add teams later.
+- A load test (T-803 or later) measures crowds above the §9 budget of 50 visible characters, to size the v2 work (LOD, cheaper
+  animation for distant characters, MessagePack).

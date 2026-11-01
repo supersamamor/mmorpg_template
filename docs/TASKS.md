@@ -105,7 +105,11 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-804 | 8 | Admin API in server: admin commands via tick loop, role checks, audit log (ARCH §12) | Claude Code | Opus 5.5 | Backlog |
 | T-805 | 8 | `Game.Admin` web panel: SSO + roles, player lookup, server status, audit search | Claude Code | Sonnet 5.5 | Backlog |
 | T-806 | 8 | Moderation & support: kick/mute/ban, item/currency restore, announcements, maintenance, deletion/export queue | Claude Code | Sonnet 5.5 | Backlog |
-| T-901 | 9 | Chat, party, trade, guilds | Claude Code | Opus 5.5 | Backlog |
+| T-901 | 9 | Chat: map, whisper, party and guild channels; rate limit + moderation hooks (mute from T-806) | Claude Code | Sonnet 5.5 | Backlog |
+| T-902 | 9 | Party: invite/leave/leader, member HP list + minimap, EXP share formula in `formulas.yaml`, shared quest kill credit via event bus | Claude Code | Opus 5.5 | Backlog |
+| T-903 | 9 | Player trade: two-step confirm, atomic transactional swap, dupe-safe (rule 10) | Claude Code | Opus 5.5 | Backlog |
+| T-904 | 9 | Guild: create/join/leave, ranks + permissions, notice, guild chat, emblem chosen from a theme set (no uploads) | Claude Code | Opus 5.5 | Backlog |
+| T-905 | 9 | Guild storage: shared items with rank permissions and audit log, transactional | Claude Code | Opus 5.5 | Backlog |
 
 ## Workflow
 1. Pick the lowest-ID `Ready` task whose dependencies are `Done`. Set it `In Progress`.

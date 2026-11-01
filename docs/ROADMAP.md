@@ -64,4 +64,5 @@ and one of them survives being backgrounded for 30 s.
 action is in the audit log, and release builds reach TestFlight and the Play internal track.
 
 ## Phase 9 — Social
-- Chat, party (EXP share), trade, guilds
+- Chat, party (EXP share), trade, guilds, guild storage (T-901 to T-905)
+- Guild war is v2 (ARCHITECTURE §13 lists what v1 keeps open for it)
