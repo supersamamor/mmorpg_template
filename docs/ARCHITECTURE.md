@@ -165,10 +165,38 @@ A map has three parts that share its id:
 The server loads everything. The client gets only what it needs to display: names,
 descriptions, asset keys, skill targeting info, UI text. That is the **client bundle**.
 
-- `Game.Tools export-client` writes `client-content.json` from the loaded registries, plus a
-  content hash. The bundle is packed into the app.
-- Drop tables, AI, spawn data, formulas and quest internals are never in the bundle.
-- On login the server sends its content hash; a mismatch means "update required".
+- `dotnet run --project src/Game.Tools -- export-client [out.json] [--content dir] [--check file]` writes the bundle from the
+  loaded registries (default `build/client-content.json`, gitignored; never commit a generated bundle) and prints its content hash.
+  `--check <file>` writes nothing and exits 1 when the file differs from what the current content produces. The bundle is packed into the app.
+- **Whitelist, not blacklist.** `Game.Shared/ClientContent` holds one plain record per definition type, and
+  `Game.Content/ClientBundle/ClientBundleBuilder` copies each field by hand. A field added to a server definition reaches the client
+  only when someone maps it there; a test fails if a client record gains a field without the table below changing.
+- **Format:** `format_version` (now `1`) is the first field. The client refuses a bundle with a version it does not know. Bump it
+  on any change to the bundle's shape.
+- **Canonical output:** compact JSON, UTF-8 without BOM, one final `\n`, fixed property order, lists ordered by id (dialogue nodes by key),
+  integers and booleans only, non-ASCII (and `<>&'"+`) escaped as `\uXXXX`, null values left out. Two exports of the same content are byte-identical on any OS.
+- **Content hash:** SHA-256, lowercase hex, over the bundle JSON **without** the `content_hash` property and without the final `\n`.
+  The file is the same JSON with `"content_hash"` inserted right after `format_version`. The server computes the same hash with the same builder at
+  boot and logs it. Only displayed data is in the bundle, so a change to drops, monster stats, formulas, balance, EXP or spawns does **not**
+  change the hash (a balance hotfix needs no app update); a change to any displayed field does.
+- **Login check** (§10): a client whose hash differs gets `bye update_required`. A missing hash is allowed in development (logged) and refused elsewhere.
+
+| Definition | In the bundle | Never in the bundle |
+|------------|---------------|---------------------|
+| Items | id, name, description, kind, icon, ground visual, equip slots (card slots for cards), weapon type, worn visual | prices, weight, stack size, consumable effects and cooldown, weapon attack, element, level and job limits, modifiers, refine |
+| Skills | id, name, description, max level, passive, target range / ground / friendly, area shape (`square`) and radius, cast time **only if a plain number**, animation id, icon, vfx, sfx | SP cost, cooldown and every other formula, effects and their numbers, passive modifiers, weapon requirement |
+| Jobs | id, name, description, parent job, usable weapon types, model, icon, skill tree (skill, max level, required skills) | stat bonuses, change requirements, EXP table id |
+| Statuses | id, name, description, buff or debuff, icon, vfx | effects, tick interval, stacks, tags, `prevents_*` flags |
+| Monsters | id, name, model | level, race, size, element, stats, attack range, EXP, drop table links, AI |
+| NPCs | id, name, title, dialogue id, model, portrait | — |
+| Dialogue | id, start node, nodes (speaker, portrait, text, next, choices with text / next / quest id) | — |
+| Quests | id, name, description, giver NPC, display text of each step | prerequisites, objectives and counts, rewards, repeatable flag |
+| Maps | id, name, scene, music, width, height, cell flags (`walkable`, `blocks_los`; base64, as in the grid file), warps (cell, target map, target cell), NPC placements, zones | `spawns`, `source_scene_hash` |
+| Elements, stats | element ids and stat ids, for labels | element multipliers, derived-stat formulas |
+| — | — | drop tables and chances, `formulas.yaml`, `balance.yaml`, EXP tables |
+
+The leak tests (`tests/Game.Tests/ClientBundle`) fail if a key names server-only data (`drop`, `chance`, `spawn`, `formula`, `ai`, `exp`, `respawn`, `hp`, `atk`, ...),
+if a server-only value (formula, scene hash, `drop.*` / `exp.*` id) appears, or if server-only fields set to unique values change a byte of the output.
 
 ## 6. Core mechanics model
 
@@ -327,11 +355,11 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 
   | type | direction | fields |
   |------|-----------|--------|
-  | `hello` | C→S (first) | `version`, `name` (dev login stub; T-701 replaces it) |
+  | `hello` | C→S (first) | `version`, `name` (dev login stub; T-701 replaces it), `content` (the hash of the client bundle, §5.4; optional) |
   | `move` | C→S | `cell` (a request; it may come back `rejected`) |
   | `stop` | C→S | — |
   | `ping` | C→S | `seq` |
-  | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate` |
+  | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids); empty lists left out |
   | `rejected` | S→C | `intent` (`move`), `reason` (a `MoveRejected` term), `cell` |
@@ -341,7 +369,7 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   A view record is `{"id":7,"kind":"monster","display_key":"monster.x","cell":[3,4],"facing":"e","next":[4,4],"speed":3.51}`.
 - **Session lifecycle:**
   1. The client connects and must send `hello` within `hello-timeout-ms`.
-  2. The server checks the protocol version and the dev login. The dev login is development only; any other environment refuses it.
+  2. The server checks the protocol version, then the content hash (T-209): a `content` that differs from the server's ends in `bye update_required`; a missing one is accepted in development (logged as a warning) and refused elsewhere. Then it checks the dev login. The dev login is development only; any other environment refuses it.
   3. The server queues the character with `GameWorld.Spawn(..., initialize)` at `balance.yaml` `new_character`. On the start
      instance's tick, the initializer sets its stats (from the stats pipeline), its display key (the job id) and its view sink, and
      queues `welcome`. The AOI then sends the first `snapshot` in phase 5 of that tick, and deltas follow.

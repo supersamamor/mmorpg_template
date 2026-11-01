@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Game.Content.ClientExport;
 using Game.Content.Validation;
 using Game.Server.Hosting;
 using Game.Server.Net;
@@ -48,7 +49,9 @@ var clock = new SystemClock();
 var pipeline = ServerPipeline.Create(content); // more systems plug in in ServerPipeline: spawns (T-301), combat, ...
 var world = new GameWorld(content.Grids.Values, pipeline, seed, clock, log);
 var runners = world.Instances.Select(i => new InstanceRunner(i, clock, log)).ToList();
-var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log); // subscribes to instance events: before ticking
+var contentHash = ClientBundleExporter.Hash(content); // the display bundle's hash: a client packed with another one must update (ARCHITECTURE §5.4)
+log.Info($"Content hash: {contentHash}");
+var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log, contentHash); // subscribes to instance events: before ticking
 
 GatewayHost host;
 try

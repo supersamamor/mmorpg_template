@@ -94,13 +94,14 @@ public sealed class Gateway
     private volatile bool _shuttingDown;
 
     /// <summary>Creates the gateway for <paramref name="world"/> and subscribes to its instances' events.</summary>
-    public Gateway(GameWorld world, NewCharacters start, GatewayOptions options, IClock clock, IServerLog log, ILoginService? login = null)
+    public Gateway(GameWorld world, NewCharacters start, GatewayOptions options, IClock clock, IServerLog log, string contentHash, ILoginService? login = null)
     {
         _world = world;
         _start = start;
         Options = options;
         Clock = clock;
         Log = log;
+        ContentHash = contentHash;
         Login = login ?? new DevLogin(options.Development, options.MaxNameLength);
         if (!world.TryGetInstance(start.MapId, out _)) throw new ArgumentException($"No instance for the start map '{start.MapId}'.", nameof(start));
         foreach (var instance in world.Instances)
@@ -119,6 +120,9 @@ public sealed class Gateway
 
     /// <summary>The log.</summary>
     public IServerLog Log { get; }
+
+    /// <summary>The server's content hash (ARCHITECTURE §5.4): sent in <c>welcome</c>; a client with another hash is told to update.</summary>
+    public string ContentHash { get; }
 
     /// <summary>The login in use (the dev stub unless one was given).</summary>
     public ILoginService Login { get; }

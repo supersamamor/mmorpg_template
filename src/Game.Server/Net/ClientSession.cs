@@ -134,7 +134,7 @@ public sealed class ClientSession : IViewSink
         entity.DefinitionId = start.JobId;
         if (Closing) return; // the gateway despawns it when EntityEnteredMap is dispatched
         _mapId = entity.MapId;
-        Post(new WelcomeMessage(ProtocolVersion.Current, entity.Id.Value, entity.MapId, TickRate.Hz));
+        Post(new WelcomeMessage(ProtocolVersion.Current, entity.Id.Value, entity.MapId, TickRate.Hz, _gateway.ContentHash));
         entity.View = this; // the AOI sends the first snapshot in this tick's phase 5, after the welcome
         Interlocked.CompareExchange(ref _state, (int)SessionState.Joined, (int)SessionState.Joining);
     }
@@ -309,6 +309,20 @@ public sealed class ClientSession : IViewSink
         if (hello.Version != ProtocolVersion.Current)
         {
             Bye(ByeReasons.BadVersion);
+            return;
+        }
+        if (hello.Content is null)
+        {
+            if (!_gateway.Options.Development)
+            {
+                Bye(ByeReasons.UpdateRequired);
+                return;
+            }
+            _gateway.Log.Warn($"[net] session {Peer}: hello without a content hash accepted (development only).");
+        }
+        else if (!string.Equals(hello.Content, _gateway.ContentHash, StringComparison.Ordinal))
+        {
+            Bye(ByeReasons.UpdateRequired);
             return;
         }
         var login = _gateway.Login.Login(hello);

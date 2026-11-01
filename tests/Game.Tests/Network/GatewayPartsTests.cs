@@ -206,7 +206,7 @@ public class GatewayPartsTests
     {
         MessageTypes.All.Ordered.ShouldBe(["hello", "move", "stop", "ping", "welcome", "snapshot", "delta", "rejected", "pong", "bye"]);
         ByeReasons.All.Ordered.ShouldBe(["timeout", "bad_version", "malformed", "unknown_type", "oversize", "before_hello", "duplicate_hello",
-            "rate_limit", "login_refused", "server_full", "too_slow", "shutdown", "server_error"]);
+            "rate_limit", "login_refused", "server_full", "too_slow", "shutdown", "server_error", "update_required"]);
         EntityKinds.All.Ordered.ShouldBe(["player", "monster", "npc"]);
         var doc = File.ReadAllText(Path.Combine(RepoRoot(), "docs", "VOCABULARY.md"));
         foreach (var term in MessageTypes.All.Concat(ByeReasons.All).Concat(EntityKinds.All)) doc.ShouldContain($"`{term}`");

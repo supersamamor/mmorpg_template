@@ -41,3 +41,6 @@ appsettings.Development.local.json
 # ---------- Logs ----------
 logs/
 *.log
+
+# ---------- Generated client bundle (export-client) ----------
+/build/
