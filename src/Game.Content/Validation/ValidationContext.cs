@@ -29,6 +29,12 @@ public sealed class ValidationContext
     /// <summary>Asset keys declared in the theme's <c>asset-manifest.json</c>. Only existence is checked, not files.</summary>
     public IReadOnlySet<string> AssetKeys { get; }
 
+    /// <summary>Manifest metadata (<c>rig</c>, <c>attach</c>) of an asset key. Null when the key is unknown, or when the key set was built without metadata (then metadata checks are skipped).</summary>
+    public AssetInfo? InfoOf(string key) => (AssetKeys as AssetKeySet)?.InfoOf(key);
+
+    /// <summary>True when <see cref="AssetKeys"/> carries manifest metadata (it does when loaded by <see cref="AssetManifest.LoadKeys"/>).</summary>
+    public bool HasAssetInfo => AssetKeys is AssetKeySet;
+
     /// <summary>Issues reported so far.</summary>
     public IReadOnlyList<ValidationIssue> Issues => _issues;
 

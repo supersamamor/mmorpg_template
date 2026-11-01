@@ -18,6 +18,7 @@ public static class ContentValidator
         new DialogueRule(),
         new FormulaRule(),
         new BalanceRule(),
+        new AppearanceRule(),
         new FileNameRule(),
         new MapGridRule(),
         new UnusedRule(),

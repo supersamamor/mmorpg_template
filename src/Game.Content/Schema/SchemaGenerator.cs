@@ -32,6 +32,7 @@ public sealed class SchemaGenerator
         ("element_table", typeof(ElementTableDef)),
         ("formula_set", typeof(FormulaSetDef)),
         ("balance", typeof(BalanceDef)),
+        ("appearance", typeof(AppearanceDef)),
     };
 
     private static readonly JsonSerializerOptions OutputOptions = new()

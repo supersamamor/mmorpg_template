@@ -123,7 +123,7 @@ Any failure prevents startup and is reported with file + path.
 `JobDef`, `SkillDef`, `ItemDef` (consumable | equip | card | etc), `MonsterDef`,
 `StatusDef` (buffs/debuffs), `QuestDef`, `NpcDef`, `DialogueDef`, `DropTableDef`,
 `MapDef` (metadata + grid reference), `ExpTableDef`, `ElementTableDef`.
-Singleton root files: `FormulaSetDef` (`formulas.yaml`), `BalanceDef` (`balance.yaml`: stat/skill point rules, stat range, damage and chance clamps, path search limits).
+Singleton root files: `FormulaSetDef` (`formulas.yaml`), `BalanceDef` (`balance.yaml`: stat/skill point rules, stat range, damage and chance clamps, path search limits). `AppearanceDef` (`appearance.yaml`: character-creation options, cosmetic only, §7.5.1).
 
 ### 5.3 Maps
 A map has three parts that share its id:
@@ -171,7 +171,7 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 - **Whitelist, not blacklist.** `Game.Shared/ClientContent` holds one plain record per definition type, and
   `Game.Content/ClientBundle/ClientBundleBuilder` copies each field by hand. A field added to a server definition reaches the client
   only when someone maps it there; a test fails if a client record gains a field without the table below changing.
-- **Format:** `format_version` (now `1`) is the first field. The client refuses a bundle with a version it does not know. Bump it
+- **Format:** `format_version` (now `2`) is the first field. The client refuses a bundle with a version it does not know. Bump it
   on any change to the bundle's shape.
 - **Canonical output:** compact JSON, UTF-8 without BOM, one final `\n`, fixed property order, lists ordered by id (dialogue nodes by key),
   integers and booleans only, non-ASCII (and `<>&'"+`) escaped as `\uXXXX`, null values left out. Two exports of the same content are byte-identical on any OS.
@@ -192,6 +192,7 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 | Dialogue | id, start node, nodes (speaker, portrait, text, next, choices with text / next / quest id) | — |
 | Quests | id, name, description, giver NPC, display text of each step | prerequisites, objectives and counts, rewards, repeatable flag |
 | Maps | id, name, scene, music, width, height, cell flags (`walkable`, `blocks_los`; base64, as in the grid file), warps (cell, target map, target cell), NPC placements, zones | `spawns`, `source_scene_hash` |
+| Appearance | genders (body model, faces, hairstyles, defaults), skin tones and hair colours: ids, names, asset keys, colours | — (cosmetic only) |
 | Elements, stats | element ids and stat ids, for labels | element multipliers, derived-stat formulas |
 | — | — | drop tables and chances, `formulas.yaml`, `balance.yaml`, EXP tables |
 
@@ -268,7 +269,7 @@ Chosen once at character creation; **cosmetic only** (never changes stats or rul
 | Hair colour | A palette of colours | Colour parameter on the hair material |
 
 - **Data, not code:** options live in `content/appearance.yaml` (ids and asset keys). The validator checks every asset key and
-  that each face and hairstyle fits its gender's rig. Headgear can declare that it hides the hair.
+  that each face and hairstyle fits its gender's rig. A face or hairstyle fits when its model has the body's rig, or has no rig and is attached at `head` in the asset manifest. The options are in the client bundle (§5.4). Headgear can declare that it hides the hair.
 - **Server authoritative:** the server checks creation choices against `appearance.yaml` and stores them with the character.
   A modified client cannot pick an option that does not exist.
 - **Network:** appearance is a few ids in the view record of a **snapshot / appeared** entry; deltas never repeat it.

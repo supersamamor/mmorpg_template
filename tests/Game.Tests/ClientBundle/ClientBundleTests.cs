@@ -24,7 +24,7 @@ public class ClientBundleTests
     // ---- shape ----
 
     private static readonly Shared.ClientContent.ClientBundle Fixture = new(
-        1, ["fire"], ["str"],
+        2, ["fire"], ["str"],
         [new ClientItem("item.a", "A \"quoted\" é", null, "equip", "icon.a", null, ["weapon"], "dagger", "model.a")],
         [new ClientSkill("skill.a", "Bolt", "Hits.", 3, false, 6, true, false, ClientAreaShapes.Square, 2, 500, "cast", "icon.s", null, null)],
         [new ClientJob("job.a", "Jobber", null, null, [], null, null, [new ClientJobSkill("skill.a", null, [new ClientSkillRequirement("skill.b", 2)])])],
@@ -35,11 +35,14 @@ public class ClientBundleTests
             [new ClientDialogueChoice("Yes", null, "quest.a")])])],
         [new ClientQuest("quest.a", "Q", null, "npc.a", ["Do it."])],
         [new ClientMap("map.a", "Map", "scene.a", null, 2, 1, "AwM=", [new ClientWarp(new GridCell(1, 0), "map.b", new GridCell(0, 0))],
-            [new ClientNpcPlacement("npc.a", new GridCell(0, 0), "s")], [new ClientZone("safe", new GridRect(0, 0, 2, 1))])]);
+            [new ClientNpcPlacement("npc.a", new GridCell(0, 0), "s")], [new ClientZone("safe", new GridRect(0, 0, 2, 1))])],
+        new ClientAppearance(
+            [new ClientGender("male", "Male", "model.b", [new ClientAppearanceOption("face.a", "Calm", "model.f")], [new ClientAppearanceOption("hair.a", "Crop", "model.h")], "face.a", "hair.a")],
+            [new ClientColorOption("skin.a", "Fair", "#F6D9C4")], "skin.a", [new ClientColorOption("haircolor.a", "Raven", "#1E1B1D")], "haircolor.a"));
 
     private static readonly string FixtureBody =
         """
-        {"format_version":1,
+        {"format_version":2,
         HASH
         "elements":["fire"],"stats":["str"],
         "items":[{"id":"item.a","name":"A @U0022quoted@U0022 @U00E9","kind":"equip","icon":"icon.a","slots":["weapon"],"weapon_type":"dagger","visual":"model.a"}],
@@ -52,7 +55,9 @@ public class ClientBundleTests
         "quests":[{"id":"quest.a","name":"Q","giver":"npc.a","steps":["Do it."]}],
         "maps":[{"id":"map.a","name":"Map","scene":"scene.a","width":2,"height":1,"cells":"AwM=",
         "warps":[{"cell":[1,0],"map":"map.b","target":[0,0]}],"npcs":[{"npc":"npc.a","cell":[0,0],"facing":"s"}],
-        "zones":[{"kind":"safe","area":[0,0,2,1]}]}]}
+        "zones":[{"kind":"safe","area":[0,0,2,1]}]}],
+        "appearance":{"genders":[{"gender":"male","name":"Male","body":"model.b","faces":[{"id":"face.a","name":"Calm","model":"model.f"}],"hairstyles":[{"id":"hair.a","name":"Crop","model":"model.h"}],"default_face":"face.a","default_hairstyle":"hair.a"}],
+        "skin_tones":[{"id":"skin.a","name":"Fair","color":"#F6D9C4"}],"default_skin_tone":"skin.a","hair_colors":[{"id":"haircolor.a","name":"Raven","color":"#1E1B1D"}],"default_hair_color":"haircolor.a"}}
         """.ReplaceLineEndings("").Replace("@U", ((char)92) + "u"); // @U stands for a JSON unicode escape
 
     [Fact]
@@ -82,10 +87,14 @@ public class ClientBundleTests
 
         fields.ShouldBe(
         [
-            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Dialogues,Quests,Maps",
+            "ClientAppearance: Genders,SkinTones,DefaultSkinToneId,HairColors,DefaultHairColorId",
+            "ClientAppearanceOption: Id,Name,ModelAssetKey",
+            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Dialogues,Quests,Maps,Appearance",
+            "ClientColorOption: Id,Name,Color",
             "ClientDialogue: Id,Start,Nodes",
             "ClientDialogueChoice: Text,Next,StartQuestId",
             "ClientDialogueNode: Key,SpeakerNpcId,PortraitAssetKey,Text,Next,Choices",
+            "ClientGender: Gender,Name,BodyModelAssetKey,Faces,Hairstyles,DefaultFaceId,DefaultHairstyleId",
             "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey",
             "ClientJob: Id,Name,Description,ParentJobId,WeaponTypes,ModelAssetKey,IconAssetKey,Skills",
             "ClientJobSkill: SkillId,MaxLevel,Requires",
@@ -107,7 +116,7 @@ public class ClientBundleTests
     {
         using var doc = JsonDocument.Parse(Export(Content).FileBytes);
         var root = doc.RootElement;
-        root.GetProperty("format_version").GetInt32().ShouldBe(1);
+        root.GetProperty("format_version").GetInt32().ShouldBe(2);
         root.GetProperty("items").GetArrayLength().ShouldBe(Content.Items.Count);
         root.GetProperty("skills").GetArrayLength().ShouldBe(Content.Skills.Count);
         root.GetProperty("jobs").GetArrayLength().ShouldBe(Content.Jobs.Count);
@@ -345,5 +354,5 @@ public class ClientBundleTests
         Registry<ExpTableDef>? expTables = null, FormulaSetDef? formulas = null, BalanceDef? balance = null) =>
         new(jobs ?? c.Jobs, skills ?? c.Skills, items ?? c.Items, monsters ?? c.Monsters, statuses ?? c.Statuses, quests ?? c.Quests,
             npcs ?? c.Npcs, c.Dialogue, drops ?? c.Drops, maps ?? c.Maps, expTables ?? c.ExpTables, formulas ?? c.Formulas, c.Elements,
-            balance ?? c.Balance, grids: c.Grids);
+            balance ?? c.Balance, c.Appearance, grids: c.Grids);
 }

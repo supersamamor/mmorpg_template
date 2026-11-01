@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AppearanceDef",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Optional editor-facing name."
+    },
+    "genders": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Display name of the gender option, e.g. \"Male\"."
+          },
+          "body_model_asset_key": {
+            "type": "string",
+            "pattern": "^model\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+            "description": "Body model (model.*) of this gender. Its rig decides which faces and hairstyles fit."
+          },
+          "faces": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^face\\.[a-z0-9_]+$",
+                  "description": "Face id, face.<name>; unique in the file."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Display name."
+                },
+                "model_asset_key": {
+                  "type": "string",
+                  "pattern": "^model\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+                  "description": "Head model (model.*); same rig as the gender's body, or a rig-less model attached at head."
+                }
+              },
+              "additionalProperties": false,
+              "description": "A face variant: a head model that fits the gender's rig.",
+              "required": [
+                "id",
+                "name",
+                "model_asset_key"
+              ]
+            },
+            "description": "Face variants (face.*)."
+          },
+          "hairstyles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^hair\\.[a-z0-9_]+$",
+                  "description": "Hairstyle id, hair.<name>; unique in the file."
+                },
+                "name": {
+                  "type": "string",
+                  "description": "Display name."
+                },
+                "model_asset_key": {
+                  "type": "string",
+                  "pattern": "^model\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+                  "description": "Hair model (model.*); same rig as the gender's body, or a rig-less model attached at head."
+                }
+              },
+              "additionalProperties": false,
+              "description": "A hairstyle: a model attached at the head attach point.",
+              "required": [
+                "id",
+                "name",
+                "model_asset_key"
+              ]
+            },
+            "description": "Hairstyles (hair.*), attached at the head attach point."
+          },
+          "default": {
+            "type": "object",
+            "properties": {
+              "face_id": {
+                "type": "string",
+                "pattern": "^face\\.[a-z0-9_]+$",
+                "description": "Face (face.*)."
+              },
+              "hairstyle_id": {
+                "type": "string",
+                "pattern": "^hair\\.[a-z0-9_]+$",
+                "description": "Hairstyle (hair.*)."
+              }
+            },
+            "additionalProperties": false,
+            "description": "The face and hairstyle a new character of this gender starts with."
+          }
+        },
+        "additionalProperties": false,
+        "description": "What one gender offers at creation: its body, its faces and hairstyles, and the starting look.",
+        "required": [
+          "name",
+          "body_model_asset_key"
+        ]
+      },
+      "propertyNames": {
+        "enum": [
+          "male",
+          "female"
+        ]
+      },
+      "description": "Options per gender. Keys are Genders terms; every term must be present."
+    },
+    "skin_tones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Id, skin.<name> or haircolor.<name> by palette; unique in the file."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name."
+          },
+          "color": {
+            "type": "string",
+            "description": "Colour as #RRGGBB (hex digits, either case)."
+          }
+        },
+        "additionalProperties": false,
+        "description": "A palette entry: a named colour (a skin tone or a hair colour).",
+        "required": [
+          "id",
+          "name",
+          "color"
+        ]
+      },
+      "description": "Skin tone palette (skin.*). Applied as a colour on the body's single material."
+    },
+    "default_skin_tone_id": {
+      "type": "string",
+      "pattern": "^skin\\.[a-z0-9_]+$",
+      "description": "Skin tone (skin.*) a new character starts with."
+    },
+    "hair_colors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/properties/skin_tones/items"
+      },
+      "description": "Hair colour palette (haircolor.*). Applied as a colour on the hair material."
+    },
+    "default_hair_color_id": {
+      "type": "string",
+      "pattern": "^haircolor\\.[a-z0-9_]+$",
+      "description": "Hair colour (haircolor.*) a new character starts with."
+    }
+  },
+  "additionalProperties": false,
+  "description": "The root of content/appearance.yaml: the options offered at character creation (ARCHITECTURE §7.5.1). A single set per game, so it has no id. Cosmetic only: nothing here has a stat, rule or balance effect. Per gender it lists the body, faces and hairstyles; skin tones and hair colours are palettes shared by both genders.",
+  "required": [
+    "default_skin_tone_id",
+    "default_hair_color_id"
+  ]
+}

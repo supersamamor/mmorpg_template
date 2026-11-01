@@ -69,6 +69,18 @@ public static class ValidationCodes
     public const string GridUnknownFlags = "grid.flags_unknown";
     /// <summary>Two warps share a cell.</summary>
     public const string GridWarpDuplicate = "grid.warp_duplicate";
+    /// <summary>A gender is missing from, or not a term of, <c>appearance.yaml</c>.</summary>
+    public const string AppearanceGender = "appearance.gender";
+    /// <summary>An appearance option id has the wrong prefix, bad format, or is not unique.</summary>
+    public const string AppearanceId = "appearance.id";
+    /// <summary>An appearance option list is empty.</summary>
+    public const string AppearanceEmpty = "appearance.empty";
+    /// <summary>An appearance asset key is not a model, or a face or hairstyle does not fit its gender's rig.</summary>
+    public const string AppearanceRig = "appearance.rig";
+    /// <summary>An appearance colour is not <c>#RRGGBB</c>.</summary>
+    public const string AppearanceColor = "appearance.color";
+    /// <summary>An appearance default points at an option that does not exist (for that gender).</summary>
+    public const string AppearanceDefault = "appearance.default";
     /// <summary>A rule threw; this is a validator bug, reported so it cannot pass silently.</summary>
     public const string RuleCrashed = "validator.rule_crashed";
 

@@ -19,13 +19,13 @@ public sealed class ContentDatabase
         Registry<JobDef> jobs, Registry<SkillDef> skills, Registry<ItemDef> items, Registry<MonsterDef> monsters,
         Registry<StatusDef> statuses, Registry<QuestDef> quests, Registry<NpcDef> npcs, Registry<DialogueDef> dialogue,
         Registry<DropTableDef> drops, Registry<MapDef> maps, Registry<ExpTableDef> expTables,
-        FormulaSetDef formulas, ElementTableDef elements, BalanceDef balance,
+        FormulaSetDef formulas, ElementTableDef elements, BalanceDef balance, AppearanceDef appearance,
         IReadOnlyDictionary<string, SourceLocation>? sources = null,
         IReadOnlyDictionary<string, MapGrid>? grids = null)
     {
         Jobs = jobs; Skills = skills; Items = items; Monsters = monsters; Statuses = statuses; Quests = quests;
         Npcs = npcs; Dialogue = dialogue; Drops = drops; Maps = maps; ExpTables = expTables;
-        Formulas = formulas; Elements = elements; Balance = balance;
+        Formulas = formulas; Elements = elements; Balance = balance; Appearance = appearance;
         _sources = sources ?? new Dictionary<string, SourceLocation>();
         Grids = grids ?? new Dictionary<string, MapGrid>();
         _registries = new IRegistry[] { jobs, skills, items, monsters, statuses, quests, npcs, dialogue, drops, maps, expTables };
@@ -60,6 +60,9 @@ public sealed class ContentDatabase
 
     /// <summary><c>content/balance.yaml</c>: progression numbers and combat clamps.</summary>
     public BalanceDef Balance { get; }
+
+    /// <summary><c>content/appearance.yaml</c>: character-creation options (cosmetic only).</summary>
+    public AppearanceDef Appearance { get; }
 
     /// <summary>Logic grid of every map, by map id. The loader guarantees one per entry of <see cref="Maps"/>.</summary>
     public IReadOnlyDictionary<string, MapGrid> Grids { get; }

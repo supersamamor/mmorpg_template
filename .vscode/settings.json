@@ -14,6 +14,7 @@
     "schemas/exp_table.schema.json": "content/exp_tables.yaml",
     "schemas/element_table.schema.json": "content/elements.yaml",
     "schemas/formula_set.schema.json": "content/formulas.yaml",
-    "schemas/balance.schema.json": "content/balance.yaml"
+    "schemas/balance.schema.json": "content/balance.yaml",
+    "schemas/appearance.schema.json": "content/appearance.yaml"
   }
 }

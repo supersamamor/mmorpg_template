@@ -23,6 +23,7 @@ Read [`docs/VOCABULARY.md`](../docs/VOCABULARY.md) for ids, enums and formula va
 | `maps/` | `map.schema.json`, `map-grid.schema.json` | `map.*` metadata, plus the logic grid `<name>.grid.json` named by its `grid_file` (format: ARCHITECTURE §5.3). `maps/src/*.txt` are ASCII sources, not loaded |
 | `formulas.yaml` | `formula_set.schema.json` | derived stats, damage, hit and crit formulas |
 | `balance.yaml` | `balance.schema.json` | stat point awards and cost, stat range, damage and chance clamps |
+| `appearance.yaml` | `appearance.schema.json` | character-creation options: per gender (`male`, `female`) the body, faces and hairstyles; shared skin-tone and hair-colour palettes; defaults. Cosmetic only |
 | `elements.yaml` | `element_table.schema.json` | attacker element × defender element multipliers |
 | `exp_tables.yaml` | `exp_table.schema.json` | `exp.*` — base and job level curves |
 

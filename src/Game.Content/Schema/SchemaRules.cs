@@ -31,6 +31,7 @@ internal static class SchemaRules
             [(typeof(MonsterDef), nameof(MonsterDef.Stats))] = new[] { Stats.All },
             [(typeof(FormulaSetDef), nameof(FormulaSetDef.Derived))] = new[] { DerivedStats.All },
             [(typeof(ElementTableDef), nameof(ElementTableDef.Multipliers))] = new[] { Elements.All, Elements.All },
+            [(typeof(AppearanceDef), nameof(AppearanceDef.Genders))] = new[] { Genders.All },
         };
 
     private static readonly (string Suffix, string Prefix)[] ReferenceSuffixes =
@@ -46,12 +47,17 @@ internal static class SchemaRules
         ("NpcId", IdPrefixes.Npc),
         ("JobId", IdPrefixes.Job),
         ("MapId", IdPrefixes.Map),
+        ("FaceId", AppearanceIdPrefixes.Face),
+        ("HairstyleId", AppearanceIdPrefixes.Hair),
+        ("SkinToneId", AppearanceIdPrefixes.Skin),
+        ("HairColorId", AppearanceIdPrefixes.HairColor),
     };
 
     private static readonly IReadOnlyDictionary<string, string[]> AssetKinds = new Dictionary<string, string[]>(StringComparer.Ordinal)
     {
         ["Icon"] = new[] { AssetKeyPrefixes.Icon },
         ["Model"] = new[] { AssetKeyPrefixes.Model },
+        ["BodyModel"] = new[] { AssetKeyPrefixes.Model },
         ["Visual"] = new[] { AssetKeyPrefixes.Model },
         ["Ground"] = new[] { AssetKeyPrefixes.Model, AssetKeyPrefixes.Sprite },
         ["Scene"] = new[] { AssetKeyPrefixes.Scene },
@@ -63,11 +69,20 @@ internal static class SchemaRules
 
     /// <summary>Pattern for the <c>Id</c> property of a registry definition, or null if the type has no id prefix.</summary>
     public static string? IdPattern(Type declaringType) =>
-        DefinitionIdPrefixes.ByType.TryGetValue(declaringType, out var prefix) ? IdPattern(prefix) : null;
+        DefinitionIdPrefixes.ByType.TryGetValue(declaringType, out var prefix) ? IdPattern(prefix)
+        : OptionIdPrefixes.TryGetValue(declaringType, out var optionPrefix) ? IdPattern(optionPrefix) : null;
+
+    /// <summary>Appearance option records whose own <c>Id</c> has one fixed prefix. (A colour option is shared by two palettes, so the validator checks it.)</summary>
+    private static readonly IReadOnlyDictionary<Type, string> OptionIdPrefixes = new Dictionary<Type, string>
+    {
+        [typeof(FaceOptionDef)] = AppearanceIdPrefixes.Face,
+        [typeof(HairstyleOptionDef)] = AppearanceIdPrefixes.Hair,
+    };
 
     /// <summary>Pattern for a reference to another definition, from the property name; null when the name is not a reference.</summary>
     public static string? ReferencePattern(string propertyName)
     {
+        if (propertyName == nameof(IDefinition.Id)) return null; // the owning record's own id, not a reference
         var name = propertyName.EndsWith("Ids", StringComparison.Ordinal) ? propertyName[..^1] : propertyName;
         if (!name.EndsWith("Id", StringComparison.Ordinal)) return null;
         foreach (var (suffix, prefix) in ReferenceSuffixes)

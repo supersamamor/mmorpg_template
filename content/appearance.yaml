@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=../schemas/appearance.schema.json
+# Character-creation options (ARCHITECTURE §7.5.1). Cosmetic only: nothing here changes stats or rules.
+# Each face and hairstyle model must use the same rig as its gender's body, or be a rig-less model attached at "head".
+name: Lumen Vale appearance
+genders:
+  male:
+    name: Male
+    body_model_asset_key: model.char.body_male
+    faces:
+      - { id: face.male_calm, name: Calm, model_asset_key: model.char.face_male_calm }
+      - { id: face.male_keen, name: Keen, model_asset_key: model.char.face_male_keen }
+      - { id: face.male_wry, name: Wry, model_asset_key: model.char.face_male_wry }
+    hairstyles:
+      - { id: hair.male_crop, name: Close Crop, model_asset_key: model.char.hair_male_crop }
+      - { id: hair.male_swept, name: Swept Back, model_asset_key: model.char.hair_male_swept }
+      - { id: hair.male_long, name: Long, model_asset_key: model.char.hair_male_long }
+      - { id: hair.male_topknot, name: Topknot, model_asset_key: model.char.hair_male_topknot }
+    default:
+      face_id: face.male_calm
+      hairstyle_id: hair.male_crop
+  female:
+    name: Female
+    body_model_asset_key: model.char.body_female
+    faces:
+      - { id: face.female_calm, name: Calm, model_asset_key: model.char.face_female_calm }
+      - { id: face.female_bright, name: Bright, model_asset_key: model.char.face_female_bright }
+      - { id: face.female_sly, name: Sly, model_asset_key: model.char.face_female_sly }
+    hairstyles:
+      - { id: hair.female_bob, name: Bob, model_asset_key: model.char.hair_female_bob }
+      - { id: hair.female_braid, name: Braid, model_asset_key: model.char.hair_female_braid }
+      - { id: hair.female_ponytail, name: Ponytail, model_asset_key: model.char.hair_female_ponytail }
+      - { id: hair.female_curls, name: Curls, model_asset_key: model.char.hair_female_curls }
+    default:
+      face_id: face.female_calm
+      hairstyle_id: hair.female_bob
+skin_tones:
+  - { id: skin.fair, name: Fair, color: "#F6D9C4" }
+  - { id: skin.light, name: Light, color: "#EBC3A0" }
+  - { id: skin.tan, name: Tan, color: "#D29F73" }
+  - { id: skin.olive, name: Olive, color: "#B98558" }
+  - { id: skin.brown, name: Brown, color: "#8A5A3C" }
+  - { id: skin.deep, name: Deep, color: "#5B3A29" }
+default_skin_tone_id: skin.light
+hair_colors:
+  - { id: haircolor.raven, name: Raven, color: "#1E1B1D" }
+  - { id: haircolor.chestnut, name: Chestnut, color: "#5A3825" }
+  - { id: haircolor.auburn, name: Auburn, color: "#8C3B1F" }
+  - { id: haircolor.golden, name: Golden, color: "#D6A84A" }
+  - { id: haircolor.silver, name: Silver, color: "#B9BEC6" }
+  - { id: haircolor.ember, name: Ember, color: "#D2512B" }
+default_hair_color_id: haircolor.chestnut
