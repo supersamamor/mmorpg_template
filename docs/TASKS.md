@@ -48,13 +48,18 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-108 | Independent review of Phase 0–1 | Codex | default | [T-108](../tasks/prompts/T-108.md) | T-107 | Ready | Findings → new tasks |
 | T-109 | Balance constants (`BalanceDef` + `balance.yaml`) | Claude Code | Sonnet 5.5 | [T-109](../tasks/prompts/T-109.md) | T-103 | Review | Added: T-105/T-106 need it |
 
+## Phase 2 — World slice
+
+| ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
+|----|------|-------|-------|--------|------------|--------|-------|
+| T-201 | Map grid loader (`.grid.json` + MapDef: collision, spawns, warps) | Claude Code | Sonnet 5.5 | [T-201](../tasks/prompts/T-201.md) | T-101, T-102 | Ready | Defines the grid format T-208 must export |
+| T-202 | Tick loop + map instances + event bus | Claude Code | Opus 5.5 | [T-202](../tasks/prompts/T-202.md) | T-201 | Ready | Tier R review recommended (concurrency) |
+| T-203 | A* pathfinding + 8-direction grid movement, LOS | Claude Code | Sonnet 5.5 | [T-203](../tasks/prompts/T-203.md) | T-201 | Ready | Pure `Game.Shared`; wired in by T-212 |
+
 ## Backlog (prompts written when the previous phase is Done)
 
 | ID | Phase | Task | Agent | Model | Status |
 |----|-------|------|-------|-------|--------|
-| T-201 | 2 | Map grid loader (`.grid.json` + MapDef: collision, spawns, warps) | Claude Code | Sonnet 5.5 | Backlog |
-| T-202 | 2 | Tick loop + map instances | Claude Code | Opus 5.5 | Backlog |
-| T-203 | 2 | A* pathfinding + 8-direction grid movement, LOS | Claude Code | Sonnet 5.5 | Backlog |
 | T-204 | 2 | AOI grid + delta snapshots | Claude Code | Opus 5.5 | Backlog |
 | T-205 | 2 | WebSocket gateway (`wss`) + message contracts | Claude Code | Opus 5.5 | Backlog |
 | T-206 | 2 | Godot 3D client: map scene, camera, tap-to-move, interpolation | Claude Code | Sonnet 5.5 | Backlog |
@@ -63,6 +68,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-209 | 2 | Client content bundle (`export-client`) + content hash check | Claude Code | Sonnet 5.5 | Backlog |
 | T-210 | 2 | Mobile session lifecycle: background, grace period, resume token | Claude Code | Opus 5.5 | Backlog |
 | T-211 | 2 | Touch input + mobile UI shell (safe area, scaling, hotbar) | Claude Code | Sonnet 5.5 | Backlog |
+| T-212 | 2 | Movement system: `MoveTo` intent → path → grid mover in the tick loop (needs T-202, T-203) | Claude Code | Sonnet 5.5 | Backlog |
 | T-301 | 3 | Monster spawns, respawn, data-driven AI | Claude Code | Opus 5.5 | Backlog |
 | T-302 | 3 | Auto-attack, death, EXP distribution, drops | Claude Code | Sonnet 5.5 | Backlog |
 | T-303 | 3 | Combat presentation: animations, damage numbers, hit VFX | Claude Code | Sonnet 5.5 | Backlog |
