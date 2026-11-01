@@ -12,7 +12,7 @@ public class SchemaCheckTests : IDisposable
     public SchemaCheckTests()
     {
         var content = Path.Combine(RepoRoot(), "content");
-        foreach (var file in Directory.GetFiles(content, "*.yaml", SearchOption.AllDirectories))
+        foreach (var file in Directory.GetFiles(content, "*.yaml", SearchOption.AllDirectories).Concat(Directory.GetFiles(content, "*.grid.json", SearchOption.AllDirectories)))
         {
             var target = Path.Combine(_temp, Path.GetRelativePath(content, file));
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
@@ -94,6 +94,49 @@ public class SchemaCheckTests : IDisposable
         issue.Path.ShouldBe("progression.skill_points_per_job_level");
     }
 
+
+    [Fact]
+    public void A_wrong_type_in_a_grid_file_is_reported_with_file_line_and_path()
+    {
+        Edit("maps/starter_meadow.grid.json", "\"width\": 48,", "\"width\": \"48\",");
+
+        var issue = SchemaCheck.Check(_temp, _schemas).ShouldHaveSingleItem();
+
+        issue.Code.ShouldBe(ValidationCodes.SchemaViolation);
+        issue.Severity.ShouldBe(ValidationSeverity.Error);
+        issue.File.ShouldBe("maps/starter_meadow.grid.json");
+        issue.Path.ShouldBe("width");
+        issue.Line.ShouldBe(4);
+        issue.Column.ShouldBe(12);   // the value, 1-based, like the YAML marks
+    }
+
+    [Fact]
+    public void A_wrong_value_inside_a_grid_list_names_the_indexed_path()
+    {
+        var spawn = File.ReadAllText(Path.Combine(_temp, "maps", "starter_meadow.grid.json")).Replace("\r\n", "\n");
+        spawn.ShouldContain("\"respawn_seconds\": ", customMessage: "test setup: the sample grid should have a spawn with respawn_seconds");
+        var at = spawn.IndexOf("\"respawn_seconds\": ", StringComparison.Ordinal);
+        var end = spawn.IndexOfAny([',', '\n'], at);
+        File.WriteAllText(Path.Combine(_temp, "maps", "starter_meadow.grid.json"), spawn[..at] + "\"respawn_seconds\": \"soon\"" + spawn[end..]);
+
+        var issue = SchemaCheck.Check(_temp, _schemas).ShouldHaveSingleItem();
+
+        issue.File.ShouldBe("maps/starter_meadow.grid.json");
+        issue.Path.ShouldMatch(@"^spawns\[\d+\]\.respawn_seconds$");
+        issue.Line.ShouldBeGreaterThan(4);
+    }
+
+    [Fact]
+    public void A_missing_grid_schema_is_reported_once_when_grid_files_exist()
+    {
+        var schemas = Path.Combine(_temp, "partial_schemas");
+        Directory.CreateDirectory(schemas);
+        foreach (var file in Directory.GetFiles(_schemas)) if (!file.EndsWith("map-grid.schema.json", StringComparison.Ordinal)) File.Copy(file, Path.Combine(schemas, Path.GetFileName(file)));
+
+        var issue = SchemaCheck.Check(_temp, schemas).ShouldHaveSingleItem();
+
+        issue.Message.ShouldContain("map-grid.schema.json");
+    }
     [Fact]
     public void A_missing_schema_directory_is_one_error()
     {

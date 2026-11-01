@@ -35,24 +35,10 @@ internal static class ValidateCommand
 
     private static IReadOnlyList<ValidationIssue> Collect(string content, string schemas, string theme)
     {
-        var load = ContentLoader.Load(content);
-        if (load.Database is null) return ValidationReportFormatter.FromLoadErrors(load.Errors);
-
-        // themes/ sits next to content/ in the repo layout.
-        var manifest = AssetManifest.PathFor(Path.Combine(Path.GetFullPath(content), "..", "themes"), theme);
-        IReadOnlySet<string> assetKeys;
-        AudioManifest audio;
-        try
-        {
-            assetKeys = AssetManifest.LoadKeys(manifest);
-            audio = AudioManifest.Load(manifest, $"themes/{theme}/asset-manifest.json");
-        }
-        catch (InvalidDataException e)
-        {
-            return new[] { new ValidationIssue(ValidationSeverity.Error, "", 0, 0, "", ValidationCodes.ThemeManifest, e.Message) };
-        }
-
-        var issues = ContentValidator.Validate(load.Database, content, assetKeys, audio).Issues.ToList();
+        // The same load and checks the server runs at boot; the schema check is the tools' extra.
+        var boot = ContentBoot.Check(content, theme);
+        if (boot.Database is null) return boot.Issues;
+        var issues = boot.Issues.ToList();
         issues.AddRange(SchemaCheck.Check(Path.GetFullPath(content), schemas));
         return issues;
     }

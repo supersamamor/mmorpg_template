@@ -81,8 +81,131 @@ public static class SchemaCheck
             var full = Path.Combine(contentRoot, file);
             if (File.Exists(full)) CheckFile(full, schemaName);
         }
+        CheckGridFiles(contentRoot, schemaDir, issues);
         return issues;
     }
+
+    /// <summary>The schema every <c>maps/*.grid.json</c> is checked against.</summary>
+    private const string GridSchema = "map-grid";
+
+    private static void CheckGridFiles(string contentRoot, string schemaDir, List<ValidationIssue> issues)
+    {
+        var dir = Path.Combine(contentRoot, "maps");
+        if (!Directory.Exists(dir)) return;
+        var files = Directory.GetFiles(dir, "*.grid.json").OrderBy(f => f, StringComparer.Ordinal).ToList();
+        if (files.Count == 0) return;
+
+        var schemaFile = Path.Combine(schemaDir, GridSchema + ".schema.json");
+        var firstRel = Path.GetRelativePath(contentRoot, files[0]).Replace('\\', '/');
+        if (!File.Exists(schemaFile))
+        {
+            issues.Add(Error(firstRel, 0, 0, "", $"schema '{schemaFile}' does not exist; run the schema command"));
+            return;
+        }
+        var schema = JsonSchema.FromText(File.ReadAllText(schemaFile));
+        foreach (var file in files) CheckGridFile(file, Path.GetRelativePath(contentRoot, file).Replace('\\', '/'), schema, issues);
+    }
+
+    private static void CheckGridFile(string fullPath, string rel, JsonSchema schema, List<ValidationIssue> issues)
+    {
+        byte[] bytes;
+        try
+        {
+            bytes = File.ReadAllBytes(fullPath);
+        }
+        catch (IOException)
+        {
+            return; // The loader reports unreadable files.
+        }
+
+        Dictionary<string, int> offsets;
+        System.Text.Json.JsonDocument json;
+        try
+        {
+            json = System.Text.Json.JsonDocument.Parse(bytes);
+            offsets = IndexOffsets(bytes);
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return; // The loader reports malformed files.
+        }
+
+        using (json)
+        {
+            var result = schema.Evaluate(json.RootElement, new EvaluationOptions { OutputFormat = OutputFormat.List });
+            if (result.IsValid) return;
+
+            var lineStarts = new List<int> { 0 };
+            for (var i = 0; i < bytes.Length; i++)
+                if (bytes[i] == (byte)'\n') lineStarts.Add(i + 1);
+
+            (int Line, int Column) Position(int offset)
+            {
+                var index = lineStarts.BinarySearch(offset);
+                if (index < 0) index = ~index - 1;
+                return (index + 1, offset - lineStarts[index] + 1); // 1-based, like the YAML marks
+            }
+
+            Report(result, rel, issues, pointer =>
+            {
+                // Walk up to the deepest pointer the file has (a missing property is reported on its parent).
+                var found = pointer;
+                while (!offsets.ContainsKey(found) && found.Length > 0) found = found.Substring(0, found.LastIndexOf('/'));
+                var (line, column) = Position(offsets[found]);
+                return (PathOf(found), line, column);
+            }, 1, 1);
+        }
+    }
+
+    /// <summary>Byte offset of every value in a JSON document, keyed by its JSON pointer (<c>""</c> is the root).</summary>
+    private static Dictionary<string, int> IndexOffsets(byte[] bytes)
+    {
+        var offsets = new Dictionary<string, int>(StringComparer.Ordinal);
+        var reader = new System.Text.Json.Utf8JsonReader(bytes);
+        var containers = new Stack<(string Pointer, bool IsArray, int Next)>();
+        string? name = null;
+        while (reader.Read())
+        {
+            switch (reader.TokenType)
+            {
+                case System.Text.Json.JsonTokenType.PropertyName:
+                    name = reader.GetString();
+                    continue;
+                case System.Text.Json.JsonTokenType.EndObject:
+                case System.Text.Json.JsonTokenType.EndArray:
+                    containers.Pop();
+                    continue;
+            }
+
+            string pointer;
+            if (containers.Count == 0) pointer = "";
+            else
+            {
+                var top = containers.Pop();
+                var segment = top.IsArray ? top.Next.ToString(CultureInfo.InvariantCulture) : name!.Replace("~", "~0").Replace("/", "~1");
+                pointer = top.Pointer + "/" + segment;
+                containers.Push(top with { Next = top.Next + 1 });
+            }
+            offsets[pointer] = (int)reader.TokenStartIndex;
+            if (reader.TokenType == System.Text.Json.JsonTokenType.StartObject) containers.Push((pointer, false, 0));
+            else if (reader.TokenType == System.Text.Json.JsonTokenType.StartArray) containers.Push((pointer, true, 0));
+        }
+        return offsets;
+    }
+
+    /// <summary>A JSON pointer written like the YAML paths: <c>spawns[0].area.x</c>.</summary>
+    private static string PathOf(string pointer)
+    {
+        var path = new StringBuilder();
+        foreach (var raw in pointer.Split('/', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var segment = raw.Replace("~1", "/").Replace("~0", "~");
+            if (int.TryParse(segment, NumberStyles.None, CultureInfo.InvariantCulture, out var index)) path.Append('[').Append(index).Append(']');
+            else path.Append(path.Length > 0 ? "." : "").Append(segment);
+        }
+        return path.ToString();
+    }
+
 
     private static void CheckDocuments(string fullPath, string rel, JsonSchema schema, List<ValidationIssue> issues)
     {
@@ -104,21 +227,32 @@ public static class SchemaCheck
             var result = schema.Evaluate(json.RootElement, new EvaluationOptions { OutputFormat = OutputFormat.List });
             if (result.IsValid) continue;
 
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var detail in RelevantFailures(result))
+            Report(result, rel, issues, pointer =>
             {
-                var pointer = detail.InstanceLocation.ToString();
-                foreach (var (keyword, message) in detail.Errors!)
-                {
-                    if (IsWrapper(keyword, message)) continue;
-                    if (!seen.Add(pointer + "|" + keyword + "|" + message)) continue;
-                    var (path, node) = Locate(document.RootNode, pointer);
-                    issues.Add(Error(rel, (int)node.Start.Line, (int)node.Start.Column, path, $"{message} ({keyword})"));
-                }
-            }
-            if (seen.Count == 0)
-                issues.Add(Error(rel, (int)document.RootNode.Start.Line, (int)document.RootNode.Start.Column, "", "document does not match its schema"));
+                var (path, node) = Locate(document.RootNode, pointer);
+                return (path, (int)node.Start.Line, (int)node.Start.Column);
+            }, (int)document.RootNode.Start.Line, (int)document.RootNode.Start.Column);
         }
+    }
+
+    /// <summary>Turns a failed evaluation into findings; <paramref name="locate"/> maps a JSON pointer to a path, line and column.</summary>
+    private static void Report(EvaluationResults result, string rel, List<ValidationIssue> issues,
+        Func<string, (string Path, int Line, int Column)> locate, int rootLine, int rootColumn)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var detail in RelevantFailures(result))
+        {
+            var pointer = detail.InstanceLocation.ToString();
+            foreach (var (keyword, message) in detail.Errors!)
+            {
+                if (IsWrapper(keyword, message)) continue;
+                if (!seen.Add(pointer + "|" + keyword + "|" + message)) continue;
+                var (path, line, column) = locate(pointer);
+                issues.Add(Error(rel, line, column, path, $"{message} ({keyword})"));
+            }
+        }
+        if (seen.Count == 0)
+            issues.Add(Error(rel, rootLine, rootColumn, "", "document does not match its schema"));
     }
 
     /// <summary>

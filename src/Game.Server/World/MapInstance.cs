@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Game.Server.Events;
 using Game.Server.World.Aoi;
 using Game.Shared.Random;
@@ -110,6 +111,18 @@ public sealed class MapInstance
     /// <summary>Running totals.</summary>
     public InstanceCounters Counters { get; } = new();
 
+    /// <summary>Durations of the most recent ticks (recorded by <see cref="Tick"/>).</summary>
+    public TickTimings Timings { get; } = new();
+
+    /// <summary>A read-only copy of the tick timings and counters. Safe to call from any thread; allocates, so not for the tick itself.</summary>
+    public InstanceStats GetStats()
+    {
+        var c = Counters;
+        return new InstanceStats(MapId, TickNumber, Timings.Snapshot(), new CounterSnapshot(
+            c.IntentsRouted, c.IntentsDroppedUnknownEntity, c.IntentsDroppedDeadEntity, c.IntentsDroppedUnrouted,
+            c.SystemErrors, c.HandlerErrors, c.StructuralIgnored));
+    }
+
     /// <summary>The intent queue (for its bound and counters).</summary>
     public IntentQueue Intents => _intents;
 
@@ -134,6 +147,7 @@ public sealed class MapInstance
     /// <summary>Runs one tick (all five phases). Never throws because of a system or event handler.</summary>
     public void Tick()
     {
+        var startedAt = Stopwatch.GetTimestamp();
         var tick = TickNumber;
         _context.TickNumber = tick;
 
@@ -161,6 +175,7 @@ public sealed class MapInstance
         foreach (var list in _routed) list.Clear();
         _context.Intents = [];
         TickNumber = tick + 1;
+        Timings.Record((long)Stopwatch.GetElapsedTime(startedAt).TotalMicroseconds);
     }
 
     /// <summary>Posts a structural change from outside the tick (another instance, the world). Thread-safe.</summary>
