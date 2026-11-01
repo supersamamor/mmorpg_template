@@ -72,11 +72,11 @@ public class CombatResolverTests
     }
 
     [Fact]
-    public void Crit_without_content_multiplier_deals_normal_damage()
+    public void Crit_uses_the_content_multiplier()
     {
         var r = new CombatResolver(Rules(), new ScriptedRandom(0.1, 0.0)).Resolve(WardenOnSlime());
         r.Crit.ShouldBeTrue();
-        r.Damage.ShouldBe(70);
+        r.Damage.ShouldBe(105); // floor(70 × 1.5), balance.yaml combat.crit_multiplier
     }
 
     [Fact]

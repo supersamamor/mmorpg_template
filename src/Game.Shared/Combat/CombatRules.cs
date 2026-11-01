@@ -55,8 +55,7 @@ namespace Game.Shared.Combat
         /// <param name="elements">The element table (<c>elements.yaml</c>).</param>
         /// <param name="balance">The combat clamps (<c>balance.yaml</c> <c>combat</c>).</param>
         /// <param name="critMultiplier">
-        /// Critical damage multiplier formula (caster and <c>t_</c> variables allowed). Content has no field for it yet,
-        /// so null means 1: crits still roll and are reported, but deal normal damage.
+        /// Overrides <see cref="CombatBalanceDef.CritMultiplier"/> (tests and what-if tools); null uses the content value.
         /// </param>
         public static CombatRules Compile(FormulaSetDef formulas, ElementTableDef elements, CombatBalanceDef balance,
             string? critMultiplier = null)
@@ -88,7 +87,7 @@ namespace Game.Shared.Combat
                 Formula.Compile(formulas.MagicDamage),
                 Formula.Compile(formulas.HitChance),
                 Formula.Compile(formulas.CritChance),
-                critMultiplier == null ? Formula.Constant(1) : Formula.Compile(critMultiplier),
+                Formula.Compile(critMultiplier ?? balance.CritMultiplier),
                 index, matrix, balance);
         }
 

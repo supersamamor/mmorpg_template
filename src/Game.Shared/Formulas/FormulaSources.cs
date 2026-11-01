@@ -39,6 +39,7 @@ namespace Game.Shared.Formulas
                 new FormulaSource("progression.stat_points_per_base_level", p.StatPointsPerBaseLevel, FormulaSymbols.BaseLevelOnly),
                 new FormulaSource("progression.skill_points_per_job_level", p.SkillPointsPerJobLevel, FormulaSymbols.JobLevelOnly),
                 new FormulaSource("progression.stat_point_cost", p.StatPointCost, FormulaSymbols.StatValueOnly),
+                new FormulaSource("combat.crit_multiplier", balance.Combat.CritMultiplier),
             };
         }
 

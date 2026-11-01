@@ -67,6 +67,8 @@ public class BalanceTests : IDisposable
         balance.Combat.MaxHitChance.ShouldBe(0.95);
         balance.Combat.MinCritChance.ShouldBe(0);
         balance.Combat.MaxCritChance.ShouldBe(0.5);
+        Formula.Compile(balance.Combat.CritMultiplier).TryGetConstant(out var critMultiplier).ShouldBeTrue();
+        critMultiplier.ShouldBe(1.5);
 
         var points = Formula.Compile(balance.Progression.StatPointsPerBaseLevel, FormulaSymbols.BaseLevelOnly);
         var ctx = new FormulaContext(FormulaSymbols.BaseLevelOnly);
@@ -127,6 +129,24 @@ public class BalanceTests : IDisposable
         var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);
         issue.File.ShouldBe("balance.yaml");
         issue.Path.ShouldBe("combat.max_hit_chance");
+    }
+
+    [Fact]
+    public void Crit_multiplier_below_one_is_an_error()
+    {
+        Edit("crit_multiplier: \"1.5\"", "crit_multiplier: \"0.8\"");
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);
+        issue.File.ShouldBe("balance.yaml");
+        issue.Path.ShouldBe("combat.crit_multiplier");
+    }
+
+    [Fact]
+    public void Unknown_variable_in_crit_multiplier_is_an_error()
+    {
+        Edit("crit_multiplier: \"1.5\"", "crit_multiplier: \"1.5 + nope\"");
+        var issue = Validate().Issues.Single(i => i.Code == FormulaErrorCodes.UnknownVariable);
+        issue.File.ShouldBe("balance.yaml");
+        issue.Path.ShouldBe("combat.crit_multiplier");
     }
 
     [Fact]

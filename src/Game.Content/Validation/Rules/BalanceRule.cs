@@ -1,3 +1,5 @@
+using Game.Shared.Formulas;
+
 namespace Game.Content.Validation.Rules;
 
 /// <summary>
@@ -37,6 +39,10 @@ public sealed class BalanceRule : IValidationRule
 
         Chances(context, "hit", c.MinHitChance, c.MaxHitChance);
         Chances(context, "crit", c.MinCritChance, c.MaxCritChance);
+
+        // Only a constant can be range-checked here; FormulaRule reports parse errors.
+        if (Formula.Parse(c.CritMultiplier).Formula is { } crit && crit.TryGetConstant(out var multiplier) && multiplier < 1)
+            Range(context, "combat.crit_multiplier", "must be at least 1, so a critical hit never deals less than a normal one.");
     }
 
     private static void Chances(ValidationContext context, string kind, double min, double max)

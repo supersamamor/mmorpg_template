@@ -133,8 +133,8 @@ public class BalanceGoldenTests
         row.HitChance.ShouldBe(0.95, 1e-9);
         row.CritChance.ShouldBe(0.02, 1e-9);
         row.Min.ShouldBe(70);
-        row.Max.ShouldBe(70);
-        row.Avg.ShouldBe(70, 1e-9);
+        row.Max.ShouldBe(105);          // crit: floor(70 × 1.5)
+        row.Avg.ShouldBe(70.7, 1e-9);   // 0.98 × 70 + 0.02 × 105
         row.HitsToKill.ShouldBe(1);
     }
 

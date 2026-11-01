@@ -27,8 +27,8 @@ the monster's max HP, `swings_to_kill` = hits_to_kill / hit chance (expected att
 The numbers are **exact, not sampled**: hit and crit chances come from the combat resolver, and the two possible damages
 (normal and critical) from resolving once with the crit roll forced below and once above the chance. Magic never misses or crits.
 
-**Known gap:** content has no crit damage multiplier yet, so crits roll but deal ×1. `crit_pct` is reported as the formula says;
-it does not change damage until a multiplier exists.
+Critical damage is the normal damage × `combat.crit_multiplier` from `balance.yaml` (a formula; ×1.5 in the sample),
+floored. `max` is the critical damage, and `avg` weights normal and critical damage by `crit_pct`.
 
 ## 2. Golden snapshots
 

@@ -72,6 +72,10 @@
         "max_crit_chance": {
           "type": "number",
           "description": "Highest critical probability (0–1)."
+        },
+        "crit_multiplier": {
+          "type": "string",
+          "description": "Damage multiplier on a critical hit, as a formula. Caster and t_ variables are allowed (e.g. 1.5 + luk * 0.005); a constant is fine."
         }
       },
       "additionalProperties": false,

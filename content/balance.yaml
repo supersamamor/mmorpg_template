@@ -30,3 +30,5 @@ combat:
   min_crit_chance: 0
   # Crits cap at 50% so they stay a bonus rather than the baseline.
   max_crit_chance: 0.5
+  # A critical hit deals 50% more damage. A formula, so it can scale later (e.g. with luk).
+  crit_multiplier: "1.5"

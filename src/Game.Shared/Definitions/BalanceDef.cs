@@ -65,5 +65,11 @@ namespace Game.Shared.Definitions
 
         /// <summary>Highest critical probability (0–1).</summary>
         public double MaxCritChance { get; init; }
+
+        /// <summary>
+        /// Damage multiplier on a critical hit, as a formula. Caster and <c>t_</c> variables are allowed
+        /// (e.g. <c>1.5 + luk * 0.005</c>); a constant is fine.
+        /// </summary>
+        public string CritMultiplier { get; init; } = string.Empty;
     }
 }
