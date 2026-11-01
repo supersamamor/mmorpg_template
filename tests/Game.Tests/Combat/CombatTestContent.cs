@@ -58,18 +58,7 @@ internal static class CombatTestContent
     }
 
     /// <summary>A monster: primary stats as base values, listed derived stats as overrides (MonsterDef.Stats docs).</summary>
-    public static StatSheet Monster(string monsterId)
-    {
-        var def = Db.Monsters.Get(monsterId);
-        var sheet = new StatSheet(LazyFormulas.Value);
-        sheet.Base.BaseLevel = def.Level;
-        foreach (var pair in def.Stats)
-        {
-            if (PrimaryStats.All.Contains(pair.Key)) sheet.Base[pair.Key] = (int)pair.Value;
-            else sheet.Modifiers.Add("monster", pair.Key, ModifierOp.Override, pair.Value);
-        }
-        return sheet;
-    }
+    public static StatSheet Monster(string monsterId) => new Game.Content.Simulation.BalanceSimulator(Db).Monster(Db.Monsters.Get(monsterId));
 
     /// <summary>An attack with the weapon's inputs and the monster's defensive element, size and race.</summary>
     public static AttackContext Attack(StatSheet attacker, string? weaponId, int refine, string monsterId, StatSheet? defender = null)

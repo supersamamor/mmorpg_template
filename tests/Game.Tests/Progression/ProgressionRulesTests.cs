@@ -28,14 +28,7 @@ public class ProgressionRulesTests
         return result.Database!;
     });
 
-    private sealed class DbContent : IProgressionContent
-    {
-        public bool TryGetJob(string id, out JobDef job) => Db.Value.Jobs.TryGet(id, out job!);
-        public bool TryGetSkill(string id, out SkillDef skill) => Db.Value.Skills.TryGet(id, out skill!);
-        public bool TryGetExpTable(string id, out ExpTableDef table) => Db.Value.ExpTables.TryGet(id, out table!);
-    }
-
-    private static ProgressionRules Rules() => new(Db.Value.Balance, new DbContent());
+    private static ProgressionRules Rules() => new(Db.Value.Balance, new Game.Content.Simulation.ContentProgression(Db.Value));
 
     [Fact]
     public void Limits_come_from_the_tables()
