@@ -60,6 +60,15 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>StatusExpired</c>: StatusExpired event.</summary>
         public const string StatusExpired = "StatusExpired";
 
+        /// <summary><c>EntityEnteredMap</c>: an entity was added to a map instance (spawn or warp arrival).</summary>
+        public const string EntityEnteredMap = "EntityEnteredMap";
+
+        /// <summary><c>EntityLeftMap</c>: an entity was removed from a map instance (despawn or warp departure).</summary>
+        public const string EntityLeftMap = "EntityLeftMap";
+
+        /// <summary><c>WarpRejected</c>: a warp was refused (unknown map or unwalkable target cell); the entity stayed.</summary>
+        public const string WarpRejected = "WarpRejected";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -80,6 +89,9 @@ namespace Game.Shared.Vocabulary
             QuestStepCompleted,
             QuestCompleted,
             StatusApplied,
-            StatusExpired);
+            StatusExpired,
+            EntityEnteredMap,
+            EntityLeftMap,
+            WarpRejected);
     }
 }

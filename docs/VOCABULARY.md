@@ -114,7 +114,8 @@ Sizes: `small`, `medium`, `large`
 `EntitySpawned`, `EntityDied`, `MonsterKilled`, `DamageDealt`, `ItemAcquired`,
 `ItemUsed`, `ItemEquipped`, `NpcTalked`, `MapEntered`, `ZoneEntered`,
 `LevelUp`, `JobLevelUp`, `JobChanged`, `SkillLearned`, `QuestStarted`,
-`QuestStepCompleted`, `QuestCompleted`, `StatusApplied`, `StatusExpired`
+`QuestStepCompleted`, `QuestCompleted`, `StatusApplied`, `StatusExpired`,
+`EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`
 
 ## Currency
 `zeny` (rename freely in data; engine id stays `currency`)

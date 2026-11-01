@@ -54,6 +54,17 @@ code and runtime code generation. `Game.Content` is server/tools only — the cl
  3D render ◄── Snapshot/Delta ──  Outbound per-client deltas (nearby only)
 ```
 
+- **Tick phases.** Each map instance ticks on its own (one thread per instance, 10 Hz, scheduled against its start
+  time). Every tick, in this order:
+  1. **Drain** the intents (and queued spawns/despawns/warp arrivals) that arrived before the tick began, in arrival
+     order; route each intent to the one system that owns its type. Intents for unknown or dead entities are dropped
+     and counted.
+  2. **Systems** run in their fixed registered order (`ITickSystem.Tick(TickContext)`), each seeing its own intents.
+     A system that throws is logged (instance, tick, system) and the tick goes on.
+  3. **Structural changes** (entity add/remove, warp departures) are applied, never mid-system. A warp leaves the source
+     here and joins the target instance in the target's next tick; an unwalkable target cell rejects it.
+  4. **Events** raised this tick are dispatched on the instance's event bus in raise order. Events published by
+     handlers wait for the next tick.
 - **Intents in, state out.** Clients never send results.
 - **3D presentation, 2D simulation.** The server simulates on a cell grid on the ground plane
   (§4). The client turns cells into 3D positions, terrain height, animation and effects.
