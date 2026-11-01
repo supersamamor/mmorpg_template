@@ -95,6 +95,7 @@ Any failure prevents startup and is reported with file + path.
 `JobDef`, `SkillDef`, `ItemDef` (consumable | equip | card | etc), `MonsterDef`,
 `StatusDef` (buffs/debuffs), `QuestDef`, `NpcDef`, `DialogueDef`, `DropTableDef`,
 `MapDef` (metadata + grid reference), `ExpTableDef`, `ElementTableDef`.
+Singleton root files: `FormulaSetDef` (`formulas.yaml`), `BalanceDef` (`balance.yaml`: stat/skill point rules, stat range, damage and chance clamps).
 
 ### 5.3 Maps
 A map has three parts that share its id:
@@ -148,7 +149,8 @@ Quest state per character is persisted as `{questId, stepIndex, counters}`.
 
 ### 6.5 Progression
 Base level + job level, separate EXP tables. Stat points per base level and skill points
-per job level come from data. Job change requirements from `JobDef`.
+per job level, stat point cost, the stat range and combat clamps come from `balance.yaml`
+(`BalanceDef`); the max base level is the base EXP table length + 1. Job change requirements from `JobDef`.
 
 ## 7. Client
 

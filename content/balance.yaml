@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=../schemas/balance.schema.json
+# Tuning numbers that are not per-entity stats (ARCHITECTURE §6.5). Chances are 0-1 probabilities,
+# the same scale the hit_chance / crit_chance formulas in formulas.yaml return.
+name: Lumen Vale balance
+progression:
+  # EXP curve for base levels. Its length sets the max base level (99 entries + 1 = level 99).
+  base_exp_table_id: exp.base
+  # Stat points gained on reaching base level L: 3 early, then 1 more per 10 levels. About 740 points over levels 2-99.
+  stat_points_per_base_level: floor(base_level / 10) + 3
+  # Skill points gained on reaching job level L: one per level, so a 50-level job grants 49 points.
+  skill_points_per_job_level: 1
+  # A new character starts with a small pool so the first choices are visible right away.
+  starting_stat_points: 10
+  # Every primary stat starts at 1 (before job and equipment bonuses).
+  starting_stat_value: 1
+  # Primary stats cap at 99 from points alone; gear and buffs may exceed it.
+  max_stat_value: 99
+  # Cost to raise a stat from its current value by one: 2 points up to 10, rising by 1 every 10 points (2..11).
+  stat_point_cost: floor((stat_value - 1) / 10) + 2
+combat:
+  # A hit that lands always deals at least 1 damage, so heavy armor never makes a target immune.
+  min_damage: 1
+  # Single-hit ceiling that keeps numbers inside display and integer limits.
+  max_damage: 999999
+  # Even a huge level gap leaves a 5% chance to hit.
+  min_hit_chance: 0.05
+  # No attack is guaranteed: at least a 5% chance to miss.
+  max_hit_chance: 0.95
+  # Critical hits can be fully suppressed.
+  min_crit_chance: 0
+  # Crits cap at 50% so they stay a bonus rather than the baseline.
+  max_crit_chance: 0.5

@@ -57,6 +57,8 @@ public static class ValidationCodes
     public const string JobCycle = "job.parent_cycle";
     /// <summary>A dialogue's start or next points at a node that does not exist.</summary>
     public const string DialogueDangling = "dialogue.dangling";
+    /// <summary>A number in <c>balance.yaml</c> is out of range or inconsistent with another.</summary>
+    public const string BalanceRange = "balance.range";
     /// <summary>A rule threw; this is a validator bug, reported so it cannot pass silently.</summary>
     public const string RuleCrashed = "validator.rule_crashed";
 

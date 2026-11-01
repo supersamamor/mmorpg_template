@@ -17,6 +17,15 @@ namespace Game.Shared.Formulas
         /// <summary>Every whitelisted variable (<see cref="FormulaVariables.All"/>).</summary>
         public static readonly FormulaSymbols Default = new FormulaSymbols(FormulaVariables.All);
 
+        /// <summary>Only <c>base_level</c>: formulas awarded per base level.</summary>
+        public static readonly FormulaSymbols BaseLevelOnly = new FormulaSymbols(new VocabularySet(FormulaVariables.BaseLevel));
+
+        /// <summary>Only <c>job_level</c>: formulas awarded per job level.</summary>
+        public static readonly FormulaSymbols JobLevelOnly = new FormulaSymbols(new VocabularySet(FormulaVariables.JobLevel));
+
+        /// <summary>Only <c>stat_value</c>: the stat point cost formula.</summary>
+        public static readonly FormulaSymbols StatValueOnly = new FormulaSymbols(new VocabularySet(FormulaVariables.StatValue));
+
         /// <summary>Creates a symbol table; slot <c>i</c> is <c>variables.Ordered[i]</c>.</summary>
         /// <param name="variables">Allowed variable names.</param>
         public FormulaSymbols(VocabularySet variables)

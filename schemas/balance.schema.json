@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "BalanceDef",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Optional editor-facing name."
+    },
+    "progression": {
+      "type": "object",
+      "properties": {
+        "base_exp_table_id": {
+          "type": "string",
+          "pattern": "^exp\\.[a-z0-9_]+$",
+          "description": "EXP table (exp.*) for base levels. Its length sets the max base level (Exp)."
+        },
+        "stat_points_per_base_level": {
+          "type": "string",
+          "description": "Stat points awarded on reaching a base level. Variable: base_level (the level just reached)."
+        },
+        "skill_points_per_job_level": {
+          "type": "string",
+          "description": "Skill points awarded on reaching a job level. Variable: job_level (the level just reached)."
+        },
+        "starting_stat_points": {
+          "type": "integer",
+          "description": "Stat points a new character starts with."
+        },
+        "starting_stat_value": {
+          "type": "integer",
+          "description": "Value every primary stat starts at."
+        },
+        "max_stat_value": {
+          "type": "integer",
+          "description": "Highest value a primary stat can be raised to (by points, before equipment and buffs)."
+        },
+        "stat_point_cost": {
+          "type": "string",
+          "description": "Stat points needed to raise a stat by one. Variable: stat_value (the stat's current value, before the raise)."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Stat point, skill point and level cap numbers."
+    },
+    "combat": {
+      "type": "object",
+      "properties": {
+        "min_damage": {
+          "type": "integer",
+          "description": "Lowest damage a hit that lands can deal."
+        },
+        "max_damage": {
+          "type": "integer",
+          "description": "Highest damage a single hit can deal."
+        },
+        "min_hit_chance": {
+          "type": "number",
+          "description": "Lowest hit probability (0–1)."
+        },
+        "max_hit_chance": {
+          "type": "number",
+          "description": "Highest hit probability (0–1)."
+        },
+        "min_crit_chance": {
+          "type": "number",
+          "description": "Lowest critical probability (0–1)."
+        },
+        "max_crit_chance": {
+          "type": "number",
+          "description": "Highest critical probability (0–1)."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Damage and chance clamps applied after the combat formulas."
+    }
+  },
+  "additionalProperties": false,
+  "description": "The root of content/balance.yaml: tuning numbers and small formulas that are not per-entity stats (ARCHITECTURE §6.5). A single set per game, so it has no id. Progression and combat code reads its numbers from here instead of hardcoding them."
+}

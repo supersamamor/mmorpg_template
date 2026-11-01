@@ -6,7 +6,8 @@ namespace Game.Shared.Formulas
     /// <summary>One formula string inside a definition.</summary>
     /// <param name="Path">YAML path inside the definition's file, in the loader's format (<c>effects[0].multiplier</c>).</param>
     /// <param name="Text">The formula source.</param>
-    public sealed record FormulaSource(string Path, string Text);
+    /// <param name="Symbols">Narrower variable set this field must compile with, or null for the default whitelist.</param>
+    public sealed record FormulaSource(string Path, string Text, FormulaSymbols? Symbols = null);
 
     /// <summary>
     /// Lists every formula string in a definition, with its YAML path, so validation and engine code can compile
@@ -26,6 +27,19 @@ namespace Game.Shared.Formulas
             list.Add(new FormulaSource("hit_chance", set.HitChance));
             list.Add(new FormulaSource("crit_chance", set.CritChance));
             return list;
+        }
+
+        /// <summary>Formulas in <c>content/balance.yaml</c>, each limited to the one variable that makes sense for it.</summary>
+        /// <param name="balance">The balance set.</param>
+        public static IReadOnlyList<FormulaSource> Of(BalanceDef balance)
+        {
+            var p = balance.Progression;
+            return new[]
+            {
+                new FormulaSource("progression.stat_points_per_base_level", p.StatPointsPerBaseLevel, FormulaSymbols.BaseLevelOnly),
+                new FormulaSource("progression.skill_points_per_job_level", p.SkillPointsPerJobLevel, FormulaSymbols.JobLevelOnly),
+                new FormulaSource("progression.stat_point_cost", p.StatPointCost, FormulaSymbols.StatValueOnly),
+            };
         }
 
         /// <summary>Formulas in a skill: costs, timings, effects and passive modifiers.</summary>

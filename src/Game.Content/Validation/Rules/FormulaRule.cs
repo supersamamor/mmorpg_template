@@ -11,6 +11,9 @@ public sealed class FormulaRule : IValidationRule
     /// <summary>File that holds the <see cref="Game.Shared.Definitions.FormulaSetDef"/>.</summary>
     private const string FormulasFile = "formulas.yaml";
 
+    /// <summary>File that holds the <see cref="Game.Shared.Definitions.BalanceDef"/>.</summary>
+    private const string BalanceFile = "balance.yaml";
+
     /// <inheritdoc />
     public string Name => "formula";
 
@@ -21,6 +24,9 @@ public sealed class FormulaRule : IValidationRule
 
         foreach (var source in FormulaSources.Of(db.Formulas))
             Check(source, (path, code, message) => context.ErrorInFile(FormulasFile, path, code, message));
+
+        foreach (var source in FormulaSources.Of(db.Balance))
+            Check(source, (path, code, message) => context.ErrorInFile(BalanceFile, path, code, message));
 
         foreach (var skill in db.Skills.All) CheckAll(context, skill.Id, FormulaSources.Of(skill));
         foreach (var item in db.Items.All) CheckAll(context, item.Id, FormulaSources.Of(item));
@@ -36,7 +42,7 @@ public sealed class FormulaRule : IValidationRule
 
     private static void Check(FormulaSource source, Action<string, string, string> report)
     {
-        var result = Formula.Parse(source.Text);
+        var result = Formula.Parse(source.Text, source.Symbols);
         foreach (var error in result.Errors)
             report(source.Path, error.Code, $"'{source.Text}' {error}");
     }

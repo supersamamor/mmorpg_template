@@ -20,6 +20,12 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>level</c>: skill level.</summary>
         public const string SkillLevel = "level";
 
+        /// <summary>
+        /// <c>stat_value</c>: current value of the primary stat being raised. Only valid in the stat point cost
+        /// formula (<see cref="Game.Shared.Definitions.ProgressionBalanceDef.StatPointCost"/>), so it is not in <see cref="All"/>.
+        /// </summary>
+        public const string StatValue = "stat_value";
+
         /// <summary><c>t_</c>: prefix that turns a caster variable into the target's (<c>t_def</c>, <c>t_vit</c>).</summary>
         public const string TargetPrefix = "t_";
 
