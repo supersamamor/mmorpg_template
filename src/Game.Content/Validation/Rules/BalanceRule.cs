@@ -6,7 +6,7 @@ namespace Game.Content.Validation.Rules;
 
 /// <summary>
 /// Sanity checks on <c>balance.yaml</c>: ranges are ordered and non-negative, chances stay within 0–1,
-/// the primary stat range holds its starting value, the base EXP table exists, and a new character starts on a walkable
+/// the primary stat range holds its starting value, AI timings are above 0, the base EXP table exists, and a new character starts on a walkable
 /// cell of an existing map in an existing job.
 /// Formulas are checked by <see cref="FormulaRule"/>.
 /// </summary>
@@ -58,6 +58,7 @@ public sealed class BalanceRule : IValidationRule
         if (balance.Aoi.ViewRadius <= 0)
             Range(context, "aoi.view_radius", "must be above 0.");
 
+        Ai(context, balance.Ai);
         NewCharacter(context, balance.NewCharacter);
     }
 
@@ -84,6 +85,25 @@ public sealed class BalanceRule : IValidationRule
         else if (!grid.IsWalkable(n.StartX, n.StartY))
             context.ErrorInFile(File, "new_character.start_x", ValidationCodes.GridCellBlocked,
                 $"balance.yaml new_character start cell ({n.StartX}, {n.StartY}) is not walkable on {grid.MapId}.");
+    }
+
+    /// <summary>Every AI timing and distance is above 0, and the wander pause range is ordered.</summary>
+    private static void Ai(ValidationContext context, AiBalanceDef a)
+    {
+        if (a.ThinkIntervalMs <= 0)
+            Range(context, "ai.think_interval_ms", "must be above 0.");
+        if (a.WanderPauseMinMs <= 0)
+            Range(context, "ai.wander_pause_min_ms", "must be above 0.");
+        if (a.WanderPauseMaxMs <= 0)
+            Range(context, "ai.wander_pause_max_ms", "must be above 0.");
+        else if (a.WanderPauseMaxMs < a.WanderPauseMinMs)
+            Range(context, "ai.wander_pause_max_ms", $"must not be below wander_pause_min_ms ({a.WanderPauseMinMs}).");
+        if (a.WanderRadius <= 0)
+            Range(context, "ai.wander_radius", "must be above 0.");
+        if (a.RepathIntervalMs <= 0)
+            Range(context, "ai.repath_interval_ms", "must be above 0.");
+        if (a.ReturnTimeoutMs <= 0)
+            Range(context, "ai.return_timeout_ms", "must be above 0.");
     }
 
     private static void Chances(ValidationContext context, string kind, double min, double max)

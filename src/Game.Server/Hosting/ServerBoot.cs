@@ -3,6 +3,7 @@ using Game.Content.Registry;
 using Game.Content.Validation;
 using Game.Server.World;
 using Game.Server.World.Aoi;
+using Game.Server.World.Monsters;
 
 namespace Game.Server.Hosting;
 
@@ -127,16 +128,22 @@ public static class ContentBoot
 public static class ServerPipeline
 {
     /// <summary>
-    /// Movement is first, so later systems (combat) see this tick's positions. The AOI does its work in phase 5 (outbound), after every
-    /// system, so its place in the list only orders its intents; it is last.
+    /// Order: movement first, so later systems see this tick's positions. Then the monster spawner (fills and refills the map's spawn
+    /// slots; new monsters appear in phase 3) and the monster AI, which decides from this tick's positions: its move intents apply in the
+    /// next tick's movement, and its attack requests are events for combat (T-302, which goes after the AI). The AOI does its work in
+    /// phase 5 (outbound), after every system, so its place in the list only orders its intents; it is last.
     /// </summary>
     public static SystemPipeline Create(ContentDatabase content)
     {
         var balance = content.Balance;
-        MovementSystem.Create(balance); // fails now, at boot, if the movement limits are unusable
-        AoiSystem.Create(balance);      // likewise for the AOI numbers
+        var monsters = MonsterCatalog.From(content);
+        MovementSystem.Create(balance);            // fails now, at boot, if the movement limits are unusable
+        MonsterAiSystem.Create(monsters, balance); // likewise for the AI timings
+        AoiSystem.Create(balance);                 // and the AOI numbers
         return new SystemPipeline()
             .Add(() => MovementSystem.Create(balance))
+            .Add(() => new MonsterSpawnerSystem(monsters))
+            .Add(() => MonsterAiSystem.Create(monsters, balance))
             .Add(() => AoiSystem.Create(balance));
     }
 }

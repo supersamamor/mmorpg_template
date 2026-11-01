@@ -81,6 +81,15 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>MoveRejected</c>: a move request was refused, with a reason; the entity did not change course.</summary>
         public const string MoveRejected = "MoveRejected";
 
+        /// <summary><c>AggroGained</c>: a monster took a target (reason: an <c>AggroReasons</c> term).</summary>
+        public const string AggroGained = "AggroGained";
+
+        /// <summary><c>AggroLost</c>: a monster dropped its target and heads home (reason: an <c>AggroReasons</c> term).</summary>
+        public const string AggroLost = "AggroLost";
+
+        /// <summary><c>AttackRequested</c>: a monster decided to auto-attack its target; combat resolves it.</summary>
+        public const string AttackRequested = "AttackRequested";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -108,6 +117,9 @@ namespace Game.Shared.Vocabulary
             MovementStarted,
             CellReached,
             MovementStopped,
-            MoveRejected);
+            MoveRejected,
+            AggroGained,
+            AggroLost,
+            AttackRequested);
     }
 }

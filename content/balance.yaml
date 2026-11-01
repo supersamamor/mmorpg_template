@@ -53,3 +53,16 @@ new_character:
   start_facing: n
   # Everyone starts as a Wanderer and picks a job later (the job is also what other players see them as until gear exists).
   start_job_id: job.novice
+ai:
+  # An awake aggressive monster looks around for a player three times a second: quick enough that walking into its range feels
+  # immediate, and a fraction of the per-tick work of scanning every tick.
+  think_interval_ms: 300
+  # Idle monsters pause 4 to 10 seconds between short strolls, so a field looks alive without everything moving at once.
+  wander_pause_min_ms: 4000
+  wander_pause_max_ms: 10000
+  # A stroll ends at most 4 cells from the monster's home cell, so monsters stay in their spawn area.
+  wander_radius: 4
+  # A chasing monster re-plans its path at most twice a second; between searches it keeps walking the last path.
+  repath_interval_ms: 500
+  # A monster that gave up a chase walks home; if it is not home after 15 seconds (blocked, path too long), it is put back there.
+  return_timeout_ms: 15000

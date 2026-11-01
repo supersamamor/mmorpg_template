@@ -225,6 +225,34 @@ Base level + job level, separate EXP tables. Stat points per base level and skil
 per job level, stat point cost, the stat range and combat clamps come from `balance.yaml`
 (`BalanceDef`); the max base level is the base EXP table length + 1. Job change requirements from `JobDef`.
 
+### 6.6 Monster AI
+Two systems in `Game.Server/World/Monsters`, after movement in the tick (`ServerPipeline`: movement, `monster_spawner`, `monster_ai`, …, AOI).
+
+- **Spawner.** On an instance's first tick every `spawns` entry of the grid gets `count` monsters on random walkable cells of its
+  area (the instance's seeded random). A monster is a `Monster` entity with `DefinitionId` = its monster id and a stat sheet from the
+  stats pipeline (primary stats as base, listed derived stats as overrides); its spawn cell is its **home** (`EntitySpawned`). Each entry
+  has `count` slots, so it never holds more. On `EntityDied` (combat) the spawner despawns the monster and refills the slot
+  `respawn_seconds` of simulated time after the tick of the death, anywhere in the area. Respawn timers always run.
+- **State machine** (`AiStates`), per monster, in entity id order; numbers from `MonsterDef` (`ai.*`, `attack_range`, `aspd`) and
+  `balance.yaml` `ai` (think, wander, re-path, return timeout):
+
+  ```
+  idle ──pause (wander_pause_min..max)──► wander ──arrived──► idle
+   │  aggressive: nearest player within aggro_range with line of sight (every think_interval)   ┐
+   │  or hit (DamageDealt)                                                                        ├─► chase  (AggroGained)
+  wander ─────────── same ─────────────────────────────────────────────────────────────────────── ┘
+  chase ──Chebyshev ≤ attack_range──► attack ──out of range──► chase      (re-path ≤ every repath_interval)
+  attack: one AttackRequested per 1000 / aspd ms
+  chase / attack ──target gone or dead · farther than chase_range from home · no path──► return (AggroLost)
+  return ──home──► idle   (ignores players and hits; after return_timeout it is put on its home cell)
+  ```
+- **The AI only decides.** It walks with `MoveTo` / `StopMove` intents (applied on the next tick) and follows the movement events; it asks
+  combat to attack with the `AttackRequested` event (attacker, target, both cells, range, time). Combat resolves the hit and publishes
+  `DamageDealt` / `EntityDied`, which the AI and the spawner listen to. Nobody calls another system.
+- **Dormancy.** An `idle` or `wander` monster that no player could be seeing (no player's AOI window, `aoi.view_radius` buckets of
+  `aoi.bucket_size`, covers its bucket) does nothing. Players come from the instance's player list (`MapInstance.Players`), bucketed once per
+  AI tick, so the cost is O(players) plus a few bucket reads per awake monster, never O(entities). A dormant map allocates nothing per tick.
+
 ## 7. Client
 
 ### 7.1 Platforms & rendering
