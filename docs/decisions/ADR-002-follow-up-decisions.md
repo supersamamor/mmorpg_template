@@ -135,7 +135,7 @@ When writing these prompts, copy in the decisions listed:
 - **T-206:** 65, 66, 67, 87, 102
 - **T-207:** 31
 - **T-305:** 73
-- **T-401:** 15, 68, 85, 99 (`new_character.start_items`)
+- **T-401:** 15, 68, 85, 99 (`new_character.start_items`), 106
 - **T-403:** 72
 - **T-501:** 14, 93
 - **T-502:** 14
@@ -189,3 +189,12 @@ When writing these prompts, copy in the decisions listed:
 | 100 | 62 ms combat tick on the first kill (first-run JIT in the reward path) (T-307) | **→ T-214:** the load test reports p99 after warm-up. If it is still over 50 ms, warm the hot paths at boot with a scratch instance tick. |
 | 101 | Hits are lost while a client catches up after falling behind; the following snapshot restores state (T-307) | **Decided: acceptable.** Hits are cosmetic; HP, death and drops are state and arrive in the snapshot. T-214 documents it in §10. |
 | 102 | The client receives a snapshot where its own character is already dead after a resume (T-307) | **→ T-206:** show the death screen with the respawn button straight from the snapshot. |
+
+## Addendum — T-111 (2026-11-02)
+| # | Question (source) | Decision |
+|---|---|---|
+| 103 | The starting class id `job.novice` is Ragnarok's class name (display name is already "Wanderer") (T-111) | **→ new T-112:** rename it to `job.wanderer`, with its EXP table and asset keys. Golden values must not change. |
+| 104 | `job.swordsman` appears as an example id in comments, a schema description and VOCABULARY.md (T-111) | **→ T-112:** use the real sample id `job.warden`. |
+| 105 | `BannedSymbolsTests` failed once in a full parallel run (nested `dotnet build`) (T-111) | **→ T-112:** find the root cause and fix it; prove it with five full runs. |
+| 106 | Show `currency_name` (crowns) in the client bundle and HUD (T-111) | **→ T-401:** with the first currency UI, plus a bundle format bump. |
+| 107 | Twin Strike level 1 is now exactly 1.0× an auto-attack; 80 golden keys moved by the +0.3× step (T-111) | **Decided: accepted.** T-309 re-checks early-game matchups on top of it. |

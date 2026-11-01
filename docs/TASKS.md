@@ -50,6 +50,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-109 | Balance constants (`BalanceDef` + `balance.yaml`) | Claude Code | Sonnet 5.5 | [T-109](../tasks/prompts/T-109.md) | T-103 | Review | Added: T-105/T-106 need it |
 | T-110 | Tooling guardrails: CI workflow, banned-API + AOT analyzers on `Game.Shared`, schema-checked `validate`, `[Formula]` marker | Claude Code | Sonnet 5.5 | [T-110](../tasks/prompts/T-110.md) | T-102, T-103, T-107, T-209 | Review | ADR-002 #2–9, 17, 19, 23 |
 | T-111 | Vocabulary + content hygiene: `zeny` → `currency` (original name), drop `MapEntered`, start-job and reach-cell checks, Twin Strike level 1 | Claude Code | Sonnet 5.5 | [T-111](../tasks/prompts/T-111.md) | T-302, T-110 | Review | Starts after T-302 and T-110 merge; ADR-002 #11–22, 29 |
+| T-112 | Naming cleanup: `job.novice` → `job.wanderer`, neutral `job.swordsman` examples; robust `BannedSymbolsTests` | Claude Code | Sonnet 5.5 | [T-112](../tasks/prompts/T-112.md) | T-111 | Ready | ADR-002 #103–105 |
 
 ## Phase 2 — World slice
 
@@ -75,7 +76,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-302 | Auto-attack, death, EXP distribution, drops | Claude Code | Opus 5.5 | [T-302](../tasks/prompts/T-302.md) | T-105, T-106, T-301 | Review | Server world only; wire side (attack messages, HP and ground items in views) is a follow-up in `Net/**` |
 | T-307 | Combat over the wire: attack/respawn messages, HP fraction + dead flag + ground items in views, hits batch, own EXP/HP | Claude Code | Opus 5.5 | [T-307](../tasks/prompts/T-307.md) | T-302, T-205, T-204 | Review | Restricted `Net/**` — **approved by owner 2026-11-02**; ADR-002 #60 |
 | T-308 | Combat + AI polish: HP/SP regen, heal on return, corpse time, only players trigger warps | Claude Code | Sonnet 5.5 | [T-308](../tasks/prompts/T-308.md) | T-302 | Review | Starts after T-302 merges; ADR-002 #37–39 |
-| T-309 | Early-game balance: a new character beats a Gel Slime without spending points; pinned matchups + seeded duel sim | Claude Code | Sonnet 5.5 | [T-309](../tasks/prompts/T-309.md) | T-307, T-111 | Ready | Found by the T-307 smoke test; ADR-002 #99 |
+| T-309 | Early-game balance: a new character beats a Gel Slime without spending points; pinned matchups + seeded duel sim | Claude Code | Sonnet 5.5 | [T-309](../tasks/prompts/T-309.md) | T-307, T-112 | Ready | Found by the T-307 smoke test; ADR-002 #99 |
 
 ## Phase 7 — Persistence & accounts
 
