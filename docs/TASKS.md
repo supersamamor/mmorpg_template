@@ -53,7 +53,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
 | T-201 | Map grid loader (`.grid.json` + MapDef: collision, spawns, warps) | Claude Code | Sonnet 5.5 | [T-201](../tasks/prompts/T-201.md) | T-101, T-102 | Review | Defines the grid format T-208 must export |
-| T-202 | Tick loop + map instances + event bus | Claude Code | Opus 5.5 | [T-202](../tasks/prompts/T-202.md) | T-201 | Ready | Tier R review recommended (concurrency) |
+| T-202 | Tick loop + map instances + event bus | Claude Code | Opus 5.5 | [T-202](../tasks/prompts/T-202.md) | T-201 | Review | Tier R review recommended (concurrency) |
 | T-203 | A* pathfinding + 8-direction grid movement, LOS | Claude Code | Sonnet 5.5 | [T-203](../tasks/prompts/T-203.md) | T-201 | Review | Pure `Game.Shared`; wired in by T-212 |
 
 ## Backlog (prompts written when the previous phase is Done)
