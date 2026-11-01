@@ -42,7 +42,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-102 | Cross-reference validator + `validate` CLI | Claude Code | Sonnet 5.5 | [T-102](../tasks/prompts/T-102.md) | T-101 | Review | |
 | T-103 | Formula evaluator (sandboxed, whitelisted vars) | Claude Code | Opus 5.5 | [T-103](../tasks/prompts/T-103.md) | T-101 | Review | |
 | T-104 | Stat / modifier pipeline | Claude Code | Opus 5.5 | [T-104](../tasks/prompts/T-104.md) | T-103 | Review | |
-| T-105 | Leveling, EXP tables, stat & skill points | Claude Code | Sonnet 5.5 | [T-105](../tasks/prompts/T-105.md) | T-104, T-109 | Ready | |
+| T-105 | Leveling, EXP tables, stat & skill points | Claude Code | Sonnet 5.5 | [T-105](../tasks/prompts/T-105.md) | T-104, T-109 | Review | |
 | T-106 | Combat resolution (hit/crit/element/damage) | Claude Code | Opus 5.5 | [T-106](../tasks/prompts/T-106.md) | T-104, T-109 | Ready | |
 | T-107 | Golden-value tests + `stats` balance report | Claude Code | Sonnet 5.5 | [T-107](../tasks/prompts/T-107.md) | T-105, T-106 | Ready | |
 | T-108 | Independent review of Phase 0–1 | Codex | default | [T-108](../tasks/prompts/T-108.md) | T-107 | Ready | Findings → new tasks |
