@@ -43,11 +43,13 @@ public class PathfinderBudgetTests
 
         const int runs = 200;
         var watch = System.Diagnostics.Stopwatch.StartNew();
-        var before = GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < runs; i++)
             if (finder.FindPath(sealedMap, start, goal, limits, path) != PathStatus.NoPath) throw new InvalidOperationException("expected no path");
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         watch.Stop();
+        var allocated = AllocationProbe.MinAllocatedBytes(() =>
+        {
+            for (var i = 0; i < runs; i++) finder.FindPath(sealedMap, start, goal, limits, path);
+        });
 
         var watch2 = System.Diagnostics.Stopwatch.StartNew();
         PathStatus farStatus = default;

@@ -168,7 +168,6 @@ public class SampleContentFormulaTests(ITestOutputHelper output)
 
         var refine = FormulaSymbols.Default.SlotOf("refine");
         var watch = new Stopwatch();
-        var allocatedBefore = GC.GetAllocatedBytesForCurrentThread();
         watch.Start();
         for (var i = 0; i < 1_000_000; i++)
         {
@@ -176,7 +175,14 @@ public class SampleContentFormulaTests(ITestOutputHelper output)
             sum += formula.Evaluate(context);
         }
         watch.Stop();
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - allocatedBefore;
+        var allocated = AllocationProbe.MinAllocatedBytes(() =>
+        {
+            for (var i = 0; i < 100_000; i++)
+            {
+                context[refine] = i & 15;
+                sum += formula.Evaluate(context);
+            }
+        });
 
         output.WriteLine($"1M evaluations: {watch.Elapsed.TotalMilliseconds:F0} ms, {allocated} bytes allocated");
         sum.ShouldBeGreaterThan(0);

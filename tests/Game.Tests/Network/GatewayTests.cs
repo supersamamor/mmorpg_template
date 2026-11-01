@@ -255,11 +255,18 @@ public class GatewayTests
         await using var rig = await GatewayRig.StartAsync(o => o with { RateLimitBurst = 4, RateLimitPerSecond = 4, RateLimitDropsBeforeBye = 3 });
         var client = await rig.JoinAsync();
         var session = rig.SessionOf(client.Id);
+        // `hello` took one token, so round 0 drops 2 pings; later rounds start full and drop 1. The drops are the last pings of a round,
+        // so waiting for the exact running total means the whole round was processed before the clock moves (waiting for `>= round + 1`
+        // let round 1's pings land after the refill of round 2 and trip the bye).
+        var expectedDrops = 2L;
         for (var round = 0; round < 3; round++)
         {
-            for (var i = 0; i < 5; i++) await client.SendAsync(new PingMessage(i)); // 1-2 dropped each round
-            await Poll.UntilAsync(() => session.RateLimited, n => n >= round + 1, "drops");
+            for (var i = 0; i < 5; i++) await client.SendAsync(new PingMessage(i));
+            var expected = expectedDrops;
+            await Poll.UntilAsync(() => session.RateLimited, n => n >= expected, "drops");
+            session.RateLimited.ShouldBe(expected);
             rig.Clock.Advance(2_000);                                                // full again
+            expectedDrops += 1;
         }
         client.Closed.ShouldBeFalse();
     }

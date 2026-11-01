@@ -279,14 +279,13 @@ public class StatPipelineTests
             ("sp_regen", "0.1 + int * 0.03 + base_level * 0.01"), ("weight_limit", "2000 + str * 30 + base_level * 10"));
         for (var i = 0; i < 12; i++) sheet.Modifiers.Add("src" + (i % 4), i % StatIndex.Count, (ModifierOp)(i % 2), i);
         var maxHp = StatIndex.IndexOf(DerivedStats.MaxHp);
-        sheet.Get(maxHp); // warm up (JIT, static slot tables)
-
-        var before = GC.GetAllocatedBytesForCurrentThread();
-        for (var i = 0; i < 1000; i++)
+        AllocationProbe.MinAllocatedBytes(() =>
         {
-            sheet.Base.BaseLevel = i;
-            sheet.Get(maxHp);
-        }
-        (GC.GetAllocatedBytesForCurrentThread() - before).ShouldBe(0);
+            for (var i = 0; i < 1000; i++)
+            {
+                sheet.Base.BaseLevel = i;
+                sheet.Get(maxHp);
+            }
+        }).ShouldBe(0);
     }
 }
