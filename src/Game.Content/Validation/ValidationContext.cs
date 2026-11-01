@@ -33,6 +33,12 @@ public sealed class ValidationContext
     /// <summary>The audio data of the theme manifest, or null when the caller did not load it (the manifest checks are then skipped).</summary>
     public AudioManifest? Audio { get; }
 
+    /// <summary>Manifest metadata (<c>rig</c>, <c>attach</c>) of an asset key. Null when the key is unknown, or when the key set was built without metadata (then metadata checks are skipped).</summary>
+    public AssetInfo? InfoOf(string key) => (AssetKeys as AssetKeySet)?.InfoOf(key);
+
+    /// <summary>True when <see cref="AssetKeys"/> carries manifest metadata (it does when loaded by <see cref="AssetManifest.LoadKeys"/>).</summary>
+    public bool HasAssetInfo => AssetKeys is AssetKeySet;
+
     /// <summary>Issues reported so far.</summary>
     public IReadOnlyList<ValidationIssue> Issues => _issues;
 

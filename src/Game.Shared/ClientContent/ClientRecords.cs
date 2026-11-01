@@ -168,6 +168,40 @@ namespace Game.Shared.ClientContent
         string Id, string Name, string SceneAssetKey, string? MusicAssetKey, string? AmbienceAssetKey, int Width, int Height, string Cells,
         IReadOnlyList<ClientWarp> Warps, IReadOnlyList<ClientNpcPlacement> Npcs, IReadOnlyList<ClientZone> Zones);
 
+    /// <summary>A face or hairstyle option of a gender.</summary>
+    /// <param name="Id">Option id (<c>face.*</c> or <c>hair.*</c>).</param>
+    /// <param name="Name">Display name.</param>
+    /// <param name="ModelAssetKey">Model key.</param>
+    public sealed record ClientAppearanceOption(string Id, string Name, string ModelAssetKey);
+
+    /// <summary>A skin tone or hair colour.</summary>
+    /// <param name="Id">Option id (<c>skin.*</c> or <c>haircolor.*</c>).</param>
+    /// <param name="Name">Display name.</param>
+    /// <param name="Color">Colour as <c>#RRGGBB</c>.</param>
+    public sealed record ClientColorOption(string Id, string Name, string Color);
+
+    /// <summary>What one gender offers at character creation.</summary>
+    /// <param name="Gender">A <c>Genders</c> term.</param>
+    /// <param name="Name">Display name.</param>
+    /// <param name="BodyModelAssetKey">Body model key.</param>
+    /// <param name="Faces">Faces, in content order.</param>
+    /// <param name="Hairstyles">Hairstyles, in content order.</param>
+    /// <param name="DefaultFaceId">Face a new character starts with.</param>
+    /// <param name="DefaultHairstyleId">Hairstyle a new character starts with.</param>
+    public sealed record ClientGender(
+        string Gender, string Name, string BodyModelAssetKey, IReadOnlyList<ClientAppearanceOption> Faces,
+        IReadOnlyList<ClientAppearanceOption> Hairstyles, string DefaultFaceId, string DefaultHairstyleId);
+
+    /// <summary>The character-creation options (cosmetic only).</summary>
+    /// <param name="Genders">One entry per gender, in <c>Genders</c> order.</param>
+    /// <param name="SkinTones">Skin tone palette, in content order.</param>
+    /// <param name="DefaultSkinToneId">Skin tone a new character starts with.</param>
+    /// <param name="HairColors">Hair colour palette, in content order.</param>
+    /// <param name="DefaultHairColorId">Hair colour a new character starts with.</param>
+    public sealed record ClientAppearance(
+        IReadOnlyList<ClientGender> Genders, IReadOnlyList<ClientColorOption> SkinTones, string DefaultSkinToneId,
+        IReadOnlyList<ClientColorOption> HairColors, string DefaultHairColorId);
+
     /// <summary>The whole client bundle (without its hash; the hash belongs to the file, see <c>ClientBundleWriter</c>).</summary>
     /// <param name="FormatVersion">The bundle format; the client refuses versions it does not know.</param>
     /// <param name="Elements">Element ids for labels, sorted.</param>
@@ -181,13 +215,14 @@ namespace Game.Shared.ClientContent
     /// <param name="Dialogues">Dialogues, by id.</param>
     /// <param name="Quests">Quests, by id.</param>
     /// <param name="Maps">Maps, by id.</param>
+    /// <param name="Appearance">Character-creation options.</param>
     public sealed record ClientBundle(
         int FormatVersion, IReadOnlyList<string> Elements, IReadOnlyList<string> Stats, IReadOnlyList<ClientItem> Items,
         IReadOnlyList<ClientSkill> Skills, IReadOnlyList<ClientJob> Jobs, IReadOnlyList<ClientStatus> Statuses,
         IReadOnlyList<ClientMonster> Monsters, IReadOnlyList<ClientNpc> Npcs, IReadOnlyList<ClientDialogue> Dialogues,
-        IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps)
+        IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps, ClientAppearance Appearance)
     {
         /// <summary>The format this build writes and reads.</summary>
-        public const int CurrentFormatVersion = 2;
+        public const int CurrentFormatVersion = 3;
     }
 }

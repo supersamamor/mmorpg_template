@@ -51,6 +51,7 @@ public static class ContentLoader
         var formulas = ctx.LoadSingleton<FormulaSetDef>(ContentLayout.FormulasFile);
         var elements = ctx.LoadSingleton<ElementTableDef>(ContentLayout.ElementsFile);
         var balance = ctx.LoadSingleton<BalanceDef>(ContentLayout.BalanceFile);
+        var appearance = ctx.LoadSingleton<AppearanceDef>(ContentLayout.AppearanceFile);
 
         ctx.ReportUnexpectedFiles();
 
@@ -76,7 +77,7 @@ public static class ContentLoader
             new Registry<JobDef>(jobs), new Registry<SkillDef>(skills), new Registry<ItemDef>(items),
             new Registry<MonsterDef>(monsters), new Registry<StatusDef>(statuses), new Registry<QuestDef>(quests),
             new Registry<NpcDef>(npcs), new Registry<DialogueDef>(dialogue), new Registry<DropTableDef>(drops),
-            new Registry<MapDef>(maps), new Registry<ExpTableDef>(expTables), formulas!, elements!, balance!, ctx.Sources, grids);
+            new Registry<MapDef>(maps), new Registry<ExpTableDef>(expTables), formulas!, elements!, balance!, appearance!, ctx.Sources, grids);
         return new LoadResult(db, errors);
     }
 
@@ -146,7 +147,7 @@ public static class ContentLoader
             {
                 Add(Rel(file), 0, 0, "", ContentErrorCodes.FileUnexpected,
                     "YAML file is outside the content layout (" + string.Join("/, ", ContentLayout.Folders.Keys) + "/, or the root files " +
-                    $"{ContentLayout.FormulasFile}, {ContentLayout.ElementsFile}, {ContentLayout.BalanceFile}, {ContentLayout.ExpTablesFile}) and was not loaded.");
+                    $"{ContentLayout.FormulasFile}, {ContentLayout.ElementsFile}, {ContentLayout.BalanceFile}, {ContentLayout.AppearanceFile}, {ContentLayout.ExpTablesFile}) and was not loaded.");
             }
         }
 

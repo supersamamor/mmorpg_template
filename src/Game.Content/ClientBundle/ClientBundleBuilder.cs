@@ -26,7 +26,20 @@ public static class ClientBundleBuilder
         content.Npcs.All.Select(n => new ClientNpc(n.Id, n.Name, n.Title, n.DialogueId, n.ModelAssetKey, n.PortraitAssetKey)).ToList(),
         content.Dialogue.All.Select(Dialogue).ToList(),
         content.Quests.All.Select(q => new ClientQuest(q.Id, q.Name, q.Description, q.GiverNpcId, q.Steps.Select(s => s.Description ?? "").ToList())).ToList(),
-        content.Maps.All.Select(m => Map(m, content.GetGrid(m.Id))).ToList());
+        content.Maps.All.Select(m => Map(m, content.GetGrid(m.Id))).ToList(),
+        Appearance(content.Appearance));
+
+    private static ClientAppearance Appearance(AppearanceDef a) => new(
+        Genders.All.Where(a.Genders.ContainsKey).Select(g =>
+        {
+            var d = a.Genders[g];
+            return new ClientGender(g, d.Name, d.BodyModelAssetKey,
+                d.Faces.Select(f => new ClientAppearanceOption(f.Id, f.Name, f.ModelAssetKey)).ToList(),
+                d.Hairstyles.Select(h => new ClientAppearanceOption(h.Id, h.Name, h.ModelAssetKey)).ToList(),
+                d.Default.FaceId, d.Default.HairstyleId);
+        }).ToList(),
+        a.SkinTones.Select(c => new ClientColorOption(c.Id, c.Name, c.Color)).ToList(), a.DefaultSkinToneId,
+        a.HairColors.Select(c => new ClientColorOption(c.Id, c.Name, c.Color)).ToList(), a.DefaultHairColorId);
 
     private static ClientMonster Monster(MonsterDef monster)
     {

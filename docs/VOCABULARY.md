@@ -20,6 +20,19 @@ Add new terms here in the same change that introduces them.
 
 Ids: lowercase, `a-z0-9_`, one prefix. Display names are separate fields.
 
+## Appearance option namespaces
+Options defined inside `content/appearance.yaml` (ARCHITECTURE §7.5.1), not registry definitions. Unique in the file; cosmetic only.
+
+| Prefix       | Option       | Example              |
+|--------------|--------------|----------------------|
+| `face.`      | Face variant | `face.male_calm`     |
+| `hair.`      | Hairstyle    | `hair.male_crop`     |
+| `skin.`      | Skin tone    | `skin.fair`          |
+| `haircolor.` | Hair colour  | `haircolor.chestnut` |
+
+## Genders
+`male`, `female` (character creation; one body type and rig each; cosmetic only)
+
 ## Asset key prefixes
 | Prefix      | Asset                                              |
 |-------------|----------------------------------------------------|

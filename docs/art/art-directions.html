@@ -1,0 +1,288 @@
+<title>Lumen Vale Art Directions</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a narrow reading column on top, then a two-up grid of live 3D style samples, then a comparison table. */
+:root{
+  --bg:#f3f5ef; --surface:#ffffff; --ink:#1d2721; --muted:#5b665e; --line:#d9ded4;
+  --accent:#2f6f5e; --accent-soft:#e1eee8; --warn:#8a5a12; --warn-soft:#f6ecd9;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141a16; --surface:#1c241f; --ink:#e7ece6; --muted:#a3ada5; --line:#2e3a32;
+  --accent:#7cc7b0; --accent-soft:#1f3a31; --warn:#e2b768; --warn-soft:#3a2f1a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141a16; --surface:#1c241f; --ink:#e7ece6; --muted:#a3ada5; --line:#2e3a32;
+  --accent:#7cc7b0; --accent-soft:#1f3a31; --warn:#e2b768; --warn-soft:#3a2f1a; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font:400 16px/1.6 var(--body)}
+.wrap{max-width:1120px;margin:0 auto;padding-block:40px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:40px}
+header{display:flex;flex-direction:column;gap:12px;max-width:68ch}
+.eyebrow{font:500 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+h1{font:700 clamp(32px,5vw,52px)/1.05 var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font:700 26px/1.15 var(--display);margin:0;text-wrap:balance}
+h3{font:600 15px/1.3 var(--body);margin:0}
+p{margin:0}
+.lede{font-size:18px;color:var(--muted)}
+.note{display:flex;gap:10px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--muted);font-size:14px}
+.note b{color:var(--ink);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px}
+@media (max-width:820px){.grid{grid-template-columns:minmax(0,1fr)}}
+.opt{display:flex;flex-direction:column;gap:14px;min-width:0}
+.stage{position:relative;aspect-ratio:16/9;max-width:100%;border-radius:14px;overflow:hidden;background:#9cc6d8;border:1px solid var(--line)}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.stage.pixel canvas{image-rendering:pixelated}
+.tag{position:absolute;left:10px;top:10px;font:500 12px/1 var(--mono);background:rgba(15,20,17,.72);color:#fff;padding:6px 8px;border-radius:6px}
+.head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.letter{font:500 13px/1 var(--mono);color:var(--muted)}
+.pick{font:600 12px/1 var(--body);color:var(--accent);background:var(--accent-soft);padding:5px 8px;border-radius:999px}
+.pitch{color:var(--muted)}
+.meters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.m{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--surface);display:flex;flex-direction:column;gap:6px}
+.m span{font:500 11px/1 var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.dots{display:flex;gap:4px}
+.dots i{width:14px;height:6px;border-radius:2px;background:var(--line)}
+.dots i.on{background:var(--accent)}
+.dots.cost i.on{background:var(--warn)}
+.pc{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;font-size:14px}
+@media (max-width:480px){.pc,.meters{grid-template-columns:minmax(0,1fr)}}
+.pc ul{margin:6px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px;color:var(--muted)}
+.tablebox{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:500 12px/1.2 var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+tr:last-child td{border-bottom:0}
+td:first-child{font-weight:600;white-space:nowrap}
+section.next{display:flex;flex-direction:column;gap:12px;max-width:72ch}
+section.next ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;color:var(--muted)}
+code{font:400 13px var(--mono);background:var(--accent-soft);color:var(--ink);padding:1px 5px;border-radius:4px}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Lumen Vale · art direction · decide later</div>
+    <h1>Four ways Starter Meadow could look</h1>
+    <p class="lede">The same corner of the meadow, the same fixed 3/4 camera, rendered live in four art styles: a Novice with a sword, two Gel Slimes, the guide, a pond, trees, rocks and a fence line, plus the tap-to-move marker.</p>
+    <div class="note"><span>i</span><span><b>These are style samples, not game screenshots.</b> They run in your browser with simple shapes so only the lighting, shading and palette differ between options. Final models will be sculpted in Blender per the style you pick, and the theme system means the choice can be changed later without touching code or content.</span></div>
+  </header>
+
+  <div class="grid">
+    <article class="opt">
+      <div class="stage" data-style="toon"><span class="tag">A · toon</span></div>
+      <div class="head"><h2>Cel-shaded toon</h2><span class="pick">My pick</span></div>
+      <p class="pitch">Flat bands of light and shadow with ink outlines. Bright, cheerful and very easy to read on a small screen.</p>
+      <div class="meters">
+        <div class="m"><span>Phone readability</span><div class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div></div>
+        <div class="m"><span>GPU cost</span><div class="dots cost"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div></div>
+        <div class="m"><span>Art effort</span><div class="dots cost"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div></div>
+      </div>
+      <div class="pc">
+        <div><h3>Works well</h3><ul><li>Silhouettes pop at 3/4 distance</li><li>Ages well; no chase for realism</li><li>Cheap shader, mobile friendly</li></ul></div>
+        <div><h3>Watch out</h3><ul><li>Outlines add draw calls; keep them to characters</li><li>Needs a consistent colour script</li></ul></div>
+      </div>
+    </article>
+
+    <article class="opt">
+      <div class="stage" data-style="lowpoly"><span class="tag">B · low-poly</span></div>
+      <div class="head"><h2>Faceted low-poly</h2><span class="letter">Cheapest art</span></div>
+      <p class="pitch">Hard-edged facets and pastel colours, no textures. Many free CC0 asset packs already look like this.</p>
+      <div class="meters">
+        <div class="m"><span>Phone readability</span><div class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div></div>
+        <div class="m"><span>GPU cost</span><div class="dots cost"><i class="on"></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="m"><span>Art effort</span><div class="dots cost"><i class="on"></i><i></i><i></i><i></i><i></i></div></div>
+      </div>
+      <div class="pc">
+        <div><h3>Works well</h3><ul><li>Fastest to fill a whole world</li><li>Lightest on battery and GPU</li><li>Easy for one person to keep consistent</li></ul></div>
+        <div><h3>Watch out</h3><ul><li>Can look generic without a strong palette</li><li>Characters read as simple; less gear detail</li></ul></div>
+      </div>
+    </article>
+
+    <article class="opt">
+      <div class="stage" data-style="soft"><span class="tag">C · soft painted</span></div>
+      <div class="head"><h2>Soft stylized</h2><span class="letter">Most premium</span></div>
+      <p class="pitch">Smooth shading, warm sunlight, soft shadows and haze. Feels rich and storybook-like, closer to a console game.</p>
+      <div class="meters">
+        <div class="m"><span>Phone readability</span><div class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div></div>
+        <div class="m"><span>GPU cost</span><div class="dots cost"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></div></div>
+        <div class="m"><span>Art effort</span><div class="dots cost"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div></div>
+      </div>
+      <div class="pc">
+        <div><h3>Works well</h3><ul><li>Best first impression in store screenshots</li><li>Gear and materials can show detail</li></ul></div>
+        <div><h3>Watch out</h3><ul><li>Hand-painted textures for every asset</li><li>Soft shadows and fog strain the 30 fps budget on mid-range phones</li></ul></div>
+      </div>
+    </article>
+
+    <article class="opt">
+      <div class="stage pixel" data-style="pixel"><span class="tag">D · pixel 3D</span></div>
+      <div class="head"><h2>Retro pixel 3D</h2><span class="letter">Most distinctive</span></div>
+      <p class="pitch">The 3D world is rendered at low resolution and scaled up with crisp pixels; the UI stays sharp. Nostalgic and very cheap.</p>
+      <div class="meters">
+        <div class="m"><span>Phone readability</span><div class="dots"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div></div>
+        <div class="m"><span>GPU cost</span><div class="dots cost"><i class="on"></i><i></i><i></i><i></i><i></i></div></div>
+        <div class="m"><span>Art effort</span><div class="dots cost"><i class="on"></i><i class="on"></i><i></i><i></i><i></i></div></div>
+      </div>
+      <div class="pc">
+        <div><h3>Works well</h3><ul><li>Hides simple models; strong identity</li><li>Tiny fill-rate cost, great for battery</li></ul></div>
+        <div><h3>Watch out</h3><ul><li>Small monsters and gear blur together on a phone</li><li>Camera motion can shimmer</li></ul></div>
+      </div>
+    </article>
+  </div>
+
+  <section style="display:flex;flex-direction:column;gap:14px">
+    <h2>Side by side</h2>
+    <div class="tablebox"><table>
+      <thead><tr><th>Option</th><th>Look</th><th>Mobile cost</th><th>Art pipeline</th><th>Best if you want</th></tr></thead>
+      <tbody>
+        <tr><td>A · Cel-shaded toon</td><td>Bright bands, ink outlines</td><td>Low: one toon shader, outlines on characters only</td><td>Simple textures or flat colour, medium modelling</td><td>A clear, friendly look that stays readable in crowds</td></tr>
+        <tr><td>B · Faceted low-poly</td><td>Hard facets, pastel, no textures</td><td>Lowest</td><td>Vertex colours only; CC0 packs to start</td><td>The most content for the least art time</td></tr>
+        <tr><td>C · Soft stylized</td><td>Smooth light, haze, soft shadows</td><td>High: soft shadows, fog, more lights</td><td>Hand-painted textures for everything</td><td>The most polished screenshots, with an artist on the team</td></tr>
+        <tr><td>D · Retro pixel 3D</td><td>Low-res 3D, crisp upscale</td><td>Very low</td><td>Low-detail models, small palettes</td><td>A distinctive retro identity</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="next">
+    <h2>When you decide</h2>
+    <ol>
+      <li>The look-dev spike builds the chosen style in Godot: one character, the Gel Slime and a corner of Starter Meadow, measured on the phone against the 30 fps budget.</li>
+      <li>It writes a one-page style guide (palette, proportions, triangle and texture limits) that every later asset follows.</li>
+      <li>The art lands in <code>themes/default</code>. A second theme can carry a different style later; game content never changes.</li>
+    </ol>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function(){
+if(!window.THREE)return;
+const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const STYLES={
+  toon:{sky:0x9fd3e6,grass:0x7cc46a,grass2:0x6db35c,water:0x4fa9dd,rim:0xbfe7f7,trunk:0x8a5a3b,leaf:0x4f9e4a,leaf2:0x6bbb57,rock:0x9aa3a6,wood:0xa8794f,tunic:0x3f74d6,pants:0x3a3f55,skin:0xf4cfae,hair:0x6b3f22,steel:0xd9dee3,slime:0x72e08f,robe:0x8f5bc9,hat:0x5e3a8f,mark:0xffffff},
+  lowpoly:{sky:0xbfe1e8,grass:0x9ccc7a,grass2:0x8bbd6c,water:0x6cb8d6,rim:0x9fd4e6,trunk:0x9b6b4a,leaf:0x5f9e5a,leaf2:0x78b46a,rock:0xb3b0a8,wood:0xb98a5e,tunic:0x5a86d6,pants:0x4b4f63,skin:0xf0cdb0,hair:0x7a4a2b,steel:0xdfe3e6,slime:0x8be3a1,robe:0xa074d0,hat:0x6e4a9e,mark:0xffffff},
+  soft:{sky:0xf2dcc0,grass:0x86b65e,grass2:0x6f9f4b,water:0x5d9fc4,rim:0xa9d2e3,trunk:0x7a5034,leaf:0x4f8d43,leaf2:0x6aa652,rock:0x9b968c,wood:0x9c6d45,tunic:0x3866b8,pants:0x343749,skin:0xf1c7a3,hair:0x5a341c,steel:0xe6e9ec,slime:0x6fd28a,robe:0x7f4fb3,hat:0x553280,mark:0xfff6e0},
+  pixel:{sky:0x8fd0ef,grass:0x6fc25a,grass2:0x5aa848,water:0x3f97d9,rim:0x9adcf5,trunk:0x8a5232,leaf:0x3f8f3c,leaf2:0x5fb04b,rock:0x9098a0,wood:0xb07a45,tunic:0x3561e0,pants:0x343a5a,skin:0xf6c9a0,hair:0x6a3a1c,steel:0xe8edf0,slime:0x63e07f,robe:0x9450d0,hat:0x5c2f90,mark:0xffffff}
+};
+let toonRamp=null;
+function ramp(){if(toonRamp)return toonRamp;const d=new Uint8Array([90,170,255]);toonRamp=new THREE.DataTexture(d,3,1,THREE.LuminanceFormat);toonRamp.minFilter=toonRamp.magFilter=THREE.NearestFilter;toonRamp.generateMipmaps=false;toonRamp.needsUpdate=true;return toonRamp;}
+function rnd(s){return function(){s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
+
+function build(style){
+  const P=STYLES[style],facet=(style==='lowpoly'||style==='pixel');
+  const scene=new THREE.Scene();scene.background=new THREE.Color(P.sky);
+  if(style==='soft')scene.fog=new THREE.Fog(P.sky,15,30);
+  const mat=(c,o)=>{o=o||{};
+    if(style==='toon')return new THREE.MeshToonMaterial(Object.assign({color:c,gradientMap:ramp()},o));
+    if(facet)return new THREE.MeshPhongMaterial(Object.assign({color:c,flatShading:true,shininess:0},o));
+    return new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.85,metalness:0},o));};
+  const seg=n=>facet?Math.max(5,Math.round(n/3)):n;
+  const outlined=[];
+  const add=(parent,geo,m,x,y,z,opts)=>{const me=new THREE.Mesh(geo,m);me.position.set(x,y,z);me.castShadow=true;me.receiveShadow=true;parent.add(me);if(!opts||opts.outline!==false)outlined.push(me);return me;};
+
+  const hemi=new THREE.HemisphereLight(style==='soft'?0xfff1dc:0xffffff,style==='soft'?0x6b5a3a:0x557a4a,style==='toon'?.55:.65);scene.add(hemi);
+  const sun=new THREE.DirectionalLight(style==='soft'?0xffe0b0:0xffffff,style==='soft'?1.05:.95);sun.position.set(-6,12,7);sun.castShadow=true;
+  sun.shadow.mapSize.set(style==='pixel'?512:1024,style==='pixel'?512:1024);const sc=sun.shadow.camera;sc.left=-10;sc.right=10;sc.top=10;sc.bottom=-10;sc.near=1;sc.far=40;sun.shadow.bias=-.0008;scene.add(sun);
+
+  const gw=32,gd=26,gx=facet?44:72,gz=facet?36:60;
+  const gg=new THREE.PlaneGeometry(gw,gd,gx,gz);gg.rotateX(-Math.PI/2);
+  const pos=gg.attributes.position,cols=[],r=rnd(7),c1=new THREE.Color(P.grass),c2=new THREE.Color(P.grass2),tmp=new THREE.Color();
+  for(let i=0;i<pos.count;i++){const x=pos.getX(i),z=pos.getZ(i);
+    const pond=((x+3.2)/2.3)**2+((z-1.6)/1.5)**2;
+    let y=facet?(r()-.5)*.18:0; if(pond<1.25)y=-.12*(1.25-pond);
+    pos.setY(i,y);tmp.copy(c1).lerp(c2,style==='toon'?0:r()*.9);cols.push(tmp.r,tmp.g,tmp.b);}
+  gg.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));gg.computeVertexNormals();
+  const ground=new THREE.Mesh(gg,mat(0xffffff,{vertexColors:true}));ground.receiveShadow=true;scene.add(ground);
+
+  const water=new THREE.Mesh(new THREE.CircleGeometry(1,seg(48)),mat(P.water,style==='soft'?{roughness:.15,transparent:true,opacity:.9}:{}));
+  water.rotation.x=-Math.PI/2;water.scale.set(2.05,1.3,1);water.position.set(-3.2,.015,1.6);water.receiveShadow=true;scene.add(water);
+  const rim=new THREE.Mesh(new THREE.RingGeometry(.93,1,seg(48)),new THREE.MeshBasicMaterial({color:P.rim}));rim.rotation.x=-Math.PI/2;rim.scale.set(2.05,1.3,1);rim.position.set(-3.2,.02,1.6);scene.add(rim);
+  if(style!=='pixel')for(let i=0;i<5;i++){const lp=new THREE.Mesh(new THREE.CircleGeometry(.16,seg(18)),mat(0x5aa04a));lp.rotation.x=-Math.PI/2;lp.position.set(-4.4+i*.55,.03,1.2+(i%2)*.7);scene.add(lp);}
+
+  const tree=(x,z,s,kind)=>{const g=new THREE.Group();g.position.set(x,0,z);g.scale.setScalar(s);scene.add(g);
+    add(g,new THREE.CylinderGeometry(.14,.2,1.1,seg(12)),mat(P.trunk),0,.55,0);
+    if(kind==='pine'){add(g,new THREE.ConeGeometry(.9,1.4,seg(14)),mat(P.leaf),0,1.5,0);add(g,new THREE.ConeGeometry(.68,1.1,seg(14)),mat(P.leaf2),0,2.2,0);}
+    else if(facet){add(g,new THREE.IcosahedronGeometry(.95,0),mat(P.leaf),0,1.7,0);add(g,new THREE.IcosahedronGeometry(.6,0),mat(P.leaf2),.45,2.15,.15);}
+    else{add(g,new THREE.SphereGeometry(.85,24,18),mat(P.leaf),0,1.65,0);add(g,new THREE.SphereGeometry(.6,24,18),mat(P.leaf2),.5,1.95,.25);add(g,new THREE.SphereGeometry(.55,24,18),mat(P.leaf2),-.5,1.9,-.1);}};
+  tree(-6.4,-3.4,1.15,'round');tree(-7.2,.9,1,'pine');tree(5.9,-3.6,1.2,'pine');tree(6.6,2.2,1.05,'round');tree(-1.4,-4.8,.95,'round');tree(2.6,-5.2,1.1,'pine');tree(-5.6,4.4,.9,'round');
+
+  const rock=(x,z,s)=>{const m=add(scene,new THREE.DodecahedronGeometry(.42,facet?0:1),mat(P.rock),x,.18*s,z);m.scale.set(s*1.25,s*.75,s);m.rotation.y=x;};
+  rock(4.2,3.8,1);rock(4.9,3.3,.65);rock(-0.6,4.6,.8);rock(-4.9,-1.4,.7);
+
+  const wood=mat(P.wood);
+  for(let i=0;i<6;i++)add(scene,new THREE.BoxGeometry(.14,.7,.14),wood,1.3+i*.75,.35,-1.6);
+  add(scene,new THREE.BoxGeometry(3.9,.09,.07),wood,3.18,.5,-1.6);add(scene,new THREE.BoxGeometry(3.9,.09,.07),wood,3.18,.25,-1.6);
+
+  if(!facet){const tg=new THREE.ConeGeometry(.05,.28,5),tm=mat(P.grass2),fg=new THREE.SphereGeometry(.06,8,6),r2=rnd(21);
+    for(let i=0;i<90;i++){const x=(r2()-.5)*16,z=(r2()-.5)*12;if(((x+3.2)/2.4)**2+((z-1.6)/1.6)**2<1.2)continue;
+      const t=new THREE.Mesh(tg,tm);t.position.set(x,.13,z);t.rotation.z=(r2()-.5)*.4;scene.add(t);
+      if(r2()<.3){const f=new THREE.Mesh(fg,mat(r2()<.5?0xffe36e:0xffffff));f.position.set(x+.1,.08,z+.05);scene.add(f);}}}
+
+  const chibi=style!=='soft';
+  const hero=new THREE.Group();hero.position.set(.2,0,1.2);hero.rotation.y=-.35;scene.add(hero);
+  const body=new THREE.Group();hero.add(body);
+  add(body,new THREE.CylinderGeometry(.08,.08,.42,seg(10)),mat(P.pants),-.11,.21,0);add(body,new THREE.CylinderGeometry(.08,.08,.42,seg(10)),mat(P.pants),.11,.21,0);
+  add(body,new THREE.CylinderGeometry(.2,.26,.52,seg(16)),mat(P.tunic),0,.68,0);
+  add(body,new THREE.CylinderGeometry(.265,.265,.07,seg(16)),mat(P.trunk),0,.5,0,{outline:false});
+  const hr=chibi?.31:.23,hy=chibi?1.24:1.16;
+  add(body,new THREE.SphereGeometry(hr,seg(24),seg(18)),mat(P.skin),0,hy,0);
+  add(body,new THREE.SphereGeometry(hr*1.07,seg(24),seg(18),0,Math.PI*2,0,Math.PI*.52),mat(P.hair),0,hy+.03,-.02,{outline:false});
+  const eye=new THREE.SphereGeometry(chibi?.045:.03,8,6),em=new THREE.MeshBasicMaterial({color:0x1b1b22});
+  [[-.1],[.1]].forEach(e=>{const m=new THREE.Mesh(eye,em);m.position.set(e[0],hy-.02,hr*.93);body.add(m);});
+  const armL=add(body,new THREE.CylinderGeometry(.06,.06,.44,seg(10)),mat(P.tunic),-.3,.7,0);armL.rotation.z=.25;
+  const armR=add(body,new THREE.CylinderGeometry(.06,.06,.44,seg(10)),mat(P.tunic),.3,.72,.05);armR.rotation.z=-.35;armR.rotation.x=-.4;
+  const sword=new THREE.Group();sword.position.set(.42,.52,.18);sword.rotation.set(-.9,0,-.25);body.add(sword);
+  add(sword,new THREE.BoxGeometry(.06,.72,.02),new THREE.MeshPhongMaterial({color:P.steel,shininess:80,flatShading:facet}),0,.42,0);
+  add(sword,new THREE.BoxGeometry(.24,.05,.06),mat(0xc9a14a),0,.06,0);add(sword,new THREE.CylinderGeometry(.025,.025,.16,6),mat(P.trunk),0,-.04,0,{outline:false});
+
+  const npc=new THREE.Group();npc.position.set(-1.9,0,-1.2);npc.rotation.y=.5;scene.add(npc);
+  add(npc,new THREE.ConeGeometry(.34,.95,seg(18)),mat(P.robe),0,.48,0);
+  add(npc,new THREE.SphereGeometry(chibi?.25:.2,seg(22),seg(16)),mat(P.skin),0,1.08,0);
+  add(npc,new THREE.ConeGeometry(.3,.55,seg(18)),mat(P.hat),0,1.42,0);
+  add(npc,new THREE.CylinderGeometry(.03,.03,1.4,6),mat(P.trunk),.36,.7,.05);
+  add(npc,new THREE.SphereGeometry(.08,seg(10),seg(8)),mat(0xffe36e,style==='soft'?{emissive:0x806020}:{}),.36,1.42,.05,{outline:false});
+  [-.07,.07].forEach(x=>{const m=new THREE.Mesh(eye,em);m.position.set(x,1.06,(chibi?.25:.2)*.92);npc.add(m);});
+
+  const slimes=[];
+  [[2.7,1.9,1],[3.9,.6,.8],[-0.3,-2.6,.9]].forEach((s,i)=>{const g=new THREE.Group();g.position.set(s[0],0,s[1]);g.rotation.y=-.6+i*.4;scene.add(g);
+    const b=add(g,new THREE.SphereGeometry(.42,seg(28),seg(20)),mat(P.slime,style==='soft'?{transparent:true,opacity:.88,roughness:.25}:style==='toon'?{}:{}),0,.3,0);b.scale.set(1,.78,1);
+    [-.13,.13].forEach(x=>{const m=new THREE.Mesh(new THREE.SphereGeometry(.055,8,6),em);m.position.set(x,.38,.36);g.add(m);});
+    if(!facet){const hl=new THREE.Mesh(new THREE.SphereGeometry(.08,10,8),new THREE.MeshBasicMaterial({color:0xffffff}));hl.position.set(-.18,.5,.22);g.add(hl);}
+    g.scale.setScalar(s[2]);slimes.push({g,b,ph:i*1.7});});
+
+  const markG=new THREE.Group();markG.position.set(2.9,.04,3.6);scene.add(markG);
+  const mark=new THREE.Mesh(new THREE.RingGeometry(.28,.36,seg(40)),new THREE.MeshBasicMaterial({color:P.mark,transparent:true,opacity:.95}));mark.rotation.x=-Math.PI/2;markG.add(mark);
+  const dotG=new THREE.CircleGeometry(.06,seg(14)),dotM=new THREE.MeshBasicMaterial({color:P.mark,transparent:true,opacity:.85});
+  for(let i=1;i<6;i++){const t=i/6,d=new THREE.Mesh(dotG,dotM);d.rotation.x=-Math.PI/2;d.position.set(.2+(2.9-.2)*t,.035,1.2+(3.6-1.2)*t);scene.add(d);}
+
+  if(style==='toon'){const om=new THREE.MeshBasicMaterial({color:0x1c2a22,side:THREE.BackSide});
+    outlined.forEach(m=>{const o=new THREE.Mesh(m.geometry,om);o.scale.setScalar(1.07);m.add(o);});}
+
+  const camera=new THREE.PerspectiveCamera(30,16/9,.5,60);camera.position.set(.4,7.6,8.6);camera.lookAt(.4,.35,.5);
+  return{scene,camera,update(t){
+    slimes.forEach(s=>{const k=Math.sin(t*3.1+s.ph);s.b.scale.set(1+.05*k,.78-.07*k,1+.05*k);s.b.position.y=.3-.03*k;});
+    body.position.y=.015*Math.sin(t*2.2);armR.rotation.x=-.4+.06*Math.sin(t*2.2);
+    const p=(t*1.2)%1;mark.scale.setScalar(.8+.5*p);mark.material.opacity=.95*(1-p);
+  }};
+}
+
+const items=[];
+document.querySelectorAll('.stage').forEach(el=>{
+  const style=el.dataset.style;let renderer;
+  try{renderer=new THREE.WebGLRenderer({antialias:style!=='pixel',powerPreference:'low-power'});}catch(e){el.insertAdjacentHTML('beforeend','<p style="position:absolute;inset:auto 12px 12px;color:#fff;font-size:14px">WebGL is not available in this browser, so the live sample cannot render.</p>');return;}
+  renderer.shadowMap.enabled=true;renderer.shadowMap.type=style==='soft'?THREE.PCFSoftShadowMap:THREE.PCFShadowMap;
+  el.prepend(renderer.domElement);
+  const s=build(style),it={el,style,renderer,s,visible:true};
+  const size=()=>{const w=el.clientWidth,h=el.clientHeight;if(!w||!h)return;
+    if(style==='pixel'){renderer.setPixelRatio(1);renderer.setSize(Math.max(80,Math.round(w/4)),Math.max(45,Math.round(h/4)),false);}
+    else{renderer.setPixelRatio(Math.min(2,window.devicePixelRatio||1));renderer.setSize(w,h,false);}
+    s.camera.aspect=w/h;s.camera.updateProjectionMatrix();renderer.render(s.scene,s.camera);};
+  it.size=size;size();
+  if('ResizeObserver'in window)new ResizeObserver(size).observe(el);
+  items.push(it);
+});
+if('IntersectionObserver'in window){const io=new IntersectionObserver(es=>es.forEach(e=>{const it=items.find(i=>i.el===e.target);if(it)it.visible=e.isIntersecting;}));items.forEach(i=>io.observe(i.el));}
+items.forEach(i=>{i.s.update(0.6);i.renderer.render(i.s.scene,i.s.camera);});
+if(!reduce){const t0=performance.now();(function loop(now){const t=(now-t0)/1000;items.forEach(i=>{if(!i.visible)return;i.s.update(t);i.renderer.render(i.s.scene,i.s.camera);});requestAnimationFrame(loop);})(t0);}
+})();
+</script>

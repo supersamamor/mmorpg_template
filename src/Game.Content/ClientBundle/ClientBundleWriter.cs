@@ -63,6 +63,7 @@ public static class ClientBundleWriter
             Array(w, "dialogues", bundle.Dialogues, Dialogue);
             Array(w, "quests", bundle.Quests, Quest);
             Array(w, "maps", bundle.Maps, Map);
+            Appearance(w, bundle.Appearance);
             w.WriteEndObject();
         }
         return output.WrittenSpan.ToArray();
@@ -154,6 +155,40 @@ public static class ClientBundleWriter
                     rw.WriteNumber("level", r.Level);
                 });
         });
+    }
+
+    private static void Appearance(Utf8JsonWriter w, ClientAppearance a)
+    {
+        w.WriteStartObject("appearance");
+        Array(w, "genders", a.Genders, (gw, g) =>
+        {
+            gw.WriteString("gender", g.Gender);
+            gw.WriteString("name", g.Name);
+            gw.WriteString("body", g.BodyModelAssetKey);
+            Array(gw, "faces", g.Faces, AppearanceOption);
+            Array(gw, "hairstyles", g.Hairstyles, AppearanceOption);
+            gw.WriteString("default_face", g.DefaultFaceId);
+            gw.WriteString("default_hairstyle", g.DefaultHairstyleId);
+        });
+        Array(w, "skin_tones", a.SkinTones, ColorOption);
+        w.WriteString("default_skin_tone", a.DefaultSkinToneId);
+        Array(w, "hair_colors", a.HairColors, ColorOption);
+        w.WriteString("default_hair_color", a.DefaultHairColorId);
+        w.WriteEndObject();
+    }
+
+    private static void AppearanceOption(Utf8JsonWriter w, ClientAppearanceOption o)
+    {
+        w.WriteString("id", o.Id);
+        w.WriteString("name", o.Name);
+        w.WriteString("model", o.ModelAssetKey);
+    }
+
+    private static void ColorOption(Utf8JsonWriter w, ClientColorOption o)
+    {
+        w.WriteString("id", o.Id);
+        w.WriteString("name", o.Name);
+        w.WriteString("color", o.Color);
     }
 
     private static void Status(Utf8JsonWriter w, ClientStatus s)
