@@ -36,6 +36,24 @@
     "grid_file": {
       "type": "string",
       "description": "File name of the logic grid in content/maps/, e.g. starter_town.grid.json. A content file name, not an asset path."
+    },
+    "respawn": {
+      "type": [
+        "object",
+        "null"
+      ],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "description": "Column, counted from the west edge."
+        },
+        "y": {
+          "type": "integer",
+          "description": "Row, counted from the north edge."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Where a player who dies on this map comes back (a walkable cell of this map's grid). Optional: without it the player returns to the first warp of any map that arrives here, then to the new_character start (balance.yaml)."
     }
   },
   "additionalProperties": false,

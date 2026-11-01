@@ -74,7 +74,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-304 | Audio data: sound keys, theme `audio.defaults` / `audio.events`, validation | Claude Code | Sonnet 5.5 | [T-304](../tasks/prompts/T-304.md) | T-102, T-209 | Review | Data only; client audio system is T-305 |
 | T-302 | Auto-attack, death, EXP distribution, drops | Claude Code | Opus 5.5 | [T-302](../tasks/prompts/T-302.md) | T-105, T-106, T-301 | Review | Server world only; wire side (attack messages, HP and ground items in views) is a follow-up in `Net/**` |
 | T-307 | Combat over the wire: attack/respawn messages, HP fraction + dead flag + ground items in views, hits batch, own EXP/HP | Claude Code | Opus 5.5 | [T-307](../tasks/prompts/T-307.md) | T-302, T-205, T-204 | In Progress | Restricted `Net/**` — **approved by owner 2026-11-02**; ADR-002 #60 |
-| T-308 | Combat + AI polish: HP/SP regen, heal on return, corpse time, only players trigger warps | Claude Code | Sonnet 5.5 | [T-308](../tasks/prompts/T-308.md) | T-302 | In Progress | Starts after T-302 merges; ADR-002 #37–39 |
+| T-308 | Combat + AI polish: HP/SP regen, heal on return, corpse time, only players trigger warps | Claude Code | Sonnet 5.5 | [T-308](../tasks/prompts/T-308.md) | T-302 | Review | Starts after T-302 merges; ADR-002 #37–39 |
 
 ## Phase 7 — Persistence & accounts
 

@@ -271,6 +271,20 @@ public class GridContentTests : IDisposable
         ExpectIssue(ValidationCodes.RefMissing, "warps[0].target_map_id", "map.nope");
     }
 
+    [Theory]
+    [InlineData(30, 5, "not walkable")]
+    [InlineData(48, 0, "outside")]
+    public void Respawn_cell_must_be_walkable_on_the_maps_grid(int x, int y, string reason)
+    {
+        EditText("maps/starter_meadow.yaml", "respawn:\n  x: 12\n  y: 12", $"respawn:\n  x: {x}\n  y: {y}");
+
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.GridCellBlocked);
+
+        issue.Path.ShouldBe("respawn");
+        issue.Message.ShouldContain(reason);
+        issue.Severity.ShouldBe(ValidationSeverity.Error);
+    }
+
     [Fact]
     public void Warp_on_a_non_walkable_cell()
     {

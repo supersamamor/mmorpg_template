@@ -17,6 +17,7 @@ namespace Game.Server.World.Combat;
 public sealed class CombatContent
 {
     private readonly IReadOnlyDictionary<string, DropTableDef> _drops;
+    private readonly IReadOnlyDictionary<string, (string MapId, GridCell Cell)> _respawns;
     private readonly ConcurrentDictionary<string, CompiledModifier[]> _jobBonuses = new(StringComparer.Ordinal);
 
     /// <summary>
@@ -24,8 +25,9 @@ public sealed class CombatContent
     /// <see cref="ProgressionRules"/> reads (jobs, skills, EXP tables).
     /// </summary>
     public CombatContent(CombatRules rules, MonsterCatalog monsters, BalanceDef balance, IReadOnlyDictionary<string, DropTableDef> drops,
-        IProgressionContent progression)
+        IProgressionContent progression, IReadOnlyDictionary<string, (string MapId, GridCell Cell)>? respawns = null)
     {
+        _respawns = respawns ?? new Dictionary<string, (string MapId, GridCell Cell)>();
         Rules = rules ?? throw new ArgumentNullException(nameof(rules));
         Monsters = monsters ?? throw new ArgumentNullException(nameof(monsters));
         Balance = balance ?? throw new ArgumentNullException(nameof(balance));
@@ -41,6 +43,8 @@ public sealed class CombatContent
         Check(balance.Loot.PriorityMs >= 0, "loot.priority_ms must not be negative.");
         Check(balance.Loot.LifetimeMs > 0, "loot.lifetime_ms must be above 0.");
         Check(balance.Loot.SpreadRadius >= 0, "loot.spread_radius must not be negative.");
+        Check(balance.Death.CorpseMs >= 0, "death.corpse_ms must not be negative.");
+        Check(balance.Regen.OutOfCombatDelayMs >= 0, "regen.out_of_combat_delay_ms must not be negative.");
     }
 
     /// <summary>Combat content of a loaded database, with <paramref name="monsters"/> (the catalog the spawner and the AI share).</summary>
@@ -49,7 +53,21 @@ public sealed class CombatContent
         ArgumentNullException.ThrowIfNull(content);
         var rules = CombatRules.Compile(content.Formulas, content.Elements, content.Balance.Combat);
         var drops = content.Drops.All.ToDictionary(d => d.Id, StringComparer.Ordinal);
-        return new CombatContent(rules, monsters, content.Balance, drops, new ContentProgression(content));
+        return new CombatContent(rules, monsters, content.Balance, drops, new ContentProgression(content), RespawnPoints(content.Maps.All, content.Grids));
+    }
+
+    internal static Dictionary<string, (string MapId, GridCell Cell)> RespawnPoints(IEnumerable<MapDef> maps, IReadOnlyDictionary<string, MapGrid> grids)
+    {
+        var points = new Dictionary<string, (string MapId, GridCell Cell)>(StringComparer.Ordinal);
+        foreach (var map in maps)
+            if (map.Respawn is { } cell) points[map.Id] = (map.Id, new GridCell(cell.X, cell.Y));
+        foreach (var map in maps)   // the first warp that arrives on a map without a respawn cell of its own
+        {
+            if (!grids.TryGetValue(map.Id, out var grid)) continue;
+            foreach (var warp in grid.Warps)
+                if (!points.ContainsKey(warp.TargetMapId)) points[warp.TargetMapId] = (warp.TargetMapId, warp.TargetCell);
+        }
+        return points;
     }
 
     /// <summary>Compiled damage, hit and crit formulas, element table and clamps.</summary>
@@ -68,10 +86,13 @@ public sealed class CombatContent
     public ExpTableDef BaseExpTable { get; }
 
     /// <summary>
-    /// The respawn point: the <c>new_character</c> start map and cell for now (every map respawns there; a per-map respawn field is a
-    /// proposed follow-up).
+    /// Where a player who dies on <paramref name="mapId"/> comes back: the map's own <c>respawn</c> cell, else the first warp (in map file
+    /// order) that arrives on it, else the <c>new_character</c> start.
     /// </summary>
-    public (string MapId, GridCell Cell) RespawnPoint => (Balance.NewCharacter.StartMapId, new GridCell(Balance.NewCharacter.StartX, Balance.NewCharacter.StartY));
+    public (string MapId, GridCell Cell) RespawnPointFor(string mapId) =>
+        _respawns.TryGetValue(mapId, out var point)
+            ? point
+            : (Balance.NewCharacter.StartMapId, new GridCell(Balance.NewCharacter.StartX, Balance.NewCharacter.StartY));
 
     /// <summary>Finds a drop table.</summary>
     public bool TryGetDropTable(string id, out DropTableDef table) => _drops.TryGetValue(id, out table!);

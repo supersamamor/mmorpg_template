@@ -6,3 +6,7 @@ music_asset_key: music.map.starter_meadow
 ambience_asset_key: ambience.map.starter_meadow
 # Generated logic grid; source: src/starter_meadow.txt (until the map_authoring exporter, T-208).
 grid_file: starter_meadow.grid.json
+# A player who dies here comes back in the safe zone, beside the guide (the same cell a new character starts on).
+respawn:
+  x: 12
+  y: 12

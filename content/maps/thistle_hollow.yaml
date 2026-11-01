@@ -6,3 +6,7 @@ music_asset_key: music.map.thistle_hollow
 ambience_asset_key: ambience.map.thistle_hollow
 # Generated logic grid; source: src/thistle_hollow.txt (until the map_authoring exporter, T-208).
 grid_file: thistle_hollow.grid.json
+# A player who dies here comes back at the hollow's entrance, where the meadow's warp arrives.
+respawn:
+  x: 2
+  y: 7

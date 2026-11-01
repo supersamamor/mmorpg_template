@@ -214,7 +214,8 @@ public sealed class MovementSystem : ITickSystem
             entity.Facing = facing;
             context.Publish(new CellReached(entity.Id, from, cell, facing));
 
-            if (_warps.TryGetValue(cell.Y * context.Instance.Grid.Width + cell.X, out var warp))
+            // Only players take warps; anything else walks over a warp cell like any other walkable cell.
+            if (entity.Kind == EntityKind.Player && _warps.TryGetValue(cell.Y * context.Instance.Grid.Width + cell.X, out var warp))
             {
                 Stop(context, state, MovementReasons.Warped);
                 context.Warp(entity.Id, warp.TargetMapId, warp.TargetCell);

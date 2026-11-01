@@ -87,6 +87,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>AggroLost</c>: a monster dropped its target and heads home (reason: an <c>AggroReasons</c> term).</summary>
         public const string AggroLost = "AggroLost";
 
+        /// <summary><c>MonsterReturned</c>: a monster that gave up arrived back on its home cell; combat resets its damage shares and may heal it.</summary>
+        public const string MonsterReturned = "MonsterReturned";
+
         /// <summary><c>AttackRequested</c>: a monster decided to auto-attack its target; combat resolves it.</summary>
         public const string AttackRequested = "AttackRequested";
 
@@ -141,6 +144,7 @@ namespace Game.Shared.Vocabulary
             MoveRejected,
             AggroGained,
             AggroLost,
+            MonsterReturned,
             AttackRequested,
             AttackRefused,
             AttackStopped,

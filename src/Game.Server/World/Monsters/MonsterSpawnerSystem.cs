@@ -13,8 +13,9 @@ namespace Game.Server.World.Monsters;
 /// </summary>
 /// <remarks>
 /// <para>Each entry has <c>count</c> slots. A slot holds a live monster or a respawn time, never both, so an entry never has more than
-/// <c>count</c> monsters. On <see cref="EntityDied"/> for one of its monsters the spawner despawns it on its next tick and refills the slot
-/// <c>respawn_seconds</c> of simulated time after the tick the death was raised in, on a fresh random cell of the same area. A monster that
+/// <c>count</c> monsters. On <see cref="EntityDied"/> for one of its monsters the slot is freed and refilled <c>respawn_seconds</c> of simulated time after the
+/// tick the death was raised in, on a fresh random cell of the same area. The dead monster itself stays in the world as a corpse for
+/// <c>death.corpse_ms</c> (so clients can play the death animation) and is despawned then; the respawn timer does not wait for it. A monster that
 /// leaves the map some other way (despawned by someone else, warped) frees its slot the same way.</para>
 /// <para>Respawn timers run whether or not anyone is near; the spawner's per-tick cost is one comparison per waiting slot. Allocation after
 /// warm-up: only the entity, its stat sheet and the event when a monster (re)spawns.</para>
@@ -27,19 +28,32 @@ public sealed class MonsterSpawnerSystem : ITickSystem
     private readonly Dictionary<long, Slot> _byEntity = new();
     private readonly List<EntityId> _died = new();
     private readonly List<EntityId> _left = new();
+    private readonly Queue<(EntityId Id, long DueMs)> _corpses = new();   // one corpse time for all, so in despawn order
+    private readonly int _corpseMs;
     private SpawnEntry[] _entries = [];
     private MapGrid? _grid;
     private EventBus? _subscribed;
     private long _lastTickMs;
 
-    /// <summary>Creates a spawner that reads monsters from <paramref name="catalog"/>.</summary>
-    public MonsterSpawnerSystem(MonsterCatalog catalog) => _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+    /// <summary>
+    /// Creates a spawner that reads monsters from <paramref name="catalog"/>. A dead monster stays <paramref name="corpseMs"/> simulated
+    /// milliseconds (<c>death.corpse_ms</c>) before it is despawned.
+    /// </summary>
+    public MonsterSpawnerSystem(MonsterCatalog catalog, int corpseMs = 0)
+    {
+        _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
+        if (corpseMs < 0) throw new ArgumentOutOfRangeException(nameof(corpseMs), corpseMs, "corpseMs must not be negative.");
+        _corpseMs = corpseMs;
+    }
 
     /// <inheritdoc />
     public string Name => "monster_spawner";
 
     /// <inheritdoc />
     public IReadOnlyCollection<Type> IntentTypes => Owned;
+
+    /// <summary>Dead monsters still lying in the world, waiting to be despawned.</summary>
+    public int CorpseCount => _corpses.Count;
 
     /// <summary>Live monsters this spawner owns.</summary>
     public int LiveCount => _byEntity.Count;
@@ -66,13 +80,18 @@ public sealed class MonsterSpawnerSystem : ITickSystem
         foreach (var id in _died)
         {
             if (!_byEntity.TryGetValue(id.Value, out var slot)) continue;
-            context.Despawn(id);
-            Free(slot);
+            Free(slot);   // the respawn timer counts from the death tick (the tick before this one)
+            _corpses.Enqueue((id, _lastTickMs + _corpseMs));
         }
         _died.Clear();
         foreach (var id in _left)
             if (_byEntity.TryGetValue(id.Value, out var slot)) Free(slot);
         _left.Clear();
+        while (_corpses.Count > 0 && _corpses.Peek().DueMs <= context.SimTimeMs)
+        {
+            var id = _corpses.Dequeue().Id;
+            if (instance.TryGetEntity(id, out _)) context.Despawn(id);   // not if someone else removed it meanwhile
+        }
 
         var now = context.SimTimeMs;
         _lastTickMs = now;

@@ -250,6 +250,7 @@ public sealed class MonsterAiSystem : ITickSystem
         {
             brain.State = AiStates.Idle;
             brain.NextWanderMs = _nowMs + Pause(context);
+            context.Publish(new MonsterReturned(entity.Id, entity.Cell));
             return;
         }
         if (_nowMs >= brain.ReturnDeadlineMs)
@@ -293,6 +294,7 @@ public sealed class MonsterAiSystem : ITickSystem
     {
         brain.Goal = cell;
         brain.MoveIssuedTick = _tick;
+        brain.MoveIssued = true;
         context.Instance.TryEnqueue(new MoveTo(brain.Entity.Id, cell));
     }
 
@@ -300,6 +302,7 @@ public sealed class MonsterAiSystem : ITickSystem
     {
         brain.Goal = null;
         brain.MoveIssuedTick = _tick;
+        brain.MoveIssued = true;
         context.Instance.TryEnqueue(new StopMove(brain.Entity.Id));
     }
 
@@ -380,7 +383,8 @@ public sealed class MonsterAiSystem : ITickSystem
         public GridCell? Goal;            // where the last MoveTo went, if it may still be walking there
         public bool Walking;              // from MovementStarted / MovementStopped
         public bool Unreachable;          // the chase's last MoveTo was refused
-        public long MoveIssuedTick = long.MinValue;
+        public bool MoveIssued;             // false until the first move: there is no "tick of the last move" to compare with
+        public long MoveIssuedTick;
         public long NextThinkMs;
         public long NextWanderMs = -1;    // < 0: not scheduled yet
         public long NextRepathMs;
@@ -391,7 +395,7 @@ public sealed class MonsterAiSystem : ITickSystem
         /// A move intent sent this tick or the last one has not been answered yet: it is drained on the next tick and its movement event
         /// dispatched at the end of that tick, so it is known by the AI two ticks after it was sent.
         /// </summary>
-        public bool MovePending(long tick) => tick - MoveIssuedTick <= 1;
+        public bool MovePending(long tick) => MoveIssued && tick - MoveIssuedTick <= 1;
     }
 
     private sealed class BrainOrder : IComparer<Brain>

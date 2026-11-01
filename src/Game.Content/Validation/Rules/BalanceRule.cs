@@ -65,6 +65,8 @@ public sealed class BalanceRule : IValidationRule
 
         Ai(context, balance.Ai);
         Death(context, balance.Death);
+        if (balance.Regen.OutOfCombatDelayMs < 0)
+            Range(context, "regen.out_of_combat_delay_ms", "must not be negative.");
         Loot(context, balance.Loot);
         NewCharacter(context, balance.NewCharacter);
     }
@@ -113,13 +115,15 @@ public sealed class BalanceRule : IValidationRule
             Range(context, "ai.return_timeout_ms", "must be above 0.");
     }
 
-    /// <summary>The respawn HP share is 1–100 percent and the EXP penalty 0–100 percent.</summary>
+    /// <summary>The respawn HP share is 1–100 percent, the EXP penalty 0–100 percent and the corpse time not negative.</summary>
     private static void Death(ValidationContext context, DeathBalanceDef d)
     {
         if (d.RespawnHpPercent < 1 || d.RespawnHpPercent > 100)
             Range(context, "death.respawn_hp_percent", "must be between 1 and 100.");
         if (d.ExpPenaltyPercent < 0 || d.ExpPenaltyPercent > 100)
             Range(context, "death.exp_penalty_percent", "must be between 0 and 100.");
+        if (d.CorpseMs < 0)
+            Range(context, "death.corpse_ms", "must not be negative.");
     }
 
     /// <summary>Loot priority is not negative, ground items live above 0 ms, and the spread radius is not negative.</summary>

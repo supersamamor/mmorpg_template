@@ -202,7 +202,7 @@ public class DefinitionConstructionTests
     }
 
     [Fact]
-    public void Constructs_MapDef_holds_metadata_only()
+    public void Constructs_MapDef_holds_metadata_and_an_optional_respawn_cell()
     {
         var map = new MapDef
         {
@@ -216,7 +216,7 @@ public class DefinitionConstructionTests
         map.Id.ShouldStartWith(MapDef.IdPrefix);
         map.SceneAssetKey.ShouldStartWith(AssetKeyPrefixes.Scene);
         typeof(MapDef).GetProperties().Select(p => p.Name)
-            .ShouldBe(["Id", "Name", "SceneAssetKey", "MusicAssetKey", "AmbienceAssetKey", "GridFile"], ignoreOrder: true);
+            .ShouldBe(["Id", "Name", "SceneAssetKey", "MusicAssetKey", "AmbienceAssetKey", "GridFile", "Respawn"], ignoreOrder: true);
     }
 
     [Fact]

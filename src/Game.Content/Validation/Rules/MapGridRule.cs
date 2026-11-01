@@ -27,6 +27,8 @@ public sealed class MapGridRule : IValidationRule
                 context.Error(map.Id, "grid_file", ValidationCodes.RefMissing, $"{map.Id} has no loaded logic grid ('{map.GridFile}')");
                 continue;
             }
+            if (map.Respawn is { } respawn)
+                RequireWalkable(grid, new GridCell(respawn.X, respawn.Y), "respawn", "respawn", (path, code, message) => context.Error(map.Id, path, code, message));
             Check(context, db, file, grid);
         }
     }

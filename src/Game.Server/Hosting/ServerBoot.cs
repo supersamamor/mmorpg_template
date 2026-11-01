@@ -148,7 +148,7 @@ public static class ServerPipeline
         var progressions = new InMemoryProgressionStore();
         return new SystemPipeline()
             .Add(() => MovementSystem.Create(balance))
-            .Add(() => new MonsterSpawnerSystem(monsters))
+            .Add(() => new MonsterSpawnerSystem(monsters, balance.Death.CorpseMs))
             .Add(() => MonsterAiSystem.Create(monsters, balance))
             .Add(() => new CombatSystem(combat, progressions))
             .Add(() => AoiSystem.Create(balance));

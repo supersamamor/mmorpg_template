@@ -17,7 +17,7 @@ namespace Game.Server.World.Combat;
 /// <see cref="AttackTarget"/>, <see cref="StopAttack"/> and <see cref="Respawn"/>. Runs after the monster AI.
 /// </summary>
 /// <remarks>
-/// <para><b>Per tick</b>, in this order: the intents (in arrival order); vitals clamped to changed stat sheets; the monster attack requests
+/// <para><b>Per tick</b>, in this order: the intents (in arrival order); vitals clamped to changed stat sheets and naturally regenerated; the monster attack requests
 /// buffered from the last tick's events (in raise order; a ranged one also needs line of sight); player auto-attacks (in entity id order); ground item expiry. A killing hit
 /// handles the death at once (<see cref="Entity.Dead"/>, <see cref="EntityDied"/>, EXP, drops), so later attacks in the same tick already
 /// see the target dead. All randomness is the instance's <see cref="TickContext.Random"/>, through the resolver and the drop rolls.</para>
@@ -32,6 +32,9 @@ public sealed class CombatSystem : ITickSystem
 {
     private static readonly IReadOnlyCollection<Type> Owned = [typeof(AttackTarget), typeof(StopAttack), typeof(Respawn)];
     private static readonly int AspdStat = StatIndex.IndexOf(DerivedStats.Aspd);
+    private static readonly int HpRegenStat = StatIndex.IndexOf(DerivedStats.HpRegen);
+    private static readonly int SpRegenStat = StatIndex.IndexOf(DerivedStats.SpRegen);
+    private const double FloorTolerance = 1e-9;   // as StatSheet: a sum of 0.1 steps that is 4.9999999999 means 5
 
     private readonly CombatContent _content;
     private readonly IPlayerProgressionStore _progressions;
@@ -114,11 +117,58 @@ public sealed class CombatSystem : ITickSystem
         for (var i = 0; i < _ordered.Count; i++)
         {
             var entity = _ordered[i].Entity;
-            if (entity.Stats is { } stats) entity.Vitals?.Sync(stats);
+            if (entity.Stats is { } stats && entity.Vitals is { } vitals)
+            {
+                vitals.Sync(stats);
+                if (!entity.Dead) Regenerate(_ordered[i], vitals, stats, context.DeltaMs);
+            }
         }
         ResolveRequests(context);
         RunChases(context);
         ExpireItems(context);
+    }
+
+    // ---- regeneration -------------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Natural regeneration for one living combatant for one tick: <c>hp_regen</c> / <c>sp_regen</c> points per second of simulated time,
+    /// paused until <c>regen.out_of_combat_delay_ms</c> after its last attack dealt or taken, never above max. The fractions of a point are
+    /// carried, so the total follows the rate exactly whatever the tick length. Allocates nothing.
+    /// </summary>
+    private void Regenerate(Combatant c, Vitals vitals, StatSheet stats, int deltaMs)
+    {
+        if (_nowMs < c.RegenResumeMs) return;
+        var hp = Step(ref c.HpFraction, stats.Get(HpRegenStat), deltaMs, vitals.Hp, vitals.MaxHp);
+        if (hp != vitals.Hp)
+        {
+            vitals.Hp = hp;
+            // Healed back to full: for a monster the damage race restarts, as when a hit leaves it at full HP.
+            if (hp >= vitals.MaxHp && c.Entity.Kind == EntityKind.Monster) ReleaseLog(c);
+        }
+        vitals.Sp = Step(ref c.SpFraction, stats.Get(SpRegenStat), deltaMs, vitals.Sp, vitals.MaxSp);
+    }
+
+    private static int Step(ref double fraction, double rate, int deltaMs, int current, int max)
+    {
+        if (current >= max || !(rate > 0))
+        {
+            fraction = 0;   // nothing banked while full or not regenerating
+            return current;
+        }
+        var total = fraction + rate * deltaMs / 1000.0;
+        var whole = Math.Floor(total + FloorTolerance);
+        fraction = Math.Max(0, total - whole);
+        var next = (int)Math.Min(max, current + whole);
+        if (next >= max) fraction = 0;
+        return next;
+    }
+
+    /// <summary>A monster is back home (<see cref="MonsterReturned"/>): its damage shares reset, and with <c>ai.heal_on_return</c> it is healed.</summary>
+    private void OnReturned(MonsterReturned e)
+    {
+        if (!_combatants.TryGetValue(e.Monster.Value, out var c) || c.Entity.Dead) return;
+        ReleaseLog(c);
+        if (_content.Balance.Ai.HealOnReturn && c.Entity.Vitals is { } vitals) vitals.Hp = vitals.MaxHp;
     }
 
     // ---- setup and bookkeeping -----------------------------------------------------------------------------------------------------
@@ -145,6 +195,7 @@ public sealed class CombatSystem : ITickSystem
         events.Subscribe<MovementStarted>(OnMovementStarted);
         events.Subscribe<MovementStopped>(OnMovementStopped);
         events.Subscribe<MoveRejected>(OnMoveRejected);
+        events.Subscribe<MonsterReturned>(OnReturned);
 
         // Entities that were there before combat first ran (tests, a system added late) join now.
         foreach (var entity in instance.Entities) Track(entity);
@@ -251,7 +302,7 @@ public sealed class CombatSystem : ITickSystem
         var hp = (int)Math.Max(1, (long)vitals.MaxHp * _content.Balance.Death.RespawnHpPercent / 100);
         vitals.Hp = Math.Min(hp, Math.Max(1, vitals.MaxHp));
         player.Dead = false;
-        var (mapId, cell) = _content.RespawnPoint;
+        var (mapId, cell) = _content.RespawnPointFor(_instance!.MapId);
         context.Warp(player.Id, mapId, cell);
         context.Publish(new PlayerRespawned(player.Id, mapId, cell, vitals.Hp));
     }
@@ -415,6 +466,9 @@ public sealed class CombatSystem : ITickSystem
         var result = _resolver!.Resolve(a);
         Resolved++;
 
+        var resume = _nowMs + _content.Balance.Regen.OutOfCombatDelayMs;   // any resolved attack, a miss too, is combat for both
+        attacker.RegenResumeMs = resume;
+        target.RegenResumeMs = resume;
         var vitals = target.Entity.Vitals!;
         var before = vitals.Hp;
         vitals.Hp = (int)Math.Clamp((long)before - result.Damage, 0, Math.Max(before, vitals.MaxHp));
@@ -471,10 +525,8 @@ public sealed class CombatSystem : ITickSystem
         if (percent <= 0 || !_progressions.TryGet(player.Id, out var state)) return;
         var table = _content.BaseExpTable.Exp;
         if (state.BaseLevel < 1 || state.BaseLevel > table.Count) return;   // at the max level EXP is always 0
-        var loss = Math.Min(state.BaseExp, table[state.BaseLevel - 1] * percent / 100);
+        var loss = _progression.LoseBaseExp(state, table[state.BaseLevel - 1] * percent / 100);
         if (loss <= 0) return;
-        // ProgressionRules has no "lose EXP" operation yet; this keeps its invariant (0 <= BaseExp < requirement, level unchanged).
-        state.BaseExp -= loss;
         context.Publish(new ExpLost(player.Id, loss));
     }
 
@@ -618,6 +670,9 @@ public sealed class CombatSystem : ITickSystem
         public readonly MonsterDef? Def = def;   // null for players
         public double NextAttackMs;              // players' auto-attack timer (monsters are paced by the AI)
         public List<DamageShare>? Damage;        // monsters: HP taken per player since the last full-HP moment, in first-hit order
+        public long RegenResumeMs;               // no natural regeneration before this time (the out-of-combat delay after the last attack)
+        public double HpFraction;                // regenerated HP not yet worth a whole point, carried to the next tick
+        public double SpFraction;
     }
 
     private sealed class Chase
