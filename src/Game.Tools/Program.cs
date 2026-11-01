@@ -6,7 +6,6 @@ const int NotImplementedExitCode = 2;
 var root = new RootCommand("Game content and build tools");
 foreach (var (name, description) in new[]
 {
-    ("validate", "Validate all content and cross-references"),
     ("stats", "Print content statistics"),
 })
 {
@@ -20,5 +19,6 @@ foreach (var (name, description) in new[]
 }
 
 root.Subcommands.Add(SchemaCommand.Create());
+root.Subcommands.Add(ValidateCommand.Create());
 
 return root.Parse(args).Invoke();
