@@ -135,13 +135,13 @@ When writing these prompts, copy in the decisions listed:
 - **T-206:** 65, 66, 67
 - **T-207:** 31
 - **T-305:** 73
-- **T-401:** 15, 68
+- **T-401:** 15, 68, 85
 - **T-403:** 72
 - **T-501:** 14
 - **T-502:** 14
 - **T-503:** 32
 - **T-602:** 12, 30
-- **T-702:** 77
+- **T-702:** 77, 85
 - **T-802:** 63, 67, 76
 - **T-804:** 50, 74
 
@@ -149,3 +149,15 @@ When writing these prompts, copy in the decisions listed:
 - Five tasks are new or reshaped with prompts: T-007, T-110, T-111, T-213 and T-308.
 - T-307 and T-214 have prompts, but they touch `src/Game.Server/Net/**` and need the owner's explicit go-ahead before they start.
 - The remaining new tasks (T-216, T-503, T-807) are backlog rows. Their prompts are written when their phase opens.
+
+## Addendum — T-302 (2026-11-02)
+| # | Question (source) | Decision |
+|---|---|---|
+| 79 | `StatSheet.WriteTo(asTarget)` allocates ~96 B per hit building `t_` names (T-302) | **→ T-308:** cache the target-side symbol slots once; the allocation test asserts 0. |
+| 80 | A `StopMove` while standing still produces no movement event, so combat can't see it (T-302) | **→ T-307:** the gateway turns client `stop` into **both** `StopMove` and `StopAttack`. |
+| 81 | The T-301 AI uses `long.MinValue` as "no move yet", so `tick - long.MinValue` overflows and `MovePending` is wrong until the first move (T-302) | **→ T-308:** a real bug; fix it with an explicit flag and add a regression test. |
+| 82 | The death penalty edits `ProgressionState.BaseExp` directly (T-302) | **→ T-308:** add `ProgressionRules.LoseBaseExp` (never below 0 within the level, never loses a level), with golden tests; combat calls it. |
+| 83 | Respawn point is the new-character start cell (T-302) | **→ T-308:** optional per-map `respawn` cell on `MapDef` (validated walkable), falling back to the map's first entry warp, then to `new_character`. Content sets it for both sample maps. |
+| 84 | Ground items are skipped by the AOI until they have a wire kind (T-302) | **→ T-307:** add the `item` kind term and remove the skip. |
+| 85 | Pickup and the progression store (T-302) | **→ T-401** (pickup uses `LootRules.MayPickUp` and despawns the item) and **→ T-702** (persist the in-memory progression store). |
+| 86 | Rare drop chances 0.5–2% (T-302 drop audit) | **Decided: keep.** They are plausible for v1; the balance pass revisits them with real play data. |
