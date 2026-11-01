@@ -37,7 +37,7 @@ public static class ProtocolJson
         {
             var reader = new Utf8JsonReader(utf8, new JsonReaderOptions { MaxDepth = MaxClientDepth });
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ClientMessage>(ByeReasons.Malformed);
-            string? type = null, name = null, content = null;
+            string? type = null, name = null, content = null, resume = null;
             int? version = null;
             long? seq = null;
             GridCell? cell = null;
@@ -51,6 +51,7 @@ public static class ProtocolJson
                     case "version": version = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var v) ? v : throw Bad(); break;
                     case "name": name = String(ref reader); break;
                     case "content": content = String(ref reader); break;
+                    case "resume": resume = String(ref reader); break;
                     case "seq": seq = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var s) ? s : throw Bad(); break;
                     case "cell": cell = Cell(ref reader); break;
                     default: reader.Skip(); break;
@@ -60,9 +61,11 @@ public static class ProtocolJson
 
             ClientMessage? message = type switch
             {
-                MessageTypes.Hello => version is { } ver && name is not null ? new HelloMessage(ver, name, content) : null,
+                // exactly one of name (a new login) and resume (a resume token)
+                MessageTypes.Hello => version is { } ver && (name is null) != (resume is null) ? new HelloMessage(ver, name, content, resume) : null,
                 MessageTypes.Move => cell is { } c ? new MoveMessage(c) : null,
                 MessageTypes.Stop => new StopMessage(),
+                MessageTypes.Logout => new LogoutMessage(),
                 MessageTypes.Ping => seq is { } n ? new PingMessage(n) : null,
                 null => null,
                 _ => throw new UnknownTypeException(),
@@ -93,7 +96,8 @@ public static class ProtocolJson
         {
             case HelloMessage hello:
                 w.WriteNumber("version", hello.Version);
-                w.WriteString("name", hello.Name);
+                if (hello.Name is not null) w.WriteString("name", hello.Name);
+                if (hello.Resume is not null) w.WriteString("resume", hello.Resume);
                 if (hello.Content is not null) w.WriteString("content", hello.Content);
                 break;
             case MoveMessage move:
@@ -122,6 +126,7 @@ public static class ProtocolJson
                 w.WriteString("map", welcome.MapId);
                 w.WriteNumber("tick_rate", welcome.TickRate);
                 if (welcome.Content is not null) w.WriteString("content", welcome.Content);
+                if (welcome.Token is not null) w.WriteString("token", welcome.Token);
                 break;
             case SnapshotMessage snapshot:
                 w.WriteNumber("tick", snapshot.Tick);
@@ -190,7 +195,7 @@ public static class ProtocolJson
         {
             var reader = new Utf8JsonReader(utf8);
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ServerMessage>(ByeReasons.Malformed);
-            string? type = null, map = null, intent = null, reason = null, content = null;
+            string? type = null, map = null, intent = null, reason = null, content = null, token = null;
             long tick = 0, id = 0, seq = 0;
             int version = 0, tickRate = 0;
             GridCell? cell = null;
@@ -209,6 +214,7 @@ public static class ProtocolJson
                     case "map": map = String(ref reader); break;
                     case "tick_rate": tickRate = reader.GetInt32(); break;
                     case "content": content = String(ref reader); break;
+                    case "token": token = String(ref reader); break;
                     case "tick": tick = reader.GetInt64(); break;
                     case "seq": seq = reader.GetInt64(); break;
                     case "intent": intent = String(ref reader); break;
@@ -228,7 +234,7 @@ public static class ProtocolJson
             }
             ServerMessage? message = type switch
             {
-                MessageTypes.Welcome => map is null ? null : new WelcomeMessage(version, id, map, tickRate, content),
+                MessageTypes.Welcome => map is null ? null : new WelcomeMessage(version, id, map, tickRate, content, token),
                 MessageTypes.Snapshot => map is null ? null : new SnapshotMessage(tick, map, id, entities),
                 MessageTypes.Delta => new DeltaMessage(tick, entities, changed, gone),
                 MessageTypes.Rejected => intent is null || reason is null ? null : new RejectedMessage(intent, reason, cell),

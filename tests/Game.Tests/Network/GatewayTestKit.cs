@@ -98,6 +98,14 @@ public sealed class GatewayRig : IAsyncDisposable
         return client;
     }
 
+    /// <summary>Connects and says hello with a resume token (no name); the caller waits for the welcome or the bye.</summary>
+    public async Task<TestClient> ResumeAsync(string token)
+    {
+        var client = await ConnectAsync();
+        await client.SendAsync(new HelloMessage(ProtocolVersion.Current, null, ContentHash, token));
+        return client;
+    }
+
     /// <summary>The session whose character is <paramref name="id"/>.</summary>
     public ClientSession SessionOf(long id) =>
         Poll.Until(() => Gateway.Sessions.FirstOrDefault(s => s.Entity?.Value == id), s => s is not null, "session of #" + id)!;
@@ -182,6 +190,9 @@ public sealed class TestClient : IDisposable
     public bool Closed => _receive.IsCompleted;
 
     public long Id => Messages.OfType<WelcomeMessage>().First().Id;
+
+    /// <summary>The resume token of the latest welcome.</summary>
+    public string Token => Messages.OfType<WelcomeMessage>().Last().Token!;
 
     /// <summary>A copy of one entity's current record in this client's view, or null.</summary>
     public EntityRecord? Seen(long id)

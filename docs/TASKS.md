@@ -59,7 +59,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-204 | AOI grid + delta snapshots | Claude Code | Opus 5.5 | [T-204](../tasks/prompts/T-204.md) | T-202, T-212 | Review | Adds tick phase 5; Tier R review recommended |
 | T-205 | WebSocket gateway (`wss`) + message contracts | Claude Code | Opus 5.5 | [T-205](../tasks/prompts/T-205.md) | T-204 | Review | Restricted `Net/**` — approved by owner; Tier R review required |
 | T-209 | Client content bundle (`export-client`) + content hash check | Claude Code | Sonnet 5.5 | [T-209](../tasks/prompts/T-209.md) | T-205 | Review | `Net/**` only for the hash check — approved by owner |
-| T-210 | Mobile session lifecycle: background, grace period, resume token | Claude Code | Opus 5.5 | [T-210](../tasks/prompts/T-210.md) | T-205, T-209 | Ready | Restricted `Net/**` — approved by owner; Tier R review required |
+| T-210 | Mobile session lifecycle: background, grace period, resume token | Claude Code | Opus 5.5 | [T-210](../tasks/prompts/T-210.md) | T-205, T-209 | Review | Restricted `Net/**` — approved by owner; Tier R review required |
 
 ## Backlog (prompts written when the previous phase is Done)
 

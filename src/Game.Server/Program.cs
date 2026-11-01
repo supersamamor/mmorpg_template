@@ -83,7 +83,8 @@ log.Info(options.DurationSeconds is { } d ? $"Running for {d} s." : "Running. Pr
 if (options.DurationSeconds is { } seconds) stop.Wait(TimeSpan.FromSeconds(seconds));
 else stop.Wait();
 
-log.Info($"Stopping: saying bye to {gateway.SessionCount} session(s), then finishing the current tick of each instance.");
+log.Info($"Stopping: saying bye to {gateway.SessionCount} session(s), releasing {gateway.CharactersInGrace} character(s) in their grace period, " +
+         "then finishing the current tick of each instance.");
 await gateway.ShutdownAsync();
 await host.StopAsync();
 await host.DisposeAsync();

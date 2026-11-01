@@ -69,13 +69,14 @@ public class GatewayTests
         await b.SendAsync(new MoveMessage(target));
         await Poll.UntilAsync(() => a.Seen(b.Id), r => r is { Next: null } && r.Cell.Equals(target), "a sees b arrive");
 
-        await b.CloseAsync();
+        await b.SendAsync(new LogoutMessage()); // a dropped connection would keep b in the world for the grace period (GatewayResumeTests)
+        (await b.WaitForByeAsync()).ShouldBe(ByeReasons.Logout);
         await a.WaitForAsync<DeltaMessage>(d => d.Disappeared.Contains(b.Id));
         a.SeenIds.ShouldNotContain(b.Id);
     }
 
     [Fact]
-    public async Task Disconnect_removes_the_character_on_the_next_tick()
+    public async Task Disconnect_keeps_the_character_for_the_grace_period_then_removes_it()
     {
         await using var rig = await GatewayRig.StartAsync();
         var client = await rig.JoinAsync();
@@ -83,6 +84,9 @@ public class GatewayTests
         rig.World.LocationOf(id).ShouldBe(rig.Start.MapId);
 
         client.Dispose(); // dropped, not closed: the mobile case
+        await Poll.UntilAsync(() => rig.Gateway.CharactersInGrace, n => n == 1, "grace period");
+        rig.World.LocationOf(id).ShouldBe(rig.Start.MapId);
+        rig.Clock.Advance(rig.Gateway.Options.GracePeriodMs);
         await Poll.UntilAsync(() => rig.World.LocationOf(id), map => map is null, "despawn");
         await Poll.UntilAsync(() => rig.Gateway.SessionCount, n => n == 0, "session gone");
     }
@@ -415,6 +419,8 @@ public class GatewayTests
         await Poll.UntilAsync(() => session.ByeReason, r => r == ByeReasons.TooSlow, "too_slow");
         rig.Clock.Advance(rig.Gateway.Options.CloseTimeoutMs); // the bye cannot be delivered: the socket is dropped
         await slow.WaitClosedAsync();
+        await Poll.UntilAsync(() => rig.Gateway.CharactersInGrace, n => n == 1, "grace period");
+        rig.Clock.Advance(rig.Gateway.Options.GracePeriodMs);
         await Poll.UntilAsync(() => rig.World.LocationOf(id), map => map is null, "despawn");
     }
 

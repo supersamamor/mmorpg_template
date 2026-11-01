@@ -19,15 +19,21 @@ public class ProtocolJsonTests
     {
         { "hello", new HelloMessage(1, "Ada"), """{"type":"hello","version":1,"name":"Ada"}""" },
         { "hello with content hash", new HelloMessage(1, "Ada", "ab12"), """{"type":"hello","version":1,"name":"Ada","content":"ab12"}""" },
+        { "hello with a resume token", new HelloMessage(1, null, "ab12", "Qk3x-_9"), """{"type":"hello","version":1,"resume":"Qk3x-_9","content":"ab12"}""" },
         { "move", new MoveMessage(new GridCell(12, 9)), """{"type":"move","cell":[12,9]}""" },
         { "stop", new StopMessage(), """{"type":"stop"}""" },
         { "ping", new PingMessage(7), """{"type":"ping","seq":7}""" },
+        { "logout", new LogoutMessage(), """{"type":"logout"}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
     {
         { "welcome", new WelcomeMessage(1, 42, "map.starter_meadow", 10), """{"type":"welcome","version":1,"id":42,"map":"map.starter_meadow","tick_rate":10}""" },
         { "welcome with content hash", new WelcomeMessage(1, 42, "map.starter_meadow", 10, "ab12"), """{"type":"welcome","version":1,"id":42,"map":"map.starter_meadow","tick_rate":10,"content":"ab12"}""" },
+        {
+            "welcome with a resume token", new WelcomeMessage(1, 42, "map.starter_meadow", 10, "ab12", "Qk3x-_9"),
+            """{"type":"welcome","version":1,"id":42,"map":"map.starter_meadow","tick_rate":10,"content":"ab12","token":"Qk3x-_9"}"""
+        },
         {
             "snapshot", new SnapshotMessage(120, "map.starter_meadow", 42, [Walker, Standing]),
             """{"type":"snapshot","tick":120,"map":"map.starter_meadow","id":42,"entities":[""" +
@@ -91,6 +97,9 @@ public class ProtocolJsonTests
     [InlineData("""{"type":"ping","seq":1,"x":[[[[[[[[[[1]]]]]]]]]]}""", ByeReasons.Malformed)] // nested too deep
     [InlineData("""{"type":"teleport","cell":[1,1]}""", ByeReasons.UnknownType)]
     [InlineData("""{"type":"bye","reason":"x"}""", ByeReasons.UnknownType)]
+    [InlineData("""{"type":"hello","version":1}""", ByeReasons.Malformed)]                                  // neither name nor resume
+    [InlineData("""{"type":"hello","version":1,"name":"Ada","resume":"Qk3x"}""", ByeReasons.Malformed)]   // both
+    [InlineData("""{"type":"hello","version":1,"resume":7}""", ByeReasons.Malformed)]
     public void Bad_client_messages_name_their_reason(string json, string reason)
     {
         var read = ProtocolJson.ReadClient(Encoding.UTF8.GetBytes(json));
