@@ -50,7 +50,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-109 | Balance constants (`BalanceDef` + `balance.yaml`) | Claude Code | Sonnet 5.5 | [T-109](../tasks/prompts/T-109.md) | T-103 | Review | Added: T-105/T-106 need it |
 | T-110 | Tooling guardrails: CI workflow, banned-API + AOT analyzers on `Game.Shared`, schema-checked `validate`, `[Formula]` marker | Claude Code | Sonnet 5.5 | [T-110](../tasks/prompts/T-110.md) | T-102, T-103, T-107, T-209 | Review | ADR-002 #2–9, 17, 19, 23 |
 | T-111 | Vocabulary + content hygiene: `zeny` → `currency` (original name), drop `MapEntered`, start-job and reach-cell checks, Twin Strike level 1 | Claude Code | Sonnet 5.5 | [T-111](../tasks/prompts/T-111.md) | T-302, T-110 | Review | Starts after T-302 and T-110 merge; ADR-002 #11–22, 29 |
-| T-112 | Naming cleanup: `job.novice` → `job.wanderer`, neutral `job.swordsman` examples; robust `BannedSymbolsTests` | Claude Code | Sonnet 5.5 | [T-112](../tasks/prompts/T-112.md) | T-111 | Ready | ADR-002 #103–105 |
+| T-112 | Naming cleanup: `job.novice` → `job.wanderer`, neutral `job.swordsman` examples; robust `BannedSymbolsTests` | Claude Code | Sonnet 5.5 | [T-112](../tasks/prompts/T-112.md) | T-111 | In Progress | ADR-002 #103–105 |
 
 ## Phase 2 — World slice
 
