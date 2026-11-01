@@ -41,7 +41,8 @@ docker compose down -v    # stop and WIPE all data
 /src
   Game.Shared     definitions, formulas, modifier pipeline, grid math, packets
   Game.Content    loader, registry, cross-reference validator, client bundle export
-  Game.Server     authoritative tick loop, networking, persistence
+  Game.Server     authoritative tick loop, networking, persistence, internal admin API
+  Game.Admin      internal web panel for live ops (staff only, never shipped)
   Game.Tools      content CLI (validate, schema gen, stats, export-client)
 /tests            Game.Tests
 /client           Godot 4 .NET 3D project for Android/iOS (renderer/input only — no game rules)

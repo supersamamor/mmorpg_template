@@ -20,7 +20,9 @@ Godot: see [ADR-001](decisions/ADR-001-3d-mobile.md).
   Game.Content     YAML loading, registries, cross-reference validation,
                    JSON Schema generation, client bundle export. Hot-reload in dev.
   Game.Server      Host: tick loop, world/map instances, AOI, entity systems,
-                   WebSocket gateway, persistence (PostgreSQL), event bus.
+                   WebSocket gateway, persistence (PostgreSQL), event bus,
+                   internal admin API (§12).
+  Game.Admin       Internal web panel for live operations (§12). Staff only, never shipped.
   Game.Tools       CLI: `validate`, `schema`, `stats`, `export-client`.
 /tests
   Game.Tests       Unit + golden-value tests (xUnit).
@@ -32,7 +34,8 @@ Godot: see [ADR-001](decisions/ADR-001-3d-mobile.md).
 /docs              This folder. Decisions in /docs/decisions (ADRs).
 ```
 
-Dependency direction: `Shared ← Content ← Server/Tools`, `Shared ← Client`.
+Dependency direction: `Shared ← Content ← Server/Tools/Admin`, `Shared ← Client`.
+`Game.Admin` never references `Game.Server`; it talks to it over the admin API (§12).
 `Game.Shared` must never reference anything else in the solution.
 
 `Game.Shared` targets `net10.0;netstandard2.1` with C# 9. Godot's .NET runtime is older than
@@ -255,7 +258,65 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 - Store rules: in-app account deletion (Apple and Google require it); Sign in with Apple if any
   other third-party login is offered; iOS privacy manifest and Play data-safety form kept current.
 
-## 12. Non-goals for v1
+## 12. Admin panel & live operations
+A live game needs staff tooling: player support, moderation, fixing mistakes, and watching
+server health. Account deletion and data-export requests are also store requirements (§11).
+
+### 12.1 Shape
+```
+Staff browser ──HTTPS + SSO──► Game.Admin (ASP.NET Core, Blazor Server)
+                                   │  service credential, private network only
+                                   ▼
+                        Game.Server admin API (src/Game.Server/Admin)
+                                   │  admin commands queued into the tick loop
+                                   ▼
+                        game systems + event bus + PostgreSQL (transactions)
+```
+- **`Game.Admin`** is a separate ASP.NET Core app (Blazor Server, so logic stays server-side).
+  It references `Game.Shared` (admin command contracts) and `Game.Content` (to show item and
+  monster names), never `Game.Server`. It has no game rules of its own.
+- **The admin API** is a separate HTTP listener inside `Game.Server`, bound to a private
+  interface/port and authenticated with a service credential. It is never reachable from the
+  public internet or from the game client's `wss` endpoint.
+- **Writes go through the game, not around it.** Every change (ban, item restore, currency fix)
+  is an *admin command* that the server queues into the tick loop and applies like a player
+  intent: validated, transactional (rule 10), and published on the event bus. The panel never
+  writes game tables directly. Reads (player lookup, history) may use a read-only database role.
+
+### 12.2 Access control
+- Staff sign in through an OIDC identity provider with MFA. There are no local panel passwords.
+- Roles: `support` (read, kick, mute, handle deletion/export requests), `gm` (+ ban, item and
+  currency restore, announcements), `admin` (+ maintenance mode, role management).
+- The server re-checks the role on every admin command. The panel's UI is not trusted for this.
+- Reachable only from a VPN or IP allowlist in production; `localhost` in development.
+
+### 12.3 Audit log
+- Every admin command writes an append-only audit row in the same transaction: staff id, role,
+  action, target, before/after values, a required free-text reason, time, request id.
+- No role can edit or delete audit rows. The panel can search them.
+- Items created by staff get new instance ids and `source = admin`, so dupe audits (§11) can tell
+  them apart.
+
+### 12.4 Features (v1)
+- **Players:** search accounts and characters; view inventory, equipment, level, location,
+  login history and item history.
+- **Moderation:** kick, mute (timed), ban (timed or permanent, account level), with reasons.
+  Bans are enforced by the server at login and on the live session.
+- **Support fixes:** restore or remove items and currency; move a stuck character to its save
+  point.
+- **Server:** players online, map instances, tick duration (p50/p99), error rate, loaded
+  content hash; server-wide announcements; maintenance mode (blocks new logins, then a timed
+  kick).
+- **Store compliance:** a queue for account deletion and data-export requests. In-app deletion
+  still runs without staff; the queue covers requests that come in through support.
+
+### 12.5 Not in the panel
+- **Content editing.** Items, monsters, drop rates and formulas stay in YAML in git, reviewed
+  and validated (`validate`) before they ship. The panel can show content, not change it.
+- Running arbitrary SQL or scripts against the live database.
+- Anything a player can see. The panel is internal; it is not the "web client" excluded in §13.
+
+## 13. Non-goals for v1
 Sharding/multi-server, client prediction beyond movement interpolation, PvP balance,
 guild wars, cash shop / in-app purchases, multi-floor maps / jumping / flying,
 downloading content or themes after install, web client, tablets-first layout, controller support.

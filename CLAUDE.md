@@ -41,6 +41,7 @@ If a request conflicts with these rules, stop and say so instead of working arou
 ## Restricted areas — only touch when explicitly asked
 - `src/Game.Server/Net/**` (networking)
 - `src/Game.Server/Persistence/**` (database, migrations)
+- `src/Game.Server/Admin/**` (privileged admin API — ARCHITECTURE §12)
 - `content/formulas.yaml` (balance)
 
 ## Task workflow

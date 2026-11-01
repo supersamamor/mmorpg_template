@@ -51,10 +51,15 @@ and one of them survives being backgrounded for 30 s.
 - Auth, character slots, save/load, transactional inventory
 - Store compliance: in-app account deletion, Sign in with Apple (if social login), privacy disclosures
 
-## Phase 8 — Tooling & release
+## Phase 8 — Tooling, live ops & release
 - Content hot-reload, balance report CLI, simple content editor
+- Admin panel for live operations (ARCHITECTURE §12): admin API, SSO + roles, audit log,
+  player lookup, kick/mute/ban, item and currency restore, announcements, maintenance mode,
+  deletion/export request queue
 - Mobile build pipeline (Android AAB, iOS via macOS CI → TestFlight / Play internal track)
 - On-device performance capture against the §9 budgets
+**Done when:** a GM can find a player, ban them and restore a lost item from the panel, each
+action is in the audit log, and release builds reach TestFlight and the Play internal track.
 
 ## Phase 9 — Social
 - Chat, party (EXP share), trade, guilds

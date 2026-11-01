@@ -78,6 +78,9 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-801 | 8 | Content hot-reload + simple editor | Claude Code | Sonnet 5.5 | Backlog |
 | T-802 | 8 | Mobile build pipeline (Android AAB, iOS on macOS CI, TestFlight / Play internal) | Claude Code | Sonnet 5.5 | Backlog |
 | T-803 | 8 | On-device performance capture vs ARCHITECTURE §9 budgets | Claude Code | Sonnet 5.5 | Backlog |
+| T-804 | 8 | Admin API in server: admin commands via tick loop, role checks, audit log (ARCH §12) | Claude Code | Opus 5.5 | Backlog |
+| T-805 | 8 | `Game.Admin` web panel: SSO + roles, player lookup, server status, audit search | Claude Code | Sonnet 5.5 | Backlog |
+| T-806 | 8 | Moderation & support: kick/mute/ban, item/currency restore, announcements, maintenance, deletion/export queue | Claude Code | Sonnet 5.5 | Backlog |
 | T-901 | 9 | Chat, party, trade, guilds | Claude Code | Opus 5.5 | Backlog |
 
 ## Workflow
