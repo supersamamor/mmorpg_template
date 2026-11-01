@@ -27,9 +27,6 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>NpcTalked</c>: NpcTalked event.</summary>
         public const string NpcTalked = "NpcTalked";
 
-        /// <summary><c>MapEntered</c>: MapEntered event.</summary>
-        public const string MapEntered = "MapEntered";
-
         /// <summary><c>ZoneEntered</c>: ZoneEntered event.</summary>
         public const string ZoneEntered = "ZoneEntered";
 
@@ -124,7 +121,6 @@ namespace Game.Shared.Vocabulary
             ItemUsed,
             ItemEquipped,
             NpcTalked,
-            MapEntered,
             ZoneEntered,
             LevelUp,
             JobLevelUp,

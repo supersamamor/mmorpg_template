@@ -80,7 +80,7 @@ namespace Game.Shared.Definitions
         /// <summary>Distance in cells at which an aggressive monster notices players.</summary>
         public int AggroRange { get; init; }
 
-        /// <summary>Distance in cells from its target beyond which the monster gives up.</summary>
+        /// <summary>Distance in cells from its <b>home</b> cell (not from its target) beyond which the monster gives up and returns.</summary>
         public int ChaseRange { get; init; }
 
         /// <summary>Skills the monster may use.</summary>

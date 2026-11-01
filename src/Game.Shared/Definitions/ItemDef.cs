@@ -100,8 +100,8 @@ namespace Game.Shared.Definitions
     public sealed record ItemEquipDef
     {
         /// <summary>
-        /// Slots the item occupies when equipped (<see cref="EquipSlots"/>), e.g. <c>[weapon, shield]</c>
-        /// for a two-handed weapon.
+        /// Slots the item fits (<see cref="EquipSlots"/>): it fits <b>any one</b> of the listed slots and occupies just that one when
+        /// equipped, e.g. <c>[accessory_1, accessory_2]</c> for an accessory that may go in either.
         /// </summary>
         public IReadOnlyList<string> Slots { get; init; } = Empty.List<string>();
 

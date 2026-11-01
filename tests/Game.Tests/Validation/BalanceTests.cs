@@ -232,6 +232,7 @@ public class BalanceTests : IDisposable
     [Theory]
     [InlineData("start_map_id: map.starter_meadow", "start_map_id: map.nowhere", ValidationCodes.RefMissing, "new_character.start_map_id")]
     [InlineData("start_job_id: job.novice", "start_job_id: job.nope", ValidationCodes.RefMissing, "new_character.start_job_id")]
+    [InlineData("start_job_id: job.novice", "start_job_id: job.warden", ValidationCodes.BalanceRange, "new_character.start_job_id")] // has a parent job
     [InlineData("start_facing: n", "start_facing: up", ValidationCodes.VocabUnknown, "new_character.start_facing")]
     [InlineData("start_x: 12", "start_x: 0", ValidationCodes.GridCellBlocked, "new_character.start_x")]   // the border wall
     [InlineData("start_x: 12", "start_x: 480", ValidationCodes.GridCellBlocked, "new_character.start_x")] // off the grid

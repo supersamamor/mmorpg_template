@@ -298,7 +298,7 @@
           {
             "properties": {
               "type": {
-                "const": "zeny"
+                "const": "currency"
               },
               "amount": {
                 "type": "integer",
@@ -306,7 +306,7 @@
               }
             },
             "additionalProperties": false,
-            "description": "zeny: give currency (engine id Currency)."
+            "description": "currency: give currency (engine id Currency)."
           },
           {
             "properties": {

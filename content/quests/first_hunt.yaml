@@ -17,4 +17,4 @@ steps:
 rewards:
   - { type: exp, base: 40, job: 25 }
   - { type: item, item_id: item.healing_draught, count: 5 }
-  - { type: zeny, amount: 150 }
+  - { type: currency, amount: 150 }

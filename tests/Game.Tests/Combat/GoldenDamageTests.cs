@@ -60,16 +60,16 @@ public class GoldenDamageTests
         // crit_chance: (2.2 − 3×0.2) / 100 = 0.016. Roll 0.9: no crit.
         // base (t_def 0): floor((26 + 38) × 100 / 100) = 64.
         // physical: floor(64 × 100 / (100 + 12×3)) = floor(6400 / 136) = floor(47.06) = 47.
-        // skill: 0.6 + 3×0.1 = 0.9. Element neutral vs earth = 1.
-        // raw = 47 × 0.9 × 1 = 42.3 → 42. (hits: 2 splits the total visually only.)
+        // skill: 0.9 + 3×0.1 = 1.2. Element neutral vs earth = 1.
+        // raw = 47 × 1.2 × 1 = 56.4 → 56. (hits: 2 splits the total visually only.)
         r.Hit.ShouldBeTrue();
         r.Crit.ShouldBeFalse();
-        r.Damage.ShouldBe(42);
+        r.Damage.ShouldBe(56);
         Step(ctx, BreakdownSteps.CritChance).ShouldBe(0.016, Tolerance);
         Step(ctx, BreakdownSteps.Base).ShouldBe(64);
         Step(ctx, BreakdownSteps.Defense).ShouldBe(47);
-        Step(ctx, BreakdownSteps.Skill).ShouldBe(0.9, Tolerance);
-        Step(ctx, BreakdownSteps.Raw).ShouldBe(42.3, Tolerance);
+        Step(ctx, BreakdownSteps.Skill).ShouldBe(1.2, Tolerance);
+        Step(ctx, BreakdownSteps.Raw).ShouldBe(56.4, Tolerance);
     }
 
     /// <summary>

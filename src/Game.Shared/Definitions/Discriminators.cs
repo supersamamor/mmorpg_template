@@ -45,7 +45,7 @@ namespace Game.Shared.Definitions
         public static readonly IReadOnlyDictionary<string, System.Type> Rewards = Table(
             (RewardTypes.Exp, typeof(ExpReward)),
             (RewardTypes.Item, typeof(ItemReward)),
-            (RewardTypes.Zeny, typeof(CurrencyReward)),
+            (RewardTypes.Currency, typeof(CurrencyReward)),
             (RewardTypes.SkillPoint, typeof(SkillPointReward)),
             (RewardTypes.StatPoint, typeof(StatPointReward)),
             (RewardTypes.UnlockJob, typeof(UnlockJobReward)),
