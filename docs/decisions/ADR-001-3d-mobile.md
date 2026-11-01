@@ -50,7 +50,7 @@ must be checked at that point.
   the YAML loader and must not hold server-only data.
 
 ## Spike results
-T-005, 2026-11-01. Project: `spikes/mobile-export/`. How to reproduce: [MOBILE_BUILD.md](../MOBILE_BUILD.md).
+T-005, 2026-11-01 (updated 2026-11-02 after rebasing onto T-002 and the later Phase 1–2 work). Project: `spikes/mobile-export/`. How to reproduce: [MOBILE_BUILD.md](../MOBILE_BUILD.md).
 
 ### Verdict
 
@@ -65,18 +65,18 @@ T-005, 2026-11-01. Project: `spikes/mobile-export/`. How to reproduce: [MOBILE_B
   (conditional `TargetFramework` in the csproj). Built with the .NET 10.0.401 SDK.
 - Runtime on device: Android uses the **Mono** runtime (`UseMonoRuntime`); iOS uses **NativeAOT**
   (`PublishAot`, trimmed) — set by the Godot SDK, not by us.
-- `Game.Shared` is referenced as its `netstandard2.1` build (`SetTargetFramework`), and rooted for the
-  trimmer (`TrimmerRootAssembly`), because the probe reaches it by reflection.
+- `Game.Shared` is referenced as its `netstandard2.1` build (`SetTargetFramework`) and called directly, with no
+  reflection and no `TrimmerRootAssembly`, so the trimmer and NativeAOT see what a real client would use.
 
 ### Android build (measured on the PC)
 - arm64-v8a export works from Windows with JDK 17, build-tools 35.0.1, platform android-35, no Gradle build.
 - The APK contains `Game.Shared.dll` (netstandard2.1), the Mono runtime and the pinned dev certificate.
-- **APK size: 103.9 MB debug, 102.1 MB release** (release signed with the debug key, only to measure size).
+- **APK size: 104.1 MB debug** (2026-11-02 build; 103.9 MB on 2026-11-01), **102.1 MB release** (2026-11-01) (release signed with the debug key, only to measure size).
   About 60 MB uncompressed of it is static Mono archives (`libmonosgen-2.0.a` alone is 44 MB) that the app
   cannot use at runtime. Under the 200 MB install budget, but stripping them is the first size win.
 
 ### Desktop sanity run (not a budget measurement)
-Windows 11, AMD Ryzen 7 7735U with integrated "AMD Radeon(TM) Graphics", 1280×720 window, cap 30, 40 characters (High, 4,968 tris each),
+2026-11-01: Windows 11, AMD Ryzen 7 7735U with integrated "AMD Radeon(TM) Graphics", 1280×720 window, cap 30, 40 characters (all at the Full mesh, 4,968 tris each),
 shadows PlayerOnly, after `--autoreport` (12 s):
 
 | Renderer | avg fps (10 s) | worst frame | draw calls | triangles |
@@ -87,16 +87,26 @@ shadows PlayerOnly, after `--autoreport` (12 s):
 `wss://127.0.0.1:8443` connected with certificate verification (pinned dev cert); `ws://` RTT on localhost
 was 26–33 ms because the socket is polled once per frame at 30 fps. `Game.Shared` loaded (`.NETStandard,Version=v2.1`).
 
+2026-11-02, same machine, Mobile renderer only, after the LOD change below: 40 characters as **8 Full (4,968 tris) +
+32 Lod1 (1,932 tris) = 101.6k character triangles**, shadows PlayerOnly, cap 30: avg 29.4 fps, worst 149.9 ms
+(start-up), 3/229 frames over 34 ms, **110 draw calls, 121.9k triangles**. `wss` verified, RTT p50 33 ms / p95 34 ms.
+The probe ran real `Game.Shared` code: a definition record with `with` copies and value equality, a formula compiled
+and evaluated (`max(1, floor(base_level * 1.5 + 2))` at 10 = 17, OK) and `Pcg32Random(42, 54)` matching the
+reference output (OK). Compatibility was not re-run.
+
 ### Findings so far
-- **§9 is internally inconsistent:** 40 characters × the 5k-triangle character cap = 200k triangles, above the
-  150k scene cap before any terrain or props. The spike measures both 40 × ~5.0k ("High") and 40 × ~3.2k ("Low").
-  §9 needs either a ~3k character cap or a higher scene cap — decided from the device numbers.
-- **Draw calls sit right at the cap:** the test scene (40 skinned characters, 10 trees of 2 meshes, 2 batched prop
-  MultiMeshes, ground, one shadow-casting character) measured 98 draw calls. Godot does not batch separate skinned
-  meshes, so every on-screen character costs at least one draw call; map scenery must be MultiMesh-batched.
-- **`Game.Shared` has no public types yet** (T-002 in progress), so on device the probe can only prove that the
-  assembly is packaged, loads and exposes metadata. The probe already constructs a record and reads `IdPrefix`
-  once T-002 lands; re-run on device after T-002 merges.
+- **§9 triangle budget (was internally inconsistent, now resolved by the project lead):** 40 × the 5k cap = 200k
+  is above the 150k scene cap. New rule: the nearest 8 characters at ≤ 5k, every other character at an LOD1 of
+  ≤ 2k, scene cap still 150k, leaving ≥ 45k for map, props and effects. The spike's LOD switch now measures
+  exactly that worst case (8 near + 32 far), plus all-Full and all-Lod1 for comparison. The new limits were not yet
+  in `docs/ARCHITECTURE.md` §9 on `main` when this was written.
+- **Draw calls are at or over the cap:** the test scene (40 skinned characters, 10 trees of 2 meshes, 2 batched prop
+  MultiMeshes, ground, one shadow-casting character) measured 98 draw calls with one shared character mesh and 110
+  with the Full + Lod1 mix (cause not investigated; check the device numbers per LOD mode). Godot does not batch
+  separate skinned meshes, so every on-screen character costs at least one draw call; map scenery must be
+  MultiMesh-batched.
+- **`Game.Shared` runs on desktop through direct calls** (after T-002 merged). On device this is still to be
+  confirmed by the report's formula / pcg32 `OK` lines.
 - **.NET 8 and .NET 9 both reach end of support on 2026-11-10**, and Godot 4.7.2 builds the client against them
   (net8.0 desktop/iOS, net9.0 Android). Moving the client to net10.0 depends on a Godot release whose templates
   accept it.

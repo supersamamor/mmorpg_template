@@ -13,6 +13,5 @@
     <ProjectReference Include="../../../src/Game.Shared/Game.Shared.csproj"
                       SetTargetFramework="TargetFramework=netstandard2.1" />
     <!-- SharedProbe reaches Game.Shared through reflection; keep all of it under trimming / NativeAOT. -->
-    <TrimmerRootAssembly Include="Game.Shared" />
   </ItemGroup>
 </Project>

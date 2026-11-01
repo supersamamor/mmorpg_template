@@ -18,9 +18,9 @@ public static class PlaceholderCharacter
         new(0.3f, 0.45f, 0), new(-0.3f, 0.45f, 0), new(0.12f, 0, 0), new(-0.12f, 0, 0),
     };
 
-    // Two detail levels: High sits just under the §9 per-character cap (5k), Low lets
-    // 40 characters fit the 150k visible-triangle budget together with the scene.
-    public enum Detail { High, Low }
+    // Two detail levels (ARCHITECTURE §9): Full sits just under the 5k cap for the nearest 8 characters,
+    // Lod1 under the 2k cap for every other character.
+    public enum Detail { Full, Lod1 }
 
     static readonly Dictionary<Detail, ArrayMesh> _meshes = new();
     static readonly Dictionary<Detail, int> _triangles = new();
@@ -61,7 +61,7 @@ public static class PlaceholderCharacter
     {
         if (_meshes.ContainsKey(detail)) return;
         // (radial, rings) for torso, head, limbs.
-        var (tr, tg, hr, hg, lr, lg) = detail == Detail.High ? (22, 10, 20, 11, 14, 8) : (16, 8, 16, 10, 12, 6);
+        var (tr, tg, hr, hg, lr, lg) = detail == Detail.Full ? (22, 10, 20, 11, 14, 8) : (12, 6, 12, 8, 10, 4);
 
         // Global rest positions (bones are translation-only at rest).
         var global = new Vector3[BoneNames.Length];

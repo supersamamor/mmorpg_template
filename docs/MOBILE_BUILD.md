@@ -166,7 +166,7 @@ The app opens straight into the test scene. Left: stats and an event log. Right:
 | Shadows | Off → PlayerOnly (§9 default: one character casts) → All (every character and prop) |
 | FPS cap | 30 → 60 → off (vsync off, shows headroom) |
 | Characters | 40 → 60 → 20 → 0 |
-| Char detail | High (~5.0k tris each, the §9 cap) / Low (~3.2k) |
+| LOD | Near8 (§9 worst case: the 8 nearest at Full, 4,968 tris; the rest at Lod1, 1,932 tris) → AllFull → AllLod1 (comparison runs) |
 | Renderer (restart) | Switches Mobile ↔ Compatibility **and quits**. Start the app again; the stats line shows which renderer is active |
 | host field + ws / wss / close | Connect to the echo server at that LAN IP |
 | Auto-reconnect | Off: record raw socket behaviour. On: reconnect after a drop that follows a resume, and log how long it took |
@@ -177,9 +177,10 @@ Pinch to zoom.
 
 ### 6.3 What to record (per device, per renderer)
 
-1. Let the scene settle 15 s (first frames compile shaders). With **40 chars / High / PlayerOnly / cap 30**,
+1. Let the scene settle 15 s (first frames compile shaders). With **40 chars / LOD Near8 / PlayerOnly / cap 30**,
    note `avg10s`, `worst`, `>34ms` count, draw calls, triangles, then **Copy report**.
-2. Repeat with Shadows **Off** and **All**, and with Char detail **Low**.
+2. Repeat with Shadows **Off** and **All**, and with LOD **AllFull** and **AllLod1**. Check the `Game.Shared`
+   lines of the report: formula `OK` and pcg32 `OK` (real Shared code ran on the device).
 3. Set the FPS cap to **off** and note `avg10s` (headroom).
 4. **Memory (the §9 number):** while the scene runs,
    `& $adb shell dumpsys meminfo dev.mmorpgtemplate.spike` → **TOTAL PSS** line. The on-screen

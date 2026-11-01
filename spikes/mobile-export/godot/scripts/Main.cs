@@ -30,7 +30,11 @@ public partial class Main : Node3D
     ShadowMode _shadows = ShadowMode.PlayerOnly;
     int _fpsCap = 30;
     int _characterCount = 40;
-    PlaceholderCharacter.Detail _detail = PlaceholderCharacter.Detail.High;
+    // §9 LOD mix: the nearest 8 characters at Full detail, the rest at Lod1. AllFull / AllLod1 are comparison runs.
+    enum LodMix { Near8, AllFull, AllLod1 }
+    const int FullDetailCount = 8;
+    LodMix _lodMix = LodMix.Near8;
+    int _fullCount, _lodTriangles;
 
     readonly Dictionary<int, Vector2> _touches = new();
     float _pinchStartDist, _pinchStartZoom;
@@ -67,7 +71,7 @@ public partial class Main : Node3D
         Log(_shared.Split('\n')[0]);
         Log($"{OS.GetName()} {OS.GetModelName()} | {RenderingServer.GetCurrentRenderingMethod()} / " +
             $"{RenderingServer.GetCurrentRenderingDriverName()} | {RenderingServer.GetVideoAdapterName()} {RenderingServer.GetVideoAdapterApiVersion()}");
-        Log($"character: High {PlaceholderCharacter.Triangles(PlaceholderCharacter.Detail.High)} / Low {PlaceholderCharacter.Triangles(PlaceholderCharacter.Detail.Low)} triangles, 1 material, 7 bones");
+        Log($"character: Full {PlaceholderCharacter.Triangles(PlaceholderCharacter.Detail.Full)} / Lod1 {PlaceholderCharacter.Triangles(PlaceholderCharacter.Detail.Lod1)} triangles, 1 material, 7 bones");
 
         // Desktop smoke run: `-- --connect wss://127.0.0.1:8443/echo`
         var args = OS.GetCmdlineUserArgs();
@@ -167,12 +171,28 @@ public partial class Main : Node3D
         _walkers.Clear();
         var rng = new RandomNumberGenerator { Seed = 7 };
         // Spread over the area the camera sees at default zoom, so all of them are on screen.
+        var spots = new List<(float anim, Vector3 center, float radius, float speed, float phase)>();
         for (int i = 0; i < count; i++)
         {
-            var node = PlaceholderCharacter.Create(_detail, rng.Randf());
-            _characterRoot.AddChild(node);
+            float anim = rng.Randf();
             var center = new Vector3(rng.RandfRange(-9, 9), 0, rng.RandfRange(-6, 6));
-            _walkers.Add((node, center, rng.RandfRange(0.5f, 2f), rng.RandfRange(0.4f, 0.9f) * (rng.Randf() < 0.5f ? -1 : 1), rng.Randf() * Mathf.Tau));
+            spots.Add((anim, center, rng.RandfRange(0.5f, 2f), rng.RandfRange(0.4f, 0.9f) * (rng.Randf() < 0.5f ? -1 : 1), rng.Randf() * Mathf.Tau));
+        }
+        // Near8: the 8 walk circles closest to the camera focus get Full detail (fixed at spawn: the worst case is
+        // the count, not which ones). Index 0 stays the shadow-casting "player" and is always among them.
+        var nearest = spots.Select((s, i) => (i, d: i == 0 ? -1f : s.center.DistanceTo(_focus)))
+            .OrderBy(x => x.d).Take(FullDetailCount).Select(x => x.i).ToHashSet();
+        _fullCount = _lodTriangles = 0;
+        for (int i = 0; i < count; i++)
+        {
+            bool full = _lodMix == LodMix.AllFull || (_lodMix == LodMix.Near8 && nearest.Contains(i));
+            var detail = full ? PlaceholderCharacter.Detail.Full : PlaceholderCharacter.Detail.Lod1;
+            if (full) _fullCount++;
+            _lodTriangles += PlaceholderCharacter.Triangles(detail);
+            var (anim, center, radius, speed, phase) = spots[i];
+            var node = PlaceholderCharacter.Create(detail, anim);
+            _characterRoot.AddChild(node);
+            _walkers.Add((node, center, radius, speed, phase));
         }
         _characterCount = count;
         ApplyShadows();
@@ -254,7 +274,7 @@ public partial class Main : Node3D
             $"FPS {M(Performance.Monitor.TimeFps):F0}  avg10s {avgFps:F1}  worst {worstMs:F1} ms  >{budgetMs:F0}ms: {slow}/{dts.Length}  cap {(_fpsCap == 0 ? "off" : _fpsCap)}\n" +
             $"Draw calls {M(Performance.Monitor.RenderTotalDrawCallsInFrame):F0}  Triangles {M(Performance.Monitor.RenderTotalPrimitivesInFrame) / 1000:F1}k  Objects {M(Performance.Monitor.RenderTotalObjectsInFrame):F0}\n" +
             $"Mem: engine {M(Performance.Monitor.MemoryStatic) / 1048576:F0} MB  VRAM {M(Performance.Monitor.RenderVideoMemUsed) / 1048576:F0} MB  managed {GC.GetTotalMemory(false) / 1048576.0:F1} MB\n" +
-            $"Chars {_characterCount} x {PlaceholderCharacter.Triangles(_detail)} tris ({_detail})  Shadows {_shadows}  {RenderingServer.GetCurrentRenderingMethod()}\n" +
+            $"Chars {_characterCount} ({_lodMix}: {_fullCount} Full + {_characterCount - _fullCount} Lod1 = {_lodTriangles / 1000.0:F1}k tris)  Shadows {_shadows}  {RenderingServer.GetCurrentRenderingMethod()}\n" +
             $"Tap: {_lastTap}  Zoom {_zoom:F1}\n" +
             $"Net: {_echo.State}  TLS {_echo.TlsMode}\n{_echo.Stats()}\n" +
             _shared;
@@ -371,11 +391,11 @@ public partial class Main : Node3D
             SpawnCharacters(steps[(Array.IndexOf(steps, _characterCount) + 1) % steps.Length]);
             _countButton.Text = $"Characters: {_characterCount}";
         });
-        _detailButton = AddButton(right, "Char detail: High", () =>
+        _detailButton = AddButton(right, "LOD: Near8", () =>
         {
-            _detail = _detail == PlaceholderCharacter.Detail.High ? PlaceholderCharacter.Detail.Low : PlaceholderCharacter.Detail.High;
+            _lodMix = (LodMix)(((int)_lodMix + 1) % 3);
             SpawnCharacters(_characterCount);
-            _detailButton.Text = $"Char detail: {_detail}";
+            _detailButton.Text = $"LOD: {_lodMix}";
         });
         AddButton(right, "Renderer (restart)", SwitchRenderer);
 
