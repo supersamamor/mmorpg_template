@@ -8,9 +8,9 @@ within the ARCHITECTURE §9 budgets.
 - [x] Prerequisites script + Postgres via Docker
 - [x] CLAUDE.md, ARCHITECTURE.md, VOCABULARY.md, ROADMAP.md
 - [x] ADR-001: 3D on a 2D grid, Android + iOS
-- [ ] Solution skeleton (`Game.Shared`, `Game.Content`, `Game.Server`, `Game.Tools`, `Game.Tests`)
+- [x] Solution skeleton (`Game.Shared`, `Game.Content`, `Game.Server`, `Game.Tools`, `Game.Tests`)
 - [ ] Mobile export spike: Godot .NET on Android + iOS devices (go / no-go for the engine)
-- [ ] Definition records + JSON Schema generation
+- [x] Definition records + JSON Schema generation
 **Done when:** `dotnet build` passes, `Game.Tools schema` emits schemas, and ADR-001 has spike results.
 
 ## Phase 1 — Headless simulation
