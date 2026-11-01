@@ -147,7 +147,11 @@ Sizes: `small`, `medium`, `large`
 **Delta**: one tick's `appeared` / `changed` / `disappeared`.
 
 ## View fields
-In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`, `speed`, `display_key`
+In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`, `speed`, `display_key`, `hp`, `dead`, `mine`.
+`hp`: HP as a fraction 0–1 in steps of 0.01 (never 0 while alive, never 1 while hurt), only for entities that fight. `dead`: true while dead.
+`mine`: a ground item only, true when this client may pick it up now. A ground item's record also has `quantity` (it never changes).
+A delta may also carry `hits` (this tick's attacks the client can see: `[attacker, target, amount, result]` with a "Hit results" term) and
+`vitals` (the client's own `hp`, `max_hp`, `sp`, `max_sp`, when they changed; also in every snapshot).
 
 ## Movement reasons
 In `MoveRejected`: `out_of_bounds`, `not_walkable`, `start_not_walkable`, `no_path`, `path_too_long`, `search_limit`, `no_speed`
@@ -163,6 +167,8 @@ In `AggroLost`: `target_gone`, `leash`, `unreachable`
 ## Attack reasons
 In `AttackRefused` and `AttackStopped`: `attacker_dead`, `target_dead`, `target_gone`, `out_of_range`, `no_line_of_sight`, `safe_zone`, `invalid_target`,
 `unreachable`, `cancelled` (ARCHITECTURE §6.7)
+On the wire in `rejected` (`intent` `attack`) and `attack_stopped`. The gateway also refuses an `attack` itself: `target_gone` for an id the client
+does not see, `invalid_target` for itself or anything but a monster.
 
 ## Hit results
 In `DamageDealt`: `hit`, `crit`, `miss`
@@ -179,8 +185,9 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `ping`, `logout`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `pong`, `bye`
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `pong`, `bye`
+Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
@@ -190,8 +197,7 @@ In `bye` (the server's last message before it closes the connection): `timeout`,
 `logout`: the client sent `logout`; its character left the world at once. `replaced`: another connection resumed this character with its token.
 The client reconnects after neither. `resume_failed`: the token in `hello` `resume` is unknown, already used, or its grace period is over
 (the client goes to the login screen). `rate_limit` also ends a resume from an address that failed too many resumes (ARCHITECTURE §10).
-A `rejected` message carries a "Movement reasons" (`MoveRejected`) term instead; the session goes on.
+A `rejected` message carries a "Movement reasons" (`MoveRejected`) term for `move`, or an "Attack reasons" term for `attack`, instead; the session goes on.
 
 ## Entity kinds
-In a view record's `kind`: `player`, `monster`, `npc`.
-Server only (not on the wire yet): `item`, a ground item a monster dropped (`EntityKind.Item`).
+In a view record's `kind`: `player`, `monster`, `npc`, `item` (a ground item a monster dropped, `EntityKind.Item`; its `display_key` is the item id).

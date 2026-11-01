@@ -25,7 +25,7 @@ public enum EntityKind
 
     /// <summary>
     /// An item lying on the ground (a monster's drop): <see cref="Entity.DefinitionId"/> is the item id and <see cref="Entity.GroundItem"/> the
-    /// quantity, loot priority and expiry. Server only for now: the AOI does not show ground items to clients yet.
+    /// quantity, loot priority and expiry. Observers see it as kind <c>item</c> with its quantity and whether they may pick it up.
     /// </summary>
     Item,
 }

@@ -204,10 +204,11 @@ public class GatewayPartsTests
     [Fact]
     public void Protocol_vocabulary_matches_the_doc()
     {
-        MessageTypes.All.Ordered.ShouldBe(["hello", "move", "stop", "ping", "logout", "welcome", "snapshot", "delta", "rejected", "pong", "bye"]);
+        MessageTypes.All.Ordered.ShouldBe(["hello", "move", "stop", "attack", "stop_attack", "respawn", "ping", "logout",
+            "welcome", "snapshot", "delta", "rejected", "attack_stopped", "exp", "level_up", "you_died", "respawned", "pong", "bye"]);
         ByeReasons.All.Ordered.ShouldBe(["timeout", "bad_version", "malformed", "unknown_type", "oversize", "before_hello", "duplicate_hello",
             "rate_limit", "login_refused", "server_full", "too_slow", "shutdown", "server_error", "update_required", "logout", "replaced", "resume_failed"]);
-        EntityKinds.All.Ordered.ShouldBe(["player", "monster", "npc"]);
+        EntityKinds.All.Ordered.ShouldBe(["player", "monster", "npc", "item"]);
         var doc = File.ReadAllText(Path.Combine(RepoRoot(), "docs", "VOCABULARY.md"));
         foreach (var term in MessageTypes.All.Concat(ByeReasons.All).Concat(EntityKinds.All)) doc.ShouldContain($"`{term}`");
     }

@@ -4,8 +4,8 @@ namespace Game.Server.World.Aoi;
 
 /// <summary>
 /// What one observer is told about one entity it can see (ARCHITECTURE §10): enough to place, orient and animate it, and to
-/// interpolate a walk between ticks. Nothing the client must not know (§11): no AI state, no HP, no path beyond the next cell, no
-/// spawn data.
+/// interpolate a walk between ticks, plus an HP bar and the dead flag. Nothing the client must not know (§11): no AI state, no exact HP
+/// (only a percentage), no path beyond the next cell, no spawn data, no loot timers.
 /// </summary>
 /// <param name="Id">Which entity; the key of every later change and disappearance.</param>
 /// <param name="Kind">Player, monster or NPC: picks the client's presentation rules (nameplate, tap action).</param>
@@ -14,7 +14,35 @@ namespace Game.Server.World.Aoi;
 /// <param name="Facing">A <c>Directions</c> term; while walking it points at <paramref name="Next"/>.</param>
 /// <param name="Next">The cell being walked to, or null when standing. The only part of the path that is ever sent.</param>
 /// <param name="Speed">Cells per second while walking (0 when standing), so the client can time the step from <paramref name="Cell"/> to <paramref name="Next"/>.</param>
-public readonly record struct EntityView(EntityId Id, EntityKind Kind, string? DisplayKey, GridCell Cell, string Facing, GridCell? Next, double Speed);
+/// <param name="HpPercent">HP as a whole percentage of max HP (<see cref="HpBar"/>), or -1 for an entity without <see cref="Entity.Vitals"/>.</param>
+/// <param name="Dead"><see cref="Entity.Dead"/>.</param>
+/// <param name="Quantity">A ground item's quantity; 0 for every other kind.</param>
+/// <param name="LootOwner">A ground item's loot-priority holder while the priority lasts, else null. Server side only: the writer turns it
+/// into a per-observer "may I pick it up" flag and never sends the id.</param>
+public readonly record struct EntityView(EntityId Id, EntityKind Kind, string? DisplayKey, GridCell Cell, string Facing, GridCell? Next, double Speed,
+    int HpPercent = -1, bool Dead = false, int Quantity = 0, EntityId? LootOwner = null);
+
+/// <summary>The HP bar others see: a whole percentage, so exact HP never leaks, that reads 0 only at 0 HP and 100 only at full HP.</summary>
+public static class HpBar
+{
+    /// <summary>The percentage of <paramref name="hp"/> out of <paramref name="maxHp"/>: rounded, then kept within 1..99 while alive and hurt.</summary>
+    public static int Percent(int hp, int maxHp)
+    {
+        if (hp <= 0 || maxHp <= 0) return 0;
+        if (hp >= maxHp) return 100;
+        return Math.Clamp((int)Math.Round(100.0 * hp / maxHp, MidpointRounding.AwayFromZero), 1, 99);
+    }
+}
+
+/// <summary>An observer's own exact HP and SP (only it is told these).</summary>
+public readonly record struct OwnVitals(int Hp, int MaxHp, int Sp, int MaxSp);
+
+/// <summary>One resolved attack (a <c>DamageDealt</c>), as observers who see its attacker or its target are told.</summary>
+/// <param name="Attacker">The attacker.</param>
+/// <param name="Target">The target.</param>
+/// <param name="Amount">Damage dealt.</param>
+/// <param name="Result">A <c>HitResults</c> term.</param>
+public readonly record struct HitView(EntityId Attacker, EntityId Target, int Amount, string Result);
 
 /// <summary>The parts of an <see cref="EntityView"/> that changed (VOCABULARY "View fields").</summary>
 [Flags]
@@ -37,6 +65,15 @@ public enum ViewFields
 
     /// <summary><c>display_key</c>: <see cref="EntityView.DisplayKey"/>.</summary>
     DisplayKey = 16,
+
+    /// <summary><c>hp</c>: <see cref="EntityView.HpPercent"/>.</summary>
+    Hp = 32,
+
+    /// <summary><c>dead</c>: <see cref="EntityView.Dead"/>.</summary>
+    Dead = 64,
+
+    /// <summary><c>mine</c>: <see cref="EntityView.LootOwner"/> (the loot priority ended, so who may pick the item up changed).</summary>
+    Mine = 128,
 }
 
 /// <summary>
@@ -68,10 +105,14 @@ public sealed class ViewSnapshot
 
     /// <summary>Every visible entity, by entity id.</summary>
     public IReadOnlyList<EntityView> Entities => EntityList;
+
+    /// <summary>The observer's own HP and SP, or null when it has no <see cref="Entity.Vitals"/>.</summary>
+    public OwnVitals? Vitals { get; internal set; }
 }
 
 /// <summary>
-/// What changed for one observer in one tick, relative to its last snapshot or delta. Sent only when at least one list is non-empty.
+/// What changed for one observer in one tick, relative to its last snapshot or delta. Sent only when at least one list is non-empty or its
+/// own <see cref="Vitals"/> changed.
 /// Each list is ordered by entity id. Valid only during the <see cref="IViewSink"/> call; the instance reuses it.
 /// </summary>
 public sealed class ViewDelta
@@ -79,6 +120,7 @@ public sealed class ViewDelta
     internal readonly List<EntityView> AppearedList = new();
     internal readonly List<EntityChange> ChangedList = new();
     internal readonly List<EntityId> DisappearedList = new();
+    internal readonly List<HitView> HitList = new();
 
     internal ViewDelta()
     {
@@ -102,13 +144,21 @@ public sealed class ViewDelta
     /// <summary>Entities that went out of view (walked out, despawned, warped away).</summary>
     public IReadOnlyList<EntityId> Disappeared => DisappearedList;
 
-    internal bool IsEmpty => AppearedList.Count == 0 && ChangedList.Count == 0 && DisappearedList.Count == 0;
+    /// <summary>This tick's attacks whose attacker or target the observer sees (after this delta), in the order combat resolved them.</summary>
+    public IReadOnlyList<HitView> Hits => HitList;
+
+    /// <summary>The observer's own HP and SP when one of them changed this tick, else null.</summary>
+    public OwnVitals? Vitals { get; internal set; }
+
+    internal bool IsEmpty => AppearedList.Count == 0 && ChangedList.Count == 0 && DisappearedList.Count == 0 && HitList.Count == 0 && Vitals is null;
 
     internal void Clear()
     {
         AppearedList.Clear();
         ChangedList.Clear();
         DisappearedList.Clear();
+        HitList.Clear();
+        Vitals = null;
     }
 }
 

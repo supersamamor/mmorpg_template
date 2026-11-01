@@ -2,7 +2,9 @@ using System.Diagnostics;
 using System.Net.WebSockets;
 using Game.Server.World;
 using Game.Server.World.Aoi;
+using Game.Server.World.Combat;
 using Game.Shared.Protocol;
+using Game.Shared.Vocabulary;
 
 namespace Game.Server.Net;
 
@@ -38,6 +40,7 @@ public sealed class ClientSession : IViewSink
     private readonly GatewayOptions _options;
     private readonly TokenBucket _bucket;
     private readonly ViewMessageWriter _views = new();
+    private readonly Dictionary<long, EntityKind> _visible = new();   // what the client was last told it sees; lock it (tick thread writes, receive loop reads)
     private readonly CancellationTokenSource _abort = new();
     private readonly long _connectedMs;
     private int _state = (int)SessionState.AwaitingHello;
@@ -120,7 +123,14 @@ public sealed class ClientSession : IViewSink
         if (Closing) return;
         var started = Stopwatch.GetTimestamp();
         _mapId = snapshot.MapId;
+        lock (_visible)
+        {
+            _visible.Clear();
+            var entities = snapshot.Entities;
+            for (var i = 0; i < entities.Count; i++) _visible[entities[i].Id.Value] = entities[i].Kind;
+        }
         if (!Queue.PostSnapshot(_views.Write(snapshot))) Bye(ByeReasons.TooSlow);
+        _gateway.PostExp(snapshot.Observer); // a fresh view (join, resume, warp, resync) comes with the own levels and EXP
         _gateway.Stats.AddSinkTime(Stopwatch.GetTimestamp() - started);
     }
 
@@ -129,6 +139,16 @@ public sealed class ClientSession : IViewSink
     {
         if (Closing) return;
         var started = Stopwatch.GetTimestamp();
+        if (delta.Appeared.Count > 0 || delta.Disappeared.Count > 0)
+        {
+            lock (_visible)
+            {
+                var appeared = delta.Appeared;
+                for (var i = 0; i < appeared.Count; i++) _visible[appeared[i].Id.Value] = appeared[i].Kind;
+                var gone = delta.Disappeared;
+                for (var i = 0; i < gone.Count; i++) _visible.Remove(gone[i].Value);
+            }
+        }
         if (Queue.Resyncing) Queue.PostDelta([], 0);  // dropped and counted without serializing: the client is behind anyway
         else Queue.PostDelta(_views.Write(delta), _gateway.Clock.NowMilliseconds);
         _gateway.Stats.AddSinkTime(Stopwatch.GetTimestamp() - started);
@@ -322,7 +342,21 @@ public sealed class ClientSession : IViewSink
                 RequestMove(move);
                 break;
             case StopMessage:
-                if (Entity is { } id) _gateway.Enqueue(new StopMove(id));
+                if (Entity is { } id)
+                {
+                    // Both: a stop while standing still produces no movement event, so combat would never hear of it (ADR-002 #80).
+                    _gateway.Enqueue(new StopMove(id));
+                    _gateway.Enqueue(new StopAttack(id));
+                }
+                break;
+            case AttackMessage attack:
+                RequestAttack(attack);
+                break;
+            case StopAttackMessage:
+                if (Entity is { } attacker) _gateway.Enqueue(new StopAttack(attacker));
+                break;
+            case RespawnMessage:
+                if (Entity is { } dead) _gateway.Enqueue(new Respawn(dead)); // combat ignores a living character
                 break;
             case PingMessage ping:
                 Post(new PongMessage(ping.Seq));
@@ -383,6 +417,25 @@ public sealed class ClientSession : IViewSink
             return;
         }
         _gateway.Enqueue(new MoveTo(id, move.Cell));
+    }
+
+    /// <summary>
+    /// The target must be in the client's view (else <c>target_gone</c>: it does not exist for this client) and a monster other than itself
+    /// (else <c>invalid_target</c>: no PvP in v1). Combat checks the rest on the tick (dead, safe zone) and may still refuse.
+    /// </summary>
+    private void RequestAttack(AttackMessage attack)
+    {
+        if (Entity is not { } id) return;
+        EntityKind kind;
+        bool seen;
+        lock (_visible) seen = _visible.TryGetValue(attack.Target, out kind);
+        string? reason = !seen ? AttackReasons.TargetGone : attack.Target == id.Value || kind != EntityKind.Monster ? AttackReasons.InvalidTarget : null;
+        if (reason is not null)
+        {
+            Post(new RejectedMessage(MessageTypes.Attack, reason, null, attack.Target));
+            return;
+        }
+        _gateway.Enqueue(new AttackTarget(id, new EntityId(attack.Target)));
     }
 
     private async Task SendLoopAsync()

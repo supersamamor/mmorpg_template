@@ -16,9 +16,10 @@ public sealed class RecordingSink : IViewSink
     public readonly List<SnapshotCopy> Snapshots = new();
     public readonly List<DeltaCopy> Deltas = new();
 
-    public sealed record SnapshotCopy(long Tick, string MapId, EntityId Observer, List<EntityView> Entities);
+    public sealed record SnapshotCopy(long Tick, string MapId, EntityId Observer, List<EntityView> Entities, OwnVitals? Vitals = null);
 
-    public sealed record DeltaCopy(long Tick, string MapId, EntityId Observer, List<EntityView> Appeared, List<EntityChange> Changed, List<EntityId> Disappeared);
+    public sealed record DeltaCopy(long Tick, string MapId, EntityId Observer, List<EntityView> Appeared, List<EntityChange> Changed, List<EntityId> Disappeared,
+        List<HitView>? Hits = null, OwnVitals? Vitals = null);
 
     public int Count => Lines.Count;
 
@@ -27,21 +28,28 @@ public sealed class RecordingSink : IViewSink
 
     public void OnSnapshot(ViewSnapshot snapshot)
     {
-        Snapshots.Add(new SnapshotCopy(snapshot.Tick, snapshot.MapId, snapshot.Observer, snapshot.Entities.ToList()));
+        Snapshots.Add(new SnapshotCopy(snapshot.Tick, snapshot.MapId, snapshot.Observer, snapshot.Entities.ToList(), snapshot.Vitals));
         Lines.Add($"t{snapshot.Tick} snap {snapshot.MapId} " + string.Join(" ", snapshot.Entities.Select(e => e.Id)));
     }
 
     public void OnDelta(ViewDelta delta)
     {
-        Deltas.Add(new DeltaCopy(delta.Tick, delta.MapId, delta.Observer, delta.Appeared.ToList(), delta.Changed.ToList(), delta.Disappeared.ToList()));
+        Deltas.Add(new DeltaCopy(delta.Tick, delta.MapId, delta.Observer, delta.Appeared.ToList(), delta.Changed.ToList(), delta.Disappeared.ToList(),
+            delta.Hits.ToList(), delta.Vitals));
         var parts = delta.Appeared.Select(e => "+" + e.Id)
             .Concat(delta.Changed.Select(c => $"~{c.View.Id}[{Fields(c.Fields)}]"))
-            .Concat(delta.Disappeared.Select(id => "-" + id));
+            .Concat(delta.Disappeared.Select(id => "-" + id))
+            .Concat(delta.Hits.Select(h => $"!{h.Attacker}>{h.Target}"))
+            .Concat(delta.Vitals is { } v ? [$"hp{v.Hp}/{v.MaxHp}"] : []);
         Lines.Add($"t{delta.Tick} " + string.Join(" ", parts));
     }
 
     public static string Fields(ViewFields fields) =>
-        string.Join(",", new[] { (ViewFields.Cell, "cell"), (ViewFields.Facing, "facing"), (ViewFields.Next, "next"), (ViewFields.Speed, "speed"), (ViewFields.DisplayKey, "display_key") }
+        string.Join(",", new[]
+            {
+                (ViewFields.Cell, "cell"), (ViewFields.Facing, "facing"), (ViewFields.Next, "next"), (ViewFields.Speed, "speed"), (ViewFields.DisplayKey, "display_key"),
+                (ViewFields.Hp, "hp"), (ViewFields.Dead, "dead"), (ViewFields.Mine, "mine"),
+            }
             .Where(f => fields.HasFlag(f.Item1)).Select(f => f.Item2));
 
     /// <summary>Every message in full, for determinism comparisons.</summary>

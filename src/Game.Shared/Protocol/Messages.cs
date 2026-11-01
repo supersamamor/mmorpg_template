@@ -39,11 +39,36 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.Move;
     }
 
-    /// <summary><c>stop</c>: stop walking at the next cell. <c>{"type":"stop"}</c>.</summary>
+    /// <summary><c>stop</c>: stop walking at the next cell, and stop auto-attacking. <c>{"type":"stop"}</c>.</summary>
     public sealed record StopMessage : ClientMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Stop;
+    }
+
+    /// <summary>
+    /// <c>attack</c>: auto-attack <see cref="Target"/> until it dies or leaves, or the client stops. A request: the target must be an entity the
+    /// client sees, and combat may still refuse it (<see cref="RejectedMessage"/> with an "Attack reasons" term). <c>{"type":"attack","target":7}</c>.
+    /// </summary>
+    /// <param name="Target">Entity id of the target (a monster in v1).</param>
+    public sealed record AttackMessage(long Target) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Attack;
+    }
+
+    /// <summary><c>stop_attack</c>: stop auto-attacking (a walk goes on). <c>{"type":"stop_attack"}</c>.</summary>
+    public sealed record StopAttackMessage : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.StopAttack;
+    }
+
+    /// <summary><c>respawn</c>: a dead character asks to come back at the respawn point (ignored while alive). <c>{"type":"respawn"}</c>.</summary>
+    public sealed record RespawnMessage : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Respawn;
     }
 
     /// <summary>
@@ -89,8 +114,10 @@ namespace Game.Shared.Protocol
     }
 
     /// <summary>
-    /// One entity as a client sees it: <c>{"id":7,"kind":"monster","display_key":"monster.x","cell":[3,4],"facing":"e","next":[4,4],"speed":3.5}</c>.
-    /// <c>display_key</c> is left out when there is none; <c>next</c> and <c>speed</c> only while walking.
+    /// One entity as a client sees it: <c>{"id":7,"kind":"monster","display_key":"monster.x","cell":[3,4],"facing":"e","next":[4,4],"speed":3.5,"hp":0.37}</c>.
+    /// <c>display_key</c> is left out when there is none; <c>next</c> and <c>speed</c> only while walking; <c>hp</c> only for an entity that
+    /// fights; <c>dead</c> only when true. A ground item (<c>kind</c> <c>item</c>, <c>display_key</c> = its item id) carries <c>quantity</c> and
+    /// <c>mine</c>: <c>{"id":9,"kind":"item","display_key":"item.x","cell":[3,4],"facing":"s","quantity":2,"mine":true}</c>.
     /// </summary>
     /// <param name="Id">Entity id.</param>
     /// <param name="Kind">An <see cref="EntityKinds"/> term.</param>
@@ -99,7 +126,14 @@ namespace Game.Shared.Protocol
     /// <param name="Facing">A <c>Directions</c> term.</param>
     /// <param name="Next">The cell being walked to, or null when standing.</param>
     /// <param name="Speed">Cells per second while walking, 0 when standing.</param>
-    public sealed record EntityRecord(long Id, string Kind, string? DisplayKey, GridCell Cell, string Facing, GridCell? Next, double Speed);
+    /// <param name="Hp">HP as a fraction of max HP, 0–1 in steps of 0.01 (never 0 while alive, never 1 while hurt), or null for an entity
+    /// without HP. Exact HP goes only to its owner (<see cref="VitalsRecord"/>).</param>
+    /// <param name="Dead">True while the entity is dead.</param>
+    /// <param name="Quantity">A ground item's quantity; 0 for everything else.</param>
+    /// <param name="Mine">A ground item: true when this client may pick it up now (no loot priority, its own, or the priority is over); null for
+    /// everything else. Who holds the priority, and until when, is never sent.</param>
+    public sealed record EntityRecord(long Id, string Kind, string? DisplayKey, GridCell Cell, string Facing, GridCell? Next, double Speed,
+        double? Hp = null, bool Dead = false, int Quantity = 0, bool? Mine = null);
 
     /// <summary>The fields of a <see cref="ChangeRecord"/> that are present (VOCABULARY.md "View fields").</summary>
     [Flags]
@@ -122,6 +156,15 @@ namespace Game.Shared.Protocol
 
         /// <summary><c>display_key</c> (present and null means it was cleared).</summary>
         DisplayKey = 16,
+
+        /// <summary><c>hp</c> (the rounded fraction changed).</summary>
+        Hp = 32,
+
+        /// <summary><c>dead</c> (died, or came back).</summary>
+        Dead = 64,
+
+        /// <summary><c>mine</c> (a ground item's loot priority ended).</summary>
+        Mine = 128,
     }
 
     /// <summary>
@@ -135,7 +178,26 @@ namespace Game.Shared.Protocol
     /// <param name="Next">New next cell (null: stopped), when <see cref="ChangedFields.Next"/>.</param>
     /// <param name="Speed">New speed, when <see cref="ChangedFields.Speed"/>.</param>
     /// <param name="DisplayKey">New display key, when <see cref="ChangedFields.DisplayKey"/>.</param>
-    public sealed record ChangeRecord(long Id, ChangedFields Fields, GridCell Cell, string? Facing, GridCell? Next, double Speed, string? DisplayKey);
+    /// <param name="Hp">New HP fraction, when <see cref="ChangedFields.Hp"/>.</param>
+    /// <param name="Dead">New dead flag, when <see cref="ChangedFields.Dead"/>.</param>
+    /// <param name="Mine">New pick-up flag, when <see cref="ChangedFields.Mine"/>.</param>
+    public sealed record ChangeRecord(long Id, ChangedFields Fields, GridCell Cell, string? Facing, GridCell? Next, double Speed, string? DisplayKey,
+        double Hp = 0, bool Dead = false, bool Mine = false);
+
+    /// <summary>
+    /// One attack seen in a tick, in a delta's <c>hits</c> as a compact array <c>[attacker, target, amount, result]</c>, e.g. <c>[42,7,13,"crit"]</c>.
+    /// </summary>
+    /// <param name="Attacker">Entity id of the attacker.</param>
+    /// <param name="Target">Entity id of the target.</param>
+    /// <param name="Amount">Damage dealt (0 on a miss).</param>
+    /// <param name="Result">A "Hit results" term: <c>hit</c>, <c>crit</c> or <c>miss</c>.</param>
+    public sealed record HitRecord(long Attacker, long Target, int Amount, string Result);
+
+    /// <summary>
+    /// The client's own exact HP and SP, in a snapshot's or delta's <c>vitals</c>: <c>{"hp":40,"max_hp":52,"sp":11,"max_sp":11}</c>. Only the
+    /// owner gets it (others see the <c>hp</c> fraction); a delta carries it only when one of the four changed.
+    /// </summary>
+    public sealed record VitalsRecord(int Hp, int MaxHp, int Sp, int MaxSp);
 
     /// <summary>
     /// <c>snapshot</c>: everything the client sees at <see cref="Tick"/>; it replaces the client's view. A snapshot for another
@@ -146,7 +208,8 @@ namespace Game.Shared.Protocol
     /// <param name="MapId">The map the character is on.</param>
     /// <param name="Id">The client's own entity id (always among <see cref="Entities"/>).</param>
     /// <param name="Entities">Every visible entity, ordered by id.</param>
-    public sealed record SnapshotMessage(long Tick, string MapId, long Id, IReadOnlyList<EntityRecord> Entities) : ServerMessage
+    /// <param name="Vitals">The client's own HP and SP, or null for a character without them.</param>
+    public sealed record SnapshotMessage(long Tick, string MapId, long Id, IReadOnlyList<EntityRecord> Entities, VitalsRecord? Vitals = null) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Snapshot;
@@ -154,13 +217,16 @@ namespace Game.Shared.Protocol
 
     /// <summary>
     /// <c>delta</c>: one tick's changes, relative to the last snapshot or delta. Empty lists are left out.
-    /// <c>{"type":"delta","tick":121,"appeared":[...],"changed":[...],"disappeared":[9]}</c>.
+    /// <c>{"type":"delta","tick":121,"appeared":[...],"changed":[...],"disappeared":[9],"hits":[[42,7,13,"hit"]],"vitals":{...}}</c>.
     /// </summary>
     /// <param name="Tick">The map instance tick it describes.</param>
     /// <param name="Appeared">Entities that came into view, as full records.</param>
     /// <param name="Changed">Entities in view that changed, with only their changed fields.</param>
     /// <param name="Disappeared">Ids of entities that went out of view.</param>
-    public sealed record DeltaMessage(long Tick, IReadOnlyList<EntityRecord> Appeared, IReadOnlyList<ChangeRecord> Changed, IReadOnlyList<long> Disappeared)
+    /// <param name="Hits">This tick's attacks whose attacker or target is in view, in the order they were resolved; null or empty when none.</param>
+    /// <param name="Vitals">The client's own HP and SP when they changed this tick, else null.</param>
+    public sealed record DeltaMessage(long Tick, IReadOnlyList<EntityRecord> Appeared, IReadOnlyList<ChangeRecord> Changed, IReadOnlyList<long> Disappeared,
+        IReadOnlyList<HitRecord>? Hits = null, VitalsRecord? Vitals = null)
         : ServerMessage
     {
         /// <inheritdoc />
@@ -168,15 +234,77 @@ namespace Game.Shared.Protocol
     }
 
     /// <summary>
-    /// <c>rejected</c>: an intent was refused and nothing changed. <c>{"type":"rejected","intent":"move","reason":"no_path","cell":[30,2]}</c>.
+    /// <c>rejected</c>: an intent was refused and nothing changed. <c>{"type":"rejected","intent":"move","reason":"no_path","cell":[30,2]}</c> or
+    /// <c>{"type":"rejected","intent":"attack","reason":"target_gone","target":99}</c>.
     /// </summary>
-    /// <param name="Intent">The message type that was refused (<c>move</c>).</param>
-    /// <param name="Reason">A VOCABULARY.md "Movement reasons" (<c>MoveRejected</c>) term.</param>
+    /// <param name="Intent">The message type that was refused (<c>move</c>, <c>attack</c>).</param>
+    /// <param name="Reason">For <c>move</c> a VOCABULARY.md "Movement reasons" (<c>MoveRejected</c>) term, for <c>attack</c> an "Attack reasons" term.</param>
     /// <param name="Cell">The target cell of the refused move, if any.</param>
-    public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell) : ServerMessage
+    /// <param name="Target">The target of the refused attack, if any.</param>
+    public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Rejected;
+    }
+
+    /// <summary>
+    /// <c>attack_stopped</c>: the client's auto-attack on <see cref="Target"/> ended. <c>{"type":"attack_stopped","target":7,"reason":"target_dead"}</c>.
+    /// </summary>
+    /// <param name="Target">The former target.</param>
+    /// <param name="Reason">An "Attack reasons" term (<c>target_dead</c>, <c>unreachable</c>, <c>cancelled</c>, ...).</param>
+    public sealed record AttackStoppedMessage(long Target, string Reason) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.AttackStopped;
+    }
+
+    /// <summary>
+    /// <c>exp</c>: the client's levels and EXP, after every snapshot and whenever they change.
+    /// <c>{"type":"exp","base_level":2,"base_exp":5,"base_next":24,"job_level":1,"job_exp":4,"job_next":10}</c>.
+    /// </summary>
+    /// <param name="BaseLevel">Base level.</param>
+    /// <param name="BaseExp">Base EXP into the current level.</param>
+    /// <param name="BaseNext">Base EXP the current level needs to level up; 0 at the max level.</param>
+    /// <param name="JobLevel">Job level.</param>
+    /// <param name="JobExp">Job EXP into the current job level.</param>
+    /// <param name="JobNext">Job EXP the current job level needs; 0 at the job's max level.</param>
+    public sealed record ExpMessage(int BaseLevel, long BaseExp, long BaseNext, int JobLevel, long JobExp, long JobNext) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Exp;
+    }
+
+    /// <summary>
+    /// <c>level_up</c>: the client reached a level, one message per level, in order; exactly one of the two fields is present.
+    /// <c>{"type":"level_up","base_level":3}</c> or <c>{"type":"level_up","job_level":2}</c>.
+    /// </summary>
+    /// <param name="BaseLevel">The base level reached, or null.</param>
+    /// <param name="JobLevel">The job level reached, or null.</param>
+    public sealed record LevelUpMessage(int? BaseLevel, int? JobLevel) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.LevelUp;
+    }
+
+    /// <summary><c>you_died</c>: the client's character died; it sends <c>respawn</c> to come back. <c>{"type":"you_died","killer":7}</c>.</summary>
+    /// <param name="Killer">Entity id of the killer, or null.</param>
+    public sealed record YouDiedMessage(long? Killer) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.YouDied;
+    }
+
+    /// <summary>
+    /// <c>respawned</c>: the answer to <c>respawn</c>: the character is alive again with <see cref="Hp"/> on <see cref="Cell"/> of <see cref="MapId"/>
+    /// (a snapshot of that place follows). <c>{"type":"respawned","map":"map.x","cell":[12,12],"hp":26}</c>.
+    /// </summary>
+    /// <param name="MapId">The respawn map.</param>
+    /// <param name="Cell">The respawn cell.</param>
+    /// <param name="Hp">HP it came back with.</param>
+    public sealed record RespawnedMessage(string MapId, GridCell Cell, int Hp) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Respawned;
     }
 
     /// <summary><c>pong</c>: answer to <see cref="PingMessage"/>. <c>{"type":"pong","seq":7}</c>.</summary>

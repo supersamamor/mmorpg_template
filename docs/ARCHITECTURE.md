@@ -283,7 +283,7 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
 - **Drops.** Each `drop_table_ids` table rolls every entry on its own (`chance`, then a quantity in `min..max`) with the instance random.
   Each drop is an `EntityKind.Item` entity on a random walkable cell within `loot.spread_radius` of the death cell (`ItemDropped`); for
   `loot.priority_ms` only the top damager may take it (`LootRules.MayPickUp`), and after `loot.lifetime_ms` it is despawned
-  (`ItemExpired`). Ground items are not shown to clients yet (the AOI skips them).
+  (`ItemExpired`). Clients see ground items as kind `item` (§10) with their quantity and whether they may take them now, never the owner or the timers.
 
 ## 7. Client
 
@@ -439,13 +439,22 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 - **Disconnects are normal.** When a socket drops or the app is backgrounded, the server keeps
   the character in the world for a grace period (`grace-period-ms`, server config, default 60 s), then saves (T-702) and logs it out.
 - **Resume** (T-210): the client reconnects with a resume token and receives a full snapshot, then deltas (lifecycle step 6 below).
-- **Snapshot / delta shape** (T-204): a view record is `id, kind, display_key, cell, facing, next, speed` (`next` and
-  `speed` only while walking); a delta is `appeared` (records), `changed` (id + changed fields only), `disappeared` (ids), each
-  ordered by entity id. A walker produces one change per cell reached, not per tick; the client interpolates from `cell` to `next`.
+- **Snapshot / delta shape** (T-204, T-307): a view record is `id, kind, display_key, cell, facing, next, speed, hp, dead` (`next` and
+  `speed` only while walking, `hp` only for entities that fight, `dead` only when true; a ground item adds `quantity` and `mine`); a delta is
+  `appeared` (records), `changed` (id + changed fields only), `disappeared` (ids), each ordered by entity id, plus `hits` and `vitals`.
+  A walker produces one change per cell reached, not per tick; the client interpolates from `cell` to `next`.
+- **Combat on the wire** (T-307). Others' HP is a fraction rounded to 0.01 (`hp`), sent only when that rounded value changes, so exact HP
+  never leaks; the owner gets its exact `hp/max_hp/sp/max_sp` as `vitals` in every snapshot and in a delta when they changed. `hits` is one
+  batch per tick per observer: every attack whose attacker or target is in view, `[attacker, target, amount, result]`. A death is the `dead`
+  flag (a dead monster stays in view until the spawner removes it). A ground item says only whether this client may pick it up now
+  (`mine`): the priority holder and the loot timers stay on the server. The owner alone gets `exp` (after every snapshot and on every change),
+  `level_up`, `you_died`, `respawned` and `attack_stopped`; a refused attack comes back as `rejected` with an "Attack reasons" term.
 - **Latency:** the client renders ~2 ticks behind the newest snapshot and interpolates.
   It tolerates cellular jitter and does not predict combat.
 - **Bandwidth:** JSON first. Switch to MessagePack if measured traffic exceeds the §9 budget. Measured (T-205): 50 loopback
-  clients walking in each other's view receive 8.1 KB/s each on the wire (payload + WebSocket header).
+  clients walking in each other's view receive 8.1 KB/s each on the wire (payload + WebSocket header). With combat (T-307: 20 of
+  the 50 auto-attacking gel slimes nonstop, 30 walking; about 52 entities and 15 hits per second in every view) it is 6.9–7.2 KB/s, so
+  full keys and JSON stay; no key shortening or distance rate limit on  was needed.
 - **Gateway** (`Game.Server/Net`, T-205): Kestrel WebSockets on one path (`/ws`). In development it listens on loopback with plain
   `ws://`; otherwise it listens on every interface with TLS only (a `.pfx` set in config; the server refuses to start without one).
   All ports, limits and timeouts are in `GatewayOptions`, which has defaults and can be overridden with `--net-<name>` or
@@ -458,17 +467,26 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   |------|-----------|--------|
   | `hello` | C→S (first) | `version`, `content` (the hash of the client bundle, §5.4; optional in development), and exactly one of `name` (dev login stub; T-701 replaces it) and `resume` (a resume token) |
   | `move` | C→S | `cell` (a request; it may come back `rejected`) |
-  | `stop` | C→S | — |
+  | `stop` | C→S | — (stops walking **and** auto-attacking: a stop while standing still has no movement event, so combat could not see it) |
+  | `attack` | C→S | `target` (an entity id the client sees; a request, it may come back `rejected`) |
+  | `stop_attack` | C→S | — |
+  | `respawn` | C→S | — (ignored while alive) |
   | `ping` | C→S | `seq` |
   | `logout` | C→S | — (leave now: `bye logout`, the character is removed on the next tick, no grace period) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
-  | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records). Replaces the view; a new `map` means you changed maps |
-  | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids); empty lists left out |
-  | `rejected` | S→C | `intent` (`move`), `reason` (a `MoveRejected` term), `cell` |
+  | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
+  | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `vitals` (when changed); empty ones left out |
+  | `rejected` | S→C | `intent` (`move` or `attack`), `reason` (a `MoveRejected` or "Attack reasons" term), `cell` (move) or `target` (attack) |
+  | `attack_stopped` | S→C (owner) | `target`, `reason` (an "Attack reasons" term) |
+  | `exp` | S→C (owner) | `base_level`, `base_exp`, `base_next`, `job_level`, `job_exp`, `job_next` (`*_next` = EXP the level needs, 0 at the cap) |
+  | `level_up` | S→C (owner) | `base_level` or `job_level` (one message per level reached) |
+  | `you_died` | S→C (owner) | `killer` (entity id, if any); send `respawn` to come back |
+  | `respawned` | S→C (owner) | `map`, `cell`, `hp`; a snapshot of the respawn point follows |
   | `pong` | S→C | `seq` |
   | `bye` | S→C (last) | `reason` (VOCABULARY "Bye reasons"), followed by the close frame |
 
-  A view record is `{"id":7,"kind":"monster","display_key":"monster.x","cell":[3,4],"facing":"e","next":[4,4],"speed":3.51}`.
+  A view record is `{"id":7,"kind":"monster","display_key":"monster.x","cell":[3,4],"facing":"e","next":[4,4],"speed":3.51,"hp":0.37}`;
+  a ground item is `{"id":9,"kind":"item","display_key":"item.x","cell":[4,5],"facing":"s","quantity":2,"mine":true}`.
 - **Session lifecycle:**
   1. The client connects and must send `hello` within `hello-timeout-ms`.
   2. The server checks the protocol version, then the content hash (T-209): a `content` that differs from the server's ends in `bye update_required`; a missing one is accepted in development (logged as a warning) and refused elsewhere. Then it checks the dev login. The dev login is development only; any other environment refuses it. A `hello` with `resume`
@@ -476,14 +494,15 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   3. The server queues the character with `GameWorld.Spawn(..., initialize)` at `balance.yaml` `new_character`. On the start
      instance's tick, the initializer sets its stats (from the stats pipeline), its display key (the job id) and its view sink, and
      queues `welcome`. The AOI then sends the first `snapshot` in phase 5 of that tick, and deltas follow.
-  4. `move`/`stop` are parsed and checked (shape, cell inside the current map) on the socket thread and queued as `MoveTo`/`StopMove`
-     wherever the character is now. Warps are followed through the world's entity directory. Each session has a token-bucket rate
+  4. `move`/`stop`/`attack`/`stop_attack`/`respawn` are parsed and checked on the socket thread (shape; a cell inside the current map; an
+     attack target the client currently sees, not itself, a monster) and queued as `MoveTo`/`StopMove`+`StopAttack`/`AttackTarget`/
+     `StopAttack`/`Respawn` wherever the character is now. When the connection drops, the grace period stops both walking and attacking. Warps are followed through the world's entity directory. Each session has a token-bucket rate
      limit: messages over it are dropped and counted, and sustained flooding ends in `bye rate_limit`.
   5. Malformed JSON, an unknown type, an oversize message, a wrong version, a message before `hello`, or silence longer than
      `idle-timeout-ms` all end in `bye <reason>` and the close frame.
   6. **Grace period and resume** (T-210). Every `welcome` carries a **resume token** for the character.
      - **The connection ends without `logout`** (the client closed or vanished, idle `timeout`, `too_slow`, a protocol error such as
-       `malformed` or `rate_limit`, `server_error`): the character is **not** removed. It is stopped (`StopMove`), its view is detached
+       `malformed` or `rate_limit`, `server_error`): the character is **not** removed. It is stopped (`StopMove`, `StopAttack`), its view is detached
        (`AttachView` with no sink), and it stays where it is, visible to others, for `grace-period-ms`. When that ends it leaves the
        world (T-702 saves it first). A buggy or hostile message must not delete a character, so protocol errors are no exception.
        A character whose session ended before its `welcome` was queued (no token yet) is removed at once.

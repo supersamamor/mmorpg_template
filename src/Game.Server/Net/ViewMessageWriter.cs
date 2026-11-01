@@ -26,6 +26,7 @@ public sealed class ViewMessageWriter
         EntityKind.Player => EntityKinds.Player,
         EntityKind.Monster => EntityKinds.Monster,
         EntityKind.Npc => EntityKinds.Npc,
+        EntityKind.Item => EntityKinds.Item,
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 
@@ -44,8 +45,10 @@ public sealed class ViewMessageWriter
         w.WriteNumber("id", snapshot.Observer.Value);
         w.WriteStartArray("entities");
         var entities = snapshot.Entities;
-        for (var i = 0; i < entities.Count; i++) Record(entities[i]);
+        var observer = snapshot.Observer;
+        for (var i = 0; i < entities.Count; i++) Record(entities[i], observer);
         w.WriteEndArray();
+        if (snapshot.Vitals is { } own) ProtocolJson.WriteVitals(w, own.Hp, own.MaxHp, own.Sp, own.MaxSp);
         w.WriteEndObject();
         return End();
     }
@@ -58,11 +61,12 @@ public sealed class ViewMessageWriter
         w.WriteStartObject();
         w.WriteString("type", MessageTypes.Delta);
         w.WriteNumber("tick", delta.Tick);
+        var observer = delta.Observer;
         var appeared = delta.Appeared;
         if (appeared.Count > 0)
         {
             w.WriteStartArray("appeared");
-            for (var i = 0; i < appeared.Count; i++) Record(appeared[i]);
+            for (var i = 0; i < appeared.Count; i++) Record(appeared[i], observer);
             w.WriteEndArray();
         }
         var changed = delta.Changed;
@@ -73,7 +77,8 @@ public sealed class ViewMessageWriter
             {
                 var c = changed[i];
                 var v = c.View;
-                ProtocolJson.WriteChange(w, v.Id.Value, FieldsOf(c.Fields), v.Cell, v.Facing, v.Next, v.Speed, v.DisplayKey);
+                ProtocolJson.WriteChange(w, v.Id.Value, FieldsOf(c.Fields), v.Cell, v.Facing, v.Next, v.Speed, v.DisplayKey, HpFraction(v) ?? 0, v.Dead,
+                    Mine(v, observer) ?? false);
             }
             w.WriteEndArray();
         }
@@ -84,12 +89,35 @@ public sealed class ViewMessageWriter
             for (var i = 0; i < gone.Count; i++) w.WriteNumberValue(gone[i].Value);
             w.WriteEndArray();
         }
+        var hits = delta.Hits;
+        if (hits.Count > 0)
+        {
+            w.WriteStartArray("hits");
+            for (var i = 0; i < hits.Count; i++)
+            {
+                var h = hits[i];
+                ProtocolJson.WriteHit(w, h.Attacker.Value, h.Target.Value, h.Amount, h.Result);
+            }
+            w.WriteEndArray();
+        }
+        if (delta.Vitals is { } own) ProtocolJson.WriteVitals(w, own.Hp, own.MaxHp, own.Sp, own.MaxSp);
         w.WriteEndObject();
         return End();
     }
 
-    private void Record(in EntityView v) =>
-        ProtocolJson.WriteRecord(_writer, v.Id.Value, KindTerm(v.Kind), v.DisplayKey, v.Cell, v.Facing, v.Next, v.Speed);
+    /// <summary>The <c>hp</c> fraction of a view (a whole percentage over 100), or null for an entity without HP.</summary>
+    public static double? HpFraction(in EntityView v) => v.HpPercent < 0 ? null : v.HpPercent / 100.0;
+
+    /// <summary>
+    /// A ground item's <c>mine</c> for <paramref name="observer"/>: true when nobody holds the loot priority any more or the observer does. Null
+    /// for every other kind. This is the only trace of the priority on the wire; the holder's id and the timers stay on the server.
+    /// </summary>
+    public static bool? Mine(in EntityView v, EntityId observer) =>
+        v.Kind == EntityKind.Item ? v.LootOwner is not { } owner || owner == observer : null;
+
+    private void Record(in EntityView v, EntityId observer) =>
+        ProtocolJson.WriteRecord(_writer, v.Id.Value, KindTerm(v.Kind), v.DisplayKey, v.Cell, v.Facing, v.Next, v.Speed, HpFraction(v), v.Dead, v.Quantity,
+            Mine(v, observer));
 
     private void Begin()
     {
