@@ -95,8 +95,8 @@ public class GoldenCharacterTests
         ShouldHave(c, "dex", 5);
         ShouldHave(c, "luk", 3);
 
-        ShouldHave(c, "max_hp", 67);        // floor((40 + 3×8) × (1 + 5×0.01)) = floor(64 × 1.05) = floor(67.2) = 67
-        ShouldHave(c, "max_sp", 19);        // floor((10 + 3×3) × (1 + 2×0.01)) = floor(19 × 1.02) = floor(19.38) = 19
+        ShouldHave(c, "max_hp", 67);        // floor((40 + 3×8) × (100 + 5) / 100) = floor(64 × (100 + 5) / 100) = floor(67.2) = 67
+        ShouldHave(c, "max_sp", 19);        // floor((10 + 3×3) × (100 + 2) / 100) = floor(19 × (100 + 2) / 100) = floor(19.38) = 19
         ShouldHave(c, "atk", 7);            // 6 + floor(5/5)=1 + floor(3/5)=0 + floor(3/4)=0 = 7
         ShouldHave(c, "matk", 3);           // floor(2×1.5)=3 + floor(3/4)=0 = 3
         ShouldHave(c, "def", 3);            // floor(5/2)=2 + floor(3/5)=0 = 2; + cap 1 = 3
@@ -134,13 +134,12 @@ public class GoldenCharacterTests
         ShouldHave(c, "dex", 10);
         ShouldHave(c, "luk", 4);
 
-        // Formula: floor((40 + 20×8) × (1 + 15×0.01)) = floor(200 × 1.15) = floor(230) = 230 by hand, BUT in binary
-        // doubles 15×0.01 → 0.15 → 1.15 is 1.1499999999999999, × 200 = 229.99999999999997, floor → 229.
-        // (Reported as a formulas.yaml issue: `vit * 0.01` style scaling under floor loses a point at exact boundaries.)
-        // Then percent modifiers: 229 × (100 + 6 job + 8 card) / 100 = 229 × 1.14 = 261.06.
-        ShouldHave(c, "max_hp", 261.06);
-        c.GetInt("max_hp").ShouldBe(261);
-        ShouldHave(c, "max_sp", 70);        // floor((10 + 20×3) × (1 + 1×0.01)) = floor(70 × 1.01) = floor(70.7) = 70
+        // Formula: floor((40 + 20×8) × (100 + 15) / 100) = floor(200 × 115 / 100) = floor(23000 / 100) = 230.
+        // Integer products stay exact in doubles; the old `(1 + vit × 0.01)` form gave 229 here (1.15 ≈ 1.1499999…).
+        // Then percent modifiers: 230 × (100 + 6 job + 8 card) / 100 = 230 × 1.14 = 262.2.
+        ShouldHave(c, "max_hp", 262.2);
+        c.GetInt("max_hp").ShouldBe(262);
+        ShouldHave(c, "max_sp", 70);        // floor((10 + 20×3) × (100 + 1) / 100) = floor(70 × (100 + 1) / 100) = floor(70.7) = 70
         ShouldHave(c, "atk", 26);           // 19 + floor(10/5)=2 + floor(4/5)=0 + floor(20/4)=5 = 26
         ShouldHave(c, "matk", 6);           // floor(1×1.5)=1 + floor(20/4)=5 = 6
         ShouldHave(c, "def", 21);           // floor(15/2)=7 + floor(20/5)=4 = 11; + vest 8 + buckler 2 = 21
@@ -159,7 +158,7 @@ public class GoldenCharacterTests
         c.Modifiers.RemoveBySource("equip:body");
         c.Modifiers.RemoveBySource("card:body:0");
         ShouldHave(c, "def", 13);           // 11 + buckler 2
-        ShouldHave(c, "max_hp", 242.74);    // 229 × 106/100
+        ShouldHave(c, "max_hp", 243.8);     // 230 × 106/100
     }
 
     /// <summary>
@@ -183,8 +182,8 @@ public class GoldenCharacterTests
         ShouldHave(c, "dex", 12);
         ShouldHave(c, "luk", 3);
 
-        ShouldHave(c, "max_hp", 169);       // floor((40 + 15×8) × (1 + 6×0.01)) = floor(160 × 1.06) = floor(169.6) = 169
-        ShouldHave(c, "max_sp", 74.8);      // floor((10 + 15×3) × (1 + 24×0.01)) = floor(55 × 1.24) = floor(68.2) = 68; × 110/100 = 74.8
+        ShouldHave(c, "max_hp", 169);       // floor((40 + 15×8) × (100 + 6) / 100) = floor(160 × (100 + 6) / 100) = floor(169.6) = 169
+        ShouldHave(c, "max_sp", 74.8);      // floor((10 + 15×3) × (100 + 24) / 100) = floor(55 × (100 + 24) / 100) = floor(68.2) = 68; × 110/100 = 74.8
         ShouldHave(c, "atk", 7);            // 2 + floor(12/5)=2 + floor(3/5)=0 + floor(15/4)=3 = 7
         ShouldHave(c, "matk", 61);          // floor(24×1.5)=36 + floor(15/4)=3 = 39; + staff 22 = 61
         ShouldHave(c, "def", 7.8);          // floor(6/2)=3 + floor(15/5)=3 = 6; × 130/100 = 7.8

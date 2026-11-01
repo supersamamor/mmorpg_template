@@ -5,10 +5,12 @@
 # Derived formulas below use only primary stats and levels, so evaluation order does not matter.
 # Units: aspd = attacks per second; move_speed = cells per second; hp_regen / sp_regen = points per second;
 # cast_time_mod = multiplier on cast time (1 = unchanged); crit = percent chance before the target's luk.
+# Percent scaling under floor() is written `* (100 + x) / 100`, not `* (1 + x * 0.01)`: 0.01 has no exact
+# binary form, so the second style can floor 230 down to 229 at exact boundaries.
 name: Default formulas
 derived:
-  max_hp: floor((40 + base_level * 8) * (1 + vit * 0.01))
-  max_sp: floor((10 + base_level * 3) * (1 + int * 0.01))
+  max_hp: floor((40 + base_level * 8) * (100 + vit) / 100)
+  max_sp: floor((10 + base_level * 3) * (100 + int) / 100)
   atk: str + floor(dex / 5) + floor(luk / 5) + floor(base_level / 4)
   matk: floor(int * 1.5) + floor(base_level / 4)
   def: floor(vit / 2) + floor(base_level / 5)
