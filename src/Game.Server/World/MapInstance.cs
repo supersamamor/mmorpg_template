@@ -219,7 +219,7 @@ public sealed class MapInstance
         {
             switch (change)
             {
-                case StructuralChange.Add add: ApplyAdd(add.Entity, add.Reason); break;
+                case StructuralChange.Add add: ApplyAdd(add.Entity, add.Reason, add.Initialize); break;
                 case StructuralChange.Remove remove: ApplyRemove(remove.Id); break;
                 case StructuralChange.Warp warp: ApplyWarp(warp); break;
             }
@@ -231,7 +231,7 @@ public sealed class MapInstance
         }
     }
 
-    private void ApplyAdd(Entity entity, MapChangeReason reason)
+    private void ApplyAdd(Entity entity, MapChangeReason reason, Action<Entity>? initialize)
     {
         if (!_entities.TryAdd(entity.Id, entity))
         {
@@ -241,6 +241,18 @@ public sealed class MapInstance
         _ordered.Add(entity);
         entity.MapId = MapId;
         World.SetLocation(entity.Id, this);
+        if (initialize is not null)
+        {
+            try
+            {
+                initialize(entity);
+            }
+            catch (Exception ex)
+            {
+                Counters.HandlerErrors++;
+                _log.Error($"[{MapId}] tick {_context.TickNumber}: initializing {entity.Id} threw; it joins as it is.", ex);
+            }
+        }
         Events.Publish(new EntityEnteredMap(entity.Id, entity.Kind, MapId, entity.Cell, reason));
     }
 

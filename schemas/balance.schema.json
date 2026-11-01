@@ -110,6 +110,35 @@
       },
       "additionalProperties": false,
       "description": "Area of interest: which entities each observer is sent (ARCHITECTURE §3)."
+    },
+    "new_character": {
+      "type": "object",
+      "properties": {
+        "start_map_id": {
+          "type": "string",
+          "pattern": "^map\\.[a-z0-9_]+$",
+          "description": "Map (map.*) a new character appears on."
+        },
+        "start_x": {
+          "type": "integer",
+          "description": "Start cell X on that map's logic grid; the cell must be walkable."
+        },
+        "start_y": {
+          "type": "integer",
+          "description": "Start cell Y on that map's logic grid; the cell must be walkable."
+        },
+        "start_facing": {
+          "type": "string",
+          "description": "Facing at the start, a Directions term (n, ne, ... nw)."
+        },
+        "start_job_id": {
+          "type": "string",
+          "pattern": "^job\\.[a-z0-9_]+$",
+          "description": "Job (job.*) a new character starts in."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Where and as what a newly created character starts (the server's player join, T-205)."
     }
   },
   "additionalProperties": false,

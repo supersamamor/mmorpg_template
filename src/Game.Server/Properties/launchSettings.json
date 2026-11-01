@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "Game.Server (Development)": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}

@@ -45,3 +45,11 @@ aoi:
   # Buckets seen around the observer's own. An observer sees at least view_radius * bucket_size = 12 cells in every direction
   # (just past the 11-cell screen edge) and at most 17, so entities appear a little before they walk on screen.
   view_radius: 2
+new_character:
+  # A new character appears in the starter meadow's safe zone, a few steps south of the guide and the trainer, facing them.
+  start_map_id: map.starter_meadow
+  start_x: 12
+  start_y: 12
+  start_facing: n
+  # Everyone starts as a Wanderer and picks a job later (the job is also what other players see them as until gear exists).
+  start_job_id: job.novice

@@ -1,10 +1,13 @@
+using Game.Shared.Definitions;
 using Game.Shared.Formulas;
+using Game.Shared.Vocabulary;
 
 namespace Game.Content.Validation.Rules;
 
 /// <summary>
 /// Sanity checks on <c>balance.yaml</c>: ranges are ordered and non-negative, chances stay within 0–1,
-/// the primary stat range holds its starting value, and the base EXP table exists.
+/// the primary stat range holds its starting value, the base EXP table exists, and a new character starts on a walkable
+/// cell of an existing map in an existing job.
 /// Formulas are checked by <see cref="FormulaRule"/>.
 /// </summary>
 public sealed class BalanceRule : IValidationRule
@@ -54,6 +57,33 @@ public sealed class BalanceRule : IValidationRule
             Range(context, "aoi.bucket_size", "must be above 0.");
         if (balance.Aoi.ViewRadius <= 0)
             Range(context, "aoi.view_radius", "must be above 0.");
+
+        NewCharacter(context, balance.NewCharacter);
+    }
+
+    /// <summary>The start map and job exist, the start cell is walkable on the map's grid, and the facing is a direction.</summary>
+    private static void NewCharacter(ValidationContext context, NewCharacterBalanceDef n)
+    {
+        var db = context.Database;
+        if (!db.Jobs.Contains(n.StartJobId))
+            context.ErrorInFile(File, "new_character.start_job_id", ValidationCodes.RefMissing,
+                $"balance.yaml new_character refers to unknown job '{n.StartJobId}'.");
+        if (!Directions.All.Contains(n.StartFacing))
+            context.ErrorInFile(File, "new_character.start_facing", ValidationCodes.VocabUnknown,
+                $"balance.yaml new_character.start_facing '{n.StartFacing}' is not a direction ({string.Join(", ", Directions.All.Ordered)}).");
+        if (!db.Maps.Contains(n.StartMapId))
+        {
+            context.ErrorInFile(File, "new_character.start_map_id", ValidationCodes.RefMissing,
+                $"balance.yaml new_character refers to unknown map '{n.StartMapId}'.");
+            return;
+        }
+        if (!db.Grids.TryGetValue(n.StartMapId, out var grid)) return; // the loader reports a map without a grid
+        if (!grid.InBounds(n.StartX, n.StartY))
+            context.ErrorInFile(File, "new_character.start_x", ValidationCodes.GridCellBlocked,
+                $"balance.yaml new_character start cell ({n.StartX}, {n.StartY}) is outside the {grid.Width}x{grid.Height} grid of {grid.MapId}.");
+        else if (!grid.IsWalkable(n.StartX, n.StartY))
+            context.ErrorInFile(File, "new_character.start_x", ValidationCodes.GridCellBlocked,
+                $"balance.yaml new_character start cell ({n.StartX}, {n.StartY}) is not walkable on {grid.MapId}.");
     }
 
     private static void Chances(ValidationContext context, string kind, double min, double max)

@@ -21,6 +21,31 @@ namespace Game.Shared.Definitions
 
         /// <summary>Area of interest: which entities each observer is sent (ARCHITECTURE §3).</summary>
         public AoiBalanceDef Aoi { get; init; } = new AoiBalanceDef();
+
+        /// <summary>Where and as what a newly created character starts (the server's player join, T-205).</summary>
+        public NewCharacterBalanceDef NewCharacter { get; init; } = new NewCharacterBalanceDef();
+    }
+
+    /// <summary>
+    /// A new character's starting place and job. Its stats come from <see cref="ProgressionBalanceDef"/> (starting stat value and
+    /// points, level 1/1) plus the job's stat bonuses; the job id is also what observers are shown it as (its display key).
+    /// </summary>
+    public sealed record NewCharacterBalanceDef
+    {
+        /// <summary>Map (<c>map.*</c>) a new character appears on.</summary>
+        public string StartMapId { get; init; } = string.Empty;
+
+        /// <summary>Start cell X on that map's logic grid; the cell must be walkable.</summary>
+        public int StartX { get; init; }
+
+        /// <summary>Start cell Y on that map's logic grid; the cell must be walkable.</summary>
+        public int StartY { get; init; }
+
+        /// <summary>Facing at the start, a <c>Directions</c> term (<c>n</c>, <c>ne</c>, ... <c>nw</c>).</summary>
+        public string StartFacing { get; init; } = string.Empty;
+
+        /// <summary>Job (<c>job.*</c>) a new character starts in.</summary>
+        public string StartJobId { get; init; } = string.Empty;
     }
 
     /// <summary>Progression numbers. The max base level is not stored here: it is the length of the base EXP table plus one.</summary>

@@ -6,11 +6,33 @@ using Game.Server.World.Aoi;
 
 namespace Game.Server.Hosting;
 
-/// <summary>Command line of <c>Game.Server</c>: <c>[content-dir] [--theme name] [--seed n] [--duration seconds]</c>.</summary>
+/// <summary>
+/// Command line of <c>Game.Server</c>: <c>[content-dir] [--theme name] [--seed n] [--duration seconds] [--environment name]
+/// [--net-&lt;name&gt; value ...]</c>. The <c>--net-</c> options are collected for <see cref="Game.Server.Net.GatewayOptions"/>.
+/// </summary>
 public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed, double? DurationSeconds)
 {
     /// <summary>Usage text.</summary>
-    public const string Usage = "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>]";
+    public const string Usage =
+        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--net-<name> <value> ...]";
+
+    /// <summary>The environment name that enables development mode (plain ws:// on loopback, the dev login).</summary>
+    public const string DevelopmentName = "Development";
+
+    private static readonly IReadOnlyList<string> NoArgs = [];
+
+    /// <summary>
+    /// <c>--environment</c>, or null to use <c>DOTNET_ENVIRONMENT</c> (then <c>Production</c>). <see cref="DevelopmentName"/> means
+    /// development; anything else is treated as production.
+    /// </summary>
+    public string? Environment { get; init; }
+
+    /// <summary>The <c>--net-</c> options and their values, in order, for <see cref="Game.Server.Net.GatewayOptions.Parse"/>.</summary>
+    public IReadOnlyList<string> NetArgs { get; init; } = NoArgs;
+
+    /// <summary>The environment name in effect: <see cref="Environment"/>, else <paramref name="environmentVariable"/>, else <c>Production</c>.</summary>
+    public string EnvironmentName(string? environmentVariable) =>
+        Environment ?? (string.IsNullOrWhiteSpace(environmentVariable) ? "Production" : environmentVariable);
 
     /// <summary>Parses the arguments; returns null with an error message when they are malformed.</summary>
     public static ServerOptions? Parse(string[] args, out string? error)
@@ -19,6 +41,8 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         var theme = "default";
         ulong? seed = null;
         double? duration = null;
+        string? environment = null;
+        var net = new List<string>();
         error = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -31,6 +55,11 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                     case "--theme": theme = Value(); break;
                     case "--seed": seed = ulong.Parse(Value()); break;
                     case "--duration": duration = double.Parse(Value(), System.Globalization.CultureInfo.InvariantCulture); break;
+                    case "--environment": environment = Value(); break;
+                    case var _ when arg.StartsWith(Game.Server.Net.GatewayOptions.ArgPrefix, StringComparison.Ordinal):
+                        net.Add(arg);
+                        net.Add(Value());
+                        break;
                     default:
                         if (arg.StartsWith("--", StringComparison.Ordinal) || content is not null) throw new FormatException($"unexpected argument '{arg}'");
                         content = arg;
@@ -43,7 +72,11 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                 return null;
             }
         }
-        return new ServerOptions(content ?? DefaultContentDir(), theme, seed, duration);
+        return new ServerOptions(content ?? DefaultContentDir(), theme, seed, duration)
+        {
+            Environment = environment,
+            NetArgs = net.Count == 0 ? NoArgs : net,
+        };
     }
 
     /// <summary><c>content/</c> under the current directory, else under the repo root (the folder holding Game.sln).</summary>

@@ -78,8 +78,8 @@ internal abstract record StructuralChange
     {
     }
 
-    /// <summary>Add an entity (spawn or warp arrival).</summary>
-    public sealed record Add(Entity Entity, MapChangeReason Reason) : StructuralChange;
+    /// <summary>Add an entity (spawn or warp arrival); <c>Initialize</c>, if any, runs on the tick just before <c>EntityEnteredMap</c>.</summary>
+    public sealed record Add(Entity Entity, MapChangeReason Reason, Action<Entity>? Initialize = null) : StructuralChange;
 
     /// <summary>Remove (despawn) an entity.</summary>
     public sealed record Remove(EntityId Id) : StructuralChange;

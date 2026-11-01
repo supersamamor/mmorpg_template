@@ -3,6 +3,13 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Kestrel + WebSockets for the gateway (Net/). -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Game.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Game.Shared\Game.Shared.csproj" />
     <ProjectReference Include="..\Game.Content\Game.Content.csproj" />
   </ItemGroup>

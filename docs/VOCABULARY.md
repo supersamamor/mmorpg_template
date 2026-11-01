@@ -139,3 +139,16 @@ Target: `t_` prefix (e.g. `t_def`, `t_vit`, `t_level`)
 Skill: `level` (skill level)
 Balance-only: `stat_value` (current value of the stat being raised) is valid only in `balance.yaml` `progression.stat_point_cost`; `progression.stat_points_per_base_level` may use only `base_level`, `progression.skill_points_per_job_level` only `job_level`.
 Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
+
+## Message types (wire protocol)
+Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
+Client → server: `hello`, `move`, `stop`, `ping`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `pong`, `bye`
+
+## Bye reasons
+In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
+`oversize`, `before_hello`, `duplicate_hello`, `rate_limit`, `login_refused`, `server_full`, `too_slow`, `shutdown`, `server_error`.
+A `rejected` message carries a "Movement reasons" (`MoveRejected`) term instead; the session goes on.
+
+## Entity kinds
+In a view record's `kind`: `player`, `monster`, `npc`

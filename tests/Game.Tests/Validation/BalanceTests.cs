@@ -160,6 +160,32 @@ public class BalanceTests : IDisposable
     }
 
     [Fact]
+    public void Sample_new_character_starts_on_a_walkable_cell_of_the_start_map()
+    {
+        var load = ContentLoader.Load(Path.Combine(RepoRoot(), "content"));
+        var start = load.Database!.Balance.NewCharacter;
+        start.StartMapId.ShouldBe("map.starter_meadow");
+        start.StartJobId.ShouldBe("job.novice");
+        start.StartFacing.ShouldBe(Directions.N);
+        load.Database.GetGrid(start.StartMapId).IsWalkable(start.StartX, start.StartY).ShouldBeTrue();
+    }
+
+    [Theory]
+    [InlineData("start_map_id: map.starter_meadow", "start_map_id: map.nowhere", ValidationCodes.RefMissing, "new_character.start_map_id")]
+    [InlineData("start_job_id: job.novice", "start_job_id: job.nope", ValidationCodes.RefMissing, "new_character.start_job_id")]
+    [InlineData("start_facing: n", "start_facing: up", ValidationCodes.VocabUnknown, "new_character.start_facing")]
+    [InlineData("start_x: 12", "start_x: 0", ValidationCodes.GridCellBlocked, "new_character.start_x")]   // the border wall
+    [InlineData("start_x: 12", "start_x: 480", ValidationCodes.GridCellBlocked, "new_character.start_x")] // off the grid
+    public void New_character_start_is_checked_at_load(string from, string to, string code, string path)
+    {
+        Edit(from, to);
+        var issue = Validate().Issues.Single(i => i.File == "balance.yaml" && i.Severity == ValidationSeverity.Error);
+        issue.Code.ShouldBe(code);
+        issue.Path.ShouldBe(path);
+        issue.Line.ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
     public void Crit_multiplier_below_one_is_an_error()
     {
         Edit("crit_multiplier: \"1.5\"", "crit_multiplier: \"0.8\"");

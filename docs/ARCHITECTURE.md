@@ -297,7 +297,46 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   ordered by entity id. A walker produces one change per cell reached, not per tick; the client interpolates from `cell` to `next`.
 - **Latency:** the client renders ~2 ticks behind the newest snapshot and interpolates.
   It tolerates cellular jitter and does not predict combat.
-- **Bandwidth:** JSON first. Switch to MessagePack if measured traffic exceeds the §9 budget.
+- **Bandwidth:** JSON first. Switch to MessagePack if measured traffic exceeds the §9 budget. Measured (T-205): 50 loopback
+  clients walking in each other's view receive 8.1 KB/s each on the wire (payload + WebSocket header).
+- **Gateway** (`Game.Server/Net`, T-205): Kestrel WebSockets on one path (`/ws`). In development it listens on loopback with plain
+  `ws://`; otherwise it listens on every interface with TLS only (a `.pfx` set in config; the server refuses to start without one).
+  All ports, limits and timeouts are in `GatewayOptions`, which has defaults and can be overridden with `--net-<name>` or
+  `GAME_NET_<NAME>`. They are server config, not content.
+- **Messages** (contracts in `Game.Shared/Protocol`, JSON mapping in `Game.Server/Net/ProtocolJson`; the mapping is written by hand,
+  with no reflection, so the client can compile the same file). Every message is one JSON text frame with a `type`. Cells are
+  `[x,y]`, speeds are rounded to 0.01, and unknown fields are ignored. The protocol version is sent in `hello`.
+
+  | type | direction | fields |
+  |------|-----------|--------|
+  | `hello` | C→S (first) | `version`, `name` (dev login stub; T-701 replaces it) |
+  | `move` | C→S | `cell` (a request; it may come back `rejected`) |
+  | `stop` | C→S | — |
+  | `ping` | C→S | `seq` |
+  | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate` |
+  | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records). Replaces the view; a new `map` means you changed maps |
+  | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids); empty lists left out |
+  | `rejected` | S→C | `intent` (`move`), `reason` (a `MoveRejected` term), `cell` |
+  | `pong` | S→C | `seq` |
+  | `bye` | S→C (last) | `reason` (VOCABULARY "Bye reasons"), followed by the close frame |
+
+  A view record is `{"id":7,"kind":"monster","display_key":"monster.x","cell":[3,4],"facing":"e","next":[4,4],"speed":3.51}`.
+- **Session lifecycle:**
+  1. The client connects and must send `hello` within `hello-timeout-ms`.
+  2. The server checks the protocol version and the dev login. The dev login is development only; any other environment refuses it.
+  3. The server queues the character with `GameWorld.Spawn(..., initialize)` at `balance.yaml` `new_character`. On the start
+     instance's tick, the initializer sets its stats (from the stats pipeline), its display key (the job id) and its view sink, and
+     queues `welcome`. The AOI then sends the first `snapshot` in phase 5 of that tick, and deltas follow.
+  4. `move`/`stop` are parsed and checked (shape, cell inside the current map) on the socket thread and queued as `MoveTo`/`StopMove`
+     wherever the character is now. Warps are followed through the world's entity directory. Each session has a token-bucket rate
+     limit: messages over it are dropped and counted, and sustained flooding ends in `bye rate_limit`.
+  5. Malformed JSON, an unknown type, an oversize message, a wrong version, a message before `hello`, or silence longer than
+     `idle-timeout-ms` all end in `bye <reason>` and the close frame.
+  6. When the connection ends for any reason, the character is despawned on its instance's next tick. T-210 adds the grace period
+     and resume here.
+- **Back-pressure:** the sink serializes on the tick thread into a bounded per-session queue, and the socket drains that queue. When
+  the queue is full, queued views are dropped and later deltas are skipped. Once the queue has drained, the session asks for a fresh
+  snapshot (`RequestSnapshot`). A client that stays behind for `slow-client-timeout-ms` gets `bye too_slow`.
 
 ## 11. Security baseline
 - Server validates every intent (range, cooldown, SP, line of sight, ownership).

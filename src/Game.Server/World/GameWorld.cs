@@ -74,12 +74,20 @@ public sealed class GameWorld
     /// Allocates an id and queues a new entity on a map; it appears on that instance's next tick. Thread-safe. Throws
     /// <see cref="ArgumentException"/> for an unknown map, an unwalkable cell or a facing that is not a <c>Directions</c> term.
     /// </summary>
-    public EntityId Spawn(EntityKind kind, string mapId, GridCell cell, string facing)
+    public EntityId Spawn(EntityKind kind, string mapId, GridCell cell, string facing) => Spawn(kind, mapId, cell, facing, null);
+
+    /// <summary>
+    /// Like <see cref="Spawn(EntityKind, string, GridCell, string)"/>, and <paramref name="initialize"/> runs on that instance's tick when
+    /// the entity is added (phase 3), before <c>EntityEnteredMap</c> is raised and before any system or the AOI sees it: the place to set
+    /// <see cref="Entity.Stats"/>, <see cref="Entity.DefinitionId"/> and <see cref="Entity.View"/> of a joining player. Thread-safe. An
+    /// initializer that throws is logged and the entity joins as it is.
+    /// </summary>
+    public EntityId Spawn(EntityKind kind, string mapId, GridCell cell, string facing, Action<Entity>? initialize)
     {
         var instance = GetInstanceOrThrow(mapId);
         var entity = CreateEntity(kind, mapId, cell, facing);
         _locations[entity.Id] = instance;
-        instance.Post(new StructuralChange.Add(entity, MapChangeReason.Spawn));
+        instance.Post(new StructuralChange.Add(entity, MapChangeReason.Spawn, initialize));
         return entity.Id;
     }
 
