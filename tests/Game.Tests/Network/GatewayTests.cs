@@ -288,9 +288,52 @@ public class GatewayTests
         await using var rig = await GatewayRig.StartAsync(development: false, tls: true);
         rig.Endpoint.Scheme.ShouldBe("wss");
         var client = await rig.ConnectAsync();
-        await client.SendAsync(new HelloMessage(ProtocolVersion.Current, "Ada"));
+        await client.SendAsync(new HelloMessage(ProtocolVersion.Current, "Ada", rig.ContentHash));
         (await client.WaitForByeAsync()).ShouldBe(ByeReasons.LoginRefused);
         rig.Gateway.Stats.Byes[ByeReasons.LoginRefused].ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Matching_content_hash_gets_a_welcome_carrying_the_servers_hash()
+    {
+        await using var rig = await GatewayRig.StartAsync();
+        var client = await rig.JoinAsync("Ada"); // JoinAsync sends the rig's hash
+
+        (await client.WaitForAsync<WelcomeMessage>()).Content.ShouldBe(rig.ContentHash);
+        rig.ContentHash.ShouldMatch("^[0-9a-f]{64}$");
+    }
+
+    [Fact]
+    public async Task Mismatching_content_hash_gets_update_required()
+    {
+        await using var rig = await GatewayRig.StartAsync();
+        var client = await rig.ConnectAsync();
+        await client.SendAsync(new HelloMessage(ProtocolVersion.Current, "Ada", new string('0', 64)));
+
+        (await client.WaitForByeAsync()).ShouldBe(ByeReasons.UpdateRequired);
+        client.Messages.OfType<WelcomeMessage>().ShouldBeEmpty();
+        rig.Gateway.Stats.Byes[ByeReasons.UpdateRequired].ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Missing_content_hash_is_accepted_in_development_with_a_warning()
+    {
+        await using var rig = await GatewayRig.StartAsync();
+        var client = await rig.ConnectAsync();
+        await client.SendAsync(new HelloMessage(ProtocolVersion.Current, "Ada"));
+
+        (await client.WaitForAsync<WelcomeMessage>()).Content.ShouldBe(rig.ContentHash);
+        rig.Log.Lines.ShouldContain(l => l.StartsWith("WARN") && l.Contains("without a content hash"));
+    }
+
+    [Fact]
+    public async Task Missing_content_hash_is_refused_outside_development()
+    {
+        await using var rig = await GatewayRig.StartAsync(development: false, tls: true);
+        var client = await rig.ConnectAsync();
+        await client.SendAsync(new HelloMessage(ProtocolVersion.Current, "Ada"));
+
+        (await client.WaitForByeAsync()).ShouldBe(ByeReasons.UpdateRequired);
     }
 
     [Fact]
@@ -299,7 +342,7 @@ public class GatewayTests
         var options = new GatewayOptions { Development = false, Port = 0 };
         options.Problems().ShouldContain(p => p.Contains("TLS certificate"));
         var world = new GameWorld(TestGrids.SampleContent.Grids.Values, new SystemPipeline(), 1, new ManualClock(), new ListLog());
-        var gateway = new Gateway(world, new NewCharacters(TestGrids.SampleContent), options, new ManualClock(), new ListLog());
+        var gateway = new Gateway(world, new NewCharacters(TestGrids.SampleContent), options, new ManualClock(), new ListLog(), "hash");
         var error = await Should.ThrowAsync<InvalidOperationException>(() => GatewayHost.StartAsync(gateway));
         error.Message.ShouldContain("TLS certificate");
 

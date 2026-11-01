@@ -147,7 +147,8 @@ Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `pong`, `bye`
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
-`oversize`, `before_hello`, `duplicate_hello`, `rate_limit`, `login_refused`, `server_full`, `too_slow`, `shutdown`, `server_error`.
+`oversize`, `before_hello`, `duplicate_hello`, `rate_limit`, `login_refused`, `server_full`, `too_slow`, `shutdown`, `server_error`, `update_required`.
+`update_required`: the client's content hash differs from the server's, or it sent none outside development (ARCHITECTURE §5.4).
 A `rejected` message carries a "Movement reasons" (`MoveRejected`) term instead; the session goes on.
 
 ## Entity kinds

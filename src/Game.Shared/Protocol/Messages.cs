@@ -15,10 +15,11 @@ namespace Game.Shared.Protocol
         public abstract string Type { get; }
     }
 
-    /// <summary><c>hello</c>: the first message of a session. <c>{"type":"hello","version":1,"name":"Ada"}</c>.</summary>
+    /// <summary><c>hello</c>: the first message of a session. <c>{"type":"hello","version":1,"name":"Ada","content":"ab12..."}</c>.</summary>
     /// <param name="Version">The client's <see cref="ProtocolVersion"/>.</param>
     /// <param name="Name">Display name for the dev login stub (no password). Real accounts replace this (T-701).</param>
-    public sealed record HelloMessage(int Version, string Name) : ClientMessage
+    /// <param name="Content">The content hash of the client's bundle (ARCHITECTURE §5.4), or null when the client has none. A hash that differs from the server's ends in <c>bye</c> <c>update_required</c>; a missing one is allowed only in development.</param>
+    public sealed record HelloMessage(int Version, string Name, string? Content = null) : ClientMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Hello;
@@ -56,13 +57,14 @@ namespace Game.Shared.Protocol
 
     /// <summary>
     /// <c>welcome</c>: the login worked and the character is in the world. A <see cref="SnapshotMessage"/> follows.
-    /// <c>{"type":"welcome","version":1,"id":42,"map":"map.x","tick_rate":10}</c>.
+    /// <c>{"type":"welcome","version":1,"id":42,"map":"map.x","tick_rate":10,"content":"ab12..."}</c>.
     /// </summary>
     /// <param name="Version">The server's <see cref="ProtocolVersion"/>.</param>
     /// <param name="Id">The client's own entity id (the <c>id</c> of its record in snapshots and deltas).</param>
     /// <param name="MapId">The map the character is on.</param>
     /// <param name="TickRate">Server ticks per second; snapshots and deltas carry tick numbers at this rate.</param>
-    public sealed record WelcomeMessage(int Version, long Id, string MapId, int TickRate) : ServerMessage
+    /// <param name="Content">The server's content hash (the client bundle's <c>content_hash</c>), or null on a server that has none.</param>
+    public sealed record WelcomeMessage(int Version, long Id, string MapId, int TickRate, string? Content = null) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Welcome;

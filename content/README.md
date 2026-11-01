@@ -70,3 +70,7 @@ The `.txt` file has header lines, a line `---`, then one text row per grid row (
 | `zone: kind  x y w h` | rule zone (`safe`, `pvp`) |
 
 Lines starting with `//` are comments. Commit the `.txt` next to the generated `.grid.json`; a test fails when they differ.
+
+## Client bundle
+
+`dotnet run --project src/Game.Tools -- export-client [out.json]` writes the display-only bundle the app packs, plus its content hash (default `build/client-content.json`, gitignored; `--check <file>` tests that a file is current). What is in it: ARCHITECTURE §5.4.

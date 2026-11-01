@@ -91,13 +91,16 @@ namespace Game.Shared.Protocol
         /// <summary><c>shutdown</c>: the server is stopping.</summary>
         public const string Shutdown = "shutdown";
 
+        /// <summary><c>update_required</c>: the client's content hash differs from the server's, or it sent none outside development (ARCHITECTURE §5.4).</summary>
+        public const string UpdateRequired = "update_required";
+
         /// <summary><c>server_error</c>: the server failed to handle the session.</summary>
         public const string ServerError = "server_error";
 
         /// <summary>Every bye reason.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             Timeout, BadVersion, Malformed, UnknownType, Oversize, BeforeHello, DuplicateHello, RateLimit, LoginRefused, ServerFull, TooSlow,
-            Shutdown, ServerError);
+            Shutdown, ServerError, UpdateRequired);
     }
 
     /// <summary>Entity kinds in a view record's <c>kind</c> field (VOCABULARY.md "Entity kinds").</summary>

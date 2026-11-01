@@ -18,6 +18,7 @@ public class ProtocolJsonTests
     public static TheoryData<string, ClientMessage, string> ClientGolden => new()
     {
         { "hello", new HelloMessage(1, "Ada"), """{"type":"hello","version":1,"name":"Ada"}""" },
+        { "hello with content hash", new HelloMessage(1, "Ada", "ab12"), """{"type":"hello","version":1,"name":"Ada","content":"ab12"}""" },
         { "move", new MoveMessage(new GridCell(12, 9)), """{"type":"move","cell":[12,9]}""" },
         { "stop", new StopMessage(), """{"type":"stop"}""" },
         { "ping", new PingMessage(7), """{"type":"ping","seq":7}""" },
@@ -26,6 +27,7 @@ public class ProtocolJsonTests
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
     {
         { "welcome", new WelcomeMessage(1, 42, "map.starter_meadow", 10), """{"type":"welcome","version":1,"id":42,"map":"map.starter_meadow","tick_rate":10}""" },
+        { "welcome with content hash", new WelcomeMessage(1, 42, "map.starter_meadow", 10, "ab12"), """{"type":"welcome","version":1,"id":42,"map":"map.starter_meadow","tick_rate":10,"content":"ab12"}""" },
         {
             "snapshot", new SnapshotMessage(120, "map.starter_meadow", 42, [Walker, Standing]),
             """{"type":"snapshot","tick":120,"map":"map.starter_meadow","id":42,"entities":[""" +

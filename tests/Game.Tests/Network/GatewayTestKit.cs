@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
+using Game.Content.ClientExport;
 using Game.Content.Registry;
 using Game.Server.Hosting;
 using Game.Server.Net;
@@ -22,6 +23,7 @@ public sealed class GatewayRig : IAsyncDisposable
     public const string CertificatePassword = "test-only";
 
     public readonly ContentDatabase Content = TestGrids.SampleContent;
+    public readonly string ContentHash;
     public readonly ManualClock Clock = new();
     public readonly ListLog Log = new();
     public readonly GameWorld World;
@@ -35,9 +37,10 @@ public sealed class GatewayRig : IAsyncDisposable
     private GatewayRig(GatewayOptions options)
     {
         var clock = new SystemClock();
+        ContentHash = ClientBundleExporter.Hash(Content);
         World = new GameWorld(Content.Grids.Values, ServerPipeline.Create(Content), 1, clock, Log);
         Start = new NewCharacters(Content);
-        Gateway = new Gateway(World, Start, options, Clock, Log);
+        Gateway = new Gateway(World, Start, options, Clock, Log, ContentHash);
         _runners = World.Instances.Select(i => new InstanceRunner(i, clock, Log)).ToList();
     }
 
@@ -89,7 +92,7 @@ public sealed class GatewayRig : IAsyncDisposable
     public async Task<TestClient> JoinAsync(string name = "tester")
     {
         var client = await ConnectAsync();
-        await client.SendAsync(new HelloMessage(ProtocolVersion.Current, name));
+        await client.SendAsync(new HelloMessage(ProtocolVersion.Current, name, ContentHash));
         await client.WaitForAsync<WelcomeMessage>();
         await client.WaitForAsync<SnapshotMessage>();
         return client;
