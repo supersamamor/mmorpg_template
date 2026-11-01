@@ -1,0 +1,59 @@
+using System.CommandLine;
+using Game.Content.Loading;
+using Game.Content.Validation;
+
+namespace Game.Tools.Commands;
+
+/// <summary>
+/// <c>validate [--content &lt;dir&gt;] [--theme &lt;name&gt;] [--format text|json]</c>: loads the content, runs every
+/// validation rule and prints the findings. Exit code 0 when there are no errors (warnings allowed), 1 otherwise.
+/// </summary>
+internal static class ValidateCommand
+{
+    public static Command Create()
+    {
+        var contentOption = new Option<DirectoryInfo?>("--content") { Description = "Content directory (default: <repo>/content)" };
+        var themeOption = new Option<string>("--theme") { Description = "Theme whose asset-manifest.json is checked", DefaultValueFactory = _ => "default" };
+        var formatOption = new Option<string>("--format") { Description = "Output format: text or json", DefaultValueFactory = _ => "text" };
+        formatOption.AcceptOnlyFromAmong("text", "json");
+
+        var command = new Command("validate", "Validate all content and cross-references") { contentOption, themeOption, formatOption };
+        command.SetAction(parse => Run(parse.GetValue(contentOption), parse.GetValue(themeOption)!, parse.GetValue(formatOption)!));
+        return command;
+    }
+
+    private static int Run(DirectoryInfo? contentDir, string theme, string format)
+    {
+        var content = contentDir?.FullName ?? Path.Combine(FindRepoRoot(), "content");
+        var issues = Collect(content, theme);
+        Console.WriteLine(format == "json" ? ValidationReportFormatter.ToJson(issues) : ValidationReportFormatter.ToText(issues));
+        return issues.Any(i => i.Severity == ValidationSeverity.Error) ? 1 : 0;
+    }
+
+    private static IReadOnlyList<ValidationIssue> Collect(string content, string theme)
+    {
+        var load = ContentLoader.Load(content);
+        if (load.Database is null) return ValidationReportFormatter.FromLoadErrors(load.Errors);
+
+        // themes/ sits next to content/ in the repo layout.
+        var manifest = AssetManifest.PathFor(Path.Combine(Path.GetFullPath(content), "..", "themes"), theme);
+        IReadOnlySet<string> assetKeys;
+        try
+        {
+            assetKeys = AssetManifest.LoadKeys(manifest);
+        }
+        catch (InvalidDataException e)
+        {
+            return new[] { new ValidationIssue(ValidationSeverity.Error, "", 0, 0, "", ValidationCodes.ThemeManifest, e.Message) };
+        }
+
+        return ContentValidator.Validate(load.Database, content, assetKeys).Issues;
+    }
+
+    private static string FindRepoRoot()
+    {
+        for (var dir = new DirectoryInfo(Directory.GetCurrentDirectory()); dir is not null; dir = dir.Parent)
+            if (File.Exists(Path.Combine(dir.FullName, "Game.sln"))) return dir.FullName;
+        throw new InvalidOperationException("Game.sln not found above the current directory; run from the repo or pass --content.");
+    }
+}
