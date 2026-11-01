@@ -76,6 +76,14 @@
         "crit_multiplier": {
           "type": "string",
           "description": "Damage multiplier on a critical hit, as a formula. Caster and t_ variables are allowed (e.g. 1.5 + luk * 0.005); a constant is fine."
+        },
+        "player_attack_range": {
+          "type": "integer",
+          "description": "A player's auto-attack range in cells (Chebyshev) while unarmed. Weapons bring their own range later (T-401)."
+        },
+        "player_repath_interval_ms": {
+          "type": "integer",
+          "description": "Shortest time between two path searches of a player walking into attack range of its target."
         }
       },
       "additionalProperties": false,
@@ -170,6 +178,40 @@
       },
       "additionalProperties": false,
       "description": "Monster behavior timings shared by every monster (ARCHITECTURE §6.6); per-monster ranges are in MonsterAiDef."
+    },
+    "death": {
+      "type": "object",
+      "properties": {
+        "respawn_hp_percent": {
+          "type": "integer",
+          "description": "Share of max_hp a player respawns with, in percent (1–100). Rounded down, at least 1 HP."
+        },
+        "exp_penalty_percent": {
+          "type": "integer",
+          "description": "Base EXP lost on death, in percent of the current base level's requirement (0 = no penalty). Rounded down; never takes EXP below 0, so a character never loses a level. Nothing is lost at the max level, where EXP is always 0."
+        }
+      },
+      "additionalProperties": false,
+      "description": "What happens when a player dies and respawns (the server's combat loop)."
+    },
+    "loot": {
+      "type": "object",
+      "properties": {
+        "priority_ms": {
+          "type": "integer",
+          "description": "How long after the drop only the top damager may pick an item up; after that anyone may."
+        },
+        "lifetime_ms": {
+          "type": "integer",
+          "description": "How long a ground item stays before it disappears."
+        },
+        "spread_radius": {
+          "type": "integer",
+          "description": "Drops land on a random walkable cell within this many cells of the death cell (0 = always the death cell). Never on a blocked cell."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Ground items a monster drops: where they land, who may take them and how long they stay."
     }
   },
   "additionalProperties": false,

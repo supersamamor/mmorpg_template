@@ -3,6 +3,7 @@ using Game.Content.Registry;
 using Game.Content.Validation;
 using Game.Server.World;
 using Game.Server.World.Aoi;
+using Game.Server.World.Combat;
 using Game.Server.World.Monsters;
 
 namespace Game.Server.Hosting;
@@ -130,9 +131,12 @@ public static class ServerPipeline
     /// <summary>
     /// Order: movement first, so later systems see this tick's positions. Then the monster spawner (fills and refills the map's spawn
     /// slots; new monsters appear in phase 3) and the monster AI, which decides from this tick's positions: its move intents apply in the
-    /// next tick's movement, and its attack requests are events for combat (T-302, which goes after the AI). The AOI does its work in
-    /// phase 5 (outbound), after every system, so its place in the list only orders its intents; it is last.
+    /// next tick's movement, and its attack requests are events. Combat comes after the AI: it resolves the attack requests raised in the
+    /// previous tick (events are dispatched in phase 4, so this tick's arrive for the next one) and this tick's player attacks against the
+    /// positions movement just produced, and a death it causes is seen by the spawner and the AI in phase 4 of the same tick. The AOI does
+    /// its work in phase 5 (outbound), after every system, so its place in the list only orders its intents; it is last.
     /// </summary>
+    /// <remarks>Player progression lives in one in-memory store shared by every instance (persistence is T-702).</remarks>
     public static SystemPipeline Create(ContentDatabase content)
     {
         var balance = content.Balance;
@@ -140,10 +144,13 @@ public static class ServerPipeline
         MovementSystem.Create(balance);            // fails now, at boot, if the movement limits are unusable
         MonsterAiSystem.Create(monsters, balance); // likewise for the AI timings
         AoiSystem.Create(balance);                 // and the AOI numbers
+        var combat = CombatContent.From(content, monsters);   // and the combat, death and loot numbers
+        var progressions = new InMemoryProgressionStore();
         return new SystemPipeline()
             .Add(() => MovementSystem.Create(balance))
             .Add(() => new MonsterSpawnerSystem(monsters))
             .Add(() => MonsterAiSystem.Create(monsters, balance))
+            .Add(() => new CombatSystem(combat, progressions))
             .Add(() => AoiSystem.Create(balance));
     }
 }

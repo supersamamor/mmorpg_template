@@ -119,7 +119,8 @@ public class ProtocolJsonTests
     {
         foreach (var field in Enum.GetValues<ViewFields>())
             ViewMessageWriter.FieldsOf(field).ToString().ShouldBe(field.ToString());
-        Enum.GetValues<EntityKind>().Select(ViewMessageWriter.KindTerm).ShouldBe(EntityKinds.All.Ordered);
+        // Ground items (EntityKind.Item, T-302) are kept out of views by the AOI until the wire follow-up gives them a kind term.
+        Enum.GetValues<EntityKind>().Where(k => k != EntityKind.Item).Select(ViewMessageWriter.KindTerm).ShouldBe(EntityKinds.All.Ordered);
     }
 
     /// <summary>The tick-thread fast path writes the same bytes as <see cref="ProtocolJson"/> for the same view, over a real walk.</summary>

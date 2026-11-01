@@ -67,7 +67,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 |----|------|-------|-------|--------|------------|--------|-------|
 | T-301 | Monster spawns, respawn, data-driven AI | Claude Code | Opus 5.5 | [T-301](../tasks/prompts/T-301.md) | T-201, T-204, T-212 | Review | Server-side; started before Phase 2 client work because that waits on T-005 |
 | T-304 | Audio data: sound keys, theme `audio.defaults` / `audio.events`, validation | Claude Code | Sonnet 5.5 | [T-304](../tasks/prompts/T-304.md) | T-102, T-209 | Review | Data only; client audio system is T-305 |
-| T-302 | Auto-attack, death, EXP distribution, drops | Claude Code | Opus 5.5 | [T-302](../tasks/prompts/T-302.md) | T-105, T-106, T-301 | Ready | Server world only; wire side (attack messages, HP and ground items in views) is a follow-up in `Net/**` |
+| T-302 | Auto-attack, death, EXP distribution, drops | Claude Code | Opus 5.5 | [T-302](../tasks/prompts/T-302.md) | T-105, T-106, T-301 | Review | Server world only; wire side (attack messages, HP and ground items in views) is a follow-up in `Net/**` |
 
 ## Phase 7 — Persistence & accounts
 

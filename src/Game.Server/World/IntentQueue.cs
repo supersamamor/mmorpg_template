@@ -10,6 +10,14 @@ public interface IIntent
     EntityId Entity { get; }
 }
 
+/// <summary>
+/// An intent that is still routed when its entity is <see cref="Entity.Dead"/> (every other intent of a dead entity is dropped and counted):
+/// what a dead entity may still ask for, such as respawning.
+/// </summary>
+public interface IDeadEntityIntent : IIntent
+{
+}
+
 /// <summary>Outcome of offering an intent to the world or an instance.</summary>
 public enum EnqueueResult
 {

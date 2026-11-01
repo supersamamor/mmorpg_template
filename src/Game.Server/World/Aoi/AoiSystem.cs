@@ -165,9 +165,12 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
     {
         var grid = _grid!;
         var entities = instance.Entities;
+        var shown = 0;
         for (var i = 0; i < entities.Count; i++)
         {
             var entity = entities[i];
+            if (entity.Kind == EntityKind.Item) continue;   // ground items are not on the wire yet (T-302 follow-up)
+            shown++;
             if (!_byId.TryGetValue(entity.Id.Value, out var entry))
             {
                 entry = new AoiEntry(entity);
@@ -184,7 +187,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
             SyncObserver(entry);
         }
 
-        if (_entries.Count == entities.Count) return;
+        if (_entries.Count == shown) return;
         var kept = 0;
         for (var i = 0; i < _entries.Count; i++)
         {

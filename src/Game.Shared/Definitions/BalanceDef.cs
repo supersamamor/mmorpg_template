@@ -27,6 +27,40 @@ namespace Game.Shared.Definitions
 
         /// <summary>Monster behavior timings shared by every monster (ARCHITECTURE §6.6); per-monster ranges are in <see cref="MonsterAiDef"/>.</summary>
         public AiBalanceDef Ai { get; init; } = new AiBalanceDef();
+
+        /// <summary>What happens when a player dies and respawns (the server's combat loop).</summary>
+        public DeathBalanceDef Death { get; init; } = new DeathBalanceDef();
+
+        /// <summary>Ground items a monster drops: where they land, who may take them and how long they stay.</summary>
+        public LootBalanceDef Loot { get; init; } = new LootBalanceDef();
+    }
+
+    /// <summary>Player death and respawn. Percentages are whole-number percents (50 means half).</summary>
+    public sealed record DeathBalanceDef
+    {
+        /// <summary>Share of <c>max_hp</c> a player respawns with, in percent (1–100). Rounded down, at least 1 HP.</summary>
+        public int RespawnHpPercent { get; init; }
+
+        /// <summary>
+        /// Base EXP lost on death, in percent of the current base level's requirement (0 = no penalty). Rounded down; never takes EXP below
+        /// 0, so a character never loses a level. Nothing is lost at the max level, where EXP is always 0.
+        /// </summary>
+        public int ExpPenaltyPercent { get; init; }
+    }
+
+    /// <summary>Ground items. Times are simulated milliseconds; distances are cells (Chebyshev).</summary>
+    public sealed record LootBalanceDef
+    {
+        /// <summary>How long after the drop only the top damager may pick an item up; after that anyone may.</summary>
+        public int PriorityMs { get; init; }
+
+        /// <summary>How long a ground item stays before it disappears.</summary>
+        public int LifetimeMs { get; init; }
+
+        /// <summary>
+        /// Drops land on a random walkable cell within this many cells of the death cell (0 = always the death cell). Never on a blocked cell.
+        /// </summary>
+        public int SpreadRadius { get; init; }
     }
 
     /// <summary>
@@ -156,5 +190,11 @@ namespace Game.Shared.Definitions
         /// (e.g. <c>1.5 + luk * 0.005</c>); a constant is fine.
         /// </summary>
         public string CritMultiplier { get; init; } = string.Empty;
+
+        /// <summary>A player's auto-attack range in cells (Chebyshev) while unarmed. Weapons bring their own range later (T-401).</summary>
+        public int PlayerAttackRange { get; init; }
+
+        /// <summary>Shortest time between two path searches of a player walking into attack range of its target.</summary>
+        public int PlayerRepathIntervalMs { get; init; }
     }
 }
