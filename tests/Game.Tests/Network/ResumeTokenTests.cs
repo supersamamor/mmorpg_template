@@ -47,10 +47,43 @@ public class ResumeTokenTests
 
         tokens.TryRotate(first, Ada, out var second).ShouldBeTrue();
         second.ShouldNotBe(first);
-        tokens.Find(first).ShouldBeNull();
         tokens.Find(second).ShouldBe(Ada);
+        tokens.Find(first).ShouldBe(Ada);                          // not acknowledged yet: still the fallback
+        tokens.Acknowledge(Ada).ShouldBeTrue();
+        tokens.Find(first).ShouldBeNull();
         tokens.TryRotate(first, Ada, out _).ShouldBeFalse();       // used
         tokens.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void An_unacknowledged_resume_can_be_redone_with_the_old_token_which_kills_the_lost_one()
+    {
+        var tokens = new ResumeTokens();
+        var first = tokens.Issue(Ada);
+        tokens.TryRotate(first, Ada, out var lost).ShouldBeTrue();  // its welcome never arrived
+        tokens.HasUnacknowledged(Ada).ShouldBeTrue();
+
+        tokens.TryRotate(first, Ada, out var third).ShouldBeTrue(); // the client only has the first one
+        tokens.Find(lost).ShouldBeNull();                           // issued in between, reached nobody who spoke with it
+        tokens.Find(third).ShouldBe(Ada);
+        tokens.Find(first).ShouldBe(Ada);
+        tokens.Count.ShouldBe(2);
+
+        tokens.Acknowledge(Ada).ShouldBeTrue();                     // the new session spoke
+        tokens.Acknowledge(Ada).ShouldBeFalse();
+        tokens.Find(first).ShouldBeNull();
+        tokens.TryRotate(first, Ada, out _).ShouldBeFalse();
+        tokens.Find(third).ShouldBe(Ada);
+        tokens.Count.ShouldBe(1);
+
+        // Redeeming the newest token before acknowledging keeps it as the fallback; revoking kills both.
+        tokens.TryRotate(third, Ada, out var fourth).ShouldBeTrue();
+        tokens.Find(third).ShouldBe(Ada);
+        tokens.Revoke(Ada).ShouldBeTrue();
+        tokens.Find(third).ShouldBeNull();
+        tokens.Find(fourth).ShouldBeNull();
+        tokens.HasUnacknowledged(Ada).ShouldBeFalse();
+        tokens.Count.ShouldBe(0);
     }
 
     [Fact]

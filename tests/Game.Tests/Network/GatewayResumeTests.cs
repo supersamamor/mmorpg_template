@@ -260,6 +260,114 @@ public class GatewayResumeTests
     }
 
     [Fact]
+    public async Task A_drop_before_the_new_welcome_is_resumable_with_the_old_token_until_the_first_message()
+    {
+        await using var rig = await StartRig();
+        var player = await rig.JoinAsync("player");
+        var id = new EntityId(player.Id);
+        var oldToken = player.Token;
+        player.Dispose();
+        await Poll.UntilAsync(() => rig.Gateway.CharactersInGrace, n => n == 1, "grace period");
+
+        // The resume goes through, but the connection drops again before the client reads its welcome: it still has only the old token.
+        var lost = await rig.ResumeAsync(oldToken);
+        var lostToken = (await lost.WaitForAsync<WelcomeMessage>()).Token!;
+        lost.Dispose();
+        await Poll.UntilAsync(() => rig.Gateway.CharactersInGrace, n => n == 1, "grace period again");
+        rig.Gateway.Tokens.HasUnacknowledged(id).ShouldBeTrue();
+
+        var back = await rig.ResumeAsync(oldToken);
+        var welcome = await back.WaitForAsync<WelcomeMessage>();
+        welcome.Id.ShouldBe(id.Value);
+        welcome.Token.ShouldNotBe(oldToken);
+        welcome.Token.ShouldNotBe(lostToken);
+        await back.WaitForAsync<SnapshotMessage>();
+        rig.Gateway.Tokens.Find(lostToken).ShouldBeNull("the token nobody received is dead");
+
+        // The first message on the new session acknowledges it: from then on the old token is refused.
+        await back.SendAsync(new PingMessage(7));
+        await back.WaitForAsync<PongMessage>();
+        rig.Gateway.Tokens.HasUnacknowledged(id).ShouldBeFalse();
+        var replay = await rig.ResumeAsync(oldToken);
+        (await replay.WaitForByeAsync()).ShouldBe(ByeReasons.ResumeFailed);
+        back.Closed.ShouldBeFalse();
+        rig.Gateway.LinkOf(id)!.Session.ShouldBe(rig.SessionOf(id.Value));
+        rig.Gateway.Tokens.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task The_old_token_never_outlives_the_grace_period()
+    {
+        await using var rig = await StartRig();
+        var player = await rig.JoinAsync("player");
+        var id = new EntityId(player.Id);
+        var oldToken = player.Token;
+        player.Dispose();
+        await Poll.UntilAsync(() => rig.Gateway.CharactersInGrace, n => n == 1, "grace period");
+        var lost = await rig.ResumeAsync(oldToken);
+        await lost.WaitForAsync<WelcomeMessage>();
+        lost.Dispose();
+        await Poll.UntilAsync(() => rig.Gateway.CharactersInGrace, n => n == 1, "grace period again");
+
+        rig.Clock.Advance(rig.Gateway.Options.GracePeriodMs);
+        await Poll.UntilAsync(() => rig.World.LocationOf(id), map => map is null, "removed at the end of the grace period");
+        rig.Gateway.Tokens.Count.ShouldBe(0);
+        var late = await rig.ResumeAsync(oldToken);
+        (await late.WaitForByeAsync()).ShouldBe(ByeReasons.ResumeFailed);
+    }
+
+    [Fact]
+    public async Task Characters_in_grace_count_toward_max_sessions_and_a_full_server_refuses_logins_but_never_resumes()
+    {
+        await using var rig = await GatewayRig.StartAsync(o => o with { MaxSessions = 2, IdleTimeoutMs = 10 * o.GracePeriodMs });
+        var playing = await rig.JoinAsync("playing");
+        var away = await rig.JoinAsync("away");
+        away.Dispose();
+        await Poll.UntilAsync(() => rig.Gateway.CharactersInGrace, n => n == 1, "grace period");
+        rig.Gateway.SlotsInUse.ShouldBe(2);
+
+        var late = await rig.ConnectAsync();
+        await late.SendAsync(new HelloMessage(ProtocolVersion.Current, "late", rig.ContentHash));
+        (await late.WaitForByeAsync()).ShouldBe(ByeReasons.ServerFull);
+        late.CloseStatus.ShouldBe(WebSocketCloseStatus.EndpointUnavailable);
+        rig.Gateway.CharactersInGrace.ShouldBe(1, "nobody was evicted to make room");
+        rig.Log.Lines.ShouldContain(l => l.Contains("login refused, the server is full"));
+
+        var back = await rig.ResumeAsync(away.Token);
+        (await back.WaitForAsync<WelcomeMessage>()).Id.ShouldBe(away.Id);
+        await back.WaitForAsync<SnapshotMessage>();
+        playing.Closed.ShouldBeFalse();
+        rig.Gateway.SlotsInUse.ShouldBe(2);
+
+        // A takeover of a character someone is still playing is a resume too, so it gets in on a full server.
+        var takeover = await rig.ResumeAsync(playing.Token);
+        (await takeover.WaitForAsync<WelcomeMessage>()).Id.ShouldBe(playing.Id);
+        (await playing.WaitForByeAsync()).ShouldBe(ByeReasons.Replaced);
+
+        // Logging out frees the slot.
+        await back.SendAsync(new LogoutMessage());
+        await back.WaitForByeAsync();
+        await Poll.UntilAsync(() => rig.Gateway.SlotsInUse, n => n == 1, "slot freed");
+        await rig.JoinAsync("next");
+    }
+
+    [Fact]
+    public async Task A_session_that_ends_while_joining_gives_its_slot_back()
+    {
+        await using var rig = await GatewayRig.StartAsync(o => o with { MaxSessions = 1, IdleTimeoutMs = 10 * o.GracePeriodMs });
+        for (var i = 0; i < 5; i++)
+        {
+            var quick = await rig.ConnectAsync();
+            await quick.SendAsync(new HelloMessage(ProtocolVersion.Current, "quick" + i, rig.ContentHash));
+            quick.Dispose(); // gone before (or right after) its welcome
+            await Poll.UntilAsync(() => rig.Gateway.SessionCount, n => n == 0, "session ended");
+            rig.Clock.Advance(rig.Gateway.Options.GracePeriodMs); // a welcomed one waits in grace: let it go
+            await Poll.UntilAsync(() => rig.Gateway.SlotsInUse, n => n == 0, "slot freed");
+        }
+        await rig.JoinAsync("stays");
+    }
+
+    [Fact]
     public async Task Shutdown_removes_characters_in_their_grace_period()
     {
         await using var rig = await GatewayRig.StartAsync();
@@ -292,6 +400,8 @@ public class GatewayResumeTests
         var b = await rig.ResumeAsync(tokens[0]);                          // resume
         await b.WaitForAsync<SnapshotMessage>();
         tokens.Add(b.Token);
+        await b.SendAsync(new PingMessage(1));                             // acknowledges the new token
+        await b.WaitForAsync<PongMessage>();
         var replay = await rig.ResumeAsync(tokens[0]);                     // a used token
         await replay.WaitForByeAsync();
         var c = await rig.ResumeAsync(tokens[1]);                          // takeover

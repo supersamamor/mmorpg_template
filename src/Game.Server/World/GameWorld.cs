@@ -16,6 +16,7 @@ public sealed class GameWorld
 {
     private readonly Dictionary<string, MapInstance> _byMap = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<EntityId, MapInstance> _locations = new();
+    private readonly ConcurrentDictionary<EntityId, byte> _removals = new(); // despawned from outside a tick, until the removal is applied
     private long _unknownEntityIntents;
 
     /// <summary>
@@ -91,10 +92,15 @@ public sealed class GameWorld
         return entity.Id;
     }
 
-    /// <summary>Queues removal of an entity on its instance's next tick. Thread-safe. False if the world does not know it.</summary>
+    /// <summary>
+    /// Queues removal of an entity on its instance's next tick. Thread-safe. False if the world does not know it. The removal is never lost,
+    /// even when the entity is between maps (a warp in flight, or a spawn not yet applied): it is marked here, so the instance it arrives on
+    /// drops it instead of adding it, and a removal that reaches an instance the entity has already left follows it to where it is now.
+    /// </summary>
     public bool Despawn(EntityId id)
     {
         if (!_locations.TryGetValue(id, out var instance)) return false;
+        _removals[id] = 0;
         instance.Post(new StructuralChange.Remove(id));
         return true;
     }
@@ -119,6 +125,15 @@ public sealed class GameWorld
     }
 
     internal void SetLocation(EntityId id, MapInstance instance) => _locations[id] = instance;
+
+    /// <summary>The instance that holds (or is about to receive) the entity, or null.</summary>
+    internal MapInstance? InstanceOf(EntityId id) => _locations.TryGetValue(id, out var instance) ? instance : null;
+
+    /// <summary>True when <see cref="Despawn"/> was asked for the entity and the removal has not been applied yet.</summary>
+    internal bool RemovalPending(EntityId id) => _removals.ContainsKey(id);
+
+    /// <summary>The entity's pending removal is done (applied, or the entity is gone anyway).</summary>
+    internal void RemovalDone(EntityId id) => _removals.TryRemove(id, out _);
 
     /// <summary>Forgets the entity only if <paramref name="instance"/> still holds it (a later warp may have moved it on).</summary>
     internal void ClearLocation(EntityId id, MapInstance instance) =>

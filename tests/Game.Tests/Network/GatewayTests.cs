@@ -283,13 +283,56 @@ public class GatewayTests
         await Poll.UntilAsync(() => rig.World.LocationOf(id), map => map is null, "despawn");
     }
 
+    [Theory]
+    [InlineData(true, true)]    // both sides deflate: the wire carries less than the JSON
+    [InlineData(true, false)]   // the client does not offer it: plain frames, still fine
+    [InlineData(false, true)]   // the server does not accept it
+    public async Task Permessage_deflate_is_used_only_when_both_sides_want_it(bool server, bool client)
+    {
+        await using var rig = await GatewayRig.StartAsync(o => o with { Compression = server });
+        var watcher = await rig.JoinAsync("watcher", client);
+        var walker = await rig.JoinAsync("walker", client);
+        var target = rig.NearStart((3, 0), (-3, 0), (0, 3));
+        await walker.SendAsync(new MoveMessage(target));
+        await Poll.UntilAsync(() => watcher.Seen(walker.Id), r => r is { Next: null } && r.Cell.Equals(target), "walk seen through the compressed stream");
+        await watcher.SendAsync(new PingMessage(5));
+        (await watcher.WaitForAsync<PongMessage>()).Seq.ShouldBe(5);
+
+        var payload = rig.Gateway.Stats.BytesOut;
+        var wire = rig.Gateway.Stats.WireBytesOut;
+        wire.ShouldBeGreaterThan(0);
+        if (server && client) wire.ShouldBeLessThan(payload, "deflate with context takeover shrinks repetitive JSON");
+        else wire.ShouldBeGreaterThan(payload, "plain frames: payload plus frame headers and the upgrade responses");
+    }
+
+    [Fact]
+    public void The_compression_option_parses_as_a_boolean()
+    {
+        GatewayOptions.Parse(["--net-compression", "true"], _ => null, true, out _)!.Compression.ShouldBeTrue();
+        GatewayOptions.Parse([], name => name == "GAME_NET_COMPRESSION" ? "false" : null, true, out _)!.Compression.ShouldBeFalse();
+        GatewayOptions.Parse(["--net-compression", "maybe"], _ => null, true, out var error).ShouldBeNull();
+        error.ShouldNotBeNull();
+        new GatewayOptions().Compression.ShouldBeFalse();
+    }
+
     [Fact]
     public async Task Over_max_sessions_is_bye_server_full()
     {
         await using var rig = await GatewayRig.StartAsync(o => o with { MaxSessions = 1 });
         await rig.JoinAsync();
+        var second = await rig.ConnectAsync();   // a connection alone is let in: it might be a resume (T-214)
+        await second.SendAsync(new HelloMessage(ProtocolVersion.Current, "second", rig.ContentHash));
+        (await second.WaitForByeAsync()).ShouldBe(ByeReasons.ServerFull);
+    }
+
+    [Fact]
+    public async Task More_connections_without_hello_than_max_sessions_are_bye_server_full()
+    {
+        await using var rig = await GatewayRig.StartAsync(o => o with { MaxSessions = 1 });
+        var first = await rig.ConnectAsync();
         var second = await rig.ConnectAsync();
         (await second.WaitForByeAsync()).ShouldBe(ByeReasons.ServerFull);
+        first.Closed.ShouldBeFalse();
     }
 
     // ---- development only ----

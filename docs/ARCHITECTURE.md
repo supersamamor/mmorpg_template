@@ -482,6 +482,14 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   clients walking in each other's view receive 8.1 KB/s each on the wire (payload + WebSocket header). With combat (T-307: 20 of
   the 50 auto-attacking gel slimes nonstop, 30 walking; about 52 entities and 15 hits per second in every view) it is 6.9–7.2 KB/s, so
   full keys and JSON stay; no key shortening or distance rate limit on `hits` was needed.
+  **Load test (T-214, `tools/loadtest`):** a real server process with bots on the same machine (Ryzen 7 7735U, 8 cores, Release
+  build), half walking and half fighting on the start map, 60 s measured after a 30 s warm-up. Per-client payload: 5.2 KB/s at 50
+  bots, 9.3 KB/s at 100, 15.3 KB/s at 200 (everyone in everyone's view, so 200 is over the §9 budget, which assumes 50 visible).
+  **permessage-deflate** (`--net-compression`, off by default): at 50 bots it cut the wire from 5.16 to 0.79 KB/s per client (−85%),
+  but server CPU went from 6.6 to 12.0 ms per 100 ms tick (+5.5 ms, mostly on the send threads, not the tick) and memory by about
+  0.3 MB per connection. The rule was ≥ 30% for < 1 ms/tick, so it stays off; turn it on per server if bandwidth matters more than
+  CPU. Shared serialized delta pieces were not built: the view sinks cost 1.5 ms/tick at 100 observers (rule: build above 2 ms);
+  4.4 ms at 200.
 - **Gateway** (`Game.Server/Net`, T-205): Kestrel WebSockets on one path (`/ws`). In development it listens on loopback with plain
   `ws://`; otherwise it listens on every interface with TLS only (a `.pfx` set in config; the server refuses to start without one).
   All ports, limits and timeouts are in `GatewayOptions`, which has defaults and can be overridden with `--net-<name>` or
@@ -543,9 +551,17 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
        `resume-failures-per-minute`); an address that runs out gets `bye rate_limit` and may not resume for `resume-lockout-ms`.
      - **Shutdown:** every session gets `bye shutdown`; characters in their grace period leave too (T-702 saves them).
      - **The token:** 256 bits from the OS CSPRNG, base64url without padding (43 characters), bound to one character, **single use and
-       rotated** (every successful resume returns a new one and the old one stops working). The server keeps only its SHA-256 and
+       rotated** (every successful resume returns a new one). The server keeps only its SHA-256 and
        compares in constant time; tokens never appear in logs (at most a 6-hex-digit fingerprint of the hash). Tokens live in server
        memory only: **a server restart invalidates every token** (durable sessions are T-701).
+     - **Acknowledgement** (T-214): the `welcome` of a resume can be lost if the connection drops again before it arrives. So the token
+       the resume used keeps working until the client's **first message on the new session** (any message: that is the implicit
+       acknowledgement), then it stops. Resuming with it again before that rotates once more and kills the token issued in between. It
+       never outlives the character's grace period: both tokens die when the character leaves.
+     - **Capacity** (T-214): `max-sessions` counts characters, not sockets: every character the server holds, played or in its grace
+       period, plus logins still joining. A new login on a full server gets `bye server_full` at its `hello`; nobody is evicted to make
+       room. A resume is always let in, since it reuses its character's slot. Connections that have not said `hello` are refused with
+       `server_full` only when more than `max-sessions` of them are open at once.
 - **Client resume flow** (for T-206):
   1. Keep the token from the latest `welcome` **in memory only** (never on disk or in preferences); replace it on every `welcome`.
   2. On a socket drop, or when the app comes back to the foreground and the socket is gone, reconnect with backoff (e.g. 0.5 s,
@@ -560,6 +576,12 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 - **Back-pressure:** the sink serializes on the tick thread into a bounded per-session queue, and the socket drains that queue. When
   the queue is full, queued views are dropped and later deltas are skipped. Once the queue has drained, the session asks for a fresh
   snapshot (`RequestSnapshot`). A client that stays behind for `slow-client-timeout-ms` gets `bye too_slow`.
+  **`hits` are dropped while a client catches up** (ADR-002 #101): they ride in the deltas that are skipped, and the snapshot that
+  ends the catch-up carries state, not history. That is accepted. Hits are cosmetic (numbers and swing animations), while HP (`hp`,
+  `vitals`), deaths (`dead`, `you_died`) and drops (ground items) are state, which the snapshot restores in full.
+- **Warps and removal** (T-214): a character removed while it is between maps (a drop or `logout` during a cross-map warp, or while it
+  is still joining) stays removed. The world marks the removal, the target instance drops the arrival, and a removal that reaches a map
+  the character has just left follows it. The gateway needs no workaround for this.
 
 ## 11. Security baseline
 - Server validates every intent (range, cooldown, SP, line of sight, ownership).

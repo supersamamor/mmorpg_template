@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- T-214: scripted bots against a real Game.Server process. Not shipped; see README.md. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Game.LoadTest</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- The same hand-written JSON mapping the server and the Godot client use (ARCHITECTURE §10). -->
+    <Compile Include="..\..\src\Game.Server\Net\ProtocolJson.cs" Link="ProtocolJson.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Game.Shared\Game.Shared.csproj" />
+  </ItemGroup>
+</Project>

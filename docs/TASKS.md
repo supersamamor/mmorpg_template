@@ -65,7 +65,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-209 | Client content bundle (`export-client`) + content hash check | Claude Code | Sonnet 5.5 | [T-209](../tasks/prompts/T-209.md) | T-205 | Review | `Net/**` only for the hash check — approved by owner |
 | T-210 | Mobile session lifecycle: background, grace period, resume token | Claude Code | Opus 5.5 | [T-210](../tasks/prompts/T-210.md) | T-205, T-209 | Review | Restricted `Net/**` — approved by owner; Tier R review required |
 | T-213 | Server boot + tick hygiene: shared content boot (with audio checks), Windows high-res tick timer, tick p50/p99 stats, AOI crowd + Ctrl+C tests | Claude Code | Sonnet 5.5 | [T-213](../tasks/prompts/T-213.md) | T-302, T-110 | Review | ADR-002 #47–52 |
-| T-214 | Gateway hardening: resume-token ack, grace cap, load test, permessage-deflate if it pays | Claude Code | Opus 5.5 | [T-214](../tasks/prompts/T-214.md) | T-210, T-307 | Ready | Restricted `Net/**` — **approved by owner 2026-11-02**; ADR-002 #55–59 |
+| T-214 | Gateway hardening: resume-token ack, grace cap, load test, permessage-deflate if it pays | Claude Code | Opus 5.5 | [T-214](../tasks/prompts/T-214.md) | T-210, T-307 | Review | Restricted `Net/**` — **approved by owner 2026-11-02**; ADR-002 #55–59 |
 
 ## Phase 3 — Combat loop
 

@@ -255,6 +255,14 @@ public sealed class MapInstance
 
     private void ApplyAdd(Entity entity, MapChangeReason reason, Action<Entity>? initialize)
     {
+        if (World.RemovalPending(entity.Id))
+        {
+            // Despawned while it was on its way here (warp in flight, or a spawn not yet applied): it never arrives. No event: it entered
+            // nowhere, and its old map already said it left.
+            World.ClearLocation(entity.Id, this);
+            World.RemovalDone(entity.Id);
+            return;
+        }
         if (!_entities.TryAdd(entity.Id, entity))
         {
             Counters.StructuralIgnored++;
@@ -283,9 +291,18 @@ public sealed class MapInstance
     {
         if (!Detach(id, out var entity))
         {
+            // Not here. A world despawn follows the entity: to the instance a warp took it to, or (it is on its way here) to our next tick,
+            // where the add sees the pending removal and drops it. A system's despawn of an entity it does not hold is ignored as before.
+            if (World.RemovalPending(id) && World.InstanceOf(id) is { } now)
+            {
+                now.Post(new StructuralChange.Remove(id));
+                return;
+            }
+            World.RemovalDone(id);
             Counters.StructuralIgnored++;
             return;
         }
+        World.RemovalDone(id);
         World.ClearLocation(id, this);
         Events.Publish(new EntityLeftMap(id, entity.Kind, MapId, entity.Cell, MapChangeReason.Spawn));
     }

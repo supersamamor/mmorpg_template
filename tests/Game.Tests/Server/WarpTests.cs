@@ -136,4 +136,69 @@ public class WarpTests
         _b.Intents.Count.ShouldBe(1);
         _a.Intents.Count.ShouldBe(0);
     }
+
+    // ---- a removal during a cross-map warp is never lost (T-214, ADR-002 #59) ----
+
+    [Fact]
+    public void A_despawn_queued_behind_a_warp_follows_the_entity_and_it_never_arrives()
+    {
+        var id = SpawnOnA();
+        _world.Warp(id, "map.b", Target).ShouldBeTrue();
+        _world.Despawn(id).ShouldBeTrue();   // the gateway saw a drop: a, which still holds it, gets the removal after the warp
+
+        _a.Tick();                           // warp applied, so the removal finds nothing on a and follows the entity to b
+        _b.Tick();                           // the add sees the pending removal: dropped
+        _b.Tick();                           // the forwarded removal finds nothing and is done
+
+        _b.TryGetEntity(id, out _).ShouldBeFalse();
+        _a.TryGetEntity(id, out _).ShouldBeFalse();
+        _world.LocationOf(id).ShouldBeNull();
+        _world.RemovalPending(id).ShouldBeFalse();
+        _events.ShouldBe([$"a:{EventNames.EntityLeftMap} {id} map.a (0, 0) Warp"]); // it entered nowhere
+    }
+
+    [Fact]
+    public void A_despawn_while_the_warp_is_in_flight_drops_the_arrival()
+    {
+        var id = SpawnOnA();
+        _world.Warp(id, "map.b", Target).ShouldBeTrue();
+        _a.Tick();                           // in flight: located on b, not added yet
+        _world.Despawn(id).ShouldBeTrue();
+        _b.Tick();
+
+        _b.TryGetEntity(id, out _).ShouldBeFalse();
+        _world.LocationOf(id).ShouldBeNull();
+        _world.RemovalPending(id).ShouldBeFalse();
+        _b.Counters.StructuralIgnored.ShouldBe(1);   // the removal itself found nothing: the add had already been dropped
+    }
+
+    [Fact]
+    public void A_despawn_before_the_spawn_is_applied_means_it_never_joins_and_its_initializer_never_runs()
+    {
+        var initialized = false;
+        var id = _world.Spawn(EntityKind.Player, "map.a", Start, Directions.S, _ => initialized = true);
+        _world.Despawn(id).ShouldBeTrue();
+        _a.Tick();
+
+        initialized.ShouldBeFalse();
+        _a.Entities.ShouldBeEmpty();
+        _world.LocationOf(id).ShouldBeNull();
+        _events.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void A_despawn_after_arrival_removes_it_normally()
+    {
+        var id = SpawnOnA();
+        _world.Warp(id, "map.b", Target).ShouldBeTrue();
+        _a.Tick();
+        _b.Tick();
+        _world.Despawn(id).ShouldBeTrue();
+        _b.Tick();
+
+        _b.TryGetEntity(id, out _).ShouldBeFalse();
+        _world.LocationOf(id).ShouldBeNull();
+        _world.RemovalPending(id).ShouldBeFalse();
+        _events.ShouldContain($"b:{EventNames.EntityLeftMap} {id} map.b (4, 4) Spawn");
+    }
 }
