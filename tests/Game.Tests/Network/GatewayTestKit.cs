@@ -85,18 +85,18 @@ public sealed class GatewayRig : IAsyncDisposable
         File.WriteAllBytes(path, cert.Export(X509ContentType.Pfx, CertificatePassword));
     }
 
-    /// <summary>Opens a connection (no hello yet).</summary>
-    public async Task<TestClient> ConnectAsync()
+    /// <summary>Opens a connection (no hello yet); <paramref name="deflate"/> offers permessage-deflate.</summary>
+    public async Task<TestClient> ConnectAsync(bool deflate = false)
     {
-        var client = await TestClient.ConnectAsync(Endpoint);
+        var client = await TestClient.ConnectAsync(Endpoint, deflate);
         lock (_clients) _clients.Add(client);
         return client;
     }
 
     /// <summary>Connects, says hello and waits for the welcome and the first snapshot.</summary>
-    public async Task<TestClient> JoinAsync(string name = "tester")
+    public async Task<TestClient> JoinAsync(string name = "tester", bool deflate = false)
     {
-        var client = await ConnectAsync();
+        var client = await ConnectAsync(deflate);
         await client.SendAsync(new HelloMessage(ProtocolVersion.Current, name, ContentHash));
         await client.WaitForAsync<WelcomeMessage>();
         await client.WaitForAsync<SnapshotMessage>();
@@ -160,9 +160,10 @@ public sealed class TestClient : IDisposable
         _receive = Task.Run(ReceiveLoopAsync);
     }
 
-    public static async Task<TestClient> ConnectAsync(Uri endpoint)
+    public static async Task<TestClient> ConnectAsync(Uri endpoint, bool deflate = false)
     {
         var socket = new ClientWebSocket();
+        if (deflate) socket.Options.DangerousDeflateOptions = new WebSocketDeflateOptions();
         socket.Options.RemoteCertificateValidationCallback = (_, _, _, _) => true; // the rig's throw-away self-signed certificate
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await socket.ConnectAsync(endpoint, timeout.Token);

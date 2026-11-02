@@ -1,3 +1,4 @@
+using System.IO.Pipelines;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -66,6 +67,12 @@ public sealed class GatewayHost : IAsyncDisposable
             kestrel.Limits.MaxRequestHeadersTotalSize = 16 * 1024;
             kestrel.Listen(options.ListenAddress, options.Port, listen =>
             {
+                // Outermost, so it counts what goes on the wire: TLS records, WebSocket frames, compressed or not (GatewayStats.WireBytesOut).
+                listen.Use(next => connection =>
+                {
+                    connection.Transport = new CountingTransport(connection.Transport, gateway.Stats);
+                    return next(connection);
+                });
                 if (certificate is not null) listen.UseHttps(certificate);
             });
         });
@@ -79,7 +86,8 @@ public sealed class GatewayHost : IAsyncDisposable
                 context.Response.StatusCode = context.Request.Path == options.Path ? StatusCodes.Status400BadRequest : StatusCodes.Status404NotFound;
                 return;
             }
-            var socket = await context.WebSockets.AcceptWebSocketAsync().ConfigureAwait(false);
+            var socket = await context.WebSockets.AcceptWebSocketAsync(new WebSocketAcceptContext { DangerousEnableCompression = options.Compression })
+                .ConfigureAwait(false);
             var peer = $"{context.Connection.RemoteIpAddress}:{context.Connection.RemotePort}";
             await gateway.RunSessionAsync(socket, peer).ConfigureAwait(false);
         });
@@ -100,4 +108,43 @@ public sealed class GatewayHost : IAsyncDisposable
 
     /// <inheritdoc />
     public async ValueTask DisposeAsync() => await _app.DisposeAsync().ConfigureAwait(false);
+}
+
+/// <summary>A connection's transport whose output counts the bytes written to the socket.</summary>
+internal sealed class CountingTransport(IDuplexPipe inner, GatewayStats stats) : IDuplexPipe
+{
+    public PipeReader Input { get; } = inner.Input;
+
+    public PipeWriter Output { get; } = new CountingWriter(inner.Output, stats);
+
+    private sealed class CountingWriter(PipeWriter inner, GatewayStats stats) : PipeWriter
+    {
+        public override bool CanGetUnflushedBytes => inner.CanGetUnflushedBytes;
+
+        public override long UnflushedBytes => inner.UnflushedBytes;
+
+        public override void Advance(int bytes)
+        {
+            stats.CountWireOut(bytes);
+            inner.Advance(bytes);
+        }
+
+        public override Memory<byte> GetMemory(int sizeHint = 0) => inner.GetMemory(sizeHint);
+
+        public override Span<byte> GetSpan(int sizeHint = 0) => inner.GetSpan(sizeHint);
+
+        public override ValueTask<FlushResult> WriteAsync(ReadOnlyMemory<byte> source, CancellationToken cancellationToken = default)
+        {
+            stats.CountWireOut(source.Length);
+            return inner.WriteAsync(source, cancellationToken);
+        }
+
+        public override ValueTask<FlushResult> FlushAsync(CancellationToken cancellationToken = default) => inner.FlushAsync(cancellationToken);
+
+        public override void CancelPendingFlush() => inner.CancelPendingFlush();
+
+        public override void Complete(Exception? exception = null) => inner.Complete(exception);
+
+        public override ValueTask CompleteAsync(Exception? exception = null) => inner.CompleteAsync(exception);
+    }
 }

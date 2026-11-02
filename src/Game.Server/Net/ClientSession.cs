@@ -53,6 +53,7 @@ public sealed class ClientSession : IViewSink
     private string? _byeReason;
     private volatile string? _mapId;
     private volatile bool _welcomed;
+    private volatile bool _unacknowledged;   // resumed, and the client has not spoken since: the redeemed token still works
 
     internal ClientSession(Gateway gateway, WebSocket socket, string peer, long nowMs)
     {
@@ -75,6 +76,9 @@ public sealed class ClientSession : IViewSink
 
     /// <summary>True once <c>welcome</c> was queued: the client has (or is about to have) a resume token for its character.</summary>
     public bool Welcomed => _welcomed;
+
+    /// <summary>True while this session's login holds a joining slot (the gateway's link lock guards it).</summary>
+    internal bool HoldsSlot { get; set; }
 
     /// <summary>The lifecycle state.</summary>
     public SessionState State => (SessionState)Volatile.Read(ref _state);
@@ -181,6 +185,7 @@ public sealed class ClientSession : IViewSink
         _mapId = mapId;
         Interlocked.Exchange(ref _entity, id.Value);
         _welcomed = true; // from here a drop starts a new grace period rather than removing the character
+        _unacknowledged = true;
         Post(new WelcomeMessage(ProtocolVersion.Current, id.Value, mapId, TickRate.Hz, _gateway.ContentHash, token));
         Interlocked.CompareExchange(ref _state, (int)SessionState.Joined, (int)SessionState.AwaitingHello);
     }
@@ -333,6 +338,13 @@ public sealed class ClientSession : IViewSink
             return;
         }
 
+        if (_unacknowledged)
+        {
+            // The first message on a resumed session: the client has the welcome, so the token it resumed with may stop working.
+            _unacknowledged = false;
+            _gateway.Acknowledge(this);
+        }
+
         switch (message)
         {
             case HelloMessage:
@@ -401,7 +413,11 @@ public sealed class ClientSession : IViewSink
         }
         DisplayName = login.DisplayName;
         Volatile.Write(ref _state, (int)SessionState.Joining);
-        var id = _gateway.SpawnCharacter(this);
+        if (_gateway.SpawnCharacter(this) is not { } id)
+        {
+            Bye(ByeReasons.ServerFull);
+            return;
+        }
         Interlocked.CompareExchange(ref _entity, id.Value, 0);
     }
 

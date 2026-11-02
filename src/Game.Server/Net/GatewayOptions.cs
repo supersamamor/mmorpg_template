@@ -108,6 +108,13 @@ public sealed record GatewayOptions
     /// <summary>How long an address that ran out of failed resumes may not resume at all (<c>rate_limit</c>).</summary>
     public int ResumeLockoutMs { get; init; } = 60_000;
 
+    /// <summary>
+    /// WebSocket permessage-deflate (RFC 7692) for clients that offer it; clients that do not get plain frames. Off by default (it saved 85%
+    /// of the bytes but cost about 5 ms of CPU per tick at 50 clients): see
+    /// ARCHITECTURE §10 "Bandwidth" for the T-214 measurement behind that.
+    /// </summary>
+    public bool Compression { get; init; }
+
     /// <summary>The address Kestrel binds (see <see cref="BindAddress"/>); only meaningful when <see cref="Problems"/> is empty.</summary>
     public IPAddress ListenAddress =>
         BindAddress.Length > 0 && IPAddress.TryParse(BindAddress, out var address) ? address
@@ -186,6 +193,7 @@ public sealed record GatewayOptions
         if (type == typeof(string)) value = text;
         else if (type == typeof(int) && int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i)) value = i;
         else if (type == typeof(double) && double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var d)) value = d;
+        else if (type == typeof(bool) && bool.TryParse(text, out var b)) value = b;
         else throw new FormatException($"'{text}' is not a valid {Kebab(property.Name)}");
         var copy = options with { };
         property.SetValue(copy, value);

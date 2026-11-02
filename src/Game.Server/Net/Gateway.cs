@@ -16,7 +16,7 @@ namespace Game.Server.Net;
 public sealed class GatewayStats
 {
     private readonly ConcurrentDictionary<string, long> _byes = new(StringComparer.Ordinal);
-    private long _accepted, _bytesIn, _messagesIn, _bytesOut, _messagesOut, _rateLimited, _intentsRefused, _sinkTicks, _sinkCalls;
+    private long _accepted, _bytesIn, _messagesIn, _bytesOut, _messagesOut, _rateLimited, _intentsRefused, _sinkTicks, _sinkCalls, _wireOut;
 
     /// <summary>Connections accepted.</summary>
     public long Accepted => Interlocked.Read(ref _accepted);
@@ -32,6 +32,12 @@ public sealed class GatewayStats
 
     /// <summary>Messages handed to sockets.</summary>
     public long MessagesOut => Interlocked.Read(ref _messagesOut);
+
+    /// <summary>
+    /// Bytes written to client sockets: TLS records or WebSocket frames (compressed when permessage-deflate is on), HTTP upgrade responses
+    /// included. What a phone actually downloads; compare with <see cref="BytesOut"/> (JSON payloads).
+    /// </summary>
+    public long WireBytesOut => Interlocked.Read(ref _wireOut);
 
     /// <summary>Client messages dropped by the rate limit.</summary>
     public long RateLimited => Interlocked.Read(ref _rateLimited);
@@ -61,6 +67,8 @@ public sealed class GatewayStats
         Interlocked.Increment(ref _messagesOut);
         Interlocked.Add(ref _bytesOut, bytes);
     }
+
+    internal void CountWireOut(int bytes) => Interlocked.Add(ref _wireOut, bytes);
 
     internal void CountRateLimited() => Interlocked.Increment(ref _rateLimited);
 
@@ -97,7 +105,7 @@ public sealed class Gateway
     private readonly ConcurrentDictionary<ClientSession, byte> _sessions = new();
     private readonly object _linkLock = new();
     private readonly ConcurrentDictionary<EntityId, CharacterLink> _links = new();
-    private readonly ConcurrentDictionary<EntityId, byte> _released = new(); // removed by the gateway, until they have left their map
+    private int _joining;   // logins accepted whose character is not linked yet (each holds a slot); under the link lock
     private readonly ResumeGuard _resumeGuard;
     private readonly CancellationTokenSource _stop = new();
     private Task? _sweeper;
@@ -162,6 +170,15 @@ public sealed class Gateway
     /// <summary>Characters the gateway holds: played by a session or waiting in their grace period.</summary>
     public int CharacterCount => _links.Count;
 
+    /// <summary>
+    /// Slots in use for <see cref="GatewayOptions.MaxSessions"/> (ADR-002 #56): characters held (played or in their grace period) plus logins
+    /// still joining. A new login on a full server is refused; a resume is always let in (it reuses its character's slot).
+    /// </summary>
+    public int SlotsInUse
+    {
+        get { lock (_linkLock) return _links.Count + _joining; }
+    }
+
     /// <summary>Characters waiting in their grace period.</summary>
     public int CharactersInGrace => _links.Values.Count(l => l.InGrace);
 
@@ -194,7 +211,9 @@ public sealed class Gateway
         var session = new ClientSession(this, socket, peer, Clock.NowMilliseconds);
         _sessions[session] = 0;
         if (_shuttingDown) session.Bye(ByeReasons.Shutdown);
-        else if (_sessions.Count > Options.MaxSessions) session.Bye(ByeReasons.ServerFull);
+        // Only a flood of connections that have not said hello is refused here; whether a login fits is decided at its hello (a resume must
+        // always get in, and characters in their grace period hold slots).
+        else if (_sessions.Keys.Count(s => s.State == SessionState.AwaitingHello) > Options.MaxSessions) session.Bye(ByeReasons.ServerFull);
         try
         {
             await session.RunAsync().ConfigureAwait(false);
@@ -237,16 +256,29 @@ public sealed class Gateway
         _world.LocationOf(id) is { } map && _world.TryGetInstance(map, out var instance) ? instance.Grid : null;
 
     /// <summary>
-    /// Queues the session's new character on the start map; it joins on that instance's next tick. There, unless the session has already
-    /// ended, the gateway links the character to the session, issues its first resume token, and the session queues <c>welcome</c>.
+    /// Queues the session's new character on the start map, or returns null when the server is full (<see cref="SlotsInUse"/>): nobody is
+    /// evicted to make room. The character joins on that instance's next tick. There, unless the session has already ended, the gateway links
+    /// the character to the session, issues its first resume token, and the session queues <c>welcome</c>.
     /// </summary>
-    internal EntityId SpawnCharacter(ClientSession session)
+    internal EntityId? SpawnCharacter(ClientSession session)
     {
+        lock (_linkLock)
+        {
+            if (_links.Count + _joining >= Options.MaxSessions)
+            {
+                Log.Warn($"[net] {session.Peer}: login refused, the server is full ({_links.Count} characters held, " +
+                         $"{_links.Values.Count(l => l.InGrace)} of them in their grace period; {_joining} joining).");
+                return null;
+            }
+            _joining++;
+            session.HoldsSlot = true;
+        }
         var id = _world.Spawn(EntityKind.Player, _start.MapId, _start.Cell, _start.Facing, entity =>
         {
             string? token = null;
             lock (_linkLock)
             {
+                FreeJoiningSlot(session); // from here the link holds the slot, or the character leaves
                 if (session.State != SessionState.Closing)
                 {
                     _links[entity.Id] = new CharacterLink(entity.Id, session.DisplayName, session);
@@ -311,6 +343,26 @@ public sealed class Gateway
                  $"{(replaced is null ? "" : $", replacing {replaced.Peer}")}; new token {ResumeTokens.Fingerprint(token)}");
     }
 
+    /// <summary>The session's join is over (linked, or the session ended first): its reserved slot is given back once. Under the link lock.</summary>
+    private void FreeJoiningSlot(ClientSession session)
+    {
+        if (!session.HoldsSlot) return;
+        session.HoldsSlot = false;
+        _joining--;
+    }
+
+    /// <summary>
+    /// A resumed session sent its first message, so its client holds the new token: the token the resume redeemed stops working (ADR-002 #55).
+    /// Only while the session still plays the character (a later resume may already have taken it over).
+    /// </summary>
+    internal void Acknowledge(ClientSession session)
+    {
+        if (session.Entity is not { } id) return;
+        lock (_linkLock)
+            if (_links.TryGetValue(id, out var link) && link.Session == session && Tokens.Acknowledge(id))
+                Log.Info($"[net] {session.Peer} acknowledged its new token for '{link.DisplayName}' ({id}); the previous one is revoked.");
+    }
+
     /// <summary><c>logout</c>: the character leaves on its instance's next tick, with no grace period; then <c>bye</c> <c>logout</c>.</summary>
     internal void Logout(ClientSession session)
     {
@@ -333,6 +385,7 @@ public sealed class Gateway
     /// </summary>
     private void OnSessionEnded(ClientSession session)
     {
+        lock (_linkLock) FreeJoiningSlot(session);
         if (session.Entity is { } id)
         {
             lock (_linkLock)
@@ -369,11 +422,14 @@ public sealed class Gateway
         Log.Info($"[net] '{link.DisplayName}' ({link.Character}) leaves the world: {why}.");
     }
 
-    /// <summary>Despawns a character the gateway holds no link for (or no longer); it is despawned again if it arrives somewhere later.</summary>
+    /// <summary>
+    /// Despawns a character the gateway holds no link for (or no longer). The world keeps the removal even if the character is between maps
+    /// (still joining, or warping), so it never turns up again.
+    /// </summary>
     private void ReleaseUnlinked(EntityId id)
     {
         Tokens.Revoke(id);
-        if (_world.Despawn(id)) _released[id] = 0;
+        _world.Despawn(id);
     }
 
     /// <summary>Removes characters whose grace period is over (gateway sweeper).</summary>
@@ -408,12 +464,6 @@ public sealed class Gateway
 
     private void OnEnteredMap(EntityEnteredMap e)
     {
-        // A character released while it was joining or warping is removed now that it has arrived.
-        if (_released.ContainsKey(e.Entity))
-        {
-            _world.Despawn(e.Entity);
-            return;
-        }
         // A view change queued while the character was between maps was dropped (it was on neither instance): say it again. The AOI ignores
         // a sink that is already set, so this costs nothing when nothing was lost.
         if (e.Reason == MapChangeReason.Warp && _links.ContainsKey(e.Entity))
@@ -425,7 +475,6 @@ public sealed class Gateway
     private void OnLeftMap(EntityLeftMap e)
     {
         if (e.Reason != MapChangeReason.Spawn) return;
-        _released.TryRemove(e.Entity, out _);
         if (!_links.ContainsKey(e.Entity)) return;
         lock (_linkLock)
         {
@@ -443,6 +492,7 @@ public sealed class Gateway
         using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(Options.SweepIntervalMs));
         var reportStarted = Stopwatch.GetTimestamp();
         var lastOut = 0L;
+        var lastWire = 0L;
         var lastSink = TimeSpan.Zero;
         try
         {
@@ -457,16 +507,26 @@ public sealed class Gateway
                 if (elapsed.TotalMilliseconds < InstanceRunner.ReportIntervalMs) continue;
                 var joined = _sessions.Keys.Count(s => s.State == SessionState.Joined);
                 var bytes = Stats.BytesOut - lastOut;
+                var wire = Stats.WireBytesOut - lastWire;
                 var sink = Stats.SinkTime - lastSink;
                 if (joined > 0 || bytes > 0 || !_links.IsEmpty)
                 {
                     var ticks = elapsed.TotalMilliseconds / TickRate.IntervalMs;
-                    Log.Info($"[net] {joined} player(s), {CharactersInGrace} in their grace period; out {bytes / elapsed.TotalSeconds / 1024:0.0} KB/s total, " +
-                             $"{(joined == 0 ? 0 : bytes / elapsed.TotalSeconds / joined / 1024):0.00} KB/s per player; " +
+                    var perPlayer = joined == 0 ? 0 : 1.0 / elapsed.TotalSeconds / joined / 1024;
+                    Log.Info($"[net] {joined} player(s), {CharactersInGrace} in their grace period, {SlotsInUse}/{Options.MaxSessions} slots; " +
+                             $"out {bytes / elapsed.TotalSeconds / 1024:0.0} KB/s total, {bytes * perPlayer:0.00} KB/s per player, " +
+                             $"wire {wire * perPlayer:0.00} KB/s per player{(Options.Compression ? " (permessage-deflate on)" : "")}; " +
                              $"view sinks {sink.TotalMicroseconds / ticks:0.0} us per tick (all instances); rate-limited {Stats.RateLimited}");
+                    // Tick cost of the last minute (TickTimings window) and the process's memory, for the load test (T-214) and operators.
+                    var stats = _world.Instances.Select(i => i.GetStats());
+                    Log.Info($"[net] ticks (last {TickTimings.Capacity / TickRate.Hz} s): " +
+                             string.Join("; ", stats.Select(t => $"{t.MapId} p50 {t.Timings.P50Micros / 1000.0:0.00} ms, p99 {t.Timings.P99Micros / 1000.0:0.00} ms, " +
+                                                                 $"max {t.Timings.MaxMicros / 1000.0:0.00} ms (since start {t.Timings.LifetimeMaxMicros / 1000.0:0.00} ms)")) +
+                             $"; memory: GC heap {GC.GetTotalMemory(false) / 1048576.0:0.0} MB, working set {Environment.WorkingSet / 1048576.0:0.0} MB");
                 }
                 reportStarted = Stopwatch.GetTimestamp();
                 lastOut = Stats.BytesOut;
+                lastWire = Stats.WireBytesOut;
                 lastSink = Stats.SinkTime;
             }
         }
