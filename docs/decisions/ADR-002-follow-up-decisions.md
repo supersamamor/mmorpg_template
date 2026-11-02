@@ -198,3 +198,11 @@ When writing these prompts, copy in the decisions listed:
 | 105 | `BannedSymbolsTests` failed once in a full parallel run (nested `dotnet build`) (T-111) | **→ T-112:** find the root cause and fix it; prove it with five full runs. |
 | 106 | Show `currency_name` (crowns) in the client bundle and HUD (T-111) | **→ T-401:** with the first currency UI, plus a bundle format bump. |
 | 107 | Twin Strike level 1 is now exactly 1.0× an auto-attack; 80 golden keys moved by the +0.3× step (T-111) | **Decided: accepted.** T-309 re-checks early-game matchups on top of it. |
+
+## Addendum — T-214 (2026-11-02)
+| # | Question (source) | Decision |
+|---|---|---|
+| 108 | 200 bots in one view → ~15 KB/s per client, over the 10 KB/s budget (T-214) | **→ new T-215:** cap the visible set per observer (`aoi.max_visible`, nearest first, with hysteresis). The observer itself, its target and its attackers are always visible. This is the standard MMO answer and keeps every crowd within budget at no CPU cost. |
+| 109 | permessage-deflate cut bytes by 85% but cost ~5 ms of CPU per tick at 50 bots (T-214) | **Decided: off in v1.** It stays a setting (`--net-compression`). The visible-set cap (row 108) keeps bandwidth in budget without it, so whether Godot's WebSocket client supports it doesn't matter for v1. Revisit only if T-803 shows mobile data use is a problem. |
+| 110 | First tick of each map takes 64–176 ms at boot (T-214) | **Won't do (v1):** it happens once, before any player can join, and the stated rule (p99 after warm-up < 50 ms) holds. |
+| 111 | Intents sent while a character is between maps can still be lost (T-214) | **Decided: acceptable** (same as row 46); the client re-sends after the new snapshot. |
