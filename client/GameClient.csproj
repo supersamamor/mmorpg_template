@@ -1,0 +1,27 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <!-- The prebuilt 4.7.2 Android template only accepts net9.0 (docs/MOBILE_BUILD.md §4). -->
+    <TargetFramework Condition=" '$(GodotTargetPlatform)' == 'android' ">net9.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RootNamespace>Game.Client</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BundleFile>$(MSBuildProjectDirectory)/bundle/client-content.json</BundleFile>
+    <RepoRoot>$(MSBuildProjectDirectory)/..</RepoRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- netstandard2.1 is the build the client loads (ADR-001). No reflection over it: iOS is NativeAOT and trimmed. -->
+    <ProjectReference Include="../src/Game.Shared/Game.Shared.csproj" SetTargetFramework="TargetFramework=netstandard2.1" />
+    <!-- The server's own JSON mapping: it depends only on Game.Shared and System.Text.Json (ARCHITECTURE §10). -->
+    <Compile Include="../src/Game.Server/Net/ProtocolJson.cs" Link="Linked/ProtocolJson.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <BundleInput Include="$(RepoRoot)/content/**/*" />
+  </ItemGroup>
+  <!-- Packs the display bundle into the project (generated, gitignored; ARCHITECTURE §5.4). Set SkipClientBundle=true to keep the file as it is. -->
+  <Target Name="PackClientBundle" BeforeTargets="PrepareForBuild" Condition=" '$(SkipClientBundle)' != 'true' "
+          Inputs="@(BundleInput)" Outputs="$(BundleFile)">
+    <Exec Command="dotnet run --project &quot;$(RepoRoot)/src/Game.Tools&quot; --no-launch-profile -- export-client &quot;$(BundleFile)&quot;" WorkingDirectory="$(RepoRoot)" />
+  </Target>
+</Project>

@@ -19,4 +19,8 @@
     <ProjectReference Include="..\..\src\Game.Server\Game.Server.csproj" />
     <ProjectReference Include="..\..\src\Game.Tools\Game.Tools.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The client's pure core (no Godot), compiled here so its logic is tested without the engine. Its ProtocolJson comes from Game.Server. -->
+    <Compile Include="../../client/Core/**/*.cs" Link="ClientCore/%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
 </Project>

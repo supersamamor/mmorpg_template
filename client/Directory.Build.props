@@ -1,0 +1,4 @@
+<Project>
+  <!-- Stops MSBuild from importing the repo's root Directory.Build.props (net10.0 default, warnings as errors), which would fight the Godot
+       SDK's own settings. The client is not part of Game.sln, so a plain `dotnet build` at the root never needs Godot. -->
+</Project>

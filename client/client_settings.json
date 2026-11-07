@@ -1,0 +1,13 @@
+{
+  "server_url": "ws://127.0.0.1:7780/ws",
+  "dev_name": "dev",
+
+  "fps_cap": 30,
+  "render_delay_ticks": 2,
+
+  "camera_pitch_degrees": 50,
+  "camera_fov_degrees": 30,
+  "camera_distance": 15,
+  "camera_distance_min": 8,
+  "camera_distance_max": 15.5
+}
