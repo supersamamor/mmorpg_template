@@ -1,0 +1,176 @@
+using Game.Client.Core.Bundle;
+using Game.Client.Core.World;
+using Game.Shared.Protocol;
+using Game.Shared.World;
+
+namespace Game.Client.Core;
+
+/// <summary>
+/// What the player's own actions and owner-only messages put on screen: the tap marker, the target highlight, the death screen and the
+/// one-line flash. None of it decides anything: a marker is a request shown back, and the server's answer removes it.
+/// </summary>
+public sealed class UiState
+{
+    private readonly ClientConfig _config;
+    private readonly DisplayBundle _bundle;
+    private double _markerEnds;
+    private double _flashEnds;
+
+    /// <summary>Creates an empty state.</summary>
+    public UiState(ClientConfig config, DisplayBundle bundle)
+    {
+        _config = config;
+        _bundle = bundle;
+    }
+
+    /// <summary>The cell of the tap marker, or null.</summary>
+    public GridCell? Marker { get; private set; }
+
+    /// <summary>The entity with the target highlight, or null.</summary>
+    public long? Target { get; private set; }
+
+    /// <summary>True while the death screen shows.</summary>
+    public bool Dead { get; private set; }
+
+    /// <summary>The flash line; empty when nothing shows.</summary>
+    public string Flash { get; private set; } = string.Empty;
+
+    /// <summary>Counts changes to anything here, so a HUD redraws only on a change.</summary>
+    public int Version { get; private set; }
+
+    /// <summary>A ground tap went out as <c>move</c>: show the marker at once (§7.3). A new walk ends any highlight, as it ends the attack on the server.</summary>
+    public void OnMoveSent(GridCell cell, double now)
+    {
+        Marker = cell;
+        Target = null;
+        _markerEnds = now + _config.TapMarkerSeconds;
+        Version++;
+    }
+
+    /// <summary>A monster tap went out as <c>attack</c>.</summary>
+    public void OnAttackSent(long target)
+    {
+        Target = target;
+        Marker = null;
+        Version++;
+    }
+
+    /// <summary><c>rejected</c>: quietly take back what the tap showed.</summary>
+    public void OnRejected(RejectedMessage rejected)
+    {
+        if (rejected.Intent == MessageTypes.Move && Marker is { } marker && rejected.Cell is { } cell && marker.X == cell.X && marker.Y == cell.Y)
+        {
+            Marker = null;
+            Version++;
+        }
+        else if (rejected.Intent == MessageTypes.Attack && Target == rejected.Target)
+        {
+            Target = null;
+            Version++;
+        }
+    }
+
+    /// <summary><c>attack_stopped</c>: the auto-attack is over.</summary>
+    public void OnAttackStopped(AttackStoppedMessage stopped)
+    {
+        if (Target != stopped.Target) return;
+        Target = null;
+        Version++;
+    }
+
+    /// <summary><c>you_died</c>.</summary>
+    public void OnYouDied()
+    {
+        SetDead(true);
+        Marker = null;
+        Target = null;
+        Version++;
+    }
+
+    /// <summary><c>respawned</c>.</summary>
+    public void OnRespawned() => SetDead(false);
+
+    /// <summary>Own vitals. A snapshot after a resume may show the character already dead (ADR-002 row 102): HP 0 is the death screen, however it was learned.</summary>
+    public void OnVitals(VitalsRecord vitals)
+    {
+        if (vitals.MaxHp <= 0) return;
+        SetDead(vitals.Hp <= 0);
+    }
+
+    /// <summary>A delta's <c>hits</c> this client is part of become the flash line.</summary>
+    public void OnHits(System.Collections.Generic.IReadOnlyList<HitRecord> hits, WorldView world, double now)
+    {
+        for (var i = 0; i < hits.Count; i++)
+        {
+            var hit = hits[i];
+            if (hit.Attacker == world.OwnId) SetFlash(UiText.YouHit(NameOfEntity(world, hit.Target), hit.Amount, hit.Result), now);
+            else if (hit.Target == world.OwnId) SetFlash(UiText.HitYou(NameOfEntity(world, hit.Attacker), hit.Amount, hit.Result), now);
+        }
+    }
+
+    /// <summary>A delta's new ground items that this client may take become the flash line.</summary>
+    public void OnAppeared(System.Collections.Generic.IReadOnlyList<EntityRecord> appeared, double now)
+    {
+        for (var i = 0; i < appeared.Count; i++)
+        {
+            var record = appeared[i];
+            if (record.Kind == EntityKinds.Item && record.Mine == true) SetFlash(UiText.Dropped(_bundle.NameOf(record.DisplayKey), record.Quantity), now);
+        }
+    }
+
+    /// <summary><c>level_up</c>.</summary>
+    public void OnLevelUp(LevelUpMessage level, double now)
+    {
+        if (level.BaseLevel is { } baseLevel) SetFlash(UiText.LevelUp(baseLevel), now);
+        else if (level.JobLevel is { } jobLevel) SetFlash(UiText.JobLevelUp(jobLevel), now);
+    }
+
+    /// <summary>Per frame: timers, the marker ending when the walk arrives, and a target leaving view. Allocates nothing.</summary>
+    public void Tick(WorldView world, double now)
+    {
+        if (Marker is { } marker && (now >= _markerEnds || Arrived(world.Own, marker)))
+        {
+            Marker = null;
+            Version++;
+        }
+        if (Target is { } target && world.Find(target) is null)
+        {
+            Target = null;
+            Version++;
+        }
+        if (Flash.Length > 0 && now >= _flashEnds)
+        {
+            Flash = string.Empty;
+            Version++;
+        }
+    }
+
+    /// <summary>Clears everything (a new login).</summary>
+    public void Reset()
+    {
+        Marker = null;
+        Target = null;
+        Dead = false;
+        Flash = string.Empty;
+        Version++;
+    }
+
+    private static bool Arrived(EntityView? own, GridCell marker) =>
+        own is not null && !own.Next.HasValue && !own.IsWalking && own.Cell.X == marker.X && own.Cell.Y == marker.Y;
+
+    private string NameOfEntity(WorldView world, long id) => _bundle.NameOf(world.Find(id)?.DisplayKey);
+
+    private void SetDead(bool dead)
+    {
+        if (Dead == dead) return;
+        Dead = dead;
+        Version++;
+    }
+
+    private void SetFlash(string text, double now)
+    {
+        Flash = text;
+        _flashEnds = now + _config.FlashSeconds;
+        Version++;
+    }
+}

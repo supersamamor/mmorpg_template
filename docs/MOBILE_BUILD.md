@@ -1,7 +1,7 @@
 # Mobile build guide (Android + iOS)
 
 How to build the Godot .NET client for phones. Written during spike T-005 against the
-throwaway project in `spikes/mobile-export/`; the same steps apply to `/client` from T-206 on.
+throwaway project in `spikes/mobile-export/`; the same steps apply to `/client` from T-206 on (§8 covers running it).
 Why Godot, and what the spike measured: [ADR-001](decisions/ADR-001-3d-mobile.md).
 
 | Pinned | Version |
@@ -228,3 +228,60 @@ Desktop numbers are only a sanity check; §9 budgets are judged on phones.
   and fixes the expected name. Production uses a public CA certificate and `TlsOptions.Client()`.
 - **Renderer choice** is a project setting read at startup; the spike switches it through
   `application/config/project_settings_override = "user://override.cfg"`.
+
+## 8. The real client (`/client`, T-206)
+
+Not in `Game.sln`: a plain `dotnet build` at the root needs neither Godot nor this project. `client/Directory.Build.props` and `client/Directory.Packages.props` keep the
+root settings away from the Godot SDK. Godot, SDK and framework versions are those in the table at the top. **No phone has run this client yet; §8.3 lists what is unverified.**
+
+### 8.1 Run it on one PC
+
+```powershell
+dotnet run --project src/Game.Server                  # terminal 1; dev loopback on ws://127.0.0.1:7780/ws
+dotnet build client/GameClient.csproj                 # terminal 2; also packs the bundle (below)
+$godot = (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -Filter "Godot_v4.7.2-stable_mono_win64_console.exe").FullName
+& $godot --headless --path client --import            # first time only
+& $godot --path client                                # add -- --autologin to skip the login screen
+```
+
+Left click or tap: walk, or attack a monster. Scroll wheel or pinch: zoom. On a device the server must be reachable, and the dev login needs the Development environment.
+
+**Settings:** `client/client_settings.json` (server URL, dev name, frame cap, camera; every key is in `client/Core/ClientConfig.cs`), then the command line after `--`:
+`--server ws://host:port/ws`, `--name Ada`, `--set key=value`. There are no secrets in it. T-216 removes cleartext `ws://` from release builds.
+
+**Bundle:** the `PackClientBundle` target writes `client/bundle/client-content.json` from `export-client` when any file under `content/` is newer (gitignored; `-p:SkipClientBundle=true` keeps it as it is).
+By hand: `dotnet run --project src/Game.Tools -- export-client client/bundle/client-content.json`. A displayed-content change that is not repacked ends in `bye update_required`, and a
+`format_version` the build does not know ends at a refusal screen. Update `content/client-content.reference.json` in the same change as any displayed-content change, or CI's `--check` fails:
+`dotnet run --project src/Game.Tools -- export-client content/client-content.reference.json`.
+
+### 8.2 Scripted runs
+
+`client/run-e2e.ps1` builds, starts a real server on its own port, runs the client and stops the server. Exit code 0 means it passed; every step prints an `[e2e]` line.
+
+```powershell
+.\client\run-e2e.ps1 -EasyMonsters                                     # login, map, walk, kill, drop, dropped socket, resume, warp, logout (headless)
+.\client\run-e2e.ps1 -EasyMonsters -Windowed -Screenshot C:\temp\run.png  # the same with the real renderer, plus a real mouse click through the engine's input
+.\client\run-e2e.ps1 -Run death -Monster monster.gel_slime              # real content: gets killed, drops the socket while dead, sees the death screen again, respawns
+```
+
+`-EasyMonsters` gives the server a temporary content copy with weak, passive monsters (monster stats do not change the bundle hash). It is needed until T-309 lands: on today's
+content a new character cannot beat a slime. Taps go through `Main.HandleInput`, the same method the engine's input calls.
+
+Measuring with extra entities: start the client with `-- --measure 40 --server ws://127.0.0.1:<port>/ws --screenshot shot.png` (add `--set fps_cap=0` for no cap, and `--resolution 1560x720` before the `--` for 19.5:9).
+It waits for 40 entities on screen, samples 15 s and prints fps, draw calls, triangles, allocations and the visible cells. Bots: `tools/loadtest` (`--bots 50 --fighters 0`) sets `max-sessions` to exactly its bots, so a
+client cannot join its server; for T-206 a throwaway launcher passed as `--server` raised that number.
+
+Stale-hash and refusal screens: `--bundle <file>` (debug builds only) reads another bundle file, and `--exit-on-refusal` quits after the refusal screen.
+
+### 8.3 Export
+
+`export_presets.cfg` is committed for `/client` (no credentials in it); its `include_filter` carries the bundle and the settings, which are not Godot resources.
+
+```powershell
+& $godot --headless --path client --export-debug "Android arm64 (debug)" exports/android/game-client.apk
+```
+
+The path is relative to `client`, and `client/exports/` is gitignored. §4's gotchas apply. The export may not exit by itself: wait for `.apk` and `.apk.idsig`, then close it.
+
+**Unverified until a phone runs it** (ADR-002 row 112): everything in T-005's §6.3, plus this client's touch input and pinch, the 48 dp picking at a real density, §9's numbers (fps, draw calls, memory, thermal), the
+safe area, `ws://` and `wss://` from the device, real pause and resume with the socket's behaviour across a suspension, and all of iOS (NativeAOT, trimming, `System.Text.Json`).

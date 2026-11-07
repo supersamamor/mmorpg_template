@@ -314,6 +314,21 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
 
 ## 7. Client
 
+**Shape** (T-206). `client/Core` is the pure part, with no Godot namespace, and is compiled into `Game.Tests` too: settings, bundle reader, protocol parsing, the
+connection state machine, the view model, interpolation, gestures, camera geometry and UI state (`client/Core/UiText.cs` holds the client's own words). `client/Scene`
+is the thin Godot layer: its nodes read the model and draw it. Time comes into the core as a parameter. The protocol mapping is `Game.Server/Net/ProtocolJson.cs`, linked
+as a source file: it has no server dependencies. Seams: `IMapView` (T-208's scenes replace `PlaceholderMap`), `IEntityVisualSource` (T-207's theme loader replaces
+`PlaceholderEntities`), `IClientSocket` (the socket). All placeholder art sits behind the first two.
+
+**Threads.** One socket thread per connection polls Godot's `WebSocketPeer` and parses frames; the main thread drains parsed messages once a frame and applies them.
+The client bundle is packed into the project by the `PackClientBundle` MSBuild target (generated, gitignored) and read at start. A `format_version` it does not know
+stops at a refusal screen, before any connection. The client is not in `Game.sln`.
+
+**Interpolation.** Each entity keeps a short queue of timed steps from `cell` to `next`, drawn `render_delay_ticks / tick_rate` behind arrival (200 ms at 10 Hz). A step
+after a step follows on with no gap, at its length over `speed`, so a diagonal takes √2 as long. A late delta makes the walker wait at the cell and pick up from the render
+time, never jump. A step behind schedule is shortened, down to half its time, so a burst catches up. A new order mid-step turns from where the entity is drawn; a correction
+glides, and snaps beyond `snap_distance_cells`. Nothing is predicted. A frame with nothing new allocates nothing, and only what changed touches a node.
+
 ### 7.1 Platforms & rendering
 - Android 8.0+ (API 26), arm64-v8a. iOS 15+, arm64. Landscape only.
 - Godot **Mobile** renderer (Vulkan / Metal). The **Compatibility** renderer (OpenGL ES 3) is
@@ -322,12 +337,24 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
 
 ### 7.2 Camera
 Fixed-pitch 3/4 perspective that follows the player. Pinch (or scroll wheel) zooms within a
-clamped range; optional rotation in 45° steps. Camera numbers are client config, not content.
+clamped range; optional rotation in 45° steps (not built yet). Camera numbers are client config, not content (`client/client_settings.json`).
+
+Measured (T-206, pitch 50°, vertical field of view 30°, default distance 15; the engine's own camera rays agree with `CameraMath`), in cells from the player:
+
+| Screen | Top edge, each side | Through the player, each side | Bottom edge, each side | Ahead | Behind |
+|--------|--------------------:|------------------------------:|-----------------------:|------:|-------:|
+| 1280×720 (16:9) | 9.2 | 7.1 | 5.8 | 6.8 | 4.3 |
+| 1560×720 (19.5:9) | 11.2 | 8.7 | 7.1 | 6.8 | 4.3 |
+
+The AOI always sends 12 cells (`view_radius` × `bucket_size`), so nothing pops in on screen. The zoom clamp keeps that true: at the farthest zoom (15.5) the top corners of a 19.5:9 screen
+are 11.6 cells away, and a test fails if the settings or `balance.yaml` break it. A phone wider than 19.5:9 needs this checked again.
 
 ### 7.3 Input
-- Tap ground → raycast → cell → `MoveTo` intent. A tap marker shows at once; the character
-  moves when the server confirms (≤ 1 tick).
-- Tap an entity → target it (attack / talk / pick up, by entity type).
+- Mouse and touch share one path (a mouse arrives as touch index 0).
+- Tap ground → raycast to the plane → cell → `move`. A tap marker shows at once; the character
+  moves when the server confirms (≤ 1 tick). `rejected` removes the marker quietly.
+- Tap a monster → `attack`, with a target ring. It is picked on screen, at least 48 dp wide, or as wide as the shape looks if that is more. The client checks no
+  range, path or walkability. Talking and picking up come with their systems (the other kinds count as ground for now).
 - Hotbar buttons → `UseSkill`. Ground-target skills: pick the skill, then tap a cell.
 - Long-press → info / context menu. A virtual joystick is backlog.
 
@@ -573,6 +600,19 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   5. On `bye logout` or `bye replaced`: do not reconnect (`replaced` means the same player is on another connection).
      On `bye update_required`: go to the store; `shutdown`: show a message and retry later with a normal login.
   6. To leave on purpose, send `logout` and wait for `bye logout`.
+
+  **What the client does** (`client/Core/Net/ConnectionMachine.cs`; the numbers are in `client_settings`):
+  - Backoff 0.5, 1, 2, 4, 4... s, ±25%. It gives up at the last message heard + `grace_seconds` (60, a copy of the server's `grace-period-ms`, which the protocol does not send)
+    + `grace_margin_seconds` (30, since the server may notice a silent client late). Those timers run on the wall clock, which keeps going while the app is suspended.
+  - The other reasons (`timeout`, `too_slow`, `server_error`, `malformed`, `unknown_type`, `oversize`, `before_hello`, `duplicate_hello`, and `rate_limit` outside a resume) leave the character
+    in its grace period, so they count as a drop. `bad_version` is treated as `update_required`. `login_refused` and, on a new login, `server_full` go to the login screen.
+    During a resume `server_full` keeps trying.
+  - It sends a `ping` right after every `welcome` (the acknowledgement of T-214), then every `ping_interval_seconds`. `silence_timeout_seconds` without any message counts as a drop.
+    A server message it cannot read counts as a drop too, since the view can no longer be trusted, and an unknown `type` is ignored.
+  - In the background it keeps the socket, sends nothing and starts no reconnect. On return it retries at once if the socket is gone, and otherwise a ping must be answered
+    within `foreground_probe_seconds`, because a socket can look open after a suspension.
+  - **`bye` also comes from the close frame.** The server writes the reason into the close frame as well, and that is needed: when `bye` and the close frame arrive in one poll,
+    `WebSocketPeer` clears its packets before they can be read. Found by T-206's live run with a stale hash, where the `bye update_required` was lost.
 - **Back-pressure:** the sink serializes on the tick thread into a bounded per-session queue, and the socket drains that queue. When
   the queue is full, queued views are dropped and later deltas are skipped. Once the queue has drained, the session asks for a fresh
   snapshot (`RequestSnapshot`). A client that stays behind for `slow-client-timeout-ms` gets `bye too_slow`.

@@ -17,6 +17,8 @@ export_presets.cfg
 *.translation
 /client/build/
 /client/exports/
+/client/bundle/
+!/client/export_presets.cfg
 
 # ---------- IDEs ----------
 .idea/

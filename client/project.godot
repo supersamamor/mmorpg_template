@@ -1,0 +1,35 @@
+; The game client (ARCHITECTURE §7, T-206). See docs/MOBILE_BUILD.md.
+
+config_version=5
+
+[application]
+
+config/name="MMORPG Template"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.7", "C#", "Mobile")
+config/icon="res://icon.svg"
+; §9: draw only when something changed, and rest between frames.
+run/low_processor_mode=true
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=0
+
+[dotnet]
+
+project/assembly_name="GameClient"
+
+[input_devices]
+
+; One input path: a mouse arrives as touch index 0.
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
+textures/vram_compression/import_etc2_astc=true
