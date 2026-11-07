@@ -72,7 +72,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-216 | Client build hardening: refuse `ws://` outside debug, strip the APK, CI export job, live `bye` tests | Claude Code | Sonnet 5.5 | [T-216](../tasks/prompts/T-216.md) | T-206 | Review | ADR-002 #64, #122 |
 | T-217 | AOI cap fairness: reserved slots by kind, own loot first, chasing monsters visible | Claude Code | Opus 5.5 | [T-217](../tasks/prompts/T-217.md) | T-215 | Review | ADR-002 #113, #121 |
 | T-208 | Map authoring plugin: bake walkability, markers, grid export, staleness check, authored sample maps | Claude Code | Opus 5.5 | [T-208](../tasks/prompts/T-208.md) | T-201, T-207 | In Progress | |
-| T-211 | Touch input + mobile UI shell: safe area, scaling, gestures, hotbar seam | Claude Code | Sonnet 5.5 | [T-211](../tasks/prompts/T-211.md) | T-206, T-207 | In Progress | ADR-002 #120 |
+| T-211 | Touch input + mobile UI shell: safe area, scaling, gestures, hotbar seam | Claude Code | Sonnet 5.5 | [T-211](../tasks/prompts/T-211.md) | T-206, T-207 | Review | ADR-002 #120 |
 | T-218 | Client robustness: root-cause the headless exit crash with model preload; validator check for manifest `fallbacks` | Claude Code | Opus 5.5 | [T-218](../tasks/prompts/T-218.md) | T-207 | In Progress | ADR-002 #133, #135 |
 
 ## Phase 3 — Combat loop

@@ -1,5 +1,6 @@
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Net;
+using Game.Client.Core.Ui;
 using Game.Client.Core.World;
 using Game.Server.Net;
 using Game.Shared.Protocol;
@@ -28,6 +29,7 @@ public sealed class ClientSession
         Connection = new ConnectionMachine(config, random);
         World = new WorldView(config);
         Ui = new UiState(config, bundle);
+        Hotbar = new HotbarModel(config.HotbarSlots);
     }
 
     /// <summary>The connection.</summary>
@@ -38,6 +40,9 @@ public sealed class ClientSession
 
     /// <summary>What the player's actions put on screen.</summary>
     public UiState Ui { get; }
+
+    /// <summary>The hotbar's slots. Empty until T-502 binds skills; the client sends no skill intent yet.</summary>
+    public HotbarModel Hotbar { get; }
 
     /// <summary>Server messages applied so far (for measuring).</summary>
     public long MessagesApplied { get; private set; }

@@ -1,14 +1,15 @@
 # Scripted client runs against a real local server (docs/MOBILE_BUILD.md §8). Exit code 0 means every run passed. Works in Windows PowerShell 5.1 and PowerShell 7 (Linux in CI).
 #   .\client\run-e2e.ps1                                  play: login, map, walk, kill, drop, dropped socket, resume, background, logout (real content, headless)
 #   .\client\run-e2e.ps1 -Run warp                        the warp to the second map, on a temporary content copy with weak monsters (real content kills a new character on the way)
-#   .\client\run-e2e.ps1 -Run bye                         the four live bye runs: resume_failed, replaced, shutdown, grace_expiry (each can be named alone)
+#   .\client\run-e2e.ps1 -Run ui                          the UI shell: layouts for every screen shape and UI scale, gestures, hotbar, cost (more: -Windowed -Screenshot x.png -Resolution 1560x720 -ClientArgs "--set","debug_notch=1")
+#   .\client\run-e2e.ps1 -Run bye                      the four live bye runs: resume_failed, replaced, shutdown, grace_expiry (each can be named alone)
 #   .\client\run-e2e.ps1 -Run release                     exports a desktop RELEASE build and checks that it refuses ws:// and does not refuse wss://
-#   .\client\run-e2e.ps1 -Run all                         play, warp, bye, release
+#   .\client\run-e2e.ps1 -Run all                         play, warp, ui, bye, release
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "ui", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [string] $Screenshot = "",
@@ -155,6 +156,11 @@ function Invoke-Scenario([string] $Name) {
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-death" @()) -EngineArgs $engineArgs
                 return (Wait-GodotClient $run 600).Code
             }
+            "ui" {
+                $server = Start-GameServer -Easy
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-ui" @()) -EngineArgs $engineArgs
+                return (Wait-GodotClient $run 300).Code
+            }
             "warp" {
                 $server = Start-GameServer -Easy
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-warp" @()) -EngineArgs $engineArgs
@@ -242,7 +248,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "ui", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 $failed = @()

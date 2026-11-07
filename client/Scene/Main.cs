@@ -1,6 +1,5 @@
 using Game.Client.Core;
 using Game.Client.Core.Bundle;
-using Game.Client.Core.Input;
 using Game.Client.Core.Net;
 using Game.Shared.Protocol;
 using Game.Shared.Random;
@@ -26,7 +25,7 @@ public partial class Main : Node3D
     private FollowCamera? _camera;
     private PlaceholderMap? _map;
     private Hud? _hud;
-    private TapGestures? _gestures;
+    private InputRouter? _input;
     private string? _loadedMap;
     private MapData? _mapData;
 
@@ -120,8 +119,8 @@ public partial class Main : Node3D
         _camera = new FollowCamera(this, _config);
         _entities = new ThemedEntities(this, _config, _bundle!, ThemeLoader.Load(_config));
         _presenter = new WorldPresenter(this, _config, _session.World, _session.Ui, _entities);
-        _gestures = new TapGestures(_config);
         _hud = new Hud(this, _config, _session, _bundle);
+        _input = new InputRouter(_config, _session, _bundle!, _camera, _hud, () => _mapData);
 
         GD.Print($"[client] bundle format {_bundle!.FormatVersion}, hash {_bundle.ContentHash}; server {_config.ServerUrl}; {(OS.IsDebugBuild() ? "debug" : "release")} build, cleartext {(_config.AllowCleartext ? "allowed" : "refused")}; renderer {RenderingServer.GetCurrentRenderingMethod()}");
         if (AutoRun.Wanted(args)) _ = new AutoRun(this, args).RunAsync();
@@ -142,6 +141,7 @@ public partial class Main : Node3D
         _presenter!.Sync(delta);
         if (world.Own is { } own) _camera!.Follow((float)own.X, (float)own.Z);
         _hud!.Refresh();
+        _input!.Tick();
 
         if (!CountAllocations) return;
         var bytes = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -168,33 +168,7 @@ public partial class Main : Node3D
     public override void _UnhandledInput(InputEvent @event) => HandleInput(@event);
 
     /// <summary>The one input path for mouse and touch. The scripted run feeds it too, so it taps exactly as a finger does.</summary>
-    public void HandleInput(InputEvent @event)
-    {
-        if (_gestures is null || _camera is null) return;
-        var now = Clocks.View();
-        switch (@event)
-        {
-            case InputEventScreenTouch touch when touch.Pressed:
-                _gestures.Press(touch.Index, touch.Position.X, touch.Position.Y, now);
-                break;
-            case InputEventScreenTouch touch:
-                if (_gestures.Release(touch.Index, touch.Position.X, touch.Position.Y, now) == GestureResult.Tap)
-                    OnTap(new Vector2((float)_gestures.TapX, (float)_gestures.TapY), now);
-                break;
-            case InputEventScreenDrag drag:
-                if (_gestures.Drag(drag.Index, drag.Position.X, drag.Position.Y) == GestureResult.Zoom) _camera.Zoom(_gestures.ZoomFactor);
-                break;
-            case InputEventMagnifyGesture magnify:
-                _camera.Zoom(1 / magnify.Factor);
-                break;
-            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp }:
-                _camera.Zoom(1 / _config.CameraWheelStep);
-                break;
-            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelDown }:
-                _camera.Zoom(_config.CameraWheelStep);
-                break;
-        }
-    }
+    public void HandleInput(InputEvent @event) => _input?.Handle(@event);
 
     /// <inheritdoc />
     public override void _Notification(int what)
@@ -202,50 +176,6 @@ public partial class Main : Node3D
         if (_session is null) return;
         if (what == NotificationApplicationPaused) _session.OnBackgrounded();
         else if (what == NotificationApplicationResumed) _session.OnForegrounded(Clocks.Wall());
-    }
-
-    /// <summary>A tap: the monster under it, generously, else the ground. It only asks; range, path and walkability are the server's.</summary>
-    private void OnTap(Vector2 position, double now)
-    {
-        var session = _session!;
-        if (PickMonster(position) is { } id)
-        {
-            session.TapEntity(id);
-            return;
-        }
-        if (!_camera!.TryGround(position, out var ground)) return;
-        var x = TouchTargets.CellOf(ground.X);
-        var y = TouchTargets.CellOf(ground.Z);
-        if (_mapData is { } map && !map.Inside(x, y)) return; // nothing there to tap; everything else goes to the server
-        session.TapGround(new Game.Shared.World.GridCell(x, y), now);
-    }
-
-    private long? PickMonster(Vector2 position)
-    {
-        var camera = _camera!.Camera;
-        var canvasHeight = GetViewport().GetVisibleRect().Size.Y;
-        var touch = TouchTargets.RadiusInCanvasUnits(_config.TouchTargetDp, DisplayServer.ScreenGetDpi(), GetWindow().Size.Y, canvasHeight);
-        long? best = null;
-        var bestDistance = float.MaxValue;
-        var entities = _session!.World.Entities;
-        for (var i = 0; i < entities.Count; i++)
-        {
-            var entity = entities[i];
-            if (entity.Kind != EntityKinds.Monster || entity.Dead) continue;
-            var world = new Vector3((float)entity.X, 0.45f, (float)entity.Z);
-            if (camera.IsPositionBehind(world)) continue;
-            var center = camera.UnprojectPosition(world);
-            // The shape's size on screen counts too, so a close-up monster is as easy to hit as it looks.
-            var top = camera.UnprojectPosition(world + Vector3.Up * 0.6f);
-            var radius = Mathf.Max((float)touch, center.DistanceTo(top));
-            var distance = center.DistanceTo(position);
-            if (distance <= radius && distance < bestDistance)
-            {
-                bestDistance = distance;
-                best = entity.Id;
-            }
-        }
-        return best;
     }
 
     private void LoadMap(string? id)

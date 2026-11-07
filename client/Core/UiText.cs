@@ -1,11 +1,13 @@
+using System;
 using System.Globalization;
 using Game.Client.Core.Net;
+using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
 
 namespace Game.Client.Core;
 
 /// <summary>
-/// The client's own words: the only place UI text is written, so localisation (T-211) has one table to replace. Names of game things never
+/// The client's own words: the only place UI text is written (T-211, ADR-002 row 120: see ARCHITECTURE §7.4), so a later translation has one table to replace. Names of game things never
 /// come from here; they come from the bundle by <c>display_key</c>.
 /// </summary>
 public static class UiText
@@ -95,6 +97,33 @@ public static class UiText
 
     /// <summary>The flash for a job level reached.</summary>
     public static string JobLevelUp(int level) => "Job level " + level.ToString(CultureInfo.InvariantCulture) + "!";
+
+    /// <summary>The info panel's second line for a kind of entity (an <c>EntityKinds</c> term). A dead one says so.</summary>
+    public static string EntityKind(string kind, bool dead)
+    {
+        var label = kind switch
+        {
+            EntityKinds.Player => "Adventurer",
+            EntityKinds.Monster => "Monster",
+            EntityKinds.Npc => "Villager",
+            EntityKinds.Item => "Item on the ground",
+            _ => string.Empty,
+        };
+        return dead && label.Length > 0 ? label + " (defeated)" : label;
+    }
+
+    /// <summary>The button that cycles the UI size, showing the current one (a percentage).</summary>
+    public static string UiSize(double scale) => "UI " + Math.Round(scale * 100).ToString(CultureInfo.InvariantCulture) + "%";
+
+    /// <summary>The small connection indicator: a phase in one or two words.</summary>
+    public static string Connection(ConnectionPhase phase) => phase switch
+    {
+        ConnectionPhase.Online => "Online",
+        ConnectionPhase.Connecting or ConnectionPhase.AwaitingWelcome => "Connecting",
+        ConnectionPhase.Backoff => "Offline",
+        ConnectionPhase.LoggingOut => "Leaving",
+        _ => string.Empty,
+    };
 
     /// <summary>The HUD's HP line.</summary>
     public static string Hp(int hp, int max) => "HP " + hp.ToString(CultureInfo.InvariantCulture) + " / " + max.ToString(CultureInfo.InvariantCulture);
