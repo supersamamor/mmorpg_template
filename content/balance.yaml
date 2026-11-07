@@ -58,7 +58,7 @@ new_character:
   start_y: 12
   start_facing: n
   # Everyone starts as a Wanderer and picks a job later (the job is also what other players see them as until gear exists).
-  start_job_id: job.novice
+  start_job_id: job.wanderer
 ai:
   # An awake aggressive monster looks around for a player three times a second: quick enough that walking into its range feels
   # immediate, and a fraction of the per-tick work of scanning every tick.

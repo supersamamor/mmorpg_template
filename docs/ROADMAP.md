@@ -43,7 +43,7 @@ and one of them survives being backgrounded for 30 s.
 
 ## Phase 5 — Jobs & skills
 - Job tree + job change, skill tree, effect runner, statuses, cast/cooldown, skill VFX
-**Done when:** Novice → first job via quest, using 3+ skills from the touch hotbar.
+**Done when:** Wanderer → first job via quest, using 3+ skills from the touch hotbar.
 
 ## Phase 6 — NPCs, dialogue, quests
 - Dialogue graphs, quest state machine on event bus, quest log UI

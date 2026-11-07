@@ -10,11 +10,11 @@ namespace Game.Tests.Progression;
 /// Progression rules against the real /content. Hand arithmetic uses these sample numbers (if content changes, redo it):
 /// exp.base[0..] = 65, 194, 400, 687, 1062, 1527, 2087, 2745, 3502 ... last (98th) = 604591, so max base level 99;
 /// stat points on reaching level L = floor(L/10)+3; stat raise cost from value v = floor((v-1)/10)+2; start 10 points, stats at 1, cap 99;
-/// exp.job_novice = 30, 80, 150, 240, 350, 480, 630, 800, 990 (max job level 10); 1 skill point per job level.
+/// exp.job_wanderer = 30, 80, 150, 240, 350, 480, 630, 800, 990 (max job level 10); 1 skill point per job level.
 /// </summary>
 public class ProgressionRulesTests
 {
-    private const string Novice = "job.novice";
+    private const string Wanderer = "job.wanderer";
     private const string Warden = "job.warden";
     private const string Spellbinder = "job.spellbinder";
 
@@ -35,14 +35,14 @@ public class ProgressionRulesTests
     {
         var rules = Rules();
         rules.MaxBaseLevel.ShouldBe(99); // 98 entries + 1
-        rules.MaxJobLevel(Novice).ShouldBe(10); // 9 entries + 1
+        rules.MaxJobLevel(Wanderer).ShouldBe(10); // 9 entries + 1
         rules.MaxJobLevel("job.nope").ShouldBe(0);
     }
 
     [Fact]
     public void New_character_starts_from_balance()
     {
-        var state = Rules().NewCharacter(Novice);
+        var state = Rules().NewCharacter(Wanderer);
         state.BaseLevel.ShouldBe(1);
         state.JobLevel.ShouldBe(1);
         state.StatPoints.ShouldBe(Db.Value.Balance.Progression.StartingStatPoints);
@@ -54,7 +54,7 @@ public class ProgressionRulesTests
     public void Single_grant_can_gain_several_levels()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice);
+        var state = rules.NewCharacter(Wanderer);
         var result = rules.GainBaseExp(state, 1000);
         // 1000 - 65 (1→2) = 935; - 194 (2→3) = 741; - 400 (3→4) = 341; 687 (4→5) is more than 341: stays at level 4 with 341.
         state.BaseLevel.ShouldBe(4);
@@ -72,7 +72,7 @@ public class ProgressionRulesTests
     public void Points_per_level_follow_the_formula_across_a_tier()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice);
+        var state = rules.NewCharacter(Wanderer);
         // Levels 1→10 cost 65+194+400+687+1062+1527+2087+2745+3502 = 12269; +100 left over.
         var result = rules.GainBaseExp(state, 12269 + 100);
         state.BaseLevel.ShouldBe(10);
@@ -86,7 +86,7 @@ public class ProgressionRulesTests
     public void Partial_exp_carries_between_grants()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice);
+        var state = rules.NewCharacter(Wanderer);
         rules.GainBaseExp(state, 60).LevelsGained.ShouldBe(0);
         state.BaseExp.ShouldBe(60);
         rules.GainBaseExp(state, 10).LevelsGained.ShouldBe(1); // 60 + 10 = 70 ≥ 65 → level 2 with 5 left
@@ -98,7 +98,7 @@ public class ProgressionRulesTests
     public void Non_positive_exp_changes_nothing()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice);
+        var state = rules.NewCharacter(Wanderer);
         rules.GainBaseExp(state, 0).LevelsGained.ShouldBe(0);
         rules.GainBaseExp(state, -500).LevelsGained.ShouldBe(0);
         state.BaseLevel.ShouldBe(1);
@@ -109,7 +109,7 @@ public class ProgressionRulesTests
     public void Base_exp_past_the_cap_is_discarded()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice);
+        var state = rules.NewCharacter(Wanderer);
         state.BaseLevel = 98;
         state.BaseExp = 4;
         // Level 98→99 needs 604591 (last table entry); 4 already held, so 604591 - 4 + 500 reaches 99 with 500 spare.
@@ -130,7 +130,7 @@ public class ProgressionRulesTests
     public void Huge_grant_does_not_overflow()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice);
+        var state = rules.NewCharacter(Wanderer);
         var result = rules.GainBaseExp(state, long.MaxValue);
         state.BaseLevel.ShouldBe(99);
         state.BaseExp.ShouldBe(0);
@@ -142,12 +142,12 @@ public class ProgressionRulesTests
     public void Job_exp_awards_skill_points_and_respects_the_job_cap()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice);
+        var state = rules.NewCharacter(Wanderer);
         var result = rules.GainJobExp(state, 30 + 80 + 10); // 1→2 costs 30, 2→3 costs 80, 10 left
         state.JobLevel.ShouldBe(3);
         state.JobExp.ShouldBe(10);
         state.SkillPoints.ShouldBe(2); // 1 per level reached
-        result.Events.ShouldBe(new IProgressionEvent[] { new JobLevelUp(Novice, 2, 1), new JobLevelUp(Novice, 3, 1) });
+        result.Events.ShouldBe(new IProgressionEvent[] { new JobLevelUp(Wanderer, 2, 1), new JobLevelUp(Wanderer, 3, 1) });
         state.BaseLevel.ShouldBe(1); // job EXP never touches base level
 
         // Remaining levels 3..10 cost 150+240+350+480+630+800+990 = 3640; 10 held, so grant 3630 + 25 spare.
@@ -162,7 +162,7 @@ public class ProgressionRulesTests
     public void Stat_raise_spends_points_by_current_value()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice); // 10 points, str 1
+        var state = rules.NewCharacter(Wanderer); // 10 points, str 1
         var result = rules.RaiseStat(state, PrimaryStats.Str, 5); // each step from 1..5 costs floor((v-1)/10)+2 = 2 → 10
         result.Success.ShouldBeTrue();
         result.PointsSpent.ShouldBe(10);
@@ -178,7 +178,7 @@ public class ProgressionRulesTests
         rules.StatRaiseCost(10).ShouldBe(2); // floor(9/10)+2
         rules.StatRaiseCost(11).ShouldBe(3); // floor(10/10)+2
         rules.StatRaiseCost(98).ShouldBe(11); // floor(97/10)+2
-        var state = rules.NewCharacter(Novice);
+        var state = rules.NewCharacter(Wanderer);
         state.Stats[PrimaryStats.Vit] = 10;
         state.StatPoints = 5;
         var result = rules.RaiseStat(state, PrimaryStats.Vit, 2); // 10→11 costs 2, 11→12 costs 3
@@ -190,7 +190,7 @@ public class ProgressionRulesTests
     public void Invalid_allocations_are_rejected_without_changes()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice);
+        var state = rules.NewCharacter(Wanderer);
 
         rules.RaiseStat(state, PrimaryStats.Str, 0).Error.ShouldBe(SpendError.InvalidAmount);
         rules.RaiseStat(state, PrimaryStats.Str, -3).Error.ShouldBe(SpendError.InvalidAmount);
@@ -251,7 +251,7 @@ public class ProgressionRulesTests
 
         rules.LearnSkill(state, "skill.ember_bolt").Error.ShouldBe(SpendError.NotInSkillTree); // spellbinder skill
         rules.LearnSkill(state, "skill.nope").Error.ShouldBe(SpendError.UnknownSkill);
-        rules.LearnSkill(state, "skill.second_wind").Success.ShouldBeTrue(); // from the parent job (novice)
+        rules.LearnSkill(state, "skill.second_wind").Success.ShouldBeTrue(); // from the parent job (wanderer)
 
         var broke = WardenWith(0);
         rules.LearnSkill(broke, "skill.iron_guard").Error.ShouldBe(SpendError.NotEnoughPoints);
@@ -262,7 +262,7 @@ public class ProgressionRulesTests
     public void Job_change_lists_every_failing_reason()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice); // base 1, job 1, no quests, nothing unlocked
+        var state = rules.NewCharacter(Wanderer); // base 1, job 1, no quests, nothing unlocked
         var check = rules.CanChangeJob(state, Warden); // needs base 10, job 8, quest.warden_trial, unlock
         check.Allowed.ShouldBeFalse();
         check.Failures.Select(f => f.Kind).ShouldBe(new[]
@@ -287,9 +287,9 @@ public class ProgressionRulesTests
     public void Job_change_rejects_unknown_same_and_wrong_parent()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice);
+        var state = rules.NewCharacter(Wanderer);
         rules.CanChangeJob(state, "job.nope").Failures.Select(f => f.Kind).ShouldBe(new[] { JobChangeFailureKind.UnknownJob });
-        rules.CanChangeJob(state, Novice).Failures.Select(f => f.Kind).ShouldContain(JobChangeFailureKind.SameJob);
+        rules.CanChangeJob(state, Wanderer).Failures.Select(f => f.Kind).ShouldContain(JobChangeFailureKind.SameJob);
 
         var spell = rules.NewCharacter(Spellbinder);
         spell.BaseLevel = 50;
@@ -303,14 +303,14 @@ public class ProgressionRulesTests
     public void Change_job_applies_only_when_allowed()
     {
         var rules = Rules();
-        var state = rules.NewCharacter(Novice);
+        var state = rules.NewCharacter(Wanderer);
         state.BaseLevel = 5;
         state.JobLevel = 5;
         state.JobExp = 12;
         state.SkillPoints = 3;
         state.Skills["skill.second_wind"] = 2;
 
-        rules.ChangeJob(state, Spellbinder, out var check).ShouldBe(new IProgressionEvent[] { new JobChanged(Novice, Spellbinder) });
+        rules.ChangeJob(state, Spellbinder, out var check).ShouldBe(new IProgressionEvent[] { new JobChanged(Wanderer, Spellbinder) });
         check.Allowed.ShouldBeTrue();
         state.JobId.ShouldBe(Spellbinder);
         state.JobLevel.ShouldBe(1);

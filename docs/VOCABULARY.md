@@ -6,7 +6,7 @@ Add new terms here in the same change that introduces them.
 ## Id namespaces
 | Prefix       | Type                  | Example                 |
 |--------------|-----------------------|-------------------------|
-| `job.`       | Job / class           | `job.swordsman`         |
+| `job.`       | Job / class           | `job.warden`         |
 | `skill.`     | Skill                 | `skill.bash`            |
 | `item.`      | Item (any kind)       | `item.red_potion`       |
 | `monster.`   | Monster               | `monster.slime`         |

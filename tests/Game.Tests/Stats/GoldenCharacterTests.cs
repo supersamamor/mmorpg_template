@@ -77,13 +77,13 @@ public class GoldenCharacterTests
         sheet.Get(stat).ShouldBe(expected, Tolerance, stat);
 
     /// <summary>
-    /// Wanderer (job.novice, no stat bonuses), base 3 / job 4. STR 6, AGI 4, VIT 5, INT 2, DEX 5, LUK 3.
+    /// Wanderer (job.wanderer, no stat bonuses), base 3 / job 4. STR 6, AGI 4, VIT 5, INT 2, DEX 5, LUK 3.
     /// Equipment: item.bone_dirk (aspd +5%), item.leather_cap (def +1, mdef +1).
     /// </summary>
     [Fact]
     public void Wanderer_level_3_with_dirk_and_cap()
     {
-        var c = NewCharacter("job.novice", 3, 4, str: 6, agi: 4, vit: 5, intel: 2, dex: 5, luk: 3);
+        var c = NewCharacter("job.wanderer", 3, 4, str: 6, agi: 4, vit: 5, intel: 2, dex: 5, luk: 3);
         Equip(c, "weapon", "item.bone_dirk");
         Equip(c, "head_top", "item.leather_cap");
 

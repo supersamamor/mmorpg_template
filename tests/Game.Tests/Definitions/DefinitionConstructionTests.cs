@@ -13,7 +13,7 @@ public class DefinitionConstructionTests
         {
             Id = "job.test_fighter",
             Name = "Test Fighter",
-            ParentJobId = "job.test_novice",
+            ParentJobId = "job.test_wanderer",
             Requirements = new JobChangeRequirementsDef { MinJobLevel = 10, QuestIds = ["quest.test"] },
             JobExpTableId = "exp.test_job",
             Skills = [new JobSkillDef { SkillId = "skill.test_b", Requires = [new SkillRequirementDef { SkillId = "skill.test_a", Level = 3 }] }],

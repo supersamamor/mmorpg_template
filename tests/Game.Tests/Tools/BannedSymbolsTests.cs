@@ -50,12 +50,29 @@ public class BannedSymbolsTests : IDisposable
         File.WriteAllText(Path.Combine(_temp, "Directory.Build.props"), "<Project />");
         File.WriteAllText(Path.Combine(_temp, "Directory.Packages.props"), "<Project />");
 
-        var info = new ProcessStartInfo("dotnet", "build --nologo -v:q") { WorkingDirectory = _temp, RedirectStandardOutput = true, RedirectStandardError = true };
+        // Restore once, then build with --no-restore. Node reuse and the shared compiler server are off so the nested build
+        // does not attach to (or leave behind) MSBuild/VBCSCompiler processes that the outer `dotnet test` run also uses.
+        var restore = Run("restore --nologo -v:q");
+        if (restore.Exit != 0) return restore;
+        return Run("build --no-restore --nologo -v:q -nodeReuse:false -p:UseSharedCompilation=false");
+    }
+
+    private static readonly TimeSpan StepTimeout = TimeSpan.FromMinutes(5);
+
+    private (int Exit, string Output) Run(string args)
+    {
+        var info = new ProcessStartInfo("dotnet", args) { WorkingDirectory = _temp, RedirectStandardOutput = true, RedirectStandardError = true };
         info.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
+        info.Environment["MSBUILDDISABLENODEREUSE"] = "1";
+        info.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";
         using var process = Process.Start(info)!;
         var stdout = process.StandardOutput.ReadToEndAsync();
         var stderr = process.StandardError.ReadToEndAsync();
-        process.WaitForExit();
+        if (!process.WaitForExit(StepTimeout))
+        {
+            try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+            throw new TimeoutException($"'dotnet {args}' did not finish within {StepTimeout}.");
+        }
         return (process.ExitCode, stdout.Result + stderr.Result);
     }
 

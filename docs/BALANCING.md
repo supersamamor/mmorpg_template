@@ -53,7 +53,7 @@ still affordable. A job without a build gets equal weights. The weapon is the be
 
    ```
    damage.json: 312 value(s) differ from the committed snapshot (key: old -> new).
-     ~ job.novice/L01/monster.gel_slime/auto/avg: 14 -> 15
+     ~ job.wanderer/L01/monster.gel_slime/auto/avg: 14 -> 15
    ```
 4. If the changes are what you meant, regenerate the snapshots. Never do this automatically or to "make the test pass":
 

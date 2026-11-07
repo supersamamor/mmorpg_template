@@ -6,7 +6,7 @@ giver_npc_id: npc.trainer
 repeatable: false
 prerequisites:
   min_base_level: 5
-  job_ids: [job.novice]
+  job_ids: [job.wanderer]
 steps:
   - description: Reach base level 10.
     objectives:
