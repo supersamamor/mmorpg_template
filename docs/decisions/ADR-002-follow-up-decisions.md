@@ -250,3 +250,12 @@ When writing these prompts, copy in the decisions listed:
 | 133 | Headless Godot exits with -1073741819 after PASS in about 1 of 4 runs with model preload on; preload is now skipped in headless, root cause not found (T-207) | **→ new T-218:** find the root cause. A crash on exit may also point to a real shutdown bug on devices. |
 | 134 | The exported APK also contains `themes/test` (T-207) | **→ T-802:** exclude test themes from store builds. It is under 1 MB, so harmless until then. |
 | 135 | Validator check that manifest `fallbacks` values exist (T-207) | **→ T-218.** Only a client test checks this today. |
+
+## Addendum — T-211 (2026-11-08)
+| # | Question (source) | Decision |
+|---|---|---|
+| 136 | Where the client's own UI words live (row 120) (T-211) | **Decided: `client/Core/UiText.cs`.** The refusal and update screens must work when the bundle or data is broken, and a missing word is a compile error. Translation later replaces member bodies with table lookups; a test forbids text literals in `client/Scene`. |
+| 137 | Hotbar default 6 slots, 1 row, 56 dp; UI scale 0.75–1.5 in 0.25 steps (T-211) | **Decided: keep.** Both are client config. **→ T-803** checks them on devices. |
+| 138 | The HUD adds about 25 draw calls; quiet frames allocate 8–9 bytes (T-211) | **→ T-803:** measure on devices first. The scene stays well under the 100 draw-call budget, so no batching until a device shows a need. |
+| 139 | The target frame shows the name only, because entity HP has no change counter (T-211) | **→ T-303:** add one with the combat presentation work. |
+| 140 | Run `-Run ui` in CI (T-211) | **Done at merge** if `ci.yml` runs `-Run all`, which now includes `ui`. |
