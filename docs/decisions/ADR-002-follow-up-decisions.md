@@ -225,3 +225,11 @@ When writing these prompts, copy in the decisions listed:
 | 120 | The client's own UI words live in `client/Core/UiText.cs` (T-206) | **→ T-211:** decide UI text storage with the UI shell. |
 | 121 | The `aoi.*` comment in `balance.yaml` says 7 cells each way; measured depth is about 7 ahead and 4 behind (T-206) | **→ T-217:** fix the comment, no value change. |
 | 122 | Live tests of `replaced`, `resume_failed`, `shutdown` on the Godot socket; `tools/loadtest` option for extra sessions (T-206) | **→ T-216.** |
+
+## Addendum — T-216 (2026-11-08)
+| # | Question (source) | Decision |
+|---|---|---|
+| 123 | No Android network-security config, unlike the T-216 prompt (T-216) | **Decided: accepted.** It doesn't cover Godot's native sockets and would need the Gradle export path. The client's own release rule is the real lock, proven on a Windows release export. **→ T-803:** confirm on a device that a release APK refuses `ws://`. |
+| 124 | Godot downloads in CI are checked against the release's own `SHA512-SUMS.txt`, not pinned hashes (T-216) | **→ T-802:** pin the hashes in the repo when CI builds store releases, so a replaced release can't pass. Acceptable for a debug export job until then. |
+| 125 | The APK fell from 104.2 MB to 44.3 MB by removing Mono static archives (T-216) | **Decided: keep, unverified on a device.** The phone test must install and start the stripped APK. If it fails to start, this is the first thing to revert. |
+| 126 | Godot 4.7.2 does not support .NET 10 for Android (T-216) | **Decided:** the client stays on net8.0 / net9.0 (Android); `Game.Shared` already targets `netstandard2.1`. Recheck on a Godot upgrade. |
