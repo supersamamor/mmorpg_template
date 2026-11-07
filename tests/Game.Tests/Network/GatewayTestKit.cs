@@ -23,7 +23,7 @@ public sealed class GatewayRig : IAsyncDisposable
 {
     public const string CertificatePassword = "test-only";
 
-    public readonly ContentDatabase Content = TestGrids.SampleContent;
+    public readonly ContentDatabase Content;
     public readonly string ContentHash;
     public readonly ManualClock Clock = new();
     public readonly ListLog Log = new();
@@ -35,8 +35,9 @@ public sealed class GatewayRig : IAsyncDisposable
     private GatewayHost? _host;
     private string? _certificateFile;
 
-    private GatewayRig(GatewayOptions options)
+    private GatewayRig(GatewayOptions options, ContentDatabase content)
     {
+        Content = content;
         var clock = new SystemClock();
         ContentHash = ClientBundleExporter.Hash(Content);
         var progressions = new InMemoryProgressionStore();
@@ -52,8 +53,9 @@ public sealed class GatewayRig : IAsyncDisposable
 
     /// <summary>Starts a rig. <paramref name="tls"/> generates a throw-away self-signed certificate (never stored in the repo).</summary>
     /// <param name="setupWorld">Runs before the instances start ticking (subscribe to their events here).</param>
+    /// <param name="content">Content to run instead of the sample content (a test that needs different monster numbers builds it).</param>
     public static async Task<GatewayRig> StartAsync(Func<GatewayOptions, GatewayOptions>? configure = null, bool development = true, bool tls = false,
-        Action<GameWorld>? setupWorld = null)
+        Action<GameWorld>? setupWorld = null, ContentDatabase? content = null)
     {
         var options = new GatewayOptions { Development = development, BindAddress = "127.0.0.1", Port = 0, SweepIntervalMs = 10, CloseTimeoutMs = 1_000 };
         string? certificate = null;
@@ -64,7 +66,7 @@ public sealed class GatewayRig : IAsyncDisposable
             options = options with { CertificatePath = certificate };
         }
         if (configure is not null) options = configure(options);
-        var rig = new GatewayRig(options) { _certificateFile = certificate };
+        var rig = new GatewayRig(options, content ?? TestGrids.SampleContent) { _certificateFile = certificate };
         setupWorld?.Invoke(rig.World);
         rig._host = await GatewayHost.StartAsync(rig.Gateway, name => name == options.CertificatePasswordEnv ? CertificatePassword : null);
         foreach (var runner in rig._runners) runner.Start();

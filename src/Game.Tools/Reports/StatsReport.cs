@@ -40,6 +40,30 @@ internal static class StatsReport
     public static double? TimeToKillSeconds(DamageRow row, double aspd) =>
         row.Attack == "auto" && row.SwingsToKill is { } swings && aspd > 0 ? swings / aspd : null;
 
+    /// <summary>The <c>stats --duel</c> table: one matchup, expected values and the seeded simulation.</summary>
+    public static IReadOnlyList<ReportTable> ForDuel(SimCharacter ch, MonsterDef monster, DuelResult r)
+    {
+        var table = new ReportTable("duel", "field", "value")
+            .Add("player", ch.JobId + " L" + ch.BaseLevel + (ch.Weapon == null ? " unarmed" : " " + ch.Weapon.Id) + ", " + ch.PointsLeft + " points unspent")
+            .Add("monster", monster.Id)
+            .Add("player_hp", r.PlayerHp)
+            .Add("monster_hp", r.MonsterHp)
+            .Add("player_hit_pct", r.PlayerHitChance * 100)
+            .Add("player_avg_hit", r.PlayerAvgHit)
+            .Add("player_aspd", r.PlayerAspd)
+            .Add("monster_hit_pct", r.MonsterHitChance * 100)
+            .Add("monster_avg_hit", r.MonsterAvgHit)
+            .Add("monster_aspd", r.MonsterAspd)
+            .Add("expected_swings", r.ExpectedSwings)
+            .Add("expected_seconds", r.ExpectedSeconds)
+            .Add("expected_hp_left_pct", r.ExpectedHpLeftFraction * 100)
+            .Add("sim_fights", r.Fights)
+            .Add("sim_win_rate_pct", r.WinRate * 100)
+            .Add("sim_mean_swings_on_win", r.MeanSwingsOnWin)
+            .Add("sim_mean_hp_left_pct_on_win", r.MeanHpLeftFractionOnWin * 100);
+        return new[] { table };
+    }
+
     public static IReadOnlyList<ReportTable> ForMonsters(BalanceSimulator sim, IReadOnlyList<MonsterTtkRow> rows)
     {
         var table = new ReportTable("monsters", "monster", "monster_level", "max_hp", "job", "player_level", "avg", "hit_pct",

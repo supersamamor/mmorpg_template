@@ -14,11 +14,12 @@ dotnet run --project src/Game.Tools -- stats --monsters
 | Option | Meaning |
 |--------|---------|
 | `--job`, `--level` | Job id and base level (job level = base level capped at the job's maximum). |
-| `--build str=..,agi=..` | **Final** primary stat values. Unlisted stats stay at the starting value. The build must be payable: the real stat point costs and the points earned by the level are checked (`ProgressionRules.RaiseStat`), otherwise the command fails with the reason. Without `--build`, the points are spent evenly across all six stats. |
+| `--build str=..,agi=..` or `none` | **Final** primary stat values. Unlisted stats stay at the starting value. The build must be payable: the real stat point costs and the points earned by the level are checked (`ProgressionRules.RaiseStat`), otherwise the command fails with the reason. Without `--build`, the points are spent evenly across all six stats. |
 | `--vs <monster>` | Damage table for one monster (default: every monster). |
 | `--weapon`, `--refine` | Override the weapon (default: the best weapon the job can use at that level, chosen from data) and its refine. |
 | `--format text\|json\|csv` | Output format. |
 | `--monsters` | Every monster against every job's auto-attack at the **expected player level**: `max(monster.level, job.requirements.min_base_level)`, read from data. |
+| `--duel <monster>` | One-on-one auto-attack fight between the character and a monster (T-309): expected swings, seconds and HP left from the exact hit/crit chances, plus a seeded simulation (`--fights`, default 1000, `--seed`, default 1) through the real `CombatResolver`. Add `--unarmed` (no weapon, as the server plays until T-401) and `--build none` (spend nothing). Monster skills are not modelled. |
 
 Damage columns (one row per attack: `auto`, then each damaging skill of the job at its maximum level):
 `hit_pct`, `crit_pct`, `min`/`max`/`avg` damage of a **landed** hit, `hits_to_kill` = landed hits of average damage to remove
