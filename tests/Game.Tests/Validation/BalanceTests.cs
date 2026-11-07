@@ -75,6 +75,11 @@ public class BalanceTests : IDisposable
         balance.Aoi.ViewRadius.ShouldBe(2);
         balance.Aoi.MaxVisible.ShouldBe(50);
         balance.Aoi.CapHysteresis.ShouldBe(5);
+        balance.Aoi.CapReservedMonsters.ShouldBe(15);
+        balance.Aoi.CapReservedNpcs.ShouldBe(4);
+        balance.Aoi.CapReservedItems.ShouldBe(6);
+        balance.Aoi.CapReservedMargin.ShouldBe(2);
+        balance.Aoi.CapPinnedChasers.ShouldBe(10);
         balance.Ai.ThinkIntervalMs.ShouldBe(300);
         balance.Ai.WanderPauseMinMs.ShouldBe(4000);
         balance.Ai.WanderPauseMaxMs.ShouldBe(10000);
@@ -168,6 +173,13 @@ public class BalanceTests : IDisposable
     [InlineData("max_visible: 50", "max_visible: 0", "aoi.max_visible")]
     [InlineData("cap_hysteresis: 5", "cap_hysteresis: -1", "aoi.cap_hysteresis")]
     [InlineData("cap_hysteresis: 5", "cap_hysteresis: 50", "aoi.cap_hysteresis")]
+    [InlineData("cap_reserved_monsters: ", "cap_reserved_monsters: -", "aoi.cap_reserved_monsters")]
+    [InlineData("cap_reserved_monsters: ", "cap_reserved_monsters: 4", "aoi.cap_reserved_monsters")]   // a digit in front: the shares no longer fit
+    [InlineData("cap_reserved_npcs: ", "cap_reserved_npcs: -", "aoi.cap_reserved_npcs")]
+    [InlineData("cap_reserved_items: ", "cap_reserved_items: -", "aoi.cap_reserved_items")]
+    [InlineData("cap_reserved_margin: ", "cap_reserved_margin: -", "aoi.cap_reserved_margin")]
+    [InlineData("cap_pinned_chasers: ", "cap_pinned_chasers: -", "aoi.cap_pinned_chasers")]
+    [InlineData("cap_pinned_chasers: ", "cap_pinned_chasers: 9", "aoi.cap_pinned_chasers")]    // a digit in front: past the cap
     public void Aoi_numbers_must_be_in_range(string from, string to, string path)
     {
         Edit(from, to);

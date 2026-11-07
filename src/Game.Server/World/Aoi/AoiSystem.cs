@@ -44,7 +44,8 @@ public sealed record AttachView(EntityId Entity, IViewSink? Sink) : IIntent;
 /// <para>Per observer, the window's buckets are checked for a change this tick; only then is the window gathered, cut to the crowd cap
 /// (<see cref="VisibleCap"/>), sorted by id and merged with the last visible set, so the cost is a few reads for a quiet view and
 /// O(window + visible log visible) for a busy one, never O(entities × observers). Who attacks whom (for the cap) comes from events too:
-/// <c>AttackStarted</c> and any <c>DamageDealt</c> set a link, <c>AttackStopped</c> and <c>AggroLost</c> clear it. Allocation after
+/// <c>AttackStarted</c> and any <c>DamageDealt</c> set a link, <c>AttackStopped</c> and <c>AggroLost</c> clear it; <c>AggroGained</c> sets
+/// who is chasing whom, and <c>AggroLost</c> clears that too. Allocation after
 /// warm-up: none per tick (entries are created when an entity joins, observer state when an observer starts; the messages and lists are
 /// reused).</para>
 /// </remarks>
@@ -68,22 +69,29 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
 
     /// <summary>
     /// Creates the AOI with a bucket side and view radius (both above 0) and a crowd cap: at most <paramref name="maxVisible"/> entities
-    /// per observer, with entities that are already shown kept for <paramref name="capHysteresis"/> ranks past the cutoff (see
-    /// <see cref="VisibleCap"/>). Without a cap an observer sees its whole window.
+    /// per observer, with entities that are already shown kept for <paramref name="capHysteresis"/> ranks past the cutoff, and slots
+    /// shared out by <paramref name="reservations"/> (see <see cref="VisibleCap"/>). Without a cap an observer sees its whole window.
     /// </summary>
-    public AoiSystem(int bucketSize, int viewRadius, int maxVisible = int.MaxValue, int capHysteresis = 0)
+    public AoiSystem(int bucketSize, int viewRadius, int maxVisible = int.MaxValue, int capHysteresis = 0, CapReservations reservations = default)
     {
         if (bucketSize < 1) throw new ArgumentOutOfRangeException(nameof(bucketSize), "Bucket size must be at least 1.");
         if (viewRadius < 1) throw new ArgumentOutOfRangeException(nameof(viewRadius), "View radius must be at least 1.");
         if (maxVisible < 1) throw new ArgumentOutOfRangeException(nameof(maxVisible), "The cap must be at least 1.");
         if (capHysteresis < 0 || capHysteresis >= maxVisible) throw new ArgumentOutOfRangeException(nameof(capHysteresis), "Hysteresis must be 0 or more and below the cap.");
+        if (reservations.Monsters < 0 || reservations.Npcs < 0 || reservations.Items < 0 || reservations.Margin < 0 || reservations.Chasers < 0)
+            throw new ArgumentOutOfRangeException(nameof(reservations), "Reservations, their margin and the chaser limit must be 0 or more.");
+        if (reservations.Monsters + reservations.Npcs + reservations.Items > maxVisible - capHysteresis - 1)
+            throw new ArgumentOutOfRangeException(nameof(reservations), "The reservations must leave the observer's own slot below the cutoff.");
+        if (reservations.Chasers + reservations.Margin > maxVisible - 1)
+            throw new ArgumentOutOfRangeException(nameof(reservations), "The chaser limit and the margin must stay below the cap.");
         _bucketSize = bucketSize;
         _viewRadius = viewRadius;
-        _cap = new VisibleCap(maxVisible, capHysteresis);
+        _cap = new VisibleCap(maxVisible, capHysteresis, reservations);
     }
 
     /// <summary>Creates the AOI with the numbers of <c>balance.yaml</c> <c>aoi</c>.</summary>
-    public static AoiSystem Create(BalanceDef balance) => new(balance.Aoi.BucketSize, balance.Aoi.ViewRadius, balance.Aoi.MaxVisible, balance.Aoi.CapHysteresis);
+    public static AoiSystem Create(BalanceDef balance) =>
+        new(balance.Aoi.BucketSize, balance.Aoi.ViewRadius, balance.Aoi.MaxVisible, balance.Aoi.CapHysteresis, CapReservations.From(balance.Aoi));
 
     /// <inheritdoc />
     public string Name => "aoi";
@@ -165,7 +173,26 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         _subscribed.Subscribe<DamageDealt>(OnDamageDealt);
         _subscribed.Subscribe<AttackStarted>(e => SetAttacking(e.Attacker, e.Target));
         _subscribed.Subscribe<AttackStopped>(e => ClearAttacking(e.Attacker, e.Target));
-        _subscribed.Subscribe<AggroLost>(e => ClearAttacking(e.Monster, e.Target));
+        _subscribed.Subscribe<AggroGained>(e => SetChasing(e.Monster, e.Target));
+        _subscribed.Subscribe<AggroLost>(OnAggroLost);
+    }
+
+    private void OnAggroLost(AggroLost e)
+    {
+        ClearAttacking(e.Monster, e.Target);
+        if (!_byId.TryGetValue(e.Monster.Value, out var entry) || entry.ChasingId != e.Target.Value) return;
+        entry.ChasingId = 0;
+        _relinked.Add(e.Monster.Value);
+        _relinked.Add(e.Target.Value);
+    }
+
+    private void SetChasing(EntityId monster, EntityId target)
+    {
+        if (!_byId.TryGetValue(monster.Value, out var entry) || entry.ChasingId == target.Value) return;
+        if (entry.ChasingId != 0) _relinked.Add(entry.ChasingId);
+        entry.ChasingId = target.Value;
+        _relinked.Add(monster.Value);
+        _relinked.Add(target.Value);
     }
 
     private void OnDamageDealt(DamageDealt e)

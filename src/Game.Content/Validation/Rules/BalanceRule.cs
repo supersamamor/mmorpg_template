@@ -61,6 +61,8 @@ public sealed class BalanceRule : IValidationRule
             Range(context, "aoi.max_visible", "must be above 0.");
         else if (balance.Aoi.CapHysteresis < 0 || balance.Aoi.CapHysteresis >= balance.Aoi.MaxVisible)
             Range(context, "aoi.cap_hysteresis", $"must be from 0 to below max_visible ({balance.Aoi.MaxVisible}).");
+        else
+            CapShares(context, balance.Aoi);
 
         if (c.PlayerAttackRange < 1)
             Range(context, "combat.player_attack_range", "must be at least 1.");
@@ -73,6 +75,27 @@ public sealed class BalanceRule : IValidationRule
             Range(context, "regen.out_of_combat_delay_ms", "must not be negative.");
         Loot(context, balance.Loot);
         NewCharacter(context, balance.NewCharacter);
+    }
+
+    /// <summary>The crowd cap's shares (only with a valid cap): none negative, and they fit the cap with room for the observer itself.</summary>
+    private static void CapShares(ValidationContext context, AoiBalanceDef a)
+    {
+        if (a.CapReservedMonsters < 0)
+            Range(context, "aoi.cap_reserved_monsters", "must not be negative.");
+        if (a.CapReservedNpcs < 0)
+            Range(context, "aoi.cap_reserved_npcs", "must not be negative.");
+        if (a.CapReservedItems < 0)
+            Range(context, "aoi.cap_reserved_items", "must not be negative.");
+        if (a.CapReservedMargin < 0)
+            Range(context, "aoi.cap_reserved_margin", "must not be negative.");
+        if (a.CapPinnedChasers < 0)
+            Range(context, "aoi.cap_pinned_chasers", "must not be negative.");
+
+        var cutoff = a.MaxVisible - a.CapHysteresis;
+        if (a.CapReservedMonsters + a.CapReservedNpcs + a.CapReservedItems > cutoff - 1)
+            Range(context, "aoi.cap_reserved_monsters", $"the three cap_reserved_* shares together must leave the observer's own slot below the cutoff: at most {cutoff - 1}.");
+        if (a.CapPinnedChasers + a.CapReservedMargin > a.MaxVisible - 1)
+            Range(context, "aoi.cap_pinned_chasers", $"with cap_reserved_margin, must stay below max_visible: at most {a.MaxVisible - 1}.");
     }
 
     /// <summary>The start map and job exist, the start cell is walkable on the map's grid, and the facing is a direction.</summary>

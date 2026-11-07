@@ -23,7 +23,7 @@ public class AoiCapTests
     private static AoiRig Rig(int maxVisible, int hysteresis = 0) => new(32, 1, 64, 64, maxVisible, hysteresis, "map.a");
 
     /// <summary>What a client knows: its view rebuilt from the messages, and how often each entity came and went after the first message.</summary>
-    private sealed class ClientView(RecordingSink sink)
+    internal sealed class ClientView(RecordingSink sink)
     {
         private int _snapshots;
         private int _deltas;

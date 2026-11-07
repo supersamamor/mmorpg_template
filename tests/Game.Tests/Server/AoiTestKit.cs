@@ -190,11 +190,17 @@ public sealed class AoiRig
 
     /// <summary>A rig with a crowd cap (without one, an observer sees its whole window).</summary>
     public AoiRig(int bucketSize, int viewRadius, int width, int height, int maxVisible, int capHysteresis, params string[] maps)
+        : this(bucketSize, viewRadius, width, height, maxVisible, capHysteresis, default, maps)
+    {
+    }
+
+    /// <summary>A rig with a crowd cap that shares its slots out by kind.</summary>
+    public AoiRig(int bucketSize, int viewRadius, int width, int height, int maxVisible, int capHysteresis, CapReservations reservations, params string[] maps)
     {
         var ids = maps.Length == 0 ? ["map.a", "map.b"] : maps;
         var pipeline = new SystemPipeline()
             .Add(() => new MovementSystem(TestGrids.Roomy))
-            .Add(() => new AoiSystem(bucketSize, viewRadius, maxVisible, capHysteresis));
+            .Add(() => new AoiSystem(bucketSize, viewRadius, maxVisible, capHysteresis, reservations));
         World = new GameWorld(ids.Select(id => Open(id, width, height)), pipeline, 7, new ManualClock(), Log);
         foreach (var instance in World.Instances)
         {
