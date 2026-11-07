@@ -134,7 +134,8 @@ public sealed class CombatRig
 
     public CombatRig(MapGrid grid, IEnumerable<MonsterDef> monsters, BalanceDef? balance = null, IEnumerable<DropTableDef>? drops = null,
         bool ai = false, ulong seed = 1, AiBalanceDef? aiBalance = null, int bucketSize = 4, int viewRadius = 1,
-        Func<ITickSystem, ITickSystem>? wrap = null, bool aoi = false, IReadOnlyDictionary<string, (string MapId, GridCell Cell)>? respawns = null)
+        Func<ITickSystem, ITickSystem>? wrap = null, bool aoi = false, IReadOnlyDictionary<string, (string MapId, GridCell Cell)>? respawns = null,
+        int maxVisible = int.MaxValue)
     {
         Catalog = TestMonsters.Catalog(monsters.ToArray());
         Content = TestCombat.Content(Catalog, balance ?? TestCombat.Balance(), drops, respawns);
@@ -145,7 +146,7 @@ public sealed class CombatRig
             .Add(() => wrap(new MonsterSpawnerSystem(Catalog, Content.Balance.Death.CorpseMs)));
         if (ai) pipeline.Add(() => wrap(new MonsterAiSystem(Catalog, timings, bucketSize, viewRadius)));
         pipeline.Add(() => wrap(new CombatSystem(Content, Progressions)));
-        if (aoi) pipeline.Add(() => new AoiSystem(bucketSize, viewRadius));
+        if (aoi) pipeline.Add(() => new AoiSystem(bucketSize, viewRadius, maxVisible));
         World = new GameWorld([grid], pipeline, seed, new ManualClock(), Log);
         Instance.Events.SubscribeAll(e => Events.Add((Instance.TickNumber, e)));
     }

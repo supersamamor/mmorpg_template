@@ -118,6 +118,14 @@
         "view_radius": {
           "type": "integer",
           "description": "How many buckets around its own an observer sees (Chebyshev distance in buckets)."
+        },
+        "max_visible": {
+          "type": "integer",
+          "description": "Most entities one observer sees from its window, itself included: the nearest, plus those always visible (itself, its attack target, its attackers), which are never cut."
+        },
+        "cap_hysteresis": {
+          "type": "integer",
+          "description": "Ranks an entity already shown may slip before it is cut. A new entity enters at rank max_visible - cap_hysteresis or better; one already shown stays until it ranks past max_visible (nearest first, then lowest id). From 0 to below max_visible."
         }
       },
       "additionalProperties": false,

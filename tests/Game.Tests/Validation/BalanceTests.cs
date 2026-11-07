@@ -73,6 +73,8 @@ public class BalanceTests : IDisposable
         balance.Movement.MaxNodesExpanded.ShouldBe(2048);
         balance.Aoi.BucketSize.ShouldBe(6);
         balance.Aoi.ViewRadius.ShouldBe(2);
+        balance.Aoi.MaxVisible.ShouldBe(50);
+        balance.Aoi.CapHysteresis.ShouldBe(5);
         balance.Ai.ThinkIntervalMs.ShouldBe(300);
         balance.Ai.WanderPauseMinMs.ShouldBe(4000);
         balance.Ai.WanderPauseMaxMs.ShouldBe(10000);
@@ -163,7 +165,10 @@ public class BalanceTests : IDisposable
     [Theory]
     [InlineData("bucket_size: 6", "bucket_size: 0", "aoi.bucket_size")]
     [InlineData("view_radius: 2", "view_radius: -1", "aoi.view_radius")]
-    public void Aoi_numbers_must_be_above_zero(string from, string to, string path)
+    [InlineData("max_visible: 50", "max_visible: 0", "aoi.max_visible")]
+    [InlineData("cap_hysteresis: 5", "cap_hysteresis: -1", "aoi.cap_hysteresis")]
+    [InlineData("cap_hysteresis: 5", "cap_hysteresis: 50", "aoi.cap_hysteresis")]
+    public void Aoi_numbers_must_be_in_range(string from, string to, string path)
     {
         Edit(from, to);
         var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);

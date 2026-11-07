@@ -132,6 +132,9 @@ internal sealed class AoiEntry
     public bool Walking;
     public double WalkSpeed;
 
+    // Who it is attacking, from the combat events (0 = nobody; ids start at 1). Keeps the target, and it, in view past the crowd cap.
+    public long AttackingId;
+
     public ObserverState? Observer;
 
     public EntityView ToView() => new(Entity.Id, Entity.Kind, DisplayKey, Cell, Facing, Next, Speed, HpPercent, Dead, Quantity, LootOwner);
@@ -148,4 +151,5 @@ internal sealed class ObserverState
     public int WindowBucket = -1;
     public bool SnapshotPending = true;
     public OwnVitals? Vitals;   // the own HP/SP last sent
+    public bool Capped;         // the crowd cap is cutting this view (VisibleCap)
 }

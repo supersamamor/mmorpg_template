@@ -21,6 +21,9 @@ public class GatewayBudgetTests(ITestOutputHelper output)
     private const int WarmupMs = 1_500;
     private const int MeasureMs = 6_000;
 
+    /// <summary>The fewest entities a client in a crowd sees (T-215): the crowd cap keeps a view between this and <c>aoi.max_visible</c>.</summary>
+    private static int FullView(GatewayRig rig) => rig.Content.Balance.Aoi.MaxVisible - rig.Content.Balance.Aoi.CapHysteresis;
+
     [Fact]
     public async Task Fifty_walking_clients_bytes_per_second_and_sink_cost()
     {
@@ -35,7 +38,7 @@ public class GatewayBudgetTests(ITestOutputHelper output)
         }
 
         var clients = await Task.WhenAll(Enumerable.Range(0, Clients).Select(i => rig.JoinAsync("walker" + i)));
-        await Poll.UntilAsync(() => clients.Min(c => c.SeenPlayers), n => n == Clients, "everyone sees everyone");
+        await Poll.UntilAsync(() => clients.Min(c => c.SeenIds.Count), n => n >= FullView(rig), "everyone has a full view");
 
         using var stop = new CancellationTokenSource();
         var walking = Task.Run(async () =>
@@ -62,7 +65,7 @@ public class GatewayBudgetTests(ITestOutputHelper output)
         var visible = new List<int>();
         while (Stopwatch.GetElapsedTime(started).TotalMilliseconds < MeasureMs)
         {
-            visible.Add(clients[0].SeenPlayers);
+            visible.Add(clients[0].SeenIds.Count);
             await Task.Delay(250);
         }
         var seconds = Stopwatch.GetElapsedTime(started).TotalSeconds;
@@ -77,7 +80,7 @@ public class GatewayBudgetTests(ITestOutputHelper output)
 
         var resyncs = rig.Gateway.Sessions.Sum(s => s.Queue.Resyncs);
         output.WriteLine($"{Clients} clients walking within 5 cells of {rig.Start.Cell} on {rig.Start.MapId}; measured {seconds:0.0} s, {ticks} ticks");
-        output.WriteLine($"visible players per client: avg {visible.Average():0.0}, min {visible.Min()}");
+        output.WriteLine($"visible entities for client 0: avg {visible.Average():0.0}, min {visible.Min()}");
         output.WriteLine($"wire bytes/s per client (payload + WebSocket header): avg {perClient.Average():0.00} KB/s, " +
                          $"min {perClient[0]:0.00}, median {perClient[perClient.Count / 2]:0.00}, max {perClient[^1]:0.00} KB/s (budget 10 KB/s)");
         output.WriteLine($"messages per client: {frames / (double)Clients / seconds:0.0}/s, {payload / (double)frames:0} bytes average");
@@ -85,7 +88,7 @@ public class GatewayBudgetTests(ITestOutputHelper output)
                          $"({calls / (double)ticks:0.0} calls per tick, {sink.TotalMicroseconds / calls:0.00} us per call)");
         output.WriteLine($"resyncs: {resyncs}; rate-limited: {rig.Gateway.Stats.RateLimited}; intents refused: {rig.Gateway.Stats.IntentsRefused}");
 
-        visible.Min().ShouldBe(Clients);
+        visible.Min().ShouldBeGreaterThanOrEqualTo(FullView(rig));
         perClient[0].ShouldBeGreaterThan(0);
         resyncs.ShouldBe(0);
     }
@@ -114,7 +117,7 @@ public class GatewayBudgetTests(ITestOutputHelper output)
         var outside = Enumerable.Range(14, 8).Select(x => new GridCell(x, 15)).Where(c => grid.IsWalkable(c.X, c.Y)).ToList();
 
         var clients = await Task.WhenAll(Enumerable.Range(0, Clients).Select(i => rig.JoinAsync((i < Fighters ? "fighter" : "walker") + i)));
-        await Poll.UntilAsync(() => clients.Min(c => c.SeenPlayers), n => n == Clients, "everyone sees everyone");
+        await Poll.UntilAsync(() => clients.Min(c => c.SeenIds.Count), n => n >= FullView(rig), "everyone has a full view");
         var fighters = clients.Take(Fighters).Select(c => new Fighter(c)).ToList();
 
         using var stop = new CancellationTokenSource();
@@ -173,8 +176,8 @@ public class GatewayBudgetTests(ITestOutputHelper output)
         output.WriteLine($"view sinks on the tick thread: {sink.TotalMicroseconds / ticks:0.0} us per tick for {Clients} observers");
         output.WriteLine($"resyncs: {resyncs}; rate-limited: {rig.Gateway.Stats.RateLimited}; intents refused: {rig.Gateway.Stats.IntentsRefused}");
 
-        // The §9 budget is an average per client with 50 visible entities. One fighter chasing a slime out of view can dip well below that for a moment.
-        visibleAverage.Average().ShouldBeGreaterThanOrEqualTo(Clients);
+        // The budget is an average per client at a full view. One fighter chasing a slime out of view can dip well below that for a moment.
+        visibleAverage.Average().ShouldBeGreaterThanOrEqualTo(FullView(rig));
         hitsSeen.Min().ShouldBeGreaterThan(1);
         perClient.Average().ShouldBeLessThanOrEqualTo(10);
         resyncs.ShouldBe(0);

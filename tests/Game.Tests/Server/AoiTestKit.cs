@@ -184,11 +184,17 @@ public sealed class AoiRig
     private readonly Dictionary<EntityId, Action<Entity>> _setup = new();
 
     public AoiRig(int bucketSize = 4, int viewRadius = 1, int width = 24, int height = 16, params string[] maps)
+        : this(bucketSize, viewRadius, width, height, int.MaxValue, 0, maps)
+    {
+    }
+
+    /// <summary>A rig with a crowd cap (without one, an observer sees its whole window).</summary>
+    public AoiRig(int bucketSize, int viewRadius, int width, int height, int maxVisible, int capHysteresis, params string[] maps)
     {
         var ids = maps.Length == 0 ? ["map.a", "map.b"] : maps;
         var pipeline = new SystemPipeline()
             .Add(() => new MovementSystem(TestGrids.Roomy))
-            .Add(() => new AoiSystem(bucketSize, viewRadius));
+            .Add(() => new AoiSystem(bucketSize, viewRadius, maxVisible, capHysteresis));
         World = new GameWorld(ids.Select(id => Open(id, width, height)), pipeline, 7, new ManualClock(), Log);
         foreach (var instance in World.Instances)
         {

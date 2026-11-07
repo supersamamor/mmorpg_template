@@ -93,6 +93,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>AttackRefused</c>: an attack request or intent was dropped (reason: an <c>AttackReasons</c> term).</summary>
         public const string AttackRefused = "AttackRefused";
 
+        /// <summary><c>AttackStarted</c>: a player's auto-attack was accepted or switched target.</summary>
+        public const string AttackStarted = "AttackStarted";
+
         /// <summary><c>AttackStopped</c>: a player's auto-attack ended (reason: an <c>AttackReasons</c> term).</summary>
         public const string AttackStopped = "AttackStopped";
 
@@ -143,6 +146,7 @@ namespace Game.Shared.Vocabulary
             MonsterReturned,
             AttackRequested,
             AttackRefused,
+            AttackStarted,
             AttackStopped,
             ExpGained,
             ExpLost,

@@ -281,6 +281,7 @@ public sealed class CombatSystem : ITickSystem
         chase.Target = targetId;
         chase.EndReason = null;
         chase.NextRepathMs = _nowMs;
+        context.Publish(new AttackStarted(player.Id, targetId));
     }
 
     private string? CanStart(Entity player, EntityId targetId)

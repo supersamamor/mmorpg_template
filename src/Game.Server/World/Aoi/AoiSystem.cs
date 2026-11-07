@@ -1,4 +1,6 @@
 using Game.Server.Events;
+using Game.Server.World.Combat;
+using Game.Server.World.Monsters;
 using Game.Shared.Definitions;
 using Game.Shared.Stats;
 using Game.Shared.Vocabulary;
@@ -39,10 +41,12 @@ public sealed record AttachView(EntityId Entity, IViewSink? Sink) : IIntent;
 /// which give the warper a fresh snapshot, and the tick's attacks (<c>DamageDealt</c>), which go into the <c>hits</c> of every observer that
 /// sees the attacker or the target. HP is read from <see cref="Entity.Vitals"/> as a percentage (a change only when the percentage moves),
 /// so others never learn exact HP; the observer's own exact vitals ride along when they change.</para>
-/// <para>Per observer, the window's buckets are checked for a change this tick; only then is the visible set gathered, sorted by id and
-/// merged with the last one, so the cost is O(observers × window) for quiet views and O(observers × visible) for busy ones, never
-/// O(entities × observers). Allocation after warm-up: none per tick (entries are created when an entity joins, observer state when an
-/// observer starts; the messages and lists are reused).</para>
+/// <para>Per observer, the window's buckets are checked for a change this tick; only then is the window gathered, cut to the crowd cap
+/// (<see cref="VisibleCap"/>), sorted by id and merged with the last visible set, so the cost is a few reads for a quiet view and
+/// O(window + visible log visible) for a busy one, never O(entities × observers). Who attacks whom (for the cap) comes from events too:
+/// <c>AttackStarted</c> and any <c>DamageDealt</c> set a link, <c>AttackStopped</c> and <c>AggroLost</c> clear it. Allocation after
+/// warm-up: none per tick (entries are created when an entity joins, observer state when an observer starts; the messages and lists are
+/// reused).</para>
 /// </remarks>
 public sealed class AoiSystem : ITickSystem, IOutboundPhase
 {
@@ -57,20 +61,29 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
     private readonly ViewSnapshot _snapshot = new();
     private readonly ViewDelta _delta = new();
     private readonly List<HitView> _hits = new();           // this tick's DamageDealt, in raise order
+    private readonly List<long> _relinked = new();          // entities whose attack link changed this tick
+    private readonly VisibleCap _cap;
     private AoiGrid? _grid;
     private EventBus? _subscribed;
 
-    /// <summary>Creates the AOI with a bucket side and view radius (both above 0).</summary>
-    public AoiSystem(int bucketSize, int viewRadius)
+    /// <summary>
+    /// Creates the AOI with a bucket side and view radius (both above 0) and a crowd cap: at most <paramref name="maxVisible"/> entities
+    /// per observer, with entities that are already shown kept for <paramref name="capHysteresis"/> ranks past the cutoff (see
+    /// <see cref="VisibleCap"/>). Without a cap an observer sees its whole window.
+    /// </summary>
+    public AoiSystem(int bucketSize, int viewRadius, int maxVisible = int.MaxValue, int capHysteresis = 0)
     {
         if (bucketSize < 1) throw new ArgumentOutOfRangeException(nameof(bucketSize), "Bucket size must be at least 1.");
         if (viewRadius < 1) throw new ArgumentOutOfRangeException(nameof(viewRadius), "View radius must be at least 1.");
+        if (maxVisible < 1) throw new ArgumentOutOfRangeException(nameof(maxVisible), "The cap must be at least 1.");
+        if (capHysteresis < 0 || capHysteresis >= maxVisible) throw new ArgumentOutOfRangeException(nameof(capHysteresis), "Hysteresis must be 0 or more and below the cap.");
         _bucketSize = bucketSize;
         _viewRadius = viewRadius;
+        _cap = new VisibleCap(maxVisible, capHysteresis);
     }
 
     /// <summary>Creates the AOI with the numbers of <c>balance.yaml</c> <c>aoi</c>.</summary>
-    public static AoiSystem Create(BalanceDef balance) => new(balance.Aoi.BucketSize, balance.Aoi.ViewRadius);
+    public static AoiSystem Create(BalanceDef balance) => new(balance.Aoi.BucketSize, balance.Aoi.ViewRadius, balance.Aoi.MaxVisible, balance.Aoi.CapHysteresis);
 
     /// <inheritdoc />
     public string Name => "aoi";
@@ -89,6 +102,9 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
 
     /// <summary>Sinks that threw and were detached.</summary>
     public long SinksDetached { get; private set; }
+
+    /// <summary>Times an observer's window was gathered, that is, it did not take the fast path.</summary>
+    public long WindowsGathered { get; private set; }
 
     /// <inheritdoc />
     public void Tick(TickContext context)
@@ -118,6 +134,10 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
             if (_byId.TryGetValue(hit.Attacker.Value, out var attacker)) _grid.Touch(attacker.Bucket, tick);
             if (_byId.TryGetValue(hit.Target.Value, out var target)) _grid.Touch(target.Bucket, tick);
         }
+        // So does a new or ended attack: it can change who the crowd cap keeps, even when nothing moved.
+        foreach (var id in _relinked)
+            if (_byId.TryGetValue(id, out var linked)) _grid.Touch(linked.Bucket, tick);
+        _relinked.Clear();
 
         foreach (var id in _snapshotIds)
             if (_byId.TryGetValue(id.Value, out var entry) && entry.Observer is { } observer) observer.SnapshotPending = true;
@@ -143,9 +163,34 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         _subscribed.Subscribe<MovementStopped>(OnMovementStopped);
         _subscribed.Subscribe<EntityEnteredMap>(OnEnteredMap);
         _subscribed.Subscribe<DamageDealt>(OnDamageDealt);
+        _subscribed.Subscribe<AttackStarted>(e => SetAttacking(e.Attacker, e.Target));
+        _subscribed.Subscribe<AttackStopped>(e => ClearAttacking(e.Attacker, e.Target));
+        _subscribed.Subscribe<AggroLost>(e => ClearAttacking(e.Monster, e.Target));
     }
 
-    private void OnDamageDealt(DamageDealt e) => _hits.Add(new HitView(e.Source, e.Target, e.Amount, e.Result));
+    private void OnDamageDealt(DamageDealt e)
+    {
+        _hits.Add(new HitView(e.Source, e.Target, e.Amount, e.Result));
+        SetAttacking(e.Source, e.Target);
+    }
+
+    private void SetAttacking(EntityId attacker, EntityId target)
+    {
+        if (!_byId.TryGetValue(attacker.Value, out var entry) || entry.AttackingId == target.Value) return;
+        if (entry.AttackingId != 0) _relinked.Add(entry.AttackingId);
+        entry.AttackingId = target.Value;
+        _relinked.Add(attacker.Value);
+        _relinked.Add(target.Value);
+    }
+
+    /// <summary>Ends a link only if it is still the one that ended: the attacker may have moved on to another target already.</summary>
+    private void ClearAttacking(EntityId attacker, EntityId target)
+    {
+        if (!_byId.TryGetValue(attacker.Value, out var entry) || entry.AttackingId != target.Value) return;
+        entry.AttackingId = 0;
+        _relinked.Add(attacker.Value);
+        _relinked.Add(target.Value);
+    }
 
     private void OnMovementStarted(MovementStarted e)
     {
@@ -306,6 +351,8 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         var visible = observer.Scratch;
         visible.Clear();
         grid.Gather(entry.Bucket, visible);
+        WindowsGathered++;
+        _cap.Apply(entry, observer, visible);
         visible.Sort(ById);   // a cached Comparison: Sort(IComparer) would allocate a delegate per call
         var known = observer.Known;
         observer.Known = visible;
@@ -378,7 +425,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
     }
 
     /// <summary>Is <paramref name="id"/> among <paramref name="visible"/> (sorted by id)?</summary>
-    private static bool Sees(List<AoiEntry> visible, long id)
+    internal static bool Sees(List<AoiEntry> visible, long id)
     {
         int lo = 0, hi = visible.Count - 1;
         while (lo <= hi)
