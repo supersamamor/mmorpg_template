@@ -39,10 +39,11 @@ public sealed class AutoRun
 
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
-        Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--measure") >= 0;
+        Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 ||
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
-    public static async void QuitAfterShot(Main main, string[] args)
+    public static async void QuitAfterShot(Main main, string[] args, string what = "the bundle")
     {
         for (var i = 0; i < 10; i++) await main.ToSignal(main.GetTree(), SceneTree.SignalName.ProcessFrame);
         var at = Array.IndexOf(args, "--screenshot");
@@ -52,7 +53,7 @@ public sealed class AutoRun
             await main.ToSignal(RenderingServer.Singleton, RenderingServerInstance.SignalName.FramePostDraw);
             main.GetViewport().GetTexture().GetImage().SavePng(args[at + 1]);
         }
-        Print("refused: the client stopped at the bundle screen, as it must");
+        Print($"refused: the client stopped at the refusal screen for {what}, as it must");
         main.GetTree().Quit(0);
     }
 
@@ -65,6 +66,8 @@ public sealed class AutoRun
         {
             if (Array.IndexOf(_args, "--measure") >= 0) await MeasureAsync();
             else if (Array.IndexOf(_args, "--e2e-death") >= 0) await DeathRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-warp") >= 0) await WarpRunAsync();
+            else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
             Print($"PASS in {clock.Elapsed.TotalSeconds:0.0} s");
         }
@@ -134,7 +137,9 @@ public sealed class AutoRun
         Check(Session.Connection.Phase == ConnectionPhase.Online, "still online after background and foreground");
         Print("background: 1.5 s in the background, socket kept, still online");
 
-        await WarpAsync();
+        // Real content puts aggressive monsters between the start and the warp that a new character cannot pass; run-e2e.ps1 then runs the warp as its own run.
+        if (Array.IndexOf(_args, "--e2e-skip-warp") >= 0) Print("warp: skipped here (its own run: -Run warp)");
+        else await WarpAsync();
 
         Print("logout: sending logout");
         Session.Logout(Clocks.Wall());
@@ -142,6 +147,15 @@ public sealed class AutoRun
         Check(Session.Connection.Notice == ConnectionNotice.LoggedOut, "the bye was logout");
         Check(!Session.Connection.HasToken, "the token is gone");
         Print($"logout: bye logout, login screen shows \"{_main.Hud!.PanelText}\"");
+    }
+
+    private async Task WarpRunAsync()
+    {
+        await LoginAsync();
+        await WarpAsync();
+        Session.Logout(Clocks.Wall());
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen, 10, "bye logout");
+        Print("logout: bye logout");
     }
 
     private async Task DeathRunAsync()

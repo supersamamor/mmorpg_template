@@ -13,6 +13,13 @@ public sealed class ClientConfig
     /// <summary>WebSocket URL of the gateway.</summary>
     public string ServerUrl { get; set; } = "ws://127.0.0.1:7780/ws";
 
+    /// <summary>
+    /// Whether plain <c>ws://</c> may be used (<see cref="Net.TransportPolicy"/>). False unless the owner of the process says so: the engine start-up sets it from
+    /// whether this is a debug build and nothing else does. It has no settings key and no command-line switch, so a <c>client_settings.json</c> or an argument
+    /// edited after install cannot turn it on in a release build (ARCHITECTURE §10).
+    /// </summary>
+    public bool AllowCleartext { get; set; }
+
     /// <summary>Name for the dev login stub (T-701 replaces it).</summary>
     public string DevName { get; set; } = "dev";
 

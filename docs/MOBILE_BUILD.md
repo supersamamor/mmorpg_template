@@ -222,8 +222,8 @@ Desktop numbers are only a sanity check; §9 budgets are judged on phones.
 
 - **Cleartext `ws://` is not expected to be blocked by the OS** (confirm on device in §6.3 step 6).
   Godot's WebSocket uses native sockets, which Android's network-security config and iOS App Transport
-  Security do not police (they cover the Java / `NSURLSession` HTTP stacks). "`ws://` only in debug builds" (ARCHITECTURE §10) must therefore be enforced by
-  the client itself, e.g. refuse non-`wss` URLs unless `OS.IsDebugBuild()`.
+  Security do not police (they cover the Java / `NSURLSession` HTTP stacks). "`ws://` only in debug builds" (ARCHITECTURE §10) is therefore enforced by
+  the client itself: it refuses non-`wss` URLs unless `OS.IsDebugBuild()` (T-216, §8.4).
 - **Trusting a dev certificate:** `TlsOptions.Client(cert, "echo.spike.test")` pins one certificate
   and fixes the expected name. Production uses a public CA certificate and `TlsOptions.Client()`.
 - **Renderer choice** is a project setting read at startup; the spike switches it through
@@ -247,7 +247,7 @@ $godot = (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages" -Recurse -
 Left click or tap: walk, or attack a monster. Scroll wheel or pinch: zoom. On a device the server must be reachable, and the dev login needs the Development environment.
 
 **Settings:** `client/client_settings.json` (server URL, dev name, frame cap, camera; every key is in `client/Core/ClientConfig.cs`), then the command line after `--`:
-`--server ws://host:port/ws`, `--name Ada`, `--set key=value`. There are no secrets in it. T-216 removes cleartext `ws://` from release builds.
+`--server ws://host:port/ws`, `--name Ada`, `--set key=value`. There are no secrets in it. **Release builds refuse `ws://`** (§8.4): the shipped `server_url` is the dev loopback, so a release build needs a `wss://` address first.
 
 **Bundle:** the `PackClientBundle` target writes `client/bundle/client-content.json` from `export-client` when any file under `content/` is newer (gitignored; `-p:SkipClientBundle=true` keeps it as it is).
 By hand: `dotnet run --project src/Game.Tools -- export-client client/bundle/client-content.json`. A displayed-content change that is not repacked ends in `bye update_required`, and a
@@ -268,8 +268,29 @@ By hand: `dotnet run --project src/Game.Tools -- export-client client/bundle/cli
 content a new character cannot beat a slime. Taps go through `Main.HandleInput`, the same method the engine's input calls.
 
 Measuring with extra entities: start the client with `-- --measure 40 --server ws://127.0.0.1:<port>/ws --screenshot shot.png` (add `--set fps_cap=0` for no cap, and `--resolution 1560x720` before the `--` for 19.5:9).
-It waits for 40 entities on screen, samples 15 s and prints fps, draw calls, triangles, allocations and the visible cells. Bots: `tools/loadtest` (`--bots 50 --fighters 0`) sets `max-sessions` to exactly its bots, so a
-client cannot join its server; for T-206 a throwaway launcher passed as `--server` raised that number.
+It waits for 40 entities on screen, samples 15 s and prints fps, draw calls, triangles, allocations and the visible cells. Bots: `tools/loadtest --bots 50 --fighters 0 --spare-slots 2 --port 7791` keeps two session slots free and a known port, so the client can join the bot-filled server
+(`--server ws://127.0.0.1:7791/ws`; tools/loadtest/README.md). Without `--spare-slots` it sets `max-sessions` to exactly its bots.
+
+**Runs** (T-216; every run starts its own server on `-Port`, default 7790, and stops it; each prints `[run-e2e] <name> exit code: N`, and the script's exit code is 0 only if all passed):
+
+| `-Run` | What it proves | Server |
+|--------|----------------|--------|
+| `play` (default) | login, walk, kill, drop, dropped socket, resume, background, logout | real content |
+| `warp` | walk to the warp and arrive on the second map | weak-monster copy: on real content, aggressive monsters between the start and the warp kill a new character, which is intended game danger |
+| `resume_failed` | the socket drops, the client's first retry comes after the server's grace period (2 s vs 5 s): the resume gets `bye resume_failed`, the client goes to the login screen and does not retry | `--net-grace-period-ms 2000` |
+| `replaced` | a second connection resumes the character with the client's token: the client gets `bye replaced`, stops, and does not reconnect | default |
+| `shutdown` | the server stops itself (`--duration 20`): `bye shutdown`, the retry notice, token dropped; the script starts a second server and the client logs in again by itself | default, twice |
+| `grace_expiry` | the script kills the server: the client resumes with backoff until its own deadline (last heard + 5 s + 1 s), then `SessionExpired` and the login screen | default, killed |
+| `bye` | the four runs above | |
+| `release` | exports a desktop **release** build (Windows, or Linux on CI), runs it with `ws://` and `--set allow_cleartext=true` (refused, refusal screen, exit 0), then with `wss://` (passes the address check) | none |
+| `all` | `play`, `warp`, the four bye runs and `release` | |
+| `death` | killed on real content, drops the socket while dead, death screen again, respawn (`-Monster monster.gel_slime`; up to 5 minutes, not in `all`) | real content |
+
+`-EasyMonsters` runs the whole `play` run, warp included, on the weak-monster copy, as T-206 did. The scripts find Godot with `-Godot`, then `$env:GODOT`, then the winget install, and run in Windows PowerShell 5.1 and PowerShell 7.
+Godot's stderr is never treated as failure (it prints an error line even on a good exit); success is the exit code.
+
+All four bye behaviours matched ARCHITECTURE §10; none differed. Timings of the first run (this PC, headless): `resume_failed` 5.2 s from the drop to the bye; `shutdown` 19.0 s to the bye and 22.2 s to being online again
+(3 s retry setting); `grace_expiry` noticed the dead server after 0.7 s and gave up at 6.1 s. The client's deadline counts from the last message heard, so `grace_expiry` pings every second to keep "last heard" fresh under its short 5 s + 1 s settings (with the shipped 60 s + 30 s the deadline is far off).
 
 Stale-hash and refusal screens: `--bundle <file>` (debug builds only) reads another bundle file, and `--exit-on-refusal` quits after the refusal screen.
 
@@ -281,7 +302,51 @@ Stale-hash and refusal screens: `--bundle <file>` (debug builds only) reads anot
 & $godot --headless --path client --export-debug "Android arm64 (debug)" exports/android/game-client.apk
 ```
 
-The path is relative to `client`, and `client/exports/` is gitignored. §4's gotchas apply. The export may not exit by itself: wait for `.apk` and `.apk.idsig`, then close it.
+The path is relative to `client`, and `client/exports/` is gitignored. §4's gotchas apply. The export does not exit by itself, so use the script, which waits for `.apk` and `.apk.idsig`, stops Godot and fails after `-TimeoutSeconds`:
 
-**Unverified until a phone runs it** (ADR-002 row 112): everything in T-005's §6.3, plus this client's touch input and pinch, the 48 dp picking at a real density, §9's numbers (fps, draw calls, memory, thermal), the
-safe area, `ws://` and `wss://` from the device, real pause and resume with the socket's behaviour across a suspension, and all of iOS (NativeAOT, trimming, `System.Text.Json`).
+```powershell
+.\client\export-android.ps1            # debug preset -> client/exports/android/game-client.apk
+.\client\export-android.ps1 -Release   # release preset; signed with GODOT_ANDROID_KEYSTORE_RELEASE_{PATH,USER,PASSWORD} (the debug keystore is fine to measure size)
+```
+
+**What the APK carries (T-216).** The presets are `Android arm64 (debug)`, `Android arm64 (release)`, `iOS (Xcode project)`, and two desktop presets used only by `-Run release` (`Windows Desktop (release check)`, `Linux (release check)`).
+The Android ones export `arm64-v8a` only (§7.1) and no other architecture.
+
+| | Before (T-206) | After (T-216) |
+|---|---|---|
+| Debug APK | 104.2 MB (178.5 MB uncompressed) | **44.3 MB (118.2 MB uncompressed)** |
+| Release APK (debug key) | 102.1 MB (T-005) | 42.5 MB |
+
+Removed: the 13 Mono static archives `lib/arm64-v8a/*.a` (58 MB uncompressed: `libmonosgen-2.0.a` 44 MB, `libSystem.IO.Compression.Native.a` 4.6 MB, `libmono-component-diagnostics_tracing-static.a` 4.2 MB, and the debugger, hot-reload,
+marshal-ilgen, `System.Native`, `System.Security.Cryptography.Native.Android`, `System.Globalization.Native` archives and their `-stub-static` variants) and `Game.Shared.xml` (documentation, 0.4 MB). The `StripUnusedAndroidFiles` target in
+`client/GameClient.csproj` does it at publish time. Android loads only the `.so` files from `lib/`, and only NativeAOT (iOS) links statically, so these were dead weight. **Kept:** every `.so` (`libgodot_android.so` 76 MB, `libmonosgen-2.0.so`, the
+`System.*.Native.so`, `libc++_shared.so`, the mono components), all framework assemblies, `Game.Shared.dll`, `GameClient.dll`, the `.pdb` files, `assets/bundle/client-content.json` and `assets/client_settings.json`. Still in the 118 MB:
+the engine library 76 MB, the framework assemblies about 30 MB uncompressed, `classes.dex` 5.7 MB. Not done, because it can only be judged on a device (ADR-002 row 112): trimming the framework assemblies and the mono component `.so` files
+(debugger, diagnostics). A custom Godot export template without unused modules would cut the engine library, but is a build of Godot itself.
+
+**Unverified until a phone runs it** (ADR-002 row 112): everything in T-005's §6.3, plus this client's touch input and pinch, the 48 dp picking at a real density, ARCHITECTURE §9's numbers (fps, draw calls, memory, thermal), the
+safe area, `ws://` and `wss://` from the device, real pause and resume with the socket's behaviour across a suspension, and all of iOS (NativeAOT, trimming, `System.Text.Json`). T-216 adds: that the stripped APK installs and starts
+(only the file contents were checked, on a PC), and the iOS ATS keys.
+
+### 8.4 Release builds refuse `ws://`
+
+ARCHITECTURE §10 allows cleartext `ws://` only in debug builds. The OS does not police Godot's WebSocket (§7), so the client does: `client/Core/Net/TransportPolicy.cs` is a pure function, `ClientConfig.AllowCleartext` is false unless
+`Main._Ready` sets it from `OS.IsDebugBuild()` (the only place, checked by a test), and the setting has no `client_settings.json` key and no command-line switch. A release build with a `ws://` (or invalid) `server_url` shows a refusal screen and does not
+open a socket; `ClientSession` checks again before opening, as a second lock. `-Run release` shows it on a real release export (§8.2). Debug builds are the opposite and every other run proves it (`debug build, cleartext allowed`).
+
+**Android network-security config and iOS ATS.** Neither affects this client's sockets (§7), and Android's platform default (target SDK 35, no `usesCleartextTraffic`) already denies cleartext to the Java stacks. A custom
+`network_security_config` needs the Gradle export path (`gradle_build/use_gradle_build`, a custom build template with its own manifest), which this project does not use; it would add Gradle and a template to every build for no effect on the WebSocket.
+So none is shipped. The iOS preset sets `NSAppTransportSecurity` explicitly (`NSAllowsArbitraryLoads` and `NSAllowsLocalNetworking` false) through `application/additional_plist_content`; that is unverified until a Mac exports it.
+
+## 9. CI export job (T-216)
+
+`.github/workflows/ci.yml` has a second job, `client-export`, separate from the server checks (`build-test`) so that a slow export does not hold them up. On `ubuntu-latest`, with a 60 minute job limit and shorter limits per step, it:
+installs the pinned JDK 17, Android SDK packages (platform android-35, build-tools 35.0.1) and Godot 4.7.2 .NET with the Android and Linux export templates (downloaded from the Godot release, checked against the release's `SHA512-SUMS.txt`, cached by version);
+builds the client; exports the Android debug APK with `export-android.ps1`; fails if the APK is over 60 MB, lacks the bundle or settings, contains static archives or another architecture; keeps the APK as an artifact for 3 days; and runs `run-e2e.ps1 -Run all`.
+The versions are in the job's `env`, next to a reminder to change them here and there together. **It has never run on GitHub** (the owner has not pushed), so the first run may need fixes; it was checked locally for YAML syntax only (`actionlint` is not installed).
+What was run locally is the same scripts on Windows.
+
+## 10. Framework: .NET 10
+
+Checked with the pinned Godot 4.7.2: the client cannot move to net10.0. With `net10.0` for Android the export stops with `C# project targets 'net10.0' but the export template only supports 'net9.0'. Consider using gradle builds instead.`
+Nothing was changed (ADR-002 row 63 stands: check at every Godot upgrade). The Gradle export path might accept it, but it is not used here and was not tried.

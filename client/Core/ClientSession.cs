@@ -173,7 +173,8 @@ public sealed class ClientSession
             switch (command)
             {
                 case ConnectionCommandKind.OpenSocket:
-                    _socket.Open(_config.ServerUrl);
+                    // Main refuses a bad URL at start-up with a screen; this stays as the second lock. Nothing is opened, so the attempt times out into "could not reach".
+                    if (TransportPolicy.Check(_config.ServerUrl, _config.AllowCleartext) == TransportVerdict.Allowed) _socket.Open(_config.ServerUrl);
                     break;
                 case ConnectionCommandKind.CloseSocket:
                     _socket.Close();

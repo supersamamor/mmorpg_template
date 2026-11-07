@@ -19,6 +19,17 @@
   <ItemGroup>
     <BundleInput Include="$(RepoRoot)/content/**/*" />
   </ItemGroup>
+  <!--
+    Android APK size (T-216, ARCHITECTURE §9). The self-contained publish brings the Mono runtime's static archives (*.a, 58 MB of 178 MB uncompressed:
+    libmonosgen-2.0.a alone is 44 MB). Android loads only the *.so files from lib/, and nothing here links statically (only NativeAOT, i.e. iOS, does),
+    so the archives are dead weight. The XML documentation of Game.Shared is not read at runtime either. The *.so files, the framework assemblies and the
+    one architecture (arm64-v8a, export_presets.cfg) stay: trimming them is only safe to judge on a device (ADR-002 row 112).
+  -->
+  <Target Name="StripUnusedAndroidFiles" AfterTargets="ComputeResolvedFilesToPublishList" Condition=" '$(GodotTargetPlatform)' == 'android' ">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)" Condition=" '%(Extension)' == '.a' Or '%(Filename)%(Extension)' == 'Game.Shared.xml' " />
+    </ItemGroup>
+  </Target>
   <!-- Packs the display bundle into the project (generated, gitignored; ARCHITECTURE §5.4). Set SkipClientBundle=true to keep the file as it is. -->
   <Target Name="PackClientBundle" BeforeTargets="PrepareForBuild" Condition=" '$(SkipClientBundle)' != 'true' "
           Inputs="@(BundleInput)" Outputs="$(BundleFile)">

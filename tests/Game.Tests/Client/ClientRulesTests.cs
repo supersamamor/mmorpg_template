@@ -263,7 +263,11 @@ public class ClientRulesTests
         // In code: the machine holds it, and the session hands it to hello. Nothing else names it.
         var token = new Regex("\\bResumeToken\\b|\\b_token\\b");
         var holders = Sources("client").Where(f => token.IsMatch(File.ReadAllText(f))).Select(Path.GetFileName).OrderBy(n => n).ToArray();
-        holders.ShouldBe(["ClientSession.cs", "ConnectionMachine.cs"]);
+        // ByeRuns.cs (scripted runs only) hands it to a second test connection for the `replaced` run; it must never print it.
+        holders.ShouldBe(["ByeRuns.cs", "ClientSession.cs", "ConnectionMachine.cs"]);
+        var byeRuns = File.ReadAllText(Sources("client/Scene").Single(f => Path.GetFileName(f) == "ByeRuns.cs"));
+        byeRuns.ShouldNotContain("{token", Case.Sensitive);
+        byeRuns.ShouldNotContain("{Session.Connection.ResumeToken", Case.Sensitive);
 
         // Those two write nothing anywhere: no file API and no printing.
         var writer = new Regex("\\b(File|FileAccess|ConfigFile|DirAccess|StreamWriter|Console|GD|OS|ProjectSettings|DisplayServer)\\.");

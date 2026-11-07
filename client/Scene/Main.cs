@@ -66,6 +66,7 @@ public partial class Main : Node3D
     {
         var args = OS.GetCmdlineUserArgs();
         LoadSettings(args);
+        _config.AllowCleartext = OS.IsDebugBuild(); // the only place this is set (TransportPolicy): not from settings, not from arguments
         Engine.MaxFps = _config.FpsCap;
 
         var environment = new Godot.Environment
@@ -96,6 +97,16 @@ public partial class Main : Node3D
             return;
         }
 
+        var transport = TransportPolicy.Check(_config.ServerUrl, _config.AllowCleartext);
+        if (transport != TransportVerdict.Allowed)
+        {
+            _hud = new Hud(this, _config, null, null);
+            _hud.ShowRefusal(UiText.TransportRefused(transport));
+            GD.Print($"[client] server address refused: {transport}; {(OS.IsDebugBuild() ? "debug" : "release")} build");
+            if (Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--exit-on-refusal") >= 0) AutoRun.QuitAfterShot(this, args, "the server address");
+            return;
+        }
+
         _socket = new GodotSocket(_config.SocketPollMs);
         _session = new ClientSession(_config, _bundle!, _socket, new Pcg32Random((ulong)System.Random.Shared.NextInt64()));
         _map = new PlaceholderMap(this);
@@ -104,7 +115,7 @@ public partial class Main : Node3D
         _gestures = new TapGestures(_config);
         _hud = new Hud(this, _config, _session, _bundle);
 
-        GD.Print($"[client] bundle format {_bundle!.FormatVersion}, hash {_bundle.ContentHash}; server {_config.ServerUrl}; renderer {RenderingServer.GetCurrentRenderingMethod()}");
+        GD.Print($"[client] bundle format {_bundle!.FormatVersion}, hash {_bundle.ContentHash}; server {_config.ServerUrl}; {(OS.IsDebugBuild() ? "debug" : "release")} build, cleartext {(_config.AllowCleartext ? "allowed" : "refused")}; renderer {RenderingServer.GetCurrentRenderingMethod()}");
         if (AutoRun.Wanted(args)) _ = new AutoRun(this, args).RunAsync();
         else if (Array.IndexOf(args, "--autologin") >= 0) _session.Login(_config.DevName, Clocks.Wall());
     }
