@@ -189,7 +189,7 @@ public class ClientRulesTests
 
         var hold = Gestures();
         hold.Press(0, 100, 200, 1);
-        hold.Release(0, 100, 200, 3).ShouldBe(GestureResult.None);
+        hold.Release(0, 100, 200, 3).ShouldBe(GestureResult.LongPress);
     }
 
     [Fact]
@@ -281,7 +281,15 @@ public class ClientRulesTests
         var fileWrites = new Regex("FileAccess\\.ModeFlags|ConfigFile|DirAccess|File\\.Write|StreamWriter");
         foreach (var file in Sources("client/Scene"))
         {
-            var match = fileWrites.Match(File.ReadAllText(file));
+            var text = File.ReadAllText(file);
+            if (Path.GetFileName(file) == "UserPrefsStore.cs")
+            {
+                // The one exception (T-211): the player's UI-size choice, in the engine's per-user folder. It handles UserPreferences and nothing else.
+                text.ShouldNotContain("Session", Case.Sensitive, "UserPrefsStore.cs");
+                text.ShouldNotContain("oken", Case.Sensitive, "UserPrefsStore.cs");
+                continue;
+            }
+            var match = fileWrites.Match(text);
             match.Success.ShouldBeFalse(Path.GetFileName(file) + ": " + match.Value);
         }
     }

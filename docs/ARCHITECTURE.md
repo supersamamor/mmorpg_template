@@ -367,17 +367,47 @@ The AOI always sends 12 cells (`view_radius` × `bucket_size`), so nothing pops 
 are 11.6 cells away, and a test fails if the settings or `balance.yaml` break it. A phone wider than 19.5:9 needs this checked again.
 
 ### 7.3 Input
-- Mouse and touch share one path (a mouse arrives as touch index 0).
-- Tap ground → raycast to the plane → cell → `move`. A tap marker shows at once; the character
-  moves when the server confirms (≤ 1 tick). `rejected` removes the marker quietly.
-- Tap a monster → `attack`, with a target ring. It is picked on screen, at least 48 dp wide, or as wide as the shape looks if that is more. The client checks no
-  range, path or walkability. Talking and picking up come with their systems (the other kinds count as ground for now).
-- Hotbar buttons → `UseSkill`. Ground-target skills: pick the skill, then tap a cell.
-- Long-press → info / context menu. A virtual joystick is backlog.
+One path for touch and mouse (`InputRouter`; a mouse arrives as touch index 0, so a click, a press-and-hold and the wheel behave as fingers do). The pure part is
+`client/Core/Input/TapGestures.cs`; thresholds are client config, in dp (times the screen's units per dp), never canvas pixels.
+- **Tap** (a press that lifts within the drag threshold, 12 dp, before the long-press time, 0.5 s). Ground → raycast to the plane → cell → `move`. A tap marker shows
+  at once; the character moves when the server confirms (≤ 1 tick). `rejected` removes the marker quietly.
+- **Tap a monster** → `attack`, with a target ring. It is picked on screen, at least half the platform's minimum touch target (48 dp Android, 44 pt iOS) on each side
+  of its centre, or as wide as the shape looks if that is more. The client checks no range, path or walkability. Talking and picking up come with their systems
+  (the other kinds count as ground for now).
+- **Long-press** (still for 0.5 s) on any entity shows a small info panel with what the display bundle says (name, stack count, kind) and nothing else; on the ground it
+  does nothing. It fires once, while the finger is down, and the lift that ends it is never a tap. Any later touch hides the panel.
+- **Drag** (past the threshold) is neither tap nor long-press. **Pinch** (two fingers, past an 8 dp dead zone) and the scroll wheel zoom the camera inside its clamp;
+  a pinch never taps, and neither does the finger left after it.
+- **UI first.** A touch that begins on a button, field or panel belongs to the UI until it ends and never reaches the world. A full-screen panel blocks everything.
+- **Hotbar** buttons call `HotbarModel.Press(slot)`. The seam for T-502 is `IHotbarContent` (what the slots hold, with a version counter so a slot redraws only
+  when it changes) and `IHotbarActivator` (what an activated slot does: T-502 sends the `UseSkill` intent from there). Until they are bound every slot is an empty
+  placeholder, a press gives visual feedback only, and the client sends nothing. Ground-target skills: pick the skill, then tap a cell (T-502).
+- A virtual joystick is backlog.
 
 ### 7.4 UI
-Godot Control nodes anchored to the device **safe area** (notches, home indicator). Minimum
-touch target 48 dp (Android) / 44 pt (iOS). A UI-scale setting. Text is never baked into textures.
+The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `CanvasLayer`; its rules are pure (`client/Core/Ui/`, tested).
+- **Safe area.** Everything sits inside one root that is placed and sized to the device's safe area (notch, rounded corners, home indicator), so nothing needs its own
+  inset. It is recalculated when the viewport resizes and when the OS reports a different safe area (turning the phone over). On a desktop the window is wholly
+  safe; `debug_notch` (debug builds only, ignored in a release build) simulates a landscape notch and home indicator, with insets in dp.
+- **Touch targets.** Minimum 48 dp (Android and desktop) / 44 pt (iOS), as rules (`TouchTargetRules`) using the screen's density: Android's dp is 1/160 inch and iOS's
+  point 1/163 inch, and the stretch from window pixels to canvas units is undone. A desktop monitor never counts below the base density. Every button, slot and field is
+  at least the minimum at every UI scale (a small scale never shrinks a target below it); a scripted check measures them.
+- **UI scale.** A step setting (`ui_scale_min`/`max`/`step`/`default` in client config: 0.75 to 1.5 in steps of 0.25) the player cycles with the size button. The choice is
+  stored in the engine's per-user storage (`user://preferences.json`, `UserPreferences`), never in `client_settings.json` and never on the server, and is clamped to the
+  range when read. It scales sizes and the font together; it is applied by the HUD itself and does not use the window's content scale, so the camera and picking see no change.
+- **Text is never baked into textures.** Every size is dp times the scale; labels wrap rather than cut. A scripted check lays the HUD out for six screen shapes (small
+  16:9, 19.5:9, a large phone, an iPhone, two desktop windows) with and without the notch at every UI scale, filled with the longest words, and fails on anything outside
+  the safe area, smaller than its text needs, or under the touch minimum.
+- **Layout.** Top left: level and EXP, HP and SP with bars. Top centre: connection notice and the target frame (the target's name). Top right: connection state, the UI size
+  button, log out. Bottom: the one-line flash, then the hotbar (slot count, rows and size are client config; a narrow screen shrinks slots to the minimum and then adds rows).
+  The login, death, stop and refusal screens are one full-screen panel whose content stays inside the safe area.
+- **Where the client's own words live (ADR-002 row 120).** In `client/Core/UiText.cs`: one static class of constants and small formatting functions in English, and nowhere
+  else (a test fails on a literal assigned to a text property in `client/Scene`). Why: the refusal and update screens must read even when the bundle, theme or any data
+  file is missing or broken, which rules out loading them; the pure core and its tests can use them; a typo or a missing word is a compile error; and the number of
+  words is small. Names of game things never come from there; they come from the bundle by `display_key`. Translation later replaces the bodies of these members with
+  lookups into a per-language table (the members are the keys, and their parameters the placeholders) without touching any caller. Localisation itself is not built.
+- **Budgets (§9).** The HUD is about 40 nodes and adds about 24 draw calls (windowed measurement, T-211 report); the frame cap is 30 fps and the HUD does work only when
+  a version counter changes, plus one size comparison per frame and one comparison while no finger is down.
 
 ### 7.5 Characters & equipment
 Modular 3D characters. Each body type has one shared rig. Equipment is either:

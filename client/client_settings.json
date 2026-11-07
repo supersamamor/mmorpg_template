@@ -9,5 +9,20 @@
   "camera_fov_degrees": 30,
   "camera_distance": 15,
   "camera_distance_min": 8,
-  "camera_distance_max": 15.5
+  "camera_distance_max": 15.5,
+
+  "tap_max_travel": 12,
+  "long_press_seconds": 0.5,
+  "pinch_dead_zone": 8,
+  "info_panel_seconds": 4,
+
+  "ui_scale_min": 0.75,
+  "ui_scale_max": 1.5,
+  "ui_scale_step": 0.25,
+  "ui_scale_default": 1,
+
+  "hotbar_slots": 6,
+  "hotbar_rows": 1,
+  "hotbar_slot_dp": 56,
+  "hotbar_gap_dp": 8
 }

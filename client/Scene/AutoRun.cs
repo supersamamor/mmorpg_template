@@ -40,7 +40,7 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--measure") >= 0;
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
     public static async void QuitAfterShot(Main main, string[] args, string what = "the bundle")
@@ -67,6 +67,7 @@ public sealed class AutoRun
             if (Array.IndexOf(_args, "--measure") >= 0) await MeasureAsync();
             else if (Array.IndexOf(_args, "--e2e-death") >= 0) await DeathRunAsync();
             else if (Array.IndexOf(_args, "--e2e-warp") >= 0) await WarpRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
             Print($"PASS in {clock.Elapsed.TotalSeconds:0.0} s");

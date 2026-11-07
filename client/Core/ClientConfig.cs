@@ -126,20 +126,73 @@ public sealed class ClientConfig
 
     // ---- input ----
 
-    /// <summary>A press that moves farther than this many canvas units is not a tap.</summary>
-    public double TapMaxTravel { get; set; } = 24;
+    /// <summary>A press that moves farther than this many dp is not a tap (and is a drag).</summary>
+    public double TapMaxTravel { get; set; } = 12;
 
-    /// <summary>A press held longer than this is not a tap, in seconds.</summary>
-    public double TapMaxSeconds { get; set; } = 0.6;
-
-    /// <summary>Minimum touch target in dp (§7.4); monster picking is at least this wide.</summary>
+    /// <summary>
+    /// Touch target size picking aims for, in dp (§7.4). The platform's own minimum (48 dp Android, 44 pt iOS: <see cref="Ui.TouchTargetRules"/>) always
+    /// applies too, and the larger wins.
+    /// </summary>
     public double TouchTargetDp { get; set; } = 48;
+
+    /// <summary>A press held this long without moving is a long-press, not a tap, in seconds.</summary>
+    public double LongPressSeconds { get; set; } = 0.5;
+
+    /// <summary>Two fingers must change their distance by more than this many dp before it counts as a pinch (finger jitter is not a zoom).</summary>
+    public double PinchDeadZone { get; set; } = 8;
+
+    /// <summary>How long the long-press info panel stays, in seconds.</summary>
+    public double InfoPanelSeconds { get; set; } = 4;
 
     /// <summary>How long the ground tap marker stays when the walk does not end it, in seconds.</summary>
     public double TapMarkerSeconds { get; set; } = 6;
 
     /// <summary>How long a hit's one-line flash stays, in seconds.</summary>
     public double FlashSeconds { get; set; } = 2.5;
+
+    // ---- UI shell (T-211, §7.4) ----
+
+    /// <summary>Smallest UI scale the player can choose.</summary>
+    public double UiScaleMin { get; set; } = 0.75;
+
+    /// <summary>Largest UI scale the player can choose.</summary>
+    public double UiScaleMax { get; set; } = 1.5;
+
+    /// <summary>The UI scale before the player chooses one.</summary>
+    public double UiScaleDefault { get; set; } = 1;
+
+    /// <summary>The distance between the UI scales the size button cycles through.</summary>
+    public double UiScaleStep { get; set; } = 0.25;
+
+    /// <summary>How many hotbar slots there are.</summary>
+    public int HotbarSlots { get; set; } = 6;
+
+    /// <summary>The fewest rows the hotbar is laid out in (a narrow screen may need more).</summary>
+    public int HotbarRows { get; set; } = 1;
+
+    /// <summary>Side of a hotbar slot, in dp; never below the platform's smallest touch target.</summary>
+    public double HotbarSlotDp { get; set; } = 56;
+
+    /// <summary>Gap between hotbar slots, in dp.</summary>
+    public double HotbarGapDp { get; set; } = 8;
+
+    /// <summary>
+    /// Pretend the screen has a notch and a home indicator (debug builds only; the engine start-up ignores it in a release build), so the safe area can be
+    /// tested on a desktop. The insets below are in dp.
+    /// </summary>
+    public bool DebugNotch { get; set; }
+
+    /// <summary>Simulated left inset (the camera cut-out of a landscape phone), in dp.</summary>
+    public double DebugNotchLeftDp { get; set; } = 48;
+
+    /// <summary>Simulated top inset, in dp.</summary>
+    public double DebugNotchTopDp { get; set; }
+
+    /// <summary>Simulated right inset, in dp.</summary>
+    public double DebugNotchRightDp { get; set; } = 24;
+
+    /// <summary>Simulated bottom inset (the home indicator), in dp.</summary>
+    public double DebugNotchBottomDp { get; set; } = 21;
 
     /// <summary>Applies a <c>client_settings.json</c> document. Unknown keys are ignored; a malformed document throws <see cref="JsonException"/>.</summary>
     public void ApplyJson(ReadOnlySpan<byte> utf8)
@@ -222,10 +275,25 @@ public sealed class ClientConfig
             case "camera_distance_max": CameraDistanceMax = Number(value); break;
             case "camera_wheel_step": CameraWheelStep = Number(value); break;
             case "tap_max_travel": TapMaxTravel = Number(value); break;
-            case "tap_max_seconds": TapMaxSeconds = Number(value); break;
             case "touch_target_dp": TouchTargetDp = Number(value); break;
             case "tap_marker_seconds": TapMarkerSeconds = Number(value); break;
             case "flash_seconds": FlashSeconds = Number(value); break;
+            case "long_press_seconds": LongPressSeconds = Number(value); break;
+            case "pinch_dead_zone": PinchDeadZone = Number(value); break;
+            case "info_panel_seconds": InfoPanelSeconds = Number(value); break;
+            case "ui_scale_min": UiScaleMin = Number(value); break;
+            case "ui_scale_max": UiScaleMax = Number(value); break;
+            case "ui_scale_default": UiScaleDefault = Number(value); break;
+            case "ui_scale_step": UiScaleStep = Number(value); break;
+            case "hotbar_slots": HotbarSlots = Math.Max(0, Math.Min(12, (int)Number(value))); break;
+            case "hotbar_rows": HotbarRows = Math.Max(1, Math.Min(4, (int)Number(value))); break;
+            case "hotbar_slot_dp": HotbarSlotDp = Number(value); break;
+            case "hotbar_gap_dp": HotbarGapDp = Number(value); break;
+            case "debug_notch": DebugNotch = Number(value) != 0; break;
+            case "debug_notch_left_dp": DebugNotchLeftDp = Number(value); break;
+            case "debug_notch_top_dp": DebugNotchTopDp = Number(value); break;
+            case "debug_notch_right_dp": DebugNotchRightDp = Number(value); break;
+            case "debug_notch_bottom_dp": DebugNotchBottomDp = Number(value); break;
         }
     }
 
