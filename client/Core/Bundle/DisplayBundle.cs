@@ -39,10 +39,11 @@ public readonly struct MapZone
 /// <summary>A map's display data: size, cell flags and the cells worth showing.</summary>
 public sealed class MapData
 {
-    internal MapData(string id, string name, int width, int height, byte[] cells, IReadOnlyList<GridCell> warps, IReadOnlyList<MapZone> zones)
+    internal MapData(string id, string name, string sceneKey, int width, int height, byte[] cells, IReadOnlyList<GridCell> warps, IReadOnlyList<MapZone> zones)
     {
         Id = id;
         Name = name;
+        SceneKey = sceneKey;
         Width = width;
         Height = height;
         Cells = cells;
@@ -55,6 +56,9 @@ public sealed class MapData
 
     /// <summary>Display name.</summary>
     public string Name { get; }
+
+    /// <summary>The asset key of its visual scene.</summary>
+    public string SceneKey { get; }
 
     /// <summary>Width in cells.</summary>
     public int Width { get; }
@@ -113,6 +117,9 @@ public sealed class DisplayBundle
         if (displayKey is null) return string.Empty;
         return _names.TryGetValue(displayKey, out var name) ? name : displayKey;
     }
+
+    /// <summary>True when the bundle has a definition with this id.</summary>
+    public bool IsKnownId(string id) => _names.ContainsKey(id);
 
     /// <summary>The model asset key a view record's <c>display_key</c> shows as (a job's body, a monster's or NPC's model, an item's ground visual), or null.</summary>
     public string? ModelKeyOf(string? displayKey) => displayKey is not null && _models.TryGetValue(displayKey, out var key) ? key : null;
@@ -186,7 +193,7 @@ public sealed class DisplayBundle
             var area = zone.GetProperty("area");
             zones.Add(new MapZone(Text(zone, "kind"), new GridRect(area[0].GetInt32(), area[1].GetInt32(), area[2].GetInt32(), area[3].GetInt32())));
         }
-        return new MapData(Text(map, "id"), Text(map, "name"), width, height, cells, warps, zones);
+        return new MapData(Text(map, "id"), Text(map, "name"), Text(map, "scene"), width, height, cells, warps, zones);
     }
 
     private static string Text(JsonElement element, string name) => element.GetProperty(name).GetString() ?? throw new FormatException(name);

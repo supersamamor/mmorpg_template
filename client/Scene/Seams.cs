@@ -3,7 +3,7 @@ using Godot;
 
 namespace Game.Client.Scene;
 
-/// <summary>The map's look. T-208's authored scenes replace <see cref="PlaceholderMap"/> behind this; the cell-to-world rule (§4) stays.</summary>
+/// <summary>The map's look: <see cref="ThemeMapView"/> shows the theme's scene and falls back to <see cref="PlaceholderMap"/>; the cell-to-world rule (§4) stays.</summary>
 public interface IMapView
 {
     /// <summary>Shows <paramref name="map"/>, replacing what was shown.</summary>
@@ -22,8 +22,8 @@ public interface IEntityVisual
     /// <summary>True for a rigged model with animations: only these count toward the level-of-detail and animation-rate limits (§9).</summary>
     bool Animated { get; }
 
-    /// <summary>Places it: the point on the ground and the rotation around the up axis.</summary>
-    void SetPose(float x, float z, float yaw);
+    /// <summary>Places it: the point on the ground, the ground's height there (visual only, §4) and the rotation around the up axis.</summary>
+    void SetPose(float x, float y, float z, float yaw);
 
     /// <summary>Applies a new look.</summary>
     void SetLook(EntityLook look);

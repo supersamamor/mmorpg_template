@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Game.Content.Loading;
+using Game.Content.Maps;
 using Game.Content.Validation;
 using Game.Tools.Validation;
 
@@ -7,7 +8,7 @@ namespace Game.Tools.Commands;
 
 /// <summary>
 /// <c>validate [--content &lt;dir&gt;] [--schemas &lt;dir&gt;] [--theme &lt;name&gt;] [--format text|json]</c>: loads the content, runs every
-/// validation rule, checks every document against its JSON Schema (once the content loads) and prints the findings.
+/// validation rule, checks every document against its JSON Schema and every grid against its map scene (once the content loads) and prints the findings.
 /// Exit code 0 when there are no errors (warnings allowed), 1 otherwise.
 /// </summary>
 internal static class ValidateCommand
@@ -35,11 +36,12 @@ internal static class ValidateCommand
 
     private static IReadOnlyList<ValidationIssue> Collect(string content, string schemas, string theme)
     {
-        // The same load and checks the server runs at boot; the schema check is the tools' extra.
+        // The same load and checks the server runs at boot; the schema and map scene checks are the tools' extras.
         var boot = ContentBoot.Check(content, theme);
         if (boot.Database is null) return boot.Issues;
         var issues = boot.Issues.ToList();
         issues.AddRange(SchemaCheck.Check(Path.GetFullPath(content), schemas));
+        issues.AddRange(MapSceneCheck.Check(boot.Database, Path.GetFullPath(content), Path.GetFullPath(Path.Combine(content, "..", "themes")), theme));
         return issues;
     }
 

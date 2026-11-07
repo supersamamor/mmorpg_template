@@ -21,6 +21,13 @@ public sealed class PlaceholderMap : IMapView
         _ground.MaterialOverride = new StandardMaterial3D { VertexColorUseAsAlbedo = true, VertexColorIsSrgb = true, Roughness = 1f, MetallicSpecular = 0f };
     }
 
+    /// <summary>Shows or hides the ground.</summary>
+    public bool Visible
+    {
+        get => _ground.Visible;
+        set => _ground.Visible = value;
+    }
+
     /// <summary>Triangles of the current ground (for reporting).</summary>
     public int Triangles { get; private set; }
 

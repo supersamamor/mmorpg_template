@@ -298,7 +298,7 @@ Stale-hash and refusal screens: `--bundle <file>` (debug builds only) reads anot
 
 `client/mount-themes.ps1` makes `client/themes` a junction to `themes/` (`-Copy` for a real copy; gitignored; `run-e2e.ps1` runs it and re-imports). Regenerate the placeholder pack with
 `dotnet run --project tools/themegen`. Godot writes `*.import` files beside each asset (gitignored). Switch theme with `--set theme=test`. An export needs
-`themes/*/asset-manifest.json` in the preset's `include_filter` (it is not a Godot resource); `export_presets.cfg` belongs to T-216.
+`themes/*/asset-manifest.json` in the preset's `include_filter` (it is not a Godot resource); `export_presets.cfg` belongs to T-216. Every preset's `exclude_filter` keeps `addons/*` and `themes/*/maps/*.authoring.tscn` out: they hold spawn data and editor tools (T-208).
 
 ### 8.3 Export
 

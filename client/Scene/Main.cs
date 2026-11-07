@@ -24,7 +24,7 @@ public partial class Main : Node3D
     private WorldPresenter? _presenter;
     private ThemedEntities? _entities;
     private FollowCamera? _camera;
-    private PlaceholderMap? _map;
+    private ThemeMapView? _map;
     private Hud? _hud;
     private TapGestures? _gestures;
     private string? _loadedMap;
@@ -51,8 +51,8 @@ public partial class Main : Node3D
     /// <summary>The camera.</summary>
     public FollowCamera? Camera => _camera;
 
-    /// <summary>The ground.</summary>
-    public PlaceholderMap? Map => _map;
+    /// <summary>The map on screen.</summary>
+    public ThemeMapView? Map => _map;
 
     /// <summary>The HUD.</summary>
     public Hud? Hud => _hud;
@@ -116,10 +116,11 @@ public partial class Main : Node3D
 
         _socket = new GodotSocket(_config.SocketPollMs);
         _session = new ClientSession(_config, _bundle!, _socket, new Pcg32Random((ulong)System.Random.Shared.NextInt64()));
-        _map = new PlaceholderMap(this);
+        var catalog = ThemeLoader.Load(_config);
+        _map = new ThemeMapView(this, catalog);
         _camera = new FollowCamera(this, _config);
-        _entities = new ThemedEntities(this, _config, _bundle!, ThemeLoader.Load(_config));
-        _presenter = new WorldPresenter(this, _config, _session.World, _session.Ui, _entities);
+        _entities = new ThemedEntities(this, _config, _bundle!, catalog);
+        _presenter = new WorldPresenter(this, _config, _session.World, _session.Ui, _entities, _map.Ground);
         _gestures = new TapGestures(_config);
         _hud = new Hud(this, _config, _session, _bundle);
 

@@ -14,7 +14,7 @@ public static class Pack
     private const string Generator = "themegen (T-207)";
 
     /// <summary>Folders the generator owns inside a theme; files in them that it does not produce are stale.</summary>
-    public static readonly string[] OwnedFolders = { "models", "anims", "icons", "portraits", "audio", "maps", "vfx" };
+    public static readonly string[] OwnedFolders = { "models", "anims", "icons", "portraits", "audio", "vfx" };
 
     /// <summary>The theme the client falls back to for anything another theme leaves out.</summary>
     public const string DefaultTheme = "default";
@@ -35,6 +35,7 @@ public static class Pack
         foreach (var (key, node) in manifest.ToList())
         {
             if (node is not JsonObject entry || key is "audio" or "fallbacks") continue;
+            if (key.StartsWith("scene.", StringComparison.Ordinal)) continue; // map scenes are authored in the editor (T-208): the manifest's path stands, and validate checks them
             var (path, bytes) = Make(key, entry, DefaultStyle, manifest);
             SetFile(entry, path);
             files[DefaultTheme + "/" + path] = bytes;
@@ -93,7 +94,6 @@ public static class Pack
         if (key.StartsWith("portrait.", StringComparison.Ordinal)) return ($"portraits/{rest}.png", Media.Png(color, hash));
         if (key.StartsWith("sfx.", StringComparison.Ordinal) || key.StartsWith("music.", StringComparison.Ordinal) || key.StartsWith("ambience.", StringComparison.Ordinal))
             return ("audio/silence.ogg", Media.SilentOgg());
-        if (key.StartsWith("scene.", StringComparison.Ordinal)) return ("maps/placeholder.tscn", Encoding.UTF8.GetBytes(Media.MapScene));
         if (key.StartsWith("vfx.", StringComparison.Ordinal)) return ("vfx/placeholder.tscn", Encoding.UTF8.GetBytes(Media.VfxScene));
         throw new InvalidOperationException($"No generator for asset key '{key}'; add one to tools/themegen/Pack.cs.");
     }

@@ -5,8 +5,8 @@ using Game.Content.Loading;
 namespace Game.Tools.Commands;
 
 /// <summary>
-/// <c>grid from-ascii &lt;in.txt&gt; &lt;out.grid.json&gt;</c>: a stopgap that builds a logic grid from ASCII art until the
-/// Godot exporter (T-208) writes real ones. Format: see <see cref="AsciiGridConverter"/> and content/README.md.
+/// <c>grid from-ascii &lt;in.txt&gt; &lt;out.grid.json&gt;</c>: an old stopgap that builds a logic grid from ASCII art, for test grids;
+/// real maps come from the Godot exporter (T-208). Format: see <see cref="AsciiGridConverter"/> and content/README.md.
 /// </summary>
 internal static class GridCommand
 {
@@ -15,7 +15,7 @@ internal static class GridCommand
         var input = new Argument<FileInfo>("in.txt") { Description = "ASCII map: header lines, a '---' line, then map rows" };
         var output = new Argument<FileInfo>("out.grid.json") { Description = "Grid file to write" };
         var fromAscii = new Command("from-ascii",
-            "STOPGAP until the Godot map exporter (T-208): convert an ASCII map (. walkable, # blocks walking and LOS, ~ blocks walking only) " +
+            "Old stopgap, for test grids; real maps come from authored scenes (docs/MAP_AUTHORING.md): convert an ASCII map (. walkable, # blocks walking and LOS, ~ blocks walking only) " +
             "plus a header (map, spawn, warp, npc, zone lines) into a .grid.json") { input, output };
         fromAscii.SetAction(parse => Run(parse.GetValue(input)!, parse.GetValue(output)!));
 

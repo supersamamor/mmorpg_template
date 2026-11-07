@@ -116,6 +116,14 @@ public sealed class ThemeCatalog
         return _byKind[kind] = FallbackFor(kind);
     }
 
+    /// <summary>The file of a scene key (a map's visual scene). False, with one warning per key, when no theme has it: the caller shows its fallback.</summary>
+    public bool ResolveScene(string key, out string path)
+    {
+        if (TryFind(key, out path, out _)) return true;
+        Warn(key, Why(key));
+        return false;
+    }
+
     /// <summary>The animation library for a model: its <c>anims</c> key resolved. Null when the model has none or the library is missing (one warning).</summary>
     public ThemeAsset? ResolveAnimations(ThemeAsset model, out string path)
     {

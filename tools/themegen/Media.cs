@@ -218,7 +218,5 @@ internal static class Media
 
     // ---------------- Godot scenes ----------------
 
-    public const string MapScene = "[gd_scene format=3]\n\n[node name=\"PlaceholderMap\" type=\"Node3D\"]\n";
-
     public const string VfxScene = "[gd_scene format=3]\n\n[node name=\"PlaceholderEffect\" type=\"Node3D\"]\n";
 }
