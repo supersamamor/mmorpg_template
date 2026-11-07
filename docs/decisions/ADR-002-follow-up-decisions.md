@@ -206,3 +206,8 @@ When writing these prompts, copy in the decisions listed:
 | 109 | permessage-deflate cut bytes by 85% but cost ~5 ms of CPU per tick at 50 bots (T-214) | **Decided: off in v1.** It stays a setting (`--net-compression`). The visible-set cap (row 108) keeps bandwidth in budget without it, so whether Godot's WebSocket client supports it doesn't matter for v1. Revisit only if T-803 shows mobile data use is a problem. |
 | 110 | First tick of each map takes 64–176 ms at boot (T-214) | **Won't do (v1):** it happens once, before any player can join, and the stated rule (p99 after warm-up < 50 ms) holds. |
 | 111 | Intents sent while a character is between maps can still be lost (T-214) | **Decided: acceptable** (same as row 46); the client re-sends after the new snapshot. |
+
+## Addendum — starting the client before the phone test (2026-11-07)
+| # | Question (source) | Decision |
+|---|---|---|
+| 112 | T-206 builds on the engine choice, but T-005's phone go/no-go is still open (no device has run it; iOS needs a Mac) | **Decided by the owner: start T-206 now.** Risk accepted: client work may need rework if device results are poor. T-005 stays In Progress, and T-206 reports all device behaviour as unverified. |
