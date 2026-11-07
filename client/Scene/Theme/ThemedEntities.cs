@@ -9,7 +9,7 @@ namespace Game.Client.Scene;
 /// <summary>
 /// Draws entities from the active theme (ARCHITECTURE §7.7, §8, §9): <c>display_key</c> to the bundle's model asset key to the theme's file, then a pooled
 /// scene instance. A model that cannot be found goes down the catalog's fallback chain with one warning, never a crash. Nothing here names content or a path.
-/// <para>Loading: models load on a worker thread; with <c>PreloadModels</c> every model the bundle names starts loading at start, so the first sight of a
+/// <para>Loading: models load on a worker thread (the main thread when there is no renderer, see <see cref="ModelLoading"/>); with <c>PreloadModels</c> every model the bundle names starts loading at start, so the first sight of a
 /// monster finds it ready. A visual whose model is not ready yet stays hidden and fills in as soon as it is. At most <c>InstantiatePerFrame</c> new instances
 /// are created per frame, so a warp that brings in 40 entities spreads over a few frames instead of one long one.</para>
 /// <para>Memory: at most <c>ModelCacheLimit</c> scenes stay loaded (the least recently used go first, never one in use) and at most <c>PoolIdleLimit</c> idle
@@ -33,9 +33,9 @@ public sealed class ThemedEntities : IEntityVisualSource
         _config = config;
         _bundle = bundle;
         _catalog = catalog;
-        _store = new ModelStore(config.ModelCacheLimit, message => GD.PushWarning(message));
-        // Headless has no renderer to warm up, and preloading there made the process crash on exit about one run in four (T-207 hand-off), so it is skipped.
-        if (config.PreloadModels && DisplayServer.GetName() != "headless") Preload();
+        var threaded = ModelLoading.Threaded(DisplayServer.GetName(), config.ThreadedLoadWithoutRenderer);
+        _store = new ModelStore(config.ModelCacheLimit, threaded, message => GD.PushWarning(message));
+        if (config.PreloadModels) Preload();
     }
 
     /// <summary>The store (for measuring).</summary>

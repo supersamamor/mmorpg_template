@@ -104,6 +104,9 @@ public sealed class ClientConfig
     /// <summary>Load every model the bundle names in the background at start, so the first sight of one does not wait on the disk.</summary>
     public bool PreloadModels { get; set; } = true;
 
+    /// <summary>Load on worker threads even with no renderer, which crashes on Godot 4.7.2 (see <c>ModelLoading</c>). Only for checking a new engine version.</summary>
+    public bool ThreadedLoadWithoutRenderer { get; set; }
+
     // ---- camera (§7.2, ADR-002 row 65) ----
 
     /// <summary>Degrees the fixed camera looks down from the horizon.</summary>
@@ -268,6 +271,7 @@ public sealed class ClientConfig
             case "pool_idle_limit": PoolIdleLimit = (int)Number(value); break;
             case "instantiate_per_frame": InstantiatePerFrame = Math.Max(1, (int)Number(value)); break;
             case "preload_models": PreloadModels = Number(value) != 0; break;
+            case "threaded_load_without_renderer": ThreadedLoadWithoutRenderer = Number(value) != 0; break;
             case "camera_pitch_degrees": CameraPitchDegrees = Number(value); break;
             case "camera_fov_degrees": CameraFovDegrees = Number(value); break;
             case "camera_distance": CameraDistance = Number(value); break;

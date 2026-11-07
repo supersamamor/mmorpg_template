@@ -47,6 +47,8 @@ public static class ValidationCodes
     public const string AssetEmpty = "asset.empty";
     /// <summary>The theme manifest could not be found or read.</summary>
     public const string ThemeManifest = "theme.manifest";
+    /// <summary>The manifest's <c>fallbacks</c> table has a malformed shape.</summary>
+    public const string ThemeFallback = "theme.fallback";
     /// <summary>Skill prerequisites form a cycle.</summary>
     public const string SkillCycle = "skill.prereq_cycle";
     /// <summary>A skill prerequisite is not part of the job's (or an ancestor job's) skill tree.</summary>

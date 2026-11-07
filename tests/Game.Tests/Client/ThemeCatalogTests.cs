@@ -47,6 +47,15 @@ public class ThemeCatalogTests
 
     // ---- parsing ----
 
+    [Theory]
+    [InlineData("headless", false, false)] // the dummy renderer: threads crash (T-218)
+    [InlineData("headless", true, true)] // the setting for checking a new engine version
+    [InlineData("Windows", false, true)]
+    [InlineData("Android", false, true)]
+    [InlineData("iOS", false, true)]
+    public void Models_load_on_threads_unless_there_is_no_renderer(string displayServer, bool force, bool threaded) =>
+        ModelLoading.Threaded(displayServer, force).ShouldBe(threaded);
+
     [Fact]
     public void The_manifest_is_read_with_its_metadata_and_the_two_tables_are_not_assets()
     {

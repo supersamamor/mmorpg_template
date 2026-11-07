@@ -259,3 +259,14 @@ When writing these prompts, copy in the decisions listed:
 | 138 | The HUD adds about 25 draw calls; quiet frames allocate 8–9 bytes (T-211) | **→ T-803:** measure on devices first. The scene stays well under the 100 draw-call budget, so no batching until a device shows a need. |
 | 139 | The target frame shows the name only, because entity HP has no change counter (T-211) | **→ T-303:** add one with the combat presentation work. |
 | 140 | Run `-Run ui` in CI (T-211) | **Done at merge** if `ci.yml` runs `-Run all`, which now includes `ui`. |
+
+## Addendum — T-208, T-218 (2026-11-08)
+| # | Question (source) | Decision |
+|---|---|---|
+| 141 | The headless crash is a Godot 4.7.2 engine bug: the dummy renderer's mesh allocator isn't thread-safe. A 20-line script with no game code reproduces it 10/10 (T-218) | **Decided:** in headless, models load on the main thread; with a real renderer they keep using threads. Crash rate went from 31% to 0 of 20. Any future threaded loading must do the same in headless (§7.7). Reporting it upstream to Godot is the owner's call, since it posts publicly. |
+| 142 | The fallback check, like the asset-key check, only reads the active theme's own keys, so a partial theme pointing at a `default`-only key would be wrongly flagged (T-218) | **→ T-219:** resolve keys through the same theme chain the client uses. |
+| 143 | Taps and monster picking still use the y = 0 plane, so taps on hills land slightly off (T-208) | **→ T-219:** pick against `GroundHeights`. |
+| 144 | Keep `grid from-ascii` (T-208) | **Decided: keep** for test grids, documented as not for real maps. |
+| 145 | `MapGridFile`'s doc comment still says the scene hash is "stored, not checked" (T-208) | **→ T-219:** fix the comment and regenerate the schema. |
+| 146 | Run `client/export-maps.ps1 -Check` in CI's Godot job (T-208) | **→ T-219.** |
+| 147 | Map scenes ship separately from their `.authoring.tscn` (spawns and markers); every export preset excludes the authoring scenes and the plugin (T-208) | **Decided: accepted.** That keeps spawn data out of the client (hard rule 11), and a test checks the presets. |
