@@ -25,18 +25,22 @@ internal static class StatsCommand
         var weapon = new Option<string?>("--weapon") { Description = "Weapon item id (default: best weapon the job can use)" };
         var refine = new Option<int>("--refine") { Description = "Weapon refine level", DefaultValueFactory = _ => 0 };
         var monsters = new Option<bool>("--monsters") { Description = "Print monster time-to-kill at the expected player level" };
+        var duel = new Option<string?>("--duel") { Description = "Monster id: one-on-one auto-attack fight (expected swings, HP left, seeded win rate)" };
+        var unarmed = new Option<bool>("--unarmed") { Description = "No weapon (what the server gives every character until T-401)" };
+        var fights = new Option<int>("--fights") { Description = "Seeded fights for --duel", DefaultValueFactory = _ => 1000 };
+        var seed = new Option<ulong>("--seed") { Description = "Random seed for --duel", DefaultValueFactory = _ => 1UL };
         var format = new Option<string>("--format") { Description = "Output format: text, json or csv", DefaultValueFactory = _ => "text" };
         format.AcceptOnlyFromAmong("text", "json", "csv");
 
         var command = new Command("stats", "Print derived stats and damage tables for balance work")
-            { content, job, level, build, vs, weapon, refine, monsters, format };
+            { content, job, level, build, vs, weapon, refine, monsters, duel, unarmed, fights, seed, format };
         command.SetAction(p => Run(p.GetValue(content), p.GetValue(job), p.GetValue(level), p.GetValue(build), p.GetValue(vs),
-            p.GetValue(weapon), p.GetValue(refine), p.GetValue(monsters), p.GetValue(format)!));
+            p.GetValue(weapon), p.GetValue(refine), p.GetValue(monsters), p.GetValue(duel), p.GetValue(unarmed), p.GetValue(fights), p.GetValue(seed), p.GetValue(format)!));
         return command;
     }
 
     private static int Run(DirectoryInfo? contentDir, string? jobId, int level, string? build, string? vs, string? weapon,
-        int refine, bool monstersMode, string format)
+        int refine, bool monstersMode, string? duelId, bool unarmed, int fights, ulong seed, string format)
     {
         try
         {
@@ -61,7 +65,14 @@ internal static class StatsCommand
                 if (level < 1 || level > sim.Progression.MaxBaseLevel) return Fail("--level must be 1.." + sim.Progression.MaxBaseLevel + ".");
                 if (vs != null && !sim.Db.Monsters.Contains(vs)) return Fail("Unknown monster '" + vs + "'.");
                 if (weapon != null && !sim.Db.Items.Contains(weapon)) return Fail("Unknown item '" + weapon + "'.");
-                var character = sim.Character(jobId, level, exact, weaponId: weapon, refine: refine);
+                var character = sim.Character(jobId, level, exact, weaponId: weapon, refine: refine, unarmed: unarmed);
+                if (duelId != null)
+                {
+                    if (!sim.Db.Monsters.Contains(duelId)) return Fail("Unknown monster '" + duelId + "'.");
+                    if (fights < 1) return Fail("--fights must be at least 1.");
+                    Console.WriteLine(ReportTable.Render(StatsReport.ForDuel(character, sim.Db.Monsters.Get(duelId), Duel.Run(sim, character, sim.Db.Monsters.Get(duelId), fights, seed)), format));
+                    return 0;
+                }
                 var targets = vs != null
                     ? new[] { sim.Db.Monsters.Get(vs) }
                     : sim.Db.Monsters.All.OrderBy(m => m.Id, StringComparer.Ordinal).ToArray();
@@ -79,6 +90,7 @@ internal static class StatsCommand
     private static Dictionary<string, int> ParseBuild(string text)
     {
         var result = new Dictionary<string, int>(StringComparer.Ordinal);
+        if (text.Trim() == "none") return result;
         foreach (var part in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var kv = part.Split('=');

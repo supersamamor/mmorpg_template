@@ -75,6 +75,29 @@ public class StatsCommandTests
     }
 
     [Fact]
+    public void Duel_reports_expected_swings_hp_left_and_a_seeded_win_rate()
+    {
+        var (exit, output, err) = Run("--job", "job.wanderer", "--unarmed", "--build", "none", "--duel", "monster.gel_slime", "--format", "json");
+
+        exit.ShouldBe(0, err);
+        using var json = JsonDocument.Parse(output);
+        var rows = json.RootElement.GetProperty("duel").EnumerateArray()
+            .ToDictionary(r => r.GetProperty("field").GetString()!, r => r.GetProperty("value"));
+        rows["expected_swings"].GetDouble().ShouldBe(11.25, 1e-3);
+        rows["sim_fights"].GetInt32().ShouldBe(1000);
+        rows["sim_win_rate_pct"].GetDouble().ShouldBeGreaterThan(99);
+    }
+
+    [Fact]
+    public void Duel_rejects_an_unknown_monster()
+    {
+        var (exit, _, err) = Run("--job", "job.wanderer", "--duel", "monster.nope");
+
+        exit.ShouldBe(1);
+        err.ShouldContain("monster.nope");
+    }
+
+    [Fact]
     public void Skills_have_no_time_to_kill()
     {
         var (exit, output, err) = Run("--job", "job.spellbinder", "--level", "20", "--vs", "monster.gel_slime", "--format", "json");

@@ -1,4 +1,7 @@
 using System.Diagnostics;
+using Game.Tests.World;
+using Game.Content.Registry;
+using Game.Shared.Definitions;
 using Game.Shared.Protocol;
 using Game.Shared.World;
 using Xunit.Abstractions;
@@ -98,7 +101,7 @@ public class GatewayBudgetTests(ITestOutputHelper output)
     public async Task Fifty_clients_with_twenty_fighting_bytes_per_second()
     {
         const int Fighters = 20;
-        await using var rig = await GatewayRig.StartAsync(o => o with { MaxSessions = Clients + 1 });
+        await using var rig = await GatewayRig.StartAsync(o => o with { MaxSessions = Clients + 1 }, content: SturdySlimes(TestGrids.SampleContent));
         var grid = rig.Content.GetGrid(rig.Start.MapId);
         var area = new List<GridCell>();
         for (var dy = -5; dy <= 5; dy++)
@@ -175,6 +178,19 @@ public class GatewayBudgetTests(ITestOutputHelper output)
         hitsSeen.Min().ShouldBeGreaterThan(1);
         perClient.Average().ShouldBeLessThanOrEqualTo(10);
         resyncs.ShouldBe(0);
+    }
+
+    /// <summary>
+    /// The sample content with 40 HP slimes. The real slime (T-309) has 9 HP and dies in a few seconds, so 20 fighters would clear the field,
+    /// wander out of the walkers' view and stop the sustained fighting this measurement needs. Only the HP differs; the wire traffic per fight is the same.
+    /// </summary>
+    private static ContentDatabase SturdySlimes(ContentDatabase db)
+    {
+        var slime = db.Monsters.Get("monster.gel_slime");
+        var sturdy = slime with { Stats = new Dictionary<string, double>(slime.Stats) { ["max_hp"] = 40 } };
+        var monsters = new Registry<MonsterDef>(db.Monsters.All.Select(m => m.Id == slime.Id ? sturdy : m));
+        return new ContentDatabase(db.Jobs, db.Skills, db.Items, monsters, db.Statuses, db.Quests, db.Npcs, db.Dialogue, db.Drops, db.Maps,
+            db.ExpTables, db.Formulas, db.Elements, db.Balance, db.Appearance, grids: db.Grids);
     }
 
     /// <summary>A scripted fighter: out of the safe zone, attack the nearest living gel slime, again when the attack ends, respawn when dead.</summary>

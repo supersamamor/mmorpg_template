@@ -146,16 +146,16 @@ public sealed class BalanceSimulator
     /// <summary>
     /// A character at a base level: the job level from <see cref="JobLevelFor"/>, stat points spent by the explicit
     /// <paramref name="exact"/> targets or else by <paramref name="weights"/> (equal weights when both are null), and the
-    /// weapon from <see cref="PickWeapon"/> unless <paramref name="weaponId"/> names one.
+    /// weapon from <see cref="PickWeapon"/> unless <paramref name="weaponId"/> names one (or <paramref name="unarmed"/> is set).
     /// </summary>
     public SimCharacter Character(string jobId, int baseLevel, IReadOnlyDictionary<string, int>? exact = null,
-        IReadOnlyDictionary<string, int>? weights = null, string? weaponId = null, int refine = 0)
+        IReadOnlyDictionary<string, int>? weights = null, string? weaponId = null, int refine = 0, bool unarmed = false)
     {
         if (!Db.Jobs.Contains(jobId)) throw new ArgumentException("Unknown job '" + jobId + "'.");
         var (stats, left) = exact != null
             ? SpendExact(jobId, baseLevel, exact)
             : SpendByWeight(jobId, baseLevel, weights ?? PrimaryStats.All.Ordered.ToDictionary(s => s, _ => 1, StringComparer.Ordinal));
-        var weapon = weaponId != null ? Db.Items.Get(weaponId) : PickWeapon(jobId, baseLevel);
+        var weapon = unarmed ? null : weaponId != null ? Db.Items.Get(weaponId) : PickWeapon(jobId, baseLevel);
         return Player(jobId, baseLevel, JobLevelFor(jobId, baseLevel), stats, left, weapon, refine);
     }
 
