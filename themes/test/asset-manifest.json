@@ -1,0 +1,15 @@
+{
+  "model.char.wanderer": {
+    "file": "models/char/wanderer.glb",
+    "rig": "humanoid",
+    "anims": "anim.humanoid"
+  },
+  "model.monster.gel_slime": {
+    "file": "models/monster/gel_slime.glb",
+    "rig": "blob",
+    "anims": "anim.blob"
+  },
+  "model.prop.loot_bag": {
+    "file": "models/prop/loot_bag.glb"
+  }
+}

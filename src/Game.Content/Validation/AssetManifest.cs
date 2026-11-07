@@ -20,8 +20,8 @@ public static class AssetManifest
             var info = new Dictionary<string, AssetInfo>(StringComparer.Ordinal);
             foreach (var p in doc.RootElement.EnumerateObject())
             {
-                // "audio" holds the sound tables (defaults, events), not an asset.
-                if (p.Name == "audio") continue;
+                // "audio" holds the sound tables (defaults, events) and "fallbacks" the client's stand-ins by entity kind; neither is an asset key.
+                if (p.Name is "audio" or "fallbacks") continue;
                 info[p.Name] = new AssetInfo(Text(p.Value, "rig"), Text(p.Value, "attach"));
             }
             return new AssetKeySet(info);

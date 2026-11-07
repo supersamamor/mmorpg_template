@@ -129,7 +129,11 @@ public sealed class ClientSession
         switch (message)
         {
             case DeltaMessage delta:
-                if (delta.Hits is { Count: > 0 } hits) Ui.OnHits(hits, World, viewNow); // before the deltas: a target that died here is still named
+                if (delta.Hits is { Count: > 0 } hits)
+                {
+                    Ui.OnHits(hits, World, viewNow); // before the deltas: a target that died here is still named
+                    World.ApplyHits(hits, viewNow);
+                }
                 World.ApplyDelta(delta, viewNow);
                 if (delta.Appeared.Count > 0) Ui.OnAppeared(delta.Appeared, viewNow);
                 if (delta.Vitals is { } vitals) Ui.OnVitals(vitals);

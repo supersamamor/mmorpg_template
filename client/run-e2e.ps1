@@ -24,7 +24,10 @@ dotnet build (Join-Path $root "src/Game.Server") -v q --nologo | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "The server does not build." }
 dotnet build (Join-Path $client "GameClient.csproj") -v q --nologo | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "The client does not build." }
-if (-not (Test-Path (Join-Path $client ".godot/uid_cache.bin"))) { & $godot --headless --path $client --import *>&1 | Out-Null }
+& (Join-Path $client "mount-themes.ps1") | Out-Null   # res://themes (ARCHITECTURE §7.7)
+$ErrorActionPreference = "Continue"   # the editor logs a harmless 'EditorSettings not instantiated' error on every import
+& $godot --headless --path $client --import *>&1 | Out-Null   # picks up new or changed theme files; quick when nothing changed
+$ErrorActionPreference = "Stop"
 
 $log = New-TemporaryFile
 $serverArgs = @("run", "--no-build", "--project", "src/Game.Server", "--", "--seed", "$Seed", "--net-port", "$Port")
@@ -59,8 +62,10 @@ try {
     if ($Screenshot) { $arguments += @("--screenshot", $Screenshot) }
     $arguments += $ClientArgs
 
-    & $godot @arguments 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -match "^\[(e2e|client)\]|ERROR|Unhandled" }
+    $ErrorActionPreference = "Continue"   # engine ERROR lines are printed below, not turned into a script failure; the exit code decides
+    & $godot @arguments 2>&1 | ForEach-Object { "$_" } | Where-Object { $_ -match "^\[(e2e|client)\]|^\[theme\]|WARNING: \[theme\]|ERROR|Unhandled" }
     $code = $LASTEXITCODE
+    $ErrorActionPreference = "Stop"
     "client exit code: $code"
     exit $code
 }

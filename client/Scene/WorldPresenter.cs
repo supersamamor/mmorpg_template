@@ -16,15 +16,23 @@ public sealed class WorldPresenter
     private readonly WorldView _world;
     private readonly UiState _ui;
     private readonly IEntityVisualSource _visuals;
+    private readonly ClientConfig _config;
+    private readonly DetailPlanner _planner;
     private readonly MultiMesh _bars;
     private readonly MeshInstance3D _marker;
     private readonly MeshInstance3D _ring;
+    private bool[] _fullRate = new bool[64];
     private bool _barsDirty;
+    private bool _replan = true;
     private int _uiVersion = -1;
+    private int _visualVersion;
+    private long _frame;
 
     /// <summary>Builds the bar layer and markers under <paramref name="parent"/>.</summary>
-    public WorldPresenter(Node3D parent, WorldView world, UiState ui, IEntityVisualSource visuals)
+    public WorldPresenter(Node3D parent, ClientConfig config, WorldView world, UiState ui, IEntityVisualSource visuals)
     {
+        _config = config;
+        _planner = new DetailPlanner(config.Lod0Count, config.FullRateAnimatedCount);
         _world = world;
         _ui = ui;
         _visuals = visuals;
@@ -65,15 +73,34 @@ public sealed class WorldPresenter
         _ring = Disc(parent, 1.1f, PlaceholderColors.TargetRing);
     }
 
-    /// <summary>Brings the screen up to date. Allocates nothing once visuals are pooled.</summary>
-    public void Sync()
+    /// <summary>Visuals currently at the full level of detail, and animated characters at the reduced rate (for measuring).</summary>
+    public (int Lod0, int Lod1, int Reduced) DetailCounts()
     {
+        int lod0 = 0, lod1 = 0, reduced = 0;
+        for (var i = 0; i < _slots.Length && i < _world.Entities.Count; i++)
+        {
+            if (_slots[i] < 0) continue;
+            if (_planner.LodOf(_slots[i]) == 0) lod0++;
+            else lod1++;
+            if (!_planner.FullRate(_slots[i])) reduced++;
+        }
+        return (lod0, lod1, reduced);
+    }
+
+    private int[] _slots = new int[64];
+
+    /// <summary>Brings the screen up to date. Allocates nothing once visuals are pooled. <paramref name="dt"/> is the frame time in seconds.</summary>
+    public void Sync(double dt)
+    {
+        _frame++;
+        _visuals.Update();
         var removed = _world.Removed;
         for (var i = 0; i < removed.Count; i++)
         {
             var entity = removed[i];
-            if (entity.Visual is IEntityVisual visual) _visuals.Release(entity.Kind, visual);
+            if (entity.Visual is IEntityVisual visual) _visuals.Release(visual);
             _barsDirty = true;
+            _replan = true;
         }
         if (removed.Count > 0) _world.ClearRemoved();
 
@@ -84,8 +111,9 @@ public sealed class WorldPresenter
             var entity = entities[i];
             if (entity.Visual is null)
             {
-                entity.Visual = _visuals.Acquire(entity.Kind);
+                entity.Visual = _visuals.Acquire(entity.Kind, entity.DisplayKey);
                 entity.PoseDirty = entity.LookDirty = true;
+                _replan = true;
             }
             var visual = (IEntityVisual)entity.Visual;
             if (entity.LookDirty)
@@ -98,12 +126,60 @@ public sealed class WorldPresenter
             {
                 visual.SetPose((float)entity.X, (float)entity.Z, (float)entity.Yaw);
                 entity.PoseDirty = false;
+                _replan = true; // distances to the player changed
                 if (entity.Hp.HasValue) _barsDirty = true;
             }
+            visual.SetMotion(entity.IsWalking, entity.AttackCount, entity.HitCount);
         }
+
+        if (_visualVersion != _visuals.Version)
+        {
+            _visualVersion = _visuals.Version;
+            _replan = true;
+        }
+        if (_replan) Replan();
+        for (var i = 0; i < entities.Count; i++)
+            ((IEntityVisual)entities[i].Visual!).Animate(dt, _fullRate[i], _frame, _config.ReducedAnimationDivisor);
 
         if (_barsDirty) RewriteBars();
         SyncMarkers();
+    }
+
+    /// <summary>Ranks the animated characters by distance to the player: the nearest few get the full level of detail, the nearest 40 the full animation rate (§9).</summary>
+    private void Replan()
+    {
+        _replan = false;
+        var entities = _world.Entities;
+        if (entities.Count > _fullRate.Length)
+        {
+            Array.Resize(ref _fullRate, entities.Count * 2);
+            Array.Resize(ref _slots, entities.Count * 2);
+        }
+        var own = _world.Own;
+        var ox = own?.X ?? 0;
+        var oz = own?.Z ?? 0;
+        _planner.Begin();
+        for (var i = 0; i < entities.Count; i++)
+        {
+            var entity = entities[i];
+            if (((IEntityVisual)entity.Visual!).Animated)
+            {
+                var dx = entity.X - ox;
+                var dz = entity.Z - oz;
+                _slots[i] = _planner.Add(entity.Id, dx * dx + dz * dz);
+            }
+            else
+            {
+                _slots[i] = -1;
+            }
+        }
+        _planner.Plan();
+        for (var i = 0; i < entities.Count; i++)
+        {
+            var slot = _slots[i];
+            _fullRate[i] = slot < 0 || _planner.FullRate(slot);
+            if (slot >= 0) ((IEntityVisual)entities[i].Visual!).SetDetail(_planner.LodOf(slot));
+        }
     }
 
     private void RewriteBars()

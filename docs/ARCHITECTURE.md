@@ -403,8 +403,18 @@ Animation ids (VOCABULARY) are shared by every model on the same rig. Server eve
 the impact frame, but that is visual only — outcomes are already decided by the server.
 
 ### 7.7 Theme mounting
-`themes/<theme>` is mounted into the Godot project at `res://themes/<theme>` (a directory
-junction/symlink in dev; copied and packed at export). Downloading themes after install is a non-goal.
+`themes/<theme>` is mounted into the Godot project at `res://themes/<theme>` (a directory junction in dev, made by `client/mount-themes.ps1`; copied and packed at export).
+Downloading themes after install is a non-goal. The active theme is the client setting `theme` (default `default`). A theme may be **partial**: lookups search the active
+theme, then `default`, so a theme contains only what it changes.
+
+**Entity visuals** (T-207): `display_key` -> the bundle's model key (a job's `model`, a monster's or NPC's `model`, an item's `ground`) -> the theme's file -> a pooled scene
+instance. The pure part (`client/Core/Theme`: manifest parser, `ThemeCatalog` fallback chain) is tested; `client/Scene/Theme` loads and shows. Model contract: faces -Z (north at
+yaw 0), origin on the ground, meshes named `Body_LOD0` and optionally `Body_LOD1` (one material); a rigged model has `Armature/Skeleton3D`, and its clips live in the `anim.*`
+library file on the same skeleton. Animation follows the view model: idle, walk, dead, and one-shot attack and hit when a delta's `hits` name the entity (delayed by the render
+delay so they line up with movement). The nearest 8 animated characters draw at LOD0, the rest at LOD1; the nearest 40 animate every frame, the rest every 4th (`lod0_count`,
+`full_rate_animated_count`, `reduced_animation_divisor`). Loading is threaded and the bundle's models start loading at start; at most `instantiate_per_frame` (6) instances are made
+per frame, so a warp spreads over a few frames. Memory is bounded: `model_cache_limit` (48) loaded scenes (least recently used, never one in use) and `pool_idle_limit` (12) idle
+instances per model.
 
 ### 7.8 Audio
 Every sound is an **asset key** resolved by the theme (§8), so replacing a sound never touches code or content.
@@ -462,6 +472,14 @@ Every sound is an **asset key** resolved by the theme (§8), so replacing a soun
 `file` or `files` (one is picked at random; not both), `volume_db` (decibels), `pitch` (`[min, max]` scale, picked at random per play), `bus`
 (VOCABULARY "Audio buses"; default follows the key prefix), `loop`. `audio.defaults` maps a category (VOCABULARY "Audio default categories") and
 `audio.events` maps an `EventNames` term to an `sfx.` key. The `audio` object is not an asset key. Replacing a sound means editing its entry or file.
+
+**Fallback chain** (T-207, `ThemeCatalog`). A key is found when a theme lists it and its file exists. A model that is not found goes to the manifest's `fallbacks` entry for the
+entity kind (`player`, `monster`, `npc`, `item`), then `fallbacks.missing` (a visible magenta marker), then a built-in marker: one logged warning per key, never a crash. An entity
+whose content names no model uses the kind stand-in silently. `fallbacks` is a table like `audio`, not an asset key.
+
+**Generated placeholder pack** (ADR-002 row 31): `themes/default` holds one real file per manifest key, written by `dotnet run --project tools/themegen` (`-- --check` verifies).
+Models are low-poly rigs (five shared rigs) with LOD0 and LOD1 and one material coloured from the key; icons are 64x64 PNG, sounds one silent OGG, scenes empty `.tscn`.
+`themes/test` is a partial theme (three models in other colours) used by tests.
 
 Rig names are theme-internal; the validator checks that a model, its animation library and its
 skinned equipment use the same rig. Active theme is a config setting.

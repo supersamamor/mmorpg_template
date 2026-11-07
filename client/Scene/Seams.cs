@@ -19,6 +19,9 @@ public readonly record struct EntityLook(bool Own, bool Dead, bool Mine);
 /// <summary>One entity on screen. Pooled: setting a pose allocates nothing.</summary>
 public interface IEntityVisual
 {
+    /// <summary>True for a rigged model with animations: only these count toward the level-of-detail and animation-rate limits (§9).</summary>
+    bool Animated { get; }
+
     /// <summary>Places it: the point on the ground and the rotation around the up axis.</summary>
     void SetPose(float x, float z, float yaw);
 
@@ -27,19 +30,37 @@ public interface IEntityVisual
 
     /// <summary>Shows or hides it (the pool hides it).</summary>
     void SetVisible(bool visible);
+
+    /// <summary>The level of detail: 0 for the nearest characters, 1 for the rest. A model with one level ignores it.</summary>
+    void SetDetail(int lod);
+
+    /// <summary>What the entity is doing, every frame: whether it is walking, and counters that go up on each attack made and each hit taken.</summary>
+    void SetMotion(bool walking, int attackCount, int hitCount);
+
+    /// <summary>Moves the animation forward. At the reduced rate the time collects and is applied every <paramref name="reducedEvery"/> frames.</summary>
+    void Animate(double dt, bool fullRate, long frame, int reducedEvery);
 }
 
-/// <summary>Where visuals come from. T-207's theme loader replaces <see cref="PlaceholderEntities"/> behind this (it can read the content ids).</summary>
+/// <summary>Where visuals come from: the active theme (<see cref="ThemedEntities"/>), through asset keys.</summary>
 public interface IEntityVisualSource
 {
-    /// <summary>A visual for an <c>EntityKinds</c> term, from the pool if possible.</summary>
-    IEntityVisual Acquire(string kind);
+    /// <summary>
+    /// A visual for an entity: <paramref name="kind"/> is an <c>EntityKinds</c> term and <paramref name="displayKey"/> the content id the server sent. The model comes
+    /// from the bundle and the theme; the visual may fill in a little later if its model is still loading.
+    /// </summary>
+    IEntityVisual Acquire(string kind, string? displayKey);
 
     /// <summary>Back to the pool.</summary>
-    void Release(string kind, IEntityVisual visual);
+    void Release(IEntityVisual visual);
+
+    /// <summary>Once a frame: finishes loads and creates the instances that were put off to spare the frame.</summary>
+    void Update();
+
+    /// <summary>Counts up whenever a visual finished loading, so the presenter plans levels of detail again.</summary>
+    int Version { get; }
 }
 
-/// <summary>Colours of the placeholder world. Not content: T-207 and T-208 replace these with the theme's art.</summary>
+/// <summary>Colours of the placeholder world. Not content: T-208 replaces these with the theme's art.</summary>
 internal static class PlaceholderColors
 {
     public static readonly Color GroundA = new(0.36f, 0.52f, 0.31f);
@@ -52,11 +73,6 @@ internal static class PlaceholderColors
     public static readonly Color Warp = new(0.55f, 0.30f, 0.80f);
     public static readonly Color Background = new(0.07f, 0.08f, 0.10f);
     public static readonly Color Own = new(0.25f, 0.65f, 1.00f);
-    public static readonly Color Player = new(0.45f, 0.80f, 0.95f);
-    public static readonly Color Monster = new(0.90f, 0.35f, 0.28f);
-    public static readonly Color Npc = new(0.95f, 0.85f, 0.45f);
-    public static readonly Color Dead = new(0.35f, 0.33f, 0.33f);
-    public static readonly Color Item = new(0.80f, 0.80f, 0.75f);
     public static readonly Color ItemMine = new(1.00f, 0.80f, 0.15f);
     public static readonly Color Marker = new(1.00f, 0.90f, 0.20f);
     public static readonly Color TargetRing = new(1.00f, 0.25f, 0.20f);

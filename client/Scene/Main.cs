@@ -22,6 +22,7 @@ public partial class Main : Node3D
     private ClientSession? _session;
     private GodotSocket? _socket;
     private WorldPresenter? _presenter;
+    private ThemedEntities? _entities;
     private FollowCamera? _camera;
     private PlaceholderMap? _map;
     private Hud? _hud;
@@ -40,6 +41,12 @@ public partial class Main : Node3D
 
     /// <summary>The socket.</summary>
     public GodotSocket? Socket => _socket;
+
+    /// <summary>The presenter of the world's entities.</summary>
+    public WorldPresenter? Presenter => _presenter;
+
+    /// <summary>The theme's entity visuals (for measuring).</summary>
+    public ThemedEntities? Entities => _entities;
 
     /// <summary>The camera.</summary>
     public FollowCamera? Camera => _camera;
@@ -100,7 +107,8 @@ public partial class Main : Node3D
         _session = new ClientSession(_config, _bundle!, _socket, new Pcg32Random((ulong)System.Random.Shared.NextInt64()));
         _map = new PlaceholderMap(this);
         _camera = new FollowCamera(this, _config);
-        _presenter = new WorldPresenter(this, _session.World, _session.Ui, new PlaceholderEntities(this));
+        _entities = new ThemedEntities(this, _config, _bundle!, ThemeLoader.Load(_config));
+        _presenter = new WorldPresenter(this, _config, _session.World, _session.Ui, _entities);
         _gestures = new TapGestures(_config);
         _hud = new Hud(this, _config, _session, _bundle);
 
@@ -120,7 +128,7 @@ public partial class Main : Node3D
 
         var world = _session.World;
         if (_loadedMap != world.MapId) LoadMap(world.MapId);
-        _presenter!.Sync();
+        _presenter!.Sync(delta);
         if (world.Own is { } own) _camera!.Follow((float)own.X, (float)own.Z);
         _hud!.Refresh();
 
@@ -139,7 +147,11 @@ public partial class Main : Node3D
     }
 
     /// <inheritdoc />
-    public override void _ExitTree() => _socket?.Shutdown();
+    public override void _ExitTree()
+    {
+        _socket?.Shutdown();
+        _entities?.Shutdown();
+    }
 
     /// <inheritdoc />
     public override void _UnhandledInput(InputEvent @event) => HandleInput(@event);

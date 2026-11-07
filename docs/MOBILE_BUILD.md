@@ -273,6 +273,12 @@ client cannot join its server; for T-206 a throwaway launcher passed as `--serve
 
 Stale-hash and refusal screens: `--bundle <file>` (debug builds only) reads another bundle file, and `--exit-on-refusal` quits after the refusal screen.
 
+### 8.4 Themes
+
+`client/mount-themes.ps1` makes `client/themes` a junction to `themes/` (`-Copy` for a real copy; gitignored; `run-e2e.ps1` runs it and re-imports). Regenerate the placeholder pack with
+`dotnet run --project tools/themegen`. Godot writes `*.import` files beside each asset (gitignored). Switch theme with `--set theme=test`. An export needs
+`themes/*/asset-manifest.json` in the preset's `include_filter` (it is not a Godot resource); `export_presets.cfg` belongs to T-216.
+
 ### 8.3 Export
 
 `export_presets.cfg` is committed for `/client` (no credentials in it); its `include_filter` carries the bundle and the settings, which are not Godot resources.

@@ -68,7 +68,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-214 | Gateway hardening: resume-token ack, grace cap, load test, permessage-deflate if it pays | Claude Code | Opus 5.5 | [T-214](../tasks/prompts/T-214.md) | T-210, T-307 | Review | Restricted `Net/**` — **approved by owner 2026-11-02**; ADR-002 #55–59 |
 | T-215 | AOI crowd cap: `aoi.max_visible` per observer, nearest first, always-visible target/attackers, hysteresis | Claude Code | Opus 5.5 | [T-215](../tasks/prompts/T-215.md) | T-204, T-214 | Review | ADR-002 #108 |
 | T-206 | Godot 3D client: bundle, connect + resume, map from grid, camera, tap to move/attack, interpolation, minimum combat display | Claude Code | Opus 5.5 | [T-206](../tasks/prompts/T-206.md) | T-005, T-209, T-210, T-307 | Review | Started before the T-005 phone test (ADR-002 #112) |
-| T-207 | Theme mounting + asset manifest loader, generated placeholder pack | Claude Code | Sonnet 5.5 | [T-207](../tasks/prompts/T-207.md) | T-206 | In Progress | ADR-002 #31 |
+| T-207 | Theme mounting + asset manifest loader, generated placeholder pack | Claude Code | Sonnet 5.5 | [T-207](../tasks/prompts/T-207.md) | T-206 | Review | ADR-002 #31 |
 | T-216 | Client build hardening: refuse `ws://` outside debug, strip the APK, CI export job, live `bye` tests | Claude Code | Sonnet 5.5 | [T-216](../tasks/prompts/T-216.md) | T-206 | In Progress | ADR-002 #64, #122 |
 | T-217 | AOI cap fairness: reserved slots by kind, own loot first, chasing monsters visible | Claude Code | Opus 5.5 | [T-217](../tasks/prompts/T-217.md) | T-215 | In Progress | ADR-002 #113, #121 |
 
