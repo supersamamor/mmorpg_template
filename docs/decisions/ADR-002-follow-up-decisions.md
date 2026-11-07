@@ -135,9 +135,9 @@ When writing these prompts, copy in the decisions listed:
 - **T-206:** 65, 66, 67, 87, 102
 - **T-207:** 31
 - **T-305:** 73
-- **T-401:** 15, 68, 85, 99 (`new_character.start_items`), 106
+- **T-401:** 15, 68, 85, 99 (`new_character.start_items`), 106, 117
 - **T-403:** 72
-- **T-501:** 14, 93
+- **T-501:** 14, 93, 118
 - **T-502:** 14
 - **T-503:** 32
 - **T-602:** 12, 30
@@ -211,3 +211,17 @@ When writing these prompts, copy in the decisions listed:
 | # | Question (source) | Decision |
 |---|---|---|
 | 112 | T-206 builds on the engine choice, but T-005's phone go/no-go is still open (no device has run it; iOS needs a Mac) | **Decided by the owner: start T-206 now.** Risk accepted: client work may need rework if device results are poor. T-005 stays In Progress, and T-206 reports all device behaviour as unverified. |
+
+## Addendum — T-215, T-309, T-206 (2026-11-07)
+| # | Question (source) | Decision |
+|---|---|---|
+| 113 | Ranking by distance alone lets nearby players crowd out monsters and NPCs; bots killed less and died more under the cap (T-215) | **→ new T-217:** reserve part of the cap by kind, so a quest NPC, the player's own loot and nearby monsters stay visible in a crowd. A hidden monster that can hit you is a gameplay bug, not just a display choice. |
+| 114 | `aoi.max_visible: 50` leaves 9.95 KB/s at worst, against the 10 KB/s budget (T-215) | **Decided: keep 50** until T-803 has device data. |
+| 115 | The cap is reached at 50 bots too, contrary to the T-215 prompt, because those views hold 61–78 entities (T-215) | **Decided: accepted.** The budget comes first. |
+| 116 | T-215 added an `AttackStarted` event in `CombatSystem`, outside its listed scope (T-215) | **Decided: accepted.** Rule 7 requires an event; it is one publish line. |
+| 117 | "Meadow's toughest monster" read as the Sting Wasp; an unarmed level 5–6 character has 0% wins against the Rock Beetle and Thornback Boar (T-309) | **Decided: accepted.** Those two are levels 7 and 10 and expect a weapon. **→ T-401** retunes them once weapons exist. |
+| 118 | `stats --duel` models auto-attacks only, so the wasp's venom sting isn't counted (T-309) | **→ T-501:** model monster skills in `--duel` with the effect runner. |
+| 119 | `welcome` doesn't carry the grace period, so the client keeps its own copy (T-206) | **Decided: keep for v1.** The client stops retrying on its own limit, and the server has the final say with `bye resume_failed`. |
+| 120 | The client's own UI words live in `client/Core/UiText.cs` (T-206) | **→ T-211:** decide UI text storage with the UI shell. |
+| 121 | The `aoi.*` comment in `balance.yaml` says 7 cells each way; measured depth is about 7 ahead and 4 behind (T-206) | **→ T-217:** fix the comment, no value change. |
+| 122 | Live tests of `replaced`, `resume_failed`, `shutdown` on the Godot socket; `tools/loadtest` option for extra sessions (T-206) | **→ T-216.** |
