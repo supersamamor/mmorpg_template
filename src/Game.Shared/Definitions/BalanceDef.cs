@@ -207,6 +207,27 @@ namespace Game.Shared.Definitions
         /// better; one already shown stays until it ranks past <c>max_visible</c> (nearest first, then lowest id). From 0 to below <c>max_visible</c>.
         /// </summary>
         public int CapHysteresis { get; init; }
+
+        /// <summary>Slots of <c>max_visible</c> kept for the nearest monsters while there are that many. Slots a kind does not use go back to the others.</summary>
+        public int CapReservedMonsters { get; init; }
+
+        /// <summary>Slots of <c>max_visible</c> kept for the nearest NPCs while there are that many.</summary>
+        public int CapReservedNpcs { get; init; }
+
+        /// <summary>Slots of <c>max_visible</c> kept for the nearest ground items while there are that many; items the observer may pick up come first.</summary>
+        public int CapReservedItems { get; init; }
+
+        /// <summary>
+        /// Ranks an entity already shown may slip past its kind's reservation, or past <c>cap_pinned_chasers</c>, and keep its slot. 0 or more.
+        /// All three reservations together must leave at least one slot below the cutoff (<c>max_visible - cap_hysteresis</c>), for the observer itself.
+        /// </summary>
+        public int CapReservedMargin { get; init; }
+
+        /// <summary>
+        /// How many monsters chasing an observer, nearest first, are always visible to it before they have hit it. The others rank like any monster,
+        /// so a long train cannot bypass the cap. 0 or more; with <c>cap_reserved_margin</c>, below <c>max_visible</c>.
+        /// </summary>
+        public int CapPinnedChasers { get; init; }
     }
 
     /// <summary>

@@ -233,3 +233,12 @@ When writing these prompts, copy in the decisions listed:
 | 124 | Godot downloads in CI are checked against the release's own `SHA512-SUMS.txt`, not pinned hashes (T-216) | **→ T-802:** pin the hashes in the repo when CI builds store releases, so a replaced release can't pass. Acceptable for a debug export job until then. |
 | 125 | The APK fell from 104.2 MB to 44.3 MB by removing Mono static archives (T-216) | **Decided: keep, unverified on a device.** The phone test must install and start the stripped APK. If it fails to start, this is the first thing to revert. |
 | 126 | Godot 4.7.2 does not support .NET 10 for Android (T-216) | **Decided:** the client stays on net8.0 / net9.0 (Android); `Game.Shared` already targets `netstandard2.1`. Recheck on a Godot upgrade. |
+
+## Addendum — T-217 (2026-11-08)
+| # | Question (source) | Decision |
+|---|---|---|
+| 127 | Monsters already hitting a player have no bound and can push a view past the cap, since the server has no entity collision (T-217) | **Decided: accept for v1.** Showing what is hitting you beats the cap; it takes a deliberate pile-up to matter. **→ T-803:** measure whether it occurs in real play. |
+| 128 | The reservation numbers (15 monsters, 4 NPCs, 6 items, margin 2, 10 chasers) are reasoned estimates, not measured (T-217) | **Decided: keep.** They met the budget (max 8.3 KB/s at 200 bots) and moved kills back toward no cap. The comments in `balance.yaml` now say which are estimates. **→ T-803** revisits them with real data. |
+| 129 | AOI phase cost rose about 40–70% (about 6 ms per 100 ms tick at 200 observers, every kind) (T-217) | **Decided: accept.** The tick has room and the p50 didn't rise. **→ T-803** if server data shows it matters. |
+| 130 | At 200 bots T-215 had fewer deaths than no cap, so row 113's "died more" only shows, weakly, at 50 bots (T-217) | **Noted:** the kills finding stands, and the fix is still right. Deaths follow how much fighting happens. |
+| 131 | A monster with 10 or more nearer chasers can land a first hit from out of view, appearing in the same delta as its hit (T-217) | **Decided: accept.** It's the cost of bounding a train. |

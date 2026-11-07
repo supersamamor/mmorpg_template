@@ -250,4 +250,44 @@ public class AoiBudgetTests(ITestOutputHelper output)
                     $"{records:F1} records per observer per tick, allocated on {allocating} of {ticks} ticks", records, allocating);
         }
     }
+
+    /// <summary>
+    /// T-217: the same crowd with all the kinds the reservations share out, and monsters chasing observers: the most work the cap does per
+    /// window. What it costs goes to the test output; wall time is not asserted.
+    /// </summary>
+    [Theory]
+    [InlineData(100)]
+    [InlineData(200)]
+    public void Outbound_cost_with_every_kind_in_one_view(int observers)
+    {
+        Run();   // thrown away, so what is measured is fully JIT-compiled
+        var (summary, allocating) = Run();
+        output.WriteLine($"{observers} observers, 40 monsters (8 chasing), 5 NPCs, 30 ground items, all in one view: {summary}");
+
+        // As above: a list can still grow to a new peak after warm-up; a per-tick allocation would show on every tick.
+        allocating.ShouldBeLessThanOrEqualTo(10);
+
+        (string Summary, int TicksAllocating) Run()
+        {
+            var field = new Field(96, 96);
+            var view = new GridRect(36, 36, 28, 28);
+            var players = new List<EntityId>();
+            for (var i = 0; i < observers; i++) players.Add(field.Add(view, walks: true, sink: new CountingSink(), kind: EntityKind.Player));
+            var monsters = new List<EntityId>();
+            for (var i = 0; i < 40; i++) monsters.Add(field.Add(view, walks: true));
+            for (var i = 0; i < 5; i++) field.Add(view, walks: false, kind: EntityKind.Npc, key: "npc.sample");
+            for (var i = 0; i < 30; i++) field.Add(view, walks: false, kind: EntityKind.Item, key: "item.sample");
+            field.Tick();
+            for (var i = 0; i < 8; i++) field.Map.Events.Publish(new Game.Server.World.Monsters.AggroGained(monsters[i], players[i % 2], AggroReasons.Sighted));
+            for (var i = 0; i < 200; i++) field.Tick();   // warm-up
+
+            field.Aoi.Measure = true;
+            const int ticks = 300;
+            for (var i = 0; i < ticks; i++) field.Tick();
+
+            var micros = field.Aoi.Micros.OrderBy(m => m).ToList();
+            var allocated = field.Aoi.Bytes.Count(b => b > 0);
+            return ($"mean {micros.Average():F0} us, p50 {micros[micros.Count / 2]:F0} us, p99 {micros[(int)(0.99 * micros.Count)]:F0} us, allocated on {allocated} of {ticks} ticks", allocated);
+        }
+    }
 }

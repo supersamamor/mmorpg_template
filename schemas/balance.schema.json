@@ -126,6 +126,26 @@
         "cap_hysteresis": {
           "type": "integer",
           "description": "Ranks an entity already shown may slip before it is cut. A new entity enters at rank max_visible - cap_hysteresis or better; one already shown stays until it ranks past max_visible (nearest first, then lowest id). From 0 to below max_visible."
+        },
+        "cap_reserved_monsters": {
+          "type": "integer",
+          "description": "Slots of max_visible kept for the nearest monsters while there are that many. Slots a kind does not use go back to the others."
+        },
+        "cap_reserved_npcs": {
+          "type": "integer",
+          "description": "Slots of max_visible kept for the nearest NPCs while there are that many."
+        },
+        "cap_reserved_items": {
+          "type": "integer",
+          "description": "Slots of max_visible kept for the nearest ground items while there are that many; items the observer may pick up come first."
+        },
+        "cap_reserved_margin": {
+          "type": "integer",
+          "description": "Ranks an entity already shown may slip past its kind's reservation, or past cap_pinned_chasers, and keep its slot. 0 or more. All three reservations together must leave at least one slot below the cutoff (max_visible - cap_hysteresis), for the observer itself."
+        },
+        "cap_pinned_chasers": {
+          "type": "integer",
+          "description": "How many monsters chasing an observer, nearest first, are always visible to it before they have hit it. The others rank like any monster, so a long train cannot bypass the cap. 0 or more; with cap_reserved_margin, below max_visible."
         }
       },
       "additionalProperties": false,

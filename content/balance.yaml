@@ -44,8 +44,8 @@ movement:
   # Nodes a single A* search may expand. Above the cell count of the largest sample map (48x32 = 1536), so no sample search is cut off.
   max_nodes_expanded: 2048
 aoi:
-  # Side of one area-of-interest bucket, in cells. A landscape phone with the fixed 3/4 camera shows about 22 x 13 cells at the
-  # default zoom (about 11 cells from the player to the side edges, 7 to the top and bottom). Small buckets keep the seen area
+  # Side of one area-of-interest bucket, in cells. A landscape phone with the fixed 3/4 camera shows, as measured in T-206, about 22 cells
+  # wide at the top edge and about 11 deep at the default zoom, split 7 ahead of the player and 4 behind. Small buckets keep the seen area
   # close to the screen; 6 cells puts the sample maps at 8 x 6 (starter_meadow) and 4 x 3 (thistle_hollow) buckets.
   bucket_size: 6
   # Buckets seen around the observer's own. An observer sees at least view_radius * bucket_size = 12 cells in every direction
@@ -57,6 +57,20 @@ aoi:
   # A new entity enters at rank max_visible - cap_hysteresis or better; one already shown stays until it ranks past max_visible. A tenth of
   # the cap: wide enough that entities milling about at the edge do not flicker, and a full view still holds 45 to 50.
   cap_hysteresis: 5
+  # Slots of max_visible kept for the nearest monsters; a slot a kind does not use goes back to the others, nearest first. The start map
+  # holds 26 monsters on 48 x 32 cells, and we estimate a view covers about half of that (not measured), so 15 should show a normal field in full. The three
+  # shares add up to half the cap, so a crowd of players still gets at least the other half.
+  cap_reserved_monsters: 15
+  # Slots kept for the nearest NPCs. A town has a few within reach (the start map's guide and trainer stand together), so a quest NPC stays on screen.
+  cap_reserved_npcs: 4
+  # Slots kept for the nearest ground items, estimated at about the drops of the last two kills (not measured). Items this observer may pick up rank first.
+  cap_reserved_items: 6
+  # Ranks an entity already shown may slip past its reservation, or past cap_pinned_chasers, and keep its slot. About a tenth of the largest
+  # share, the same proportion as cap_hysteresis has to the cap.
+  cap_reserved_margin: 2
+  # Monsters chasing the observer that are always visible before their first hit, nearest first: the 8 cells around it and two more on
+  # the way. With the margin that is at most 12 of the cap, however long the train. The rest rank like any monster until they hit.
+  cap_pinned_chasers: 10
 new_character:
   # A new character appears in the starter meadow's safe zone, a few steps south of the guide and the trainer, facing them.
   start_map_id: map.starter_meadow

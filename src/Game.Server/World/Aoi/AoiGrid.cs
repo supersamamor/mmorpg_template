@@ -104,10 +104,12 @@ internal sealed class AoiEntry
     {
         Entity = entity;
         Id = entity.Id.Value;
+        Kind = entity.Kind;
     }
 
     public readonly Entity Entity;
     public readonly long Id;
+    public readonly EntityKind Kind;   // read for every entity of a capped window: a copy here saves a trip to the entity
 
     public int Bucket = -1;
     public int Slot;
@@ -134,6 +136,9 @@ internal sealed class AoiEntry
 
     // Who it is attacking, from the combat events (0 = nobody; ids start at 1). Keeps the target, and it, in view past the crowd cap.
     public long AttackingId;
+
+    // Whom it has taken as its target, from the AI's events (0 = nobody), before any hit. Keeps it in that target's view past the crowd cap, within a bound.
+    public long ChasingId;
 
     public ObserverState? Observer;
 

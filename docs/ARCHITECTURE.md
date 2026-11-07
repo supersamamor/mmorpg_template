@@ -88,13 +88,21 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
   included) or sends `RequestSnapshot`, and otherwise at most one **delta** per tick, none when nothing in view changed. The sink
   (`IViewSink`, implemented by the gateway) is called on the tick thread: it copies or serializes and queues, never does I/O;
   one that throws is logged and detached.
-- **Crowd cap** (T-215, `VisibleCap`): an observer sees at most `aoi.max_visible` entities of its window. Always visible, and counted
-  toward the cap: itself, its current attack target (from `AttackStarted` until `AttackStopped`) and any living entity attacking it
-  (from its first `DamageDealt` until `AttackStopped` or `AggroLost`), as long as they are in the window. Party members join this list
-  when parties exist (a documented hook in `VisibleCap.AlwaysVisible`). These are never cut, so more attackers than the cap go over it.
-  The rest are ranked by Chebyshev distance, then entity id. An entity enters at rank `max_visible - cap_hysteresis` or better (the
-  cutoff) and, once shown, stays until it ranks past `max_visible` or leaves the window, so nothing near is ever hidden, the cap is never
-  passed by ranked entities, and an entity at the cutoff does not flicker. A window that has never held more than the cap is not cut at
+- **Crowd cap** (T-215, T-217, `VisibleCap`): an observer sees at most `aoi.max_visible` entities of its window. Always visible, and counted
+  toward the cap: itself, its current attack target (from `AttackStarted` until `AttackStopped`), any living entity attacking it
+  (from its first `DamageDealt` until `AttackStopped` or `AggroLost`), and the nearest `aoi.cap_pinned_chasers` living monsters that have
+  taken it as their target (from `AggroGained` until `AggroLost`), as long as they are in the window. Party members join this list
+  when parties exist (a documented hook in `VisibleCap.AlwaysVisible`). Attackers are never cut, so more of them than the cap go over it; a
+  chaser only stays pinned within the limit plus `aoi.cap_reserved_margin`, so a long train cannot bypass the cap. Past that limit a chaser
+  ranks like any monster and, if it does land a hit from out of view, arrives in the same delta as the hit.
+  Next, monsters, NPCs and ground items each get a **reservation** (`aoi.cap_reserved_monsters`, `_npcs`, `_items`), filled with the nearest of
+  the kind; what is pinned of a kind counts toward it, and a kind with fewer entities leaves the rest of its share to the others. The
+  remaining slots go nearest first, whatever the kind. Rank is Chebyshev distance, then entity id, except that a ground item another player
+  has loot priority on ranks behind everything else, in its reservation and in the remaining slots, until the priority ends.
+  **No flicker:** a new entity enters within its reservation, or at rank `max_visible - cap_hysteresis` or better overall (the cutoff).
+  Once shown, it stays up to `aoi.cap_reserved_margin` ranks past its reservation, or until it ranks past `max_visible`, or until it leaves the
+  window. So the cap is never passed by ranked entities, and an entity at either edge does not flicker, also when its reservation shrinks
+  because something of its kind was just pinned. A window that has never held more than the cap is not cut at
   all; once capped, a view stays capped until its window is back at the cutoff. Anything cut is simply not in view: no changes for it,
   and the client cannot target it. Being cut is not visibly different from walking out of the window: it arrives in `disappeared`.
 - **Tick timing and stats.** A tick's start is scheduled against the instance's start time, never against the previous tick, so a late
@@ -533,6 +541,10 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   KB/s to 7.2 / 9.1 / 9.8 and 7.3 / 9.2 / 9.95 (two runs) at `aoi.max_visible` 50. A cap of 60 gave 8.5 / 10.6 / 11.3 and 80 gave 10.7 / 12.6 / 13.4. Hits are why it does
   not fall in step with the view: a hit is sent when either side is in view, so crowds around shown monsters still arrive. At 50 bots, whose
   views hold 61–78 entities (bots, monsters, ground items) before the cap, it went from 5.4 to 4.4 KB/s. So the cap applies there too.
+  **Reservations (T-217, §3):** same load test and machine, after the T-309 rebalance, 2–4 runs each. Max per-client KB/s and mean kills / deaths per
+  run: at 200 bots, no cap 18.2–20.4 and 2062 / 189, distance only 10.1–10.2 and 1510 / 70, reservations 8.1–8.3 and 1935 / 160. At 50 bots, no cap
+  6.1 and 665 / 37, distance only 4.9–5.2 and 437 / 50, reservations 4.9–5.3 and 650 / 29. The runs are noisy (at 50 bots with reservations, 387–797 kills
+  and 11–46 deaths), but both kills and deaths move back toward no cap, and the payload fell.
 - **Gateway** (`Game.Server/Net`, T-205): Kestrel WebSockets on one path (`/ws`). In development it listens on loopback with plain
   `ws://`; otherwise it listens on every interface with TLS only (a `.pfx` set in config; the server refuses to start without one).
   All ports, limits and timeouts are in `GatewayOptions`, which has defaults and can be overridden with `--net-<name>` or
