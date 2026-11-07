@@ -139,13 +139,13 @@ An item's `equip.slots` lists the slots it fits: it fits **any one** of them (an
 `LevelUp`, `JobLevelUp`, `JobChanged`, `SkillLearned`, `QuestStarted`,
 `QuestStepCompleted`, `QuestCompleted`, `StatusApplied`, `StatusExpired`,
 `EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`, `MovementStarted`, `CellReached`,
-`MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `MonsterReturned`, `AttackRequested`, `AttackRefused`, `AttackStopped`,
+`MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `MonsterReturned`, `AttackRequested`, `AttackRefused`, `AttackStarted`, `AttackStopped`,
 `ExpGained`, `ExpLost`, `PlayerRespawned`, `ItemDropped`, `ItemExpired`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
-`aoi.bucket_size` cells; an observer sees the buckets within `aoi.view_radius` of its own. **Snapshot**: an observer's full view.
-**Delta**: one tick's `appeared` / `changed` / `disappeared`.
+`aoi.bucket_size` cells; an observer sees the buckets within `aoi.view_radius` of its own, up to the **crowd cap** (`aoi.max_visible`).
+**Snapshot**: an observer's full view. **Delta**: one tick's `appeared` / `changed` / `disappeared`.
 
 ## View fields
 In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`, `speed`, `display_key`, `hp`, `dead`, `mine`.

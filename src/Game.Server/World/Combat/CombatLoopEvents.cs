@@ -15,6 +15,16 @@ public sealed record AttackRefused(EntityId Attacker, EntityId Target, string Re
     public string Name => EventNames.AttackRefused;
 }
 
+/// <summary>
+/// <c>AttackStarted</c>: a player's auto-attack now aims at <c>Target</c> (it was accepted, or it switched target), before the first swing,
+/// which may be a walk away. Ends with <see cref="AttackStopped"/>, or on the next <c>AttackStarted</c>.
+/// </summary>
+public sealed record AttackStarted(EntityId Attacker, EntityId Target) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.AttackStarted;
+}
+
 /// <summary><c>AttackStopped</c>: a player's auto-attack on <c>Target</c> ended, for an <see cref="AttackReasons"/> term.</summary>
 public sealed record AttackStopped(EntityId Attacker, EntityId Target, string Reason) : IGameEvent
 {

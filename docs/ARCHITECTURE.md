@@ -83,11 +83,20 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
   cells. An **observer** (an entity with a view sink, `Entity.View`) sees every entity whose bucket is within `aoi.view_radius`
   buckets (Chebyshev) of its own, itself included. In phase 5 the AOI compares every entity with what observers were last told
   (one pass, O(entities)) and moves it between buckets when it crosses a boundary; walking state comes from the movement events.
-  An observer whose window of buckets had no change this tick costs a few array reads; otherwise its visible set is gathered
-  and merged with the last one (O(visible)). It gets a **snapshot** when it starts observing, arrives on a map (warps included)
-  or sends `RequestSnapshot`, and otherwise at most one **delta** per tick, none when nothing in view changed. The sink
+  An observer whose window of buckets had no change this tick costs a few array reads; otherwise its window is gathered, cut to the
+  crowd cap and merged with the last visible set (O(window)). It gets a **snapshot** when it starts observing, arrives on a map (warps
+  included) or sends `RequestSnapshot`, and otherwise at most one **delta** per tick, none when nothing in view changed. The sink
   (`IViewSink`, implemented by the gateway) is called on the tick thread: it copies or serializes and queues, never does I/O;
   one that throws is logged and detached.
+- **Crowd cap** (T-215, `VisibleCap`): an observer sees at most `aoi.max_visible` entities of its window. Always visible, and counted
+  toward the cap: itself, its current attack target (from `AttackStarted` until `AttackStopped`) and any living entity attacking it
+  (from its first `DamageDealt` until `AttackStopped` or `AggroLost`), as long as they are in the window. Party members join this list
+  when parties exist (a documented hook in `VisibleCap.AlwaysVisible`). These are never cut, so more attackers than the cap go over it.
+  The rest are ranked by Chebyshev distance, then entity id. An entity enters at rank `max_visible - cap_hysteresis` or better (the
+  cutoff) and, once shown, stays until it ranks past `max_visible` or leaves the window, so nothing near is ever hidden, the cap is never
+  passed by ranked entities, and an entity at the cutoff does not flicker. A window that has never held more than the cap is not cut at
+  all; once capped, a view stays capped until its window is back at the cutoff. Anything cut is simply not in view: no changes for it,
+  and the client cannot target it. Being cut is not visibly different from walking out of the window: it arrives in `disappeared`.
 - **Tick timing and stats.** A tick's start is scheduled against the instance's start time, never against the previous tick, so a late
   wake-up does not push later ticks back; simulated time still comes from the tick count. On Windows the wait uses a high-resolution
   waitable timer (`CREATE_WAITABLE_TIMER_HIGH_RESOLUTION`) up to 1 ms before the due time and spins for the rest, because an ordinary
@@ -472,7 +481,7 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   A walker produces one change per cell reached, not per tick; the client interpolates from `cell` to `next`.
 - **Combat on the wire** (T-307). Others' HP is a fraction rounded to 0.01 (`hp`), sent only when that rounded value changes, so exact HP
   never leaks; the owner gets its exact `hp/max_hp/sp/max_sp` as `vitals` in every snapshot and in a delta when they changed. `hits` is one
-  batch per tick per observer: every attack whose attacker or target is in view, `[attacker, target, amount, result]`. A death is the `dead`
+  batch per tick per observer: every attack whose attacker or target is in view (after the crowd cap, §3), `[attacker, target, amount, result]`. A death is the `dead`
   flag (a dead monster stays in view until the spawner removes it). A ground item says only whether this client may pick it up now
   (`mine`): the priority holder and the loot timers stay on the server. The owner alone gets `exp` (after every snapshot and on every change),
   `level_up`, `you_died`, `respawned` and `attack_stopped`; a refused attack comes back as `rejected` with an "Attack reasons" term.
@@ -490,6 +499,10 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   0.3 MB per connection. The rule was ≥ 30% for < 1 ms/tick, so it stays off; turn it on per server if bandwidth matters more than
   CPU. Shared serialized delta pieces were not built: the view sinks cost 1.5 ms/tick at 100 observers (rule: build above 2 ms);
   4.4 ms at 200.
+  **Crowd cap (T-215, §3):** same load test and machine. At 200 bots the per-client payload (mean / p50 / max) went from 13.4 / 16.7 / 18.2
+  KB/s to 7.2 / 9.1 / 9.8 and 7.3 / 9.2 / 9.95 (two runs) at `aoi.max_visible` 50. A cap of 60 gave 8.5 / 10.6 / 11.3 and 80 gave 10.7 / 12.6 / 13.4. Hits are why it does
+  not fall in step with the view: a hit is sent when either side is in view, so crowds around shown monsters still arrive. At 50 bots, whose
+  views hold 61–78 entities (bots, monsters, ground items) before the cap, it went from 5.4 to 4.4 KB/s. So the cap applies there too.
 - **Gateway** (`Game.Server/Net`, T-205): Kestrel WebSockets on one path (`/ws`). In development it listens on loopback with plain
   `ws://`; otherwise it listens on every interface with TLS only (a `.pfx` set in config; the server refuses to start without one).
   All ports, limits and timeouts are in `GatewayOptions`, which has defaults and can be overridden with `--net-<name>` or

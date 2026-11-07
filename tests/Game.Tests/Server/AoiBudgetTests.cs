@@ -55,13 +55,13 @@ public class AoiBudgetTests(ITestOutputHelper output)
         private readonly Dictionary<EntityId, GridRect> _areas = new();
         private readonly Dictionary<EntityId, (IViewSink? Sink, string? Key, int Agi)> _setup = new();
 
-        public Field(int width, int height)
+        public Field(int width, int height, Func<AoiSystem>? aoi = null)
         {
             var balance = TestGrids.SampleContent.Balance;
             TimedAoi? timed = null;
             var pipeline = new SystemPipeline()
                 .Add(() => MovementSystem.Create(balance))
-                .Add(() => timed = new TimedAoi(AoiSystem.Create(balance)));
+                .Add(() => timed = new TimedAoi(aoi?.Invoke() ?? AoiSystem.Create(balance)));
             World = new GameWorld([AoiRig.Open("map.field", width, height)], pipeline, 5, new ManualClock(), new ListLog());
             Map = World.Instances.Single();
             Aoi = timed!;
@@ -198,5 +198,56 @@ public class AoiBudgetTests(ITestOutputHelper output)
         output.WriteLine($"records handed to sinks: {sinks.Sum(s => s.Records) / (double)ticks:F0}/tick in {sinks.Sum(s => s.Messages) / (double)ticks:F0} messages/tick");
 
         field.Aoi.Inner.ObserverCount.ShouldBe(100);
+    }
+
+    /// <summary>
+    /// T-215: everyone in one view, the crowd cap's worst case, without the cap (the T-204 path: the whole window sorted) and with it. What it
+    /// costs goes to the test output; wall time is not asserted.
+    /// </summary>
+    [Theory]
+    [InlineData(100)]
+    [InlineData(200)]
+    public void Outbound_cost_with_every_observer_in_one_view(int observers)
+    {
+        var aoi = TestGrids.SampleContent.Balance.Aoi;
+        AoiSystem Uncapped() => new(aoi.BucketSize, aoi.ViewRadius);
+        AoiSystem Capped() => AoiSystem.Create(TestGrids.SampleContent.Balance);
+        // A whole pass of each is thrown away, so both are measured fully JIT-compiled, whichever runs first.
+        Run(Uncapped);
+        Run(Capped);
+        var before = Run(Uncapped);
+        var after = Run(Capped);
+        output.WriteLine($"{observers} observers, no other entities, all in one view:");
+        output.WriteLine($"  without the cap: {before.Summary}");
+        output.WriteLine($"  max_visible {aoi.MaxVisible}: {after.Summary}");
+
+        after.Records.ShouldBeLessThan(before.Records);
+        // Each observer's reused lists can still grow to a new peak after warm-up, with or without the cap; a per-tick allocation would show on every tick.
+        after.TicksAllocating.ShouldBeLessThanOrEqualTo(10);
+
+        (string Summary, double Records, int TicksAllocating) Run(Func<AoiSystem> create)
+        {
+            var field = new Field(96, 96, create);
+            var sinks = new List<CountingSink>();
+            var view = new GridRect(36, 36, 28, 28);
+            for (var i = 0; i < observers; i++)
+            {
+                var sink = new CountingSink();
+                sinks.Add(sink);
+                field.Add(view, walks: true, sink: sink, kind: EntityKind.Player);
+            }
+            for (var i = 0; i < 200; i++) field.Tick();   // warm-up
+            var warmRecords = sinks.Sum(s => s.Records);
+
+            field.Aoi.Measure = true;
+            const int ticks = 300;
+            for (var i = 0; i < ticks; i++) field.Tick();
+
+            var micros = field.Aoi.Micros.OrderBy(m => m).ToList();
+            var records = (sinks.Sum(s => s.Records) - warmRecords) / (double)(ticks * observers);
+            var allocating = field.Aoi.Bytes.Count(b => b > 0);
+            return ($"mean {micros.Average():F0} us, p50 {micros[micros.Count / 2]:F0} us, p99 {micros[(int)(0.99 * micros.Count)]:F0} us, " +
+                    $"{records:F1} records per observer per tick, allocated on {allocating} of {ticks} ticks", records, allocating);
+        }
     }
 }

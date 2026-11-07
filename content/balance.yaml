@@ -51,6 +51,12 @@ aoi:
   # Buckets seen around the observer's own. An observer sees at least view_radius * bucket_size = 12 cells in every direction
   # (just past the 11-cell screen edge) and at most 17, so entities appear a little before they walk on screen.
   view_radius: 2
+  # Most entities one observer is sent, itself included. ARCHITECTURE §9 budgets 10 KB/s per client at 50 visible, and the T-214 load test
+  # agrees: 200 bots in one view cost at most 9.95 KB/s for any client at 50, but 11.3 KB/s at 60 and 13.4 KB/s at 80.
+  max_visible: 50
+  # A new entity enters at rank max_visible - cap_hysteresis or better; one already shown stays until it ranks past max_visible. A tenth of
+  # the cap: wide enough that entities milling about at the edge do not flicker, and a full view still holds 45 to 50.
+  cap_hysteresis: 5
 new_character:
   # A new character appears in the starter meadow's safe zone, a few steps south of the guide and the trainer, facing them.
   start_map_id: map.starter_meadow

@@ -195,6 +195,18 @@ namespace Game.Shared.Definitions
 
         /// <summary>How many buckets around its own an observer sees (Chebyshev distance in buckets).</summary>
         public int ViewRadius { get; init; }
+
+        /// <summary>
+        /// Most entities one observer sees from its window, itself included: the nearest, plus those always visible (itself, its attack
+        /// target, its attackers), which are never cut.
+        /// </summary>
+        public int MaxVisible { get; init; }
+
+        /// <summary>
+        /// Ranks an entity already shown may slip before it is cut. A new entity enters at rank <c>max_visible - cap_hysteresis</c> or
+        /// better; one already shown stays until it ranks past <c>max_visible</c> (nearest first, then lowest id). From 0 to below <c>max_visible</c>.
+        /// </summary>
+        public int CapHysteresis { get; init; }
     }
 
     /// <summary>

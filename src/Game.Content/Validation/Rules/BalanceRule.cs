@@ -57,6 +57,10 @@ public sealed class BalanceRule : IValidationRule
             Range(context, "aoi.bucket_size", "must be above 0.");
         if (balance.Aoi.ViewRadius <= 0)
             Range(context, "aoi.view_radius", "must be above 0.");
+        if (balance.Aoi.MaxVisible <= 0)
+            Range(context, "aoi.max_visible", "must be above 0.");
+        else if (balance.Aoi.CapHysteresis < 0 || balance.Aoi.CapHysteresis >= balance.Aoi.MaxVisible)
+            Range(context, "aoi.cap_hysteresis", $"must be from 0 to below max_visible ({balance.Aoi.MaxVisible}).");
 
         if (c.PlayerAttackRange < 1)
             Range(context, "combat.player_attack_range", "must be at least 1.");
