@@ -33,7 +33,7 @@ exp: [
 ---
 # Wanderer job levels 1-10 (9 entries). Generator, L = 1..9:
 #   exp(L) = floor(10 * L^2 + 20 * L)
-id: exp.job_novice
+id: exp.job_wanderer
 name: Wanderer job level curve
 exp: [
   30, 80, 150, 240, 350, 480, 630, 800, 990

@@ -19,16 +19,16 @@ public class SpawnInitializerTests
         var id = rig.World.Spawn(EntityKind.Player, "map.a", new GridCell(1, 1), Directions.S, entity =>
         {
             order.Add("init");
-            entity.DefinitionId = "job.novice";
+            entity.DefinitionId = "job.wanderer";
             entity.Stats = AoiRig.Sheet(1);
             entity.View = sink;
         });
         order.ShouldBeEmpty();      // nothing happens off the tick
         rig.Ticks();
 
-        order.ShouldBe(["init", "entered:job.novice"]);
+        order.ShouldBe(["init", "entered:job.wanderer"]);
         sink.Snapshots.Single().Entities.Single().Id.ShouldBe(id);
-        sink.Snapshots[0].Entities[0].DisplayKey.ShouldBe("job.novice");
+        sink.Snapshots[0].Entities[0].DisplayKey.ShouldBe("job.wanderer");
     }
 
     [Fact]

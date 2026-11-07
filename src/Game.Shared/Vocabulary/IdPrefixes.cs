@@ -3,7 +3,7 @@ namespace Game.Shared.Vocabulary
     /// <summary>Namespace prefixes of content ids, one per definition type. VOCABULARY.md: "Id namespaces".</summary>
     public static class IdPrefixes
     {
-        /// <summary><c>job.</c>: Job / class (<c>job.swordsman</c>).</summary>
+        /// <summary><c>job.</c>: Job / class (<c>job.warden</c>).</summary>
         public const string Job = "job.";
 
         /// <summary><c>skill.</c>: Skill (<c>skill.bash</c>).</summary>

@@ -80,7 +80,7 @@ public class DeterminismTests
         {
             Attack(Warden(3), "item.iron_blade", 3, "monster.gel_slime"),
             Attack(Warden(0), "item.iron_blade", 0, "monster.thornback_boar"),
-            Attack(Character("job.novice", 1, 1, 1, 1, 1, 1, 1, 1), null, 0, "monster.sting_wasp"),
+            Attack(Character("job.wanderer", 1, 1, 1, 1, 1, 1, 1, 1), null, 0, "monster.sting_wasp"),
         };
         attacks[1].Effect = DamageEffectOf("skill.shockwave");
         attacks[1].SkillLevel = 4;

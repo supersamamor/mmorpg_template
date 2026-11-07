@@ -6,7 +6,7 @@
     "id": {
       "type": "string",
       "pattern": "^job\\.[a-z0-9_]+$",
-      "description": "Job id, e.g. job.swordsman."
+      "description": "Job id, e.g. job.warden."
     },
     "name": {
       "type": "string",

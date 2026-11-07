@@ -2,7 +2,7 @@
 id: job.spellbinder
 name: Spellbinder
 description: A scholar of the old tongues who shapes flame and mana from a safe distance.
-parent_job_id: job.novice
+parent_job_id: job.wanderer
 requirements:
   min_base_level: 5
   min_job_level: 5

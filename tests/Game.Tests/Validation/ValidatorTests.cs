@@ -97,14 +97,14 @@ public class ValidatorTests : IDisposable
     }
 
     [Theory]
-    [InlineData("jobs/novice.yaml", "skill_id: skill.second_wind", "skill_id: skill.nope", "skills[0].skill_id")]
+    [InlineData("jobs/wanderer.yaml", "skill_id: skill.second_wind", "skill_id: skill.nope", "skills[0].skill_id")]
     [InlineData("jobs/warden.yaml", "quest_ids: [quest.warden_trial]", "quest_ids: [quest.nope]", "requirements.quest_ids[0]")]
-    [InlineData("jobs/novice.yaml", "job_exp_table_id: exp.job_novice", "job_exp_table_id: exp.nope", "job_exp_table_id")]
-    [InlineData("jobs/spellbinder.yaml", "parent_job_id: job.novice", "parent_job_id: job.nope", "parent_job_id")]
+    [InlineData("jobs/wanderer.yaml", "job_exp_table_id: exp.job_wanderer", "job_exp_table_id: exp.nope", "job_exp_table_id")]
+    [InlineData("jobs/spellbinder.yaml", "parent_job_id: job.wanderer", "parent_job_id: job.nope", "parent_job_id")]
     [InlineData("drops/gel_slime.yaml", "item.gel_glob", "item.nope", "entries[0].item_id")]
     [InlineData("npcs/guide.yaml", "dialogue_id: dialogue.guide_intro", "dialogue_id: dialogue.nope", "dialogue_id")]
     [InlineData("skills/call_seedling.yaml", "monster_id: monster.mossling", "monster_id: monster.nope", "effects[0].monster_id")]
-    [InlineData("quests/warden_trial.yaml", "job_ids: [job.novice]", "job_ids: [job.nope]", "prerequisites.job_ids[0]")]
+    [InlineData("quests/warden_trial.yaml", "job_ids: [job.wanderer]", "job_ids: [job.nope]", "prerequisites.job_ids[0]")]
     [InlineData("quests/first_hunt.yaml", "monster_id: monster.gel_slime", "monster_id: monster.nope", "steps[0].objectives[0].monster_id")]
     [InlineData("quests/first_hunt.yaml", "giver_npc_id: npc.guide", "giver_npc_id: npc.nope", "giver_npc_id")]
     [InlineData("quests/gear_up.yaml", "map_id: map.starter_meadow", "map_id: map.nope", "steps[2].objectives[0].map_id")]
@@ -148,7 +148,7 @@ public class ValidatorTests : IDisposable
     [InlineData("items/iron_blade.yaml", "slots: [weapon]", "slots: [hand]", "equip.slots[0]")]
     [InlineData("items/iron_blade.yaml", "stat: str", "stat: strength", "equip.modifiers[0].stat")]
     [InlineData("skills/call_seedling.yaml", "animation_id: cast", "animation_id: zap", "animation_id")]
-    [InlineData("jobs/novice.yaml", "weapon_types: [unarmed, dagger]", "weapon_types: [unarmed, lance]", "weapon_types[1]")]
+    [InlineData("jobs/wanderer.yaml", "weapon_types: [unarmed, dagger]", "weapon_types: [unarmed, lance]", "weapon_types[1]")]
     [InlineData("jobs/spellbinder.yaml", "stat: max_sp", "stat: mana", "stat_bonuses[0].stat")]
     public void Value_outside_the_vocabulary_is_reported(string file, string from, string to, string path)
     {
@@ -272,11 +272,11 @@ public class ValidatorTests : IDisposable
     [Fact]
     public void Job_parent_loop_is_reported()
     {
-        Edit("jobs/novice.yaml", "parent_job_id: null", "parent_job_id: job.warden");
+        Edit("jobs/wanderer.yaml", "parent_job_id: null", "parent_job_id: job.warden");
 
         var issues = Validate().Issues.Where(i => i.Code == ValidationCodes.JobCycle).ToList();
 
-        issues.Select(i => i.File).OrderBy(f => f).ShouldBe(new[] { "jobs/novice.yaml", "jobs/warden.yaml" });
+        issues.Select(i => i.File).OrderBy(f => f).ShouldBe(new[] { "jobs/wanderer.yaml", "jobs/warden.yaml" });
     }
 
     // ---- dialogue ----------------------------------------------------------------------------------------------

@@ -481,7 +481,7 @@ public class CombatPolishTests
     public void LoseBaseExp_stays_within_the_current_level(int level, long exp, long amount, long expectedLost, long expectedLeft)
     {
         var rules = Rules();
-        var state = rules.NewCharacter("job.novice");
+        var state = rules.NewCharacter("job.wanderer");
         state.BaseLevel = level;
         state.BaseExp = exp;
 
@@ -496,7 +496,7 @@ public class CombatPolishTests
     public void LoseBaseExp_at_the_max_level_loses_nothing()
     {
         var rules = Rules();
-        var state = rules.NewCharacter("job.novice");
+        var state = rules.NewCharacter("job.wanderer");
         state.BaseLevel = rules.MaxBaseLevel;
         state.BaseExp = 0;
 

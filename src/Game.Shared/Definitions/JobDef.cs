@@ -9,7 +9,7 @@ namespace Game.Shared.Definitions
         /// <summary>Id namespace for jobs.</summary>
         public const string IdPrefix = IdPrefixes.Job;
 
-        /// <summary>Job id, e.g. <c>job.swordsman</c>.</summary>
+        /// <summary>Job id, e.g. <c>job.warden</c>.</summary>
         public string Id { get; init; } = string.Empty;
 
         /// <summary>Display name.</summary>

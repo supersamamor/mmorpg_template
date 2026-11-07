@@ -29,12 +29,12 @@ public class CombatResolverTests
     [Fact]
     public void Hit_chance_is_clamped_to_balance_minimum_for_a_hopeless_attacker()
     {
-        // A level-1 novice (hit 1 + 1 + 10 = 12) against a boar whose flee is overridden to 1000:
+        // A level-1 wanderer (hit 1 + 1 + 10 = 12) against a boar whose flee is overridden to 1000:
         // (12 − 1000 + 80) / 100 = −9.08 → 0.05 (formula clamp and balance min_hit_chance agree).
-        var novice = Character("job.novice", 1, 1, 1, 1, 1, 1, 1, 1);
+        var wanderer = Character("job.wanderer", 1, 1, 1, 1, 1, 1, 1, 1);
         var boar = Monster("monster.thornback_boar");
         boar.Modifiers.Add("test", DerivedStats.Flee, ModifierOp.Override, 1000);
-        var ctx = Attack(novice, null, 0, "monster.thornback_boar", boar);
+        var ctx = Attack(wanderer, null, 0, "monster.thornback_boar", boar);
         ctx.Breakdown = new DamageBreakdown();
 
         new CombatResolver(Rules(), new ScriptedRandom(0.0499, 0.9)).Resolve(ctx).Hit.ShouldBeTrue();
@@ -93,10 +93,10 @@ public class CombatResolverTests
     [Fact]
     public void Min_damage_applies_to_landed_hits()
     {
-        // Level-1 novice, all stats 1: atk = 1. On a rock beetle (def 12): max(1, floor(100 / 136)) = 1.
+        // Level-1 wanderer, all stats 1: atk = 1. On a rock beetle (def 12): max(1, floor(100 / 136)) = 1.
         // Pretend the beetle is ghost: neutral vs ghost = 0.25 → raw 0.25 → floor 0 → min_damage 1.
-        var novice = Character("job.novice", 1, 1, 1, 1, 1, 1, 1, 1);
-        var ctx = Attack(novice, null, 0, "monster.rock_beetle");
+        var wanderer = Character("job.wanderer", 1, 1, 1, 1, 1, 1, 1, 1);
+        var ctx = Attack(wanderer, null, 0, "monster.rock_beetle");
         ctx.DefenderElement = Elements.Ghost;
         ctx.Breakdown = new DamageBreakdown();
         var r = new CombatResolver(Rules(), new ScriptedRandom(0.0, 0.9)).Resolve(ctx);

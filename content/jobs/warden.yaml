@@ -2,7 +2,7 @@
 id: job.warden
 name: Warden
 description: A frontline guardian who protects the vale with blade and buckler.
-parent_job_id: job.novice
+parent_job_id: job.wanderer
 requirements:
   min_base_level: 10
   min_job_level: 8
