@@ -39,13 +39,15 @@ public sealed class ModelStore
     private readonly Dictionary<string, AnimSet?> _animations = new(StringComparer.Ordinal);
     private readonly HashSet<string> _requested = new(StringComparer.Ordinal);
     private readonly int _limit;
+    private readonly bool _threaded;
     private readonly Action<string> _log;
     private long _clock;
 
-    /// <summary>Creates a store.</summary>
-    public ModelStore(int cacheLimit, Action<string> log)
+    /// <summary>Creates a store. Without <paramref name="threaded"/> every load happens at once on the calling thread (<see cref="ModelLoading"/>).</summary>
+    public ModelStore(int cacheLimit, bool threaded, Action<string> log)
     {
         _limit = Math.Max(1, cacheLimit);
+        _threaded = threaded;
         _log = log;
     }
 
@@ -59,6 +61,11 @@ public sealed class ModelStore
     public void Request(string path)
     {
         if (_scenes.TryGetValue(path, out var entry) && (entry.Scene is not null || entry.Failed)) return;
+        if (!_threaded)
+        {
+            LoadNow(path);
+            return;
+        }
         if (!_requested.Add(path)) return;
         var error = ResourceLoader.LoadThreadedRequest("res://" + path, "PackedScene");
         if (error != Error.Ok)
@@ -66,6 +73,17 @@ public sealed class ModelStore
             _log($"[theme] could not start loading {path}: {error}");
             _scenes[path] = new Entry { Failed = true };
         }
+    }
+
+    private void LoadNow(string path)
+    {
+        if (ResourceLoader.Load("res://" + path, "PackedScene") is PackedScene loaded)
+        {
+            _scenes[path] = new Entry { Scene = loaded, LastUsed = ++_clock };
+            return;
+        }
+        _log($"[theme] {path} could not be loaded; drawing a fallback");
+        _scenes[path] = new Entry { Failed = true };
     }
 
     /// <summary>The scene, if loaded. False while loading; <paramref name="failed"/> says it never will.</summary>
@@ -88,6 +106,7 @@ public sealed class ModelStore
             }
         }
         Request(path);
+        if (!_threaded) return TryGetScene(path, out scene, out failed); // Request has just filled in the entry
         switch (ResourceLoader.LoadThreadedGetStatus("res://" + path))
         {
             case ResourceLoader.ThreadLoadStatus.Loaded:

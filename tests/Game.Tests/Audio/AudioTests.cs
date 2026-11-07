@@ -128,6 +128,46 @@ public class AudioTests : IDisposable
         manifest.Events.ShouldBe([new KeyValuePair<string, string>("LevelUp", "sfx.rich")]);
     }
 
+    // ---- the fallbacks table (T-218) ----
+
+    [Fact]
+    public void A_fallback_naming_a_key_the_manifest_lacks_fails_with_file_and_path()
+    {
+        var issue = Single(Validate(EditManifest("\"monster\": \"model.monster.gel_slime\"", "\"monster\": \"model.monster.nope\""), [new ThemeFallbackRule()]), ValidationCodes.AssetMissing);
+
+        issue.File.ShouldBe("themes/default/asset-manifest.json");
+        issue.Path.ShouldBe("fallbacks.monster");
+        issue.Line.ShouldBeGreaterThan(0);
+        issue.Message.ShouldContain("model.monster.nope");
+    }
+
+    [Fact]
+    public void The_real_fallbacks_table_passes()
+    {
+        Validate(rules: [new ThemeFallbackRule()]).Issues.ShouldBeEmpty();
+        AudioManifest.Parse(RealManifestText(), "m.json").Fallbacks.Select(f => f.Key).ShouldBe(["missing", "player", "monster", "npc", "item"]);
+    }
+
+    [Fact]
+    public void A_fallback_value_that_is_not_a_string_fails()
+    {
+        var issue = Single(Validate(EditManifest("\"npc\": \"model.npc.guide\"", "\"npc\": 7"), [new ThemeFallbackRule()]), ValidationCodes.ThemeFallback);
+        issue.Path.ShouldBe("fallbacks.npc");
+    }
+
+    [Fact]
+    public void A_fallbacks_table_that_is_not_an_object_fails()
+    {
+        const string manifest = """{ "model.a": { "file": "a.glb" }, "fallbacks": [] }""";
+        Single(Validate(manifest, [new ThemeFallbackRule()]), ValidationCodes.ThemeFallback).Path.ShouldBe("fallbacks");
+    }
+
+    [Fact]
+    public void A_manifest_with_no_fallbacks_table_is_fine()
+    {
+        Validate("""{ "model.a": { "file": "a.glb" } }""", [new ThemeFallbackRule()]).Issues.ShouldBeEmpty();
+    }
+
     [Fact]
     public void The_audio_section_is_not_an_asset_key()
     {

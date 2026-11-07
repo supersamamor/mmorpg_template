@@ -421,7 +421,9 @@ yaw 0), origin on the ground, meshes named `Body_LOD0` and optionally `Body_LOD1
 library file on the same skeleton. Animation follows the view model: idle, walk, dead, and one-shot attack and hit when a delta's `hits` name the entity (delayed by the render
 delay so they line up with movement). The nearest 8 animated characters draw at LOD0, the rest at LOD1; the nearest 40 animate every frame, the rest every 4th (`lod0_count`,
 `full_rate_animated_count`, `reduced_animation_divisor`). Loading is threaded and the bundle's models start loading at start; at most `instantiate_per_frame` (6) instances are made
-per frame, so a warp spreads over a few frames. Memory is bounded: `model_cache_limit` (48) loaded scenes (least recently used, never one in use) and `pool_idle_limit` (12) idle
+per frame, so a warp spreads over a few frames. With no renderer (the headless display server, which uses Godot's dummy renderer) everything loads on the main thread instead: that renderer's mesh allocator is not
+thread-safe, and creating meshes from several threads there corrupts memory and crashes the process (T-218, `ModelLoading`). Any new threaded resource loading must follow the same
+rule. Memory is bounded: `model_cache_limit` (48) loaded scenes (least recently used, never one in use) and `pool_idle_limit` (12) idle
 instances per model.
 
 ### 7.8 Audio

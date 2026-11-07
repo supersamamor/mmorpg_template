@@ -17,7 +17,9 @@ param(
     [switch] $EasyMonsters,          # play: run the warp leg too, on a temporary content copy where a new character wins every fight
     [string] $Resolution = "1280x720",
     [string[]] $ClientArgs = @(),    # more arguments for the client, e.g. --set grace_seconds=30
-    [string] $Godot = ""             # the Godot .NET console binary; default: $env:GODOT, then the winget install
+    [string] $Godot = "",            # the Godot .NET console binary; default: $env:GODOT, then the winget install
+    [int] $Repeat = 1,               # run each scenario this many times and print the count of each exit code (T-218)
+    [string] $KeepLogs = ""          # keep each client run's stdout and stderr in this folder
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -125,6 +127,12 @@ function Wait-GodotClient($run, [int] $TimeoutSeconds, [scriptblock] $OnMarker =
     }
     $run.Process.WaitForExit()
     $code = $run.Process.ExitCode
+    if ($KeepLogs) {
+        New-Item -ItemType Directory -Force -Path $KeepLogs | Out-Null
+        $stem = Join-Path $KeepLogs ("run-{0:yyyyMMdd-HHmmss-fff}-code{1}" -f (Get-Date), $code)
+        Copy-Item $run.Log "$stem.out"
+        Copy-Item "$($run.Log).err" "$stem.err"
+    }
     Remove-Item $run.Log, "$($run.Log).err" -ErrorAction SilentlyContinue
     return [pscustomobject]@{ Code = $code; Text = $text.ToString() }
 }
@@ -248,9 +256,14 @@ $runs = switch ($Run) {
 $failed = @()
 try {
     foreach ($name in $runs) {
-        $code = if ($name -eq "release") { Invoke-Release } else { Invoke-Scenario $name }
-        Write-Host "[run-e2e] $name exit code: $code"
-        if ($code -ne 0) { $failed += $name }
+        $codes = @{}
+        for ($i = 1; $i -le $Repeat; $i++) {
+            $code = if ($name -eq "release") { Invoke-Release } else { Invoke-Scenario $name }
+            Write-Host "[run-e2e] $name exit code: $code$(if ($Repeat -gt 1) { " (run $i of $Repeat)" })"
+            $codes["$code"] = 1 + [int]$codes["$code"]
+            if ($code -ne 0 -and $failed -notcontains $name) { $failed += $name }
+        }
+        if ($Repeat -gt 1) { Write-Host "[run-e2e] $name exit codes: $(($codes.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name) x$($_.Value)" }) -join ', ')" }
     }
 }
 finally {

@@ -56,6 +56,12 @@ public sealed class AudioManifest
     /// <summary>Shape problems found while reading.</summary>
     public List<AudioManifestProblem> Problems { get; } = new();
 
+    /// <summary>The <c>fallbacks</c> table (entity kind or <c>missing</c> → model key), in file order. Not audio, but it is the other table in the same file; <c>ThemeFallbackRule</c> reads it.</summary>
+    public List<KeyValuePair<string, string>> Fallbacks { get; } = new();
+
+    /// <summary>Shape problems of the <c>fallbacks</c> table.</summary>
+    public List<AudioManifestProblem> FallbackProblems { get; } = new();
+
     /// <summary>True when <paramref name="key"/> names a sound (<c>sfx.</c>, <c>ambience.</c> or <c>music.</c> prefix).</summary>
     public static bool IsSoundKey(string key) => SoundPrefixes.Any(p => key.StartsWith(p, StringComparison.Ordinal));
 
@@ -87,6 +93,7 @@ public sealed class AudioManifest
             foreach (var property in doc.RootElement.EnumerateObject())
             {
                 if (property.Name == "audio") manifest.ReadAudio(property.Value);
+                else if (property.Name == "fallbacks") manifest.ReadFallbacks(property.Value);
                 else if (IsSoundKey(property.Name)) manifest.ReadEntry(property.Name, property.Value);
             }
         }
@@ -115,6 +122,22 @@ public sealed class AudioManifest
                         $"unknown section 'audio.{section.Name}' (expected 'defaults' or 'events')"));
                     break;
             }
+        }
+    }
+
+    private void ReadFallbacks(JsonElement table)
+    {
+        if (table.ValueKind != JsonValueKind.Object)
+        {
+            FallbackProblems.Add(new AudioManifestProblem("fallbacks", "fallbacks", "'fallbacks' must be an object of name → model key"));
+            return;
+        }
+        foreach (var row in table.EnumerateObject())
+        {
+            if (row.Value.ValueKind != JsonValueKind.String)
+                FallbackProblems.Add(new AudioManifestProblem("fallbacks", "fallbacks." + row.Name, "must be a model key (a string)"));
+            else
+                Fallbacks.Add(new KeyValuePair<string, string>(row.Name, row.Value.GetString()!));
         }
     }
 
