@@ -18,6 +18,9 @@ export_presets.cfg
 /client/build/
 /client/exports/
 /client/bundle/
+/client/themes
+# Godot writes import settings next to each asset it reads through the mounted themes folder
+/themes/**/*.import
 !/client/export_presets.cfg
 
 # ---------- IDEs ----------

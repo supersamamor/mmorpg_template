@@ -29,7 +29,8 @@ dotnet build (Join-Path $root "src/Game.Server") -v q --nologo | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "The server does not build." }
 dotnet build (Join-Path $client "GameClient.csproj") -v q --nologo | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "The client does not build." }
-Import-GodotProject $godot $client
+& (Join-Path $client "mount-themes.ps1") | Out-Null   # res://themes (ARCHITECTURE §7.7)
+Import-GodotProject $godot $client -Force
 
 $script:temp = $null
 

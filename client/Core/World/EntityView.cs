@@ -15,6 +15,8 @@ public sealed class EntityView
     private readonly Step[] _steps = new Step[StepCapacity];
     private int _stepCount;
     private double _targetYaw;
+    private double _attackAt = double.NaN;
+    private double _hitAt = double.NaN;
 
     /// <summary>Entity id.</summary>
     public long Id { get; private set; }
@@ -61,6 +63,12 @@ public sealed class EntityView
     /// <summary>Kind, HP, dead or mine changed since the presenter last cleared this.</summary>
     public bool LookDirty { get; set; }
 
+    /// <summary>Counts the attacks this entity made that have reached render time; a visual plays an attack clip when it goes up.</summary>
+    public int AttackCount { get; private set; }
+
+    /// <summary>Counts the hits this entity took that have reached render time; a visual plays a hit clip when it goes up.</summary>
+    public int HitCount { get; private set; }
+
     /// <summary>The presenter's visual for this entity. Owned by the presenter.</summary>
     public object? Visual { get; set; }
 
@@ -71,6 +79,8 @@ public sealed class EntityView
     {
         Id = record.Id;
         _stepCount = 0;
+        AttackCount = HitCount = 0;
+        _attackAt = _hitAt = double.NaN;
         Kind = record.Kind;
         DisplayKey = record.DisplayKey;
         Cell = record.Cell;
@@ -108,9 +118,28 @@ public sealed class EntityView
         else Settle(now, delay, snapDistance, glideSpeed);
     }
 
+    /// <summary>
+    /// A <c>hits</c> entry named this entity as attacker, seen at view time <paramref name="now"/>. The attack animation waits until render time catches up with
+    /// it, like every other change, so it lines up with the movement on screen.
+    /// </summary>
+    internal void QueueAttack(double now) => _attackAt = now;
+
+    /// <summary>A <c>hits</c> entry named this entity as the target, seen at view time <paramref name="now"/>.</summary>
+    internal void QueueHit(double now) => _hitAt = now;
+
     /// <summary>Walks the queue to render time and turns toward the facing. Allocates nothing.</summary>
     internal void Advance(double renderTime, double dt, double turnRate)
     {
+        if (_attackAt <= renderTime)
+        {
+            AttackCount++;
+            _attackAt = double.NaN;
+        }
+        if (_hitAt <= renderTime)
+        {
+            HitCount++;
+            _hitAt = double.NaN;
+        }
         if (_stepCount > 0) AdvanceSteps(renderTime);
         if (Yaw != _targetYaw)
         {

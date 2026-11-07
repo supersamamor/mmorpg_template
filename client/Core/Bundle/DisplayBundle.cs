@@ -91,6 +91,8 @@ public sealed class DisplayBundle
     private static readonly string[] NamedLists = { "items", "skills", "jobs", "statuses", "monsters", "npcs", "quests" };
 
     private readonly Dictionary<string, string> _names = new Dictionary<string, string>(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _models = new Dictionary<string, string>(StringComparer.Ordinal);
+    private readonly SortedSet<string> _modelKeys = new SortedSet<string>(StringComparer.Ordinal);
     private readonly Dictionary<string, MapData> _maps = new Dictionary<string, MapData>(StringComparer.Ordinal);
 
     private DisplayBundle(int formatVersion, string contentHash)
@@ -112,6 +114,12 @@ public sealed class DisplayBundle
         return _names.TryGetValue(displayKey, out var name) ? name : displayKey;
     }
 
+    /// <summary>The model asset key a view record's <c>display_key</c> shows as (a job's body, a monster's or NPC's model, an item's ground visual), or null.</summary>
+    public string? ModelKeyOf(string? displayKey) => displayKey is not null && _models.TryGetValue(displayKey, out var key) ? key : null;
+
+    /// <summary>Every distinct model key the bundle names, in order (for preloading).</summary>
+    public IReadOnlyCollection<string> ModelKeys => _modelKeys;
+
     /// <summary>A map's display data.</summary>
     public bool TryGetMap(string id, out MapData? map) => _maps.TryGetValue(id, out map);
 
@@ -131,8 +139,20 @@ public sealed class DisplayBundle
 
             var result = new DisplayBundle(formatVersion, root.GetProperty("content_hash").GetString() ?? throw new FormatException());
             foreach (var list in NamedLists)
+            {
+                // What an entity of this id looks like: a ground item's "ground" visual, or the "model" of a job (a player), monster or NPC.
+                var modelField = list == "items" ? "ground" : "model";
                 foreach (var entry in root.GetProperty(list).EnumerateArray())
-                    result._names[Text(entry, "id")] = Text(entry, "name");
+                {
+                    var id = Text(entry, "id");
+                    result._names[id] = Text(entry, "name");
+                    if (entry.TryGetProperty(modelField, out var model) && model.ValueKind == JsonValueKind.String && model.GetString() is { Length: > 0 } key)
+                    {
+                        result._models[id] = key;
+                        result._modelKeys.Add(key);
+                    }
+                }
+            }
             foreach (var map in root.GetProperty("maps").EnumerateArray())
             {
                 var data = ReadMap(map);

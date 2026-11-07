@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- T-207: writes the generated placeholder theme pack (glTF, PNG, OGG, scenes) from code. See ../../themes/README.md. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Game.ThemeGen</RootNamespace>
+  </PropertyGroup>
+</Project>

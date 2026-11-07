@@ -78,6 +78,32 @@ public sealed class ClientConfig
     /// <summary>Speed of a correction that glides when the entity has no speed of its own, in cells per second.</summary>
     public double GlideCellsPerSecond { get; set; } = 6;
 
+    // ---- theme and entity visuals (§7.7, §8, §9) ----
+
+    /// <summary>The active theme: the folder under <c>themes/</c> the client draws from. Anything it leaves out comes from <c>default</c>.</summary>
+    public string Theme { get; set; } = "default";
+
+    /// <summary>How many characters, nearest first, are drawn at the full level of detail (§9: 8).</summary>
+    public int Lod0Count { get; set; } = 8;
+
+    /// <summary>How many animated characters, nearest first, animate at the full rate (§9: 40).</summary>
+    public int FullRateAnimatedCount { get; set; } = 40;
+
+    /// <summary>Beyond <see cref="FullRateAnimatedCount"/>, a character animates once every this many frames.</summary>
+    public int ReducedAnimationDivisor { get; set; } = 4;
+
+    /// <summary>Most distinct models kept loaded at once; loaded models nobody is showing are dropped oldest first beyond this (bounds memory).</summary>
+    public int ModelCacheLimit { get; set; } = 48;
+
+    /// <summary>Most idle instances kept per model for reuse; extra ones are freed.</summary>
+    public int PoolIdleLimit { get; set; } = 12;
+
+    /// <summary>Most new model instances created in one frame; the rest wait a frame, so a warp does not hitch.</summary>
+    public int InstantiatePerFrame { get; set; } = 6;
+
+    /// <summary>Load every model the bundle names in the background at start, so the first sight of one does not wait on the disk.</summary>
+    public bool PreloadModels { get; set; } = true;
+
     // ---- camera (§7.2, ADR-002 row 65) ----
 
     /// <summary>Degrees the fixed camera looks down from the horizon.</summary>
@@ -131,8 +157,9 @@ public sealed class ClientConfig
             }
             var value = reader.TokenType == JsonTokenType.String
                 ? reader.GetString() ?? string.Empty
-                : reader.TokenType == JsonTokenType.Number ? reader.GetDouble().ToString("R", CultureInfo.InvariantCulture) : string.Empty;
-            Set(key, value);
+                : reader.TokenType == JsonTokenType.Number ? reader.GetDouble().ToString("R", CultureInfo.InvariantCulture)
+                : reader.TokenType == JsonTokenType.True ? "1" : reader.TokenType == JsonTokenType.False ? "0" : string.Empty;
+            if (value.Length > 0 || reader.TokenType == JsonTokenType.String) Set(key, value);
         }
     }
 
@@ -180,6 +207,14 @@ public sealed class ClientConfig
             case "turn_degrees_per_second": TurnDegreesPerSecond = Number(value); break;
             case "snap_distance_cells": SnapDistanceCells = Number(value); break;
             case "glide_cells_per_second": GlideCellsPerSecond = Number(value); break;
+            case "theme": Theme = value; break;
+            case "lod0_count": Lod0Count = (int)Number(value); break;
+            case "full_rate_animated_count": FullRateAnimatedCount = (int)Number(value); break;
+            case "reduced_animation_divisor": ReducedAnimationDivisor = Math.Max(1, (int)Number(value)); break;
+            case "model_cache_limit": ModelCacheLimit = (int)Number(value); break;
+            case "pool_idle_limit": PoolIdleLimit = (int)Number(value); break;
+            case "instantiate_per_frame": InstantiatePerFrame = Math.Max(1, (int)Number(value)); break;
+            case "preload_models": PreloadModels = Number(value) != 0; break;
             case "camera_pitch_degrees": CameraPitchDegrees = Number(value); break;
             case "camera_fov_degrees": CameraFovDegrees = Number(value); break;
             case "camera_distance": CameraDistance = Number(value); break;

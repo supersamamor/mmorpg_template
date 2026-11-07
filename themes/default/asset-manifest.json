@@ -1,6 +1,6 @@
 {
   "anim.humanoid": {
-    "file": "placeholder.glb",
+    "file": "anims/humanoid.glb",
     "rig": "humanoid",
     "clips": {
       "idle": "Idle",
@@ -14,7 +14,7 @@
     }
   },
   "anim.blob": {
-    "file": "placeholder.glb",
+    "file": "anims/blob.glb",
     "rig": "blob",
     "clips": {
       "idle": "Idle",
@@ -25,7 +25,7 @@
     }
   },
   "anim.sprout": {
-    "file": "placeholder.glb",
+    "file": "anims/sprout.glb",
     "rig": "sprout",
     "clips": {
       "idle": "Idle",
@@ -36,7 +36,7 @@
     }
   },
   "anim.insect": {
-    "file": "placeholder.glb",
+    "file": "anims/insect.glb",
     "rig": "insect",
     "clips": {
       "idle": "Idle",
@@ -47,7 +47,7 @@
     }
   },
   "anim.quadruped": {
-    "file": "placeholder.glb",
+    "file": "anims/quadruped.glb",
     "rig": "quadruped",
     "clips": {
       "idle": "Idle",
@@ -58,402 +58,405 @@
     }
   },
   "icon.item.antidote": {
-    "file": "placeholder.png"
+    "file": "icons/item/antidote.png"
   },
   "icon.item.beetle_shell": {
-    "file": "placeholder.png"
+    "file": "icons/item/beetle_shell.png"
   },
   "icon.item.boar_tusk": {
-    "file": "placeholder.png"
+    "file": "icons/item/boar_tusk.png"
   },
   "icon.item.bone_dirk": {
-    "file": "placeholder.png"
+    "file": "icons/item/bone_dirk.png"
   },
   "icon.item.focus_tonic": {
-    "file": "placeholder.png"
+    "file": "icons/item/focus_tonic.png"
   },
   "icon.item.gel_glob": {
-    "file": "placeholder.png"
+    "file": "icons/item/gel_glob.png"
   },
   "icon.item.gelcap_card": {
-    "file": "placeholder.png"
+    "file": "icons/item/gelcap_card.png"
   },
   "icon.item.healing_draught": {
-    "file": "placeholder.png"
+    "file": "icons/item/healing_draught.png"
   },
   "icon.item.iron_blade": {
-    "file": "placeholder.png"
+    "file": "icons/item/iron_blade.png"
   },
   "icon.item.leather_cap": {
-    "file": "placeholder.png"
+    "file": "icons/item/leather_cap.png"
   },
   "icon.item.mossy_fiber": {
-    "file": "placeholder.png"
+    "file": "icons/item/mossy_fiber.png"
   },
   "icon.item.oak_staff": {
-    "file": "placeholder.png"
+    "file": "icons/item/oak_staff.png"
   },
   "icon.item.padded_vest": {
-    "file": "placeholder.png"
+    "file": "icons/item/padded_vest.png"
   },
   "icon.item.swift_elixir": {
-    "file": "placeholder.png"
+    "file": "icons/item/swift_elixir.png"
   },
   "icon.item.warden_token": {
-    "file": "placeholder.png"
+    "file": "icons/item/warden_token.png"
   },
   "icon.item.wasp_stinger": {
-    "file": "placeholder.png"
+    "file": "icons/item/wasp_stinger.png"
   },
   "icon.item.wooden_buckler": {
-    "file": "placeholder.png"
+    "file": "icons/item/wooden_buckler.png"
   },
   "icon.job.wanderer": {
-    "file": "placeholder.png"
+    "file": "icons/job/wanderer.png"
   },
   "icon.job.spellbinder": {
-    "file": "placeholder.png"
+    "file": "icons/job/spellbinder.png"
   },
   "icon.job.warden": {
-    "file": "placeholder.png"
+    "file": "icons/job/warden.png"
   },
   "icon.skill.call_seedling": {
-    "file": "placeholder.png"
+    "file": "icons/skill/call_seedling.png"
   },
   "icon.skill.cleanse": {
-    "file": "placeholder.png"
+    "file": "icons/skill/cleanse.png"
   },
   "icon.skill.ember_bolt": {
-    "file": "placeholder.png"
+    "file": "icons/skill/ember_bolt.png"
   },
   "icon.skill.iron_guard": {
-    "file": "placeholder.png"
+    "file": "icons/skill/iron_guard.png"
   },
   "icon.skill.mana_font": {
-    "file": "placeholder.png"
+    "file": "icons/skill/mana_font.png"
   },
   "icon.skill.return_home": {
-    "file": "placeholder.png"
+    "file": "icons/skill/return_home.png"
   },
   "icon.skill.second_wind": {
-    "file": "placeholder.png"
+    "file": "icons/skill/second_wind.png"
   },
   "icon.skill.shockwave": {
-    "file": "placeholder.png"
+    "file": "icons/skill/shockwave.png"
   },
   "icon.skill.tough_body": {
-    "file": "placeholder.png"
+    "file": "icons/skill/tough_body.png"
   },
   "icon.skill.twin_strike": {
-    "file": "placeholder.png"
+    "file": "icons/skill/twin_strike.png"
   },
   "icon.status.iron_skin": {
-    "file": "placeholder.png"
+    "file": "icons/status/iron_skin.png"
   },
   "icon.status.poison": {
-    "file": "placeholder.png"
+    "file": "icons/status/poison.png"
   },
   "icon.status.stun": {
-    "file": "placeholder.png"
+    "file": "icons/status/stun.png"
   },
   "icon.status.swift": {
-    "file": "placeholder.png"
+    "file": "icons/status/swift.png"
   },
   "model.char.spellbinder": {
-    "file": "placeholder.glb",
+    "file": "models/char/spellbinder.glb",
     "rig": "humanoid",
     "anims": "anim.humanoid"
   },
   "model.char.wanderer": {
-    "file": "placeholder.glb",
+    "file": "models/char/wanderer.glb",
     "rig": "humanoid",
     "anims": "anim.humanoid"
   },
   "model.char.warden": {
-    "file": "placeholder.glb",
+    "file": "models/char/warden.glb",
     "rig": "humanoid",
     "anims": "anim.humanoid"
   },
   "model.char.body_male": {
-    "file": "placeholder.glb",
+    "file": "models/char/body_male.glb",
     "rig": "humanoid",
     "anims": "anim.humanoid"
   },
   "model.char.body_female": {
-    "file": "placeholder.glb",
+    "file": "models/char/body_female.glb",
     "rig": "humanoid",
     "anims": "anim.humanoid"
   },
   "model.char.face_male_calm": {
-    "file": "placeholder.glb",
+    "file": "models/char/face_male_calm.glb",
     "rig": "humanoid"
   },
   "model.char.face_male_keen": {
-    "file": "placeholder.glb",
+    "file": "models/char/face_male_keen.glb",
     "rig": "humanoid"
   },
   "model.char.face_male_wry": {
-    "file": "placeholder.glb",
+    "file": "models/char/face_male_wry.glb",
     "rig": "humanoid"
   },
   "model.char.face_female_calm": {
-    "file": "placeholder.glb",
+    "file": "models/char/face_female_calm.glb",
     "rig": "humanoid"
   },
   "model.char.face_female_bright": {
-    "file": "placeholder.glb",
+    "file": "models/char/face_female_bright.glb",
     "rig": "humanoid"
   },
   "model.char.face_female_sly": {
-    "file": "placeholder.glb",
+    "file": "models/char/face_female_sly.glb",
     "rig": "humanoid"
   },
   "model.char.hair_male_crop": {
-    "file": "placeholder.glb",
+    "file": "models/char/hair_male_crop.glb",
     "attach": "head"
   },
   "model.char.hair_male_swept": {
-    "file": "placeholder.glb",
+    "file": "models/char/hair_male_swept.glb",
     "attach": "head"
   },
   "model.char.hair_male_long": {
-    "file": "placeholder.glb",
+    "file": "models/char/hair_male_long.glb",
     "attach": "head"
   },
   "model.char.hair_male_topknot": {
-    "file": "placeholder.glb",
+    "file": "models/char/hair_male_topknot.glb",
     "attach": "head"
   },
   "model.char.hair_female_bob": {
-    "file": "placeholder.glb",
+    "file": "models/char/hair_female_bob.glb",
     "attach": "head"
   },
   "model.char.hair_female_braid": {
-    "file": "placeholder.glb",
+    "file": "models/char/hair_female_braid.glb",
     "attach": "head"
   },
   "model.char.hair_female_ponytail": {
-    "file": "placeholder.glb",
+    "file": "models/char/hair_female_ponytail.glb",
     "attach": "head"
   },
   "model.char.hair_female_curls": {
-    "file": "placeholder.glb",
+    "file": "models/char/hair_female_curls.glb",
     "attach": "head"
   },
   "model.equip.bone_dirk": {
-    "file": "placeholder.glb",
+    "file": "models/equip/bone_dirk.glb",
     "attach": "hand_r"
   },
   "model.equip.iron_blade": {
-    "file": "placeholder.glb",
+    "file": "models/equip/iron_blade.glb",
     "attach": "hand_r"
   },
   "model.equip.leather_cap": {
-    "file": "placeholder.glb",
+    "file": "models/equip/leather_cap.glb",
     "attach": "head"
   },
   "model.equip.oak_staff": {
-    "file": "placeholder.glb",
+    "file": "models/equip/oak_staff.glb",
     "attach": "hand_r"
   },
   "model.equip.padded_vest": {
-    "file": "placeholder.glb",
+    "file": "models/equip/padded_vest.glb",
     "skinned": "humanoid"
   },
   "model.equip.wooden_buckler": {
-    "file": "placeholder.glb",
+    "file": "models/equip/wooden_buckler.glb",
     "attach": "hand_l"
   },
   "model.monster.gel_slime": {
-    "file": "placeholder.glb",
+    "file": "models/monster/gel_slime.glb",
     "rig": "blob",
     "anims": "anim.blob"
   },
   "model.monster.mossling": {
-    "file": "placeholder.glb",
+    "file": "models/monster/mossling.glb",
     "rig": "sprout",
     "anims": "anim.sprout"
   },
   "model.monster.rock_beetle": {
-    "file": "placeholder.glb",
+    "file": "models/monster/rock_beetle.glb",
     "rig": "insect",
     "anims": "anim.insect"
   },
   "model.monster.sting_wasp": {
-    "file": "placeholder.glb",
+    "file": "models/monster/sting_wasp.glb",
     "rig": "insect",
     "anims": "anim.insect"
   },
   "model.monster.thornback_boar": {
-    "file": "placeholder.glb",
+    "file": "models/monster/thornback_boar.glb",
     "rig": "quadruped",
     "anims": "anim.quadruped"
   },
   "model.npc.guide": {
-    "file": "placeholder.glb",
+    "file": "models/npc/guide.glb",
     "rig": "humanoid",
     "anims": "anim.humanoid"
   },
   "model.npc.trainer": {
-    "file": "placeholder.glb",
+    "file": "models/npc/trainer.glb",
     "rig": "humanoid",
     "anims": "anim.humanoid"
   },
   "model.prop.loot_bag": {
-    "file": "placeholder.glb"
+    "file": "models/prop/loot_bag.glb"
+  },
+  "model.missing": {
+    "file": "models/missing.glb"
   },
   "music.map.starter_meadow": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "music.map.thistle_hollow": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "portrait.npc.guide": {
-    "file": "placeholder.png"
+    "file": "portraits/npc/guide.png"
   },
   "portrait.npc.trainer": {
-    "file": "placeholder.png"
+    "file": "portraits/npc/trainer.png"
   },
   "scene.map.starter_meadow": {
-    "file": "placeholder.tscn"
+    "file": "maps/placeholder.tscn"
   },
   "scene.map.thistle_hollow": {
-    "file": "placeholder.tscn"
+    "file": "maps/placeholder.tscn"
   },
   "sfx.skill.buff": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.skill.fire": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.skill.heal": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.skill.slam": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.skill.slash": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.skill.summon": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.skill.warp": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "vfx.skill.buff": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.skill.ember_bolt": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.skill.heal": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.skill.mana_font": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.skill.shockwave": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.skill.slash": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.skill.sting": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.skill.summon": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.skill.warp": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.status.iron_skin": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.status.poison": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.status.stun": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "vfx.status.swift": {
-    "file": "placeholder.tscn"
+    "file": "vfx/placeholder.tscn"
   },
   "ambience.map.starter_meadow": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "ambience.map.thistle_hollow": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.event.item_acquired": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.event.job_level_up": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.event.level_up": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.event.quest_complete": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.item.equip.cloth": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.item.equip.metal": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.item.use.potion": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.monster.aggro.generic": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.monster.aggro.wasp": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.monster.die.generic": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.monster.die.slime": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.monster.hit.generic": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.monster.hit.slime": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.ui.close": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.ui.error": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.ui.open": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.ui.tap": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.weapon.impact.blunt": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.weapon.impact.pierce": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.weapon.swing.heavy": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.weapon.swing.light": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.weapon.swing.shot": {
-    "file": "placeholder.ogg"
+    "file": "audio/silence.ogg"
   },
   "sfx.weapon.impact.slash": {
-    "files": ["placeholder.ogg", "placeholder.ogg", "placeholder.ogg"],
+    "files": ["audio/silence.ogg", "audio/silence.ogg", "audio/silence.ogg"],
     "volume_db": -3,
     "pitch": [0.95, 1.05],
     "bus": "sfx"
@@ -496,5 +499,12 @@
       "QuestCompleted": "sfx.event.quest_complete",
       "ItemAcquired": "sfx.event.item_acquired"
     }
+  },
+  "fallbacks": {
+    "missing": "model.missing",
+    "player": "model.char.wanderer",
+    "monster": "model.monster.gel_slime",
+    "npc": "model.npc.guide",
+    "item": "model.prop.loot_bag"
   }
 }

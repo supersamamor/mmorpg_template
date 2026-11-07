@@ -11,7 +11,7 @@ function Resolve-Godot([string] $Given) {
 }
 
 # Imports the project's resources the first time (no .godot cache yet). Godot writes to stderr even on success, so it runs apart from the script's error handling.
-function Import-GodotProject([string] $Godot, [string] $Client) {
-    if (Test-Path (Join-Path $Client ".godot/uid_cache.bin")) { return }
+function Import-GodotProject([string] $Godot, [string] $Client, [switch] $Force) {
+    if (-not $Force -and (Test-Path (Join-Path $Client ".godot/uid_cache.bin"))) { return }   # -Force picks up new or changed theme files
     $null = Start-Process $Godot -Wait -NoNewWindow -RedirectStandardOutput ([IO.Path]::GetTempFileName()) -RedirectStandardError ([IO.Path]::GetTempFileName()) -ArgumentList @("--headless", "--path", $Client, "--import")
 }

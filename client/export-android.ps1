@@ -25,7 +25,8 @@ if (-not $SkipBuild) {
     dotnet build (Join-Path $client "GameClient.csproj") -v q --nologo | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "The client does not build." }
 }
-Import-GodotProject $Godot $client
+& (Join-Path $client "mount-themes.ps1") -Copy | Out-Null   # a real copy: what an export packs (ARCHITECTURE §7.7)
+Import-GodotProject $Godot $client -Force
 
 $flag = if ($Release) { "--export-release" } else { "--export-debug" }
 $log = Join-Path ([IO.Path]::GetTempPath()) ("t216-export-" + [guid]::NewGuid().ToString("N") + ".log")

@@ -276,9 +276,9 @@ public class AudioTests : IDisposable
     [InlineData("\"pitch\": [0.95, 1.05]", "\"pitch\": [-1, 1]", ValidationCodes.AudioRange, "sfx.weapon.impact.slash.pitch")]
     [InlineData("\"volume_db\": -3", "\"volume_db\": 40", ValidationCodes.AudioRange, "sfx.weapon.impact.slash.volume_db")]
     [InlineData("\"volume_db\": -3", "\"volume_db\": -90", ValidationCodes.AudioRange, "sfx.weapon.impact.slash.volume_db")]
-    [InlineData("\"files\": [\"placeholder.ogg\", \"placeholder.ogg\", \"placeholder.ogg\"]", "\"files\": []", ValidationCodes.AudioFile, "sfx.weapon.impact.slash.files")]
-    [InlineData("\"files\": [\"placeholder.ogg\", \"placeholder.ogg\", \"placeholder.ogg\"]", "\"files\": [\"a.ogg\", \"b.wav\", \"c.ogg\"]", ValidationCodes.AudioFile, "sfx.weapon.impact.slash.files[1]")]
-    [InlineData("\"files\": [\"placeholder.ogg\", \"placeholder.ogg\", \"placeholder.ogg\"],", "", ValidationCodes.AudioFile, "sfx.weapon.impact.slash.file")]
+    [InlineData("\"files\": [\"audio/silence.ogg\", \"audio/silence.ogg\", \"audio/silence.ogg\"]", "\"files\": []", ValidationCodes.AudioFile, "sfx.weapon.impact.slash.files")]
+    [InlineData("\"files\": [\"audio/silence.ogg\", \"audio/silence.ogg\", \"audio/silence.ogg\"]", "\"files\": [\"a.ogg\", \"b.wav\", \"c.ogg\"]", ValidationCodes.AudioFile, "sfx.weapon.impact.slash.files[1]")]
+    [InlineData("\"files\": [\"audio/silence.ogg\", \"audio/silence.ogg\", \"audio/silence.ogg\"],", "", ValidationCodes.AudioFile, "sfx.weapon.impact.slash.file")]
     public void Bad_sound_entries_are_errors(string from, string to, string code, string path)
     {
         var issue = Single(ValidateAudio(EditManifest(from, to)), code);
@@ -291,7 +291,7 @@ public class AudioTests : IDisposable
     [Fact]
     public void A_plain_file_that_is_not_ogg_is_an_error()
     {
-        var text = EditManifest("\"sfx.ui.tap\": {\n    \"file\": \"placeholder.ogg\"", "\"sfx.ui.tap\": {\n    \"file\": \"tap.mp3\"");
+        var text = EditManifest("\"sfx.ui.tap\": {\n    \"file\": \"audio/silence.ogg\"", "\"sfx.ui.tap\": {\n    \"file\": \"tap.mp3\"");
 
         Single(ValidateAudio(text), ValidationCodes.AudioFile).Path.ShouldBe("sfx.ui.tap.file");
     }

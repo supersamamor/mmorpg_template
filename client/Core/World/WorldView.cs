@@ -96,6 +96,20 @@ public sealed class WorldView
         if (delta.Vitals is { } vitals) SetVitals(vitals);
     }
 
+    /// <summary>
+    /// A delta's <c>hits</c>: the attacker plays an attack and a target that was not missed plays a hit reaction, both when render time reaches this moment.
+    /// Visual only; the outcome was decided by the server. Entities that are not in view are ignored.
+    /// </summary>
+    public void ApplyHits(IReadOnlyList<HitRecord> hits, double now)
+    {
+        for (var i = 0; i < hits.Count; i++)
+        {
+            var hit = hits[i];
+            if (_byId.TryGetValue(hit.Attacker, out var attacker)) attacker.QueueAttack(now);
+            if (hit.Result != Game.Shared.Vocabulary.HitResults.Miss && _byId.TryGetValue(hit.Target, out var target)) target.QueueHit(now);
+        }
+    }
+
     /// <summary><c>exp</c>: own levels and EXP.</summary>
     public void ApplyExp(ExpMessage exp)
     {
