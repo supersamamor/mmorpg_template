@@ -498,7 +498,10 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 ## 10. Networking on mobile
 
 - **TLS required:** `wss://` everywhere except local dev. Cleartext `ws://` is allowed only in
-  debug builds (Android network-security config, iOS ATS exception).
+  debug builds, and **the client enforces that itself** (T-216): Godot's WebSocket uses native sockets, which Android's network-security
+  config and iOS ATS do not police. A release build shows a refusal screen for a `ws://` or invalid server address and opens no socket;
+  the allowance is set once at start-up from the engine's debug-build flag and cannot be changed by `client_settings.json` or the command line
+  (`TransportPolicy`, MOBILE_BUILD §8.4). The iOS preset still states ATS explicitly; no Android network-security config is shipped (it would need the Gradle export and would not cover these sockets).
 - **Disconnects are normal.** When a socket drops or the app is backgrounded, the server keeps
   the character in the world for a grace period (`grace-period-ms`, server config, default 60 s), then saves (T-702) and logs it out.
 - **Resume** (T-210): the client reconnects with a resume token and receives a full snapshot, then deltas (lifecycle step 6 below).
@@ -642,6 +645,8 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 - Passwords hashed (Argon2/BCrypt). Session tokens, not credentials, on the socket.
 - Item operations in DB transactions; item instances have unique ids (dupe auditing).
 - The client is untrusted (CLAUDE.md rule 11); the client bundle holds display data only.
+- No plaintext outside debug builds (§10): release clients refuse `ws://`. The Android APK carries only what runs on a device (arm64-v8a; the Mono static
+  archives are stripped, MOBILE_BUILD §8.3), and CI exports it on every push (MOBILE_BUILD §9).
 - Store rules: in-app account deletion (Apple and Google require it); Sign in with Apple if any
   other third-party login is offered; iOS privacy manifest and Play data-safety form kept current.
 

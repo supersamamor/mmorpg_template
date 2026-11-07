@@ -49,7 +49,7 @@ public class ClientSessionTests
     private static (ClientSession Session, ScriptedSocket Socket) Playing(params EntityRecord[] entities)
     {
         var socket = new ScriptedSocket();
-        var session = new ClientSession(new ClientConfig(), Bundle(), socket, new Pcg32Random(1));
+        var session = new ClientSession(new ClientConfig { AllowCleartext = true }, Bundle(), socket, new Pcg32Random(1));
         session.Login("Ada", 0);
         socket.Events.Enqueue(new SocketEvent(SocketEventKind.Opened));
         socket.Push(new WelcomeMessage(1, 1, "map.starter_meadow", 10, null, "secret-token"));
@@ -71,7 +71,7 @@ public class ClientSessionTests
     {
         var socket = new ScriptedSocket();
         var bundle = Bundle();
-        var session = new ClientSession(new ClientConfig(), bundle, socket, new Pcg32Random(1));
+        var session = new ClientSession(new ClientConfig { AllowCleartext = true }, bundle, socket, new Pcg32Random(1));
         session.Login("Ada", 0);
         socket.Events.Enqueue(new SocketEvent(SocketEventKind.Opened));
         session.Update(0, 0);
@@ -179,7 +179,7 @@ public class ClientSessionTests
     public void Nothing_is_sent_while_offline_or_dead()
     {
         var socket = new ScriptedSocket();
-        var session = new ClientSession(new ClientConfig(), Bundle(), socket, new Pcg32Random(1));
+        var session = new ClientSession(new ClientConfig { AllowCleartext = true }, Bundle(), socket, new Pcg32Random(1));
         session.TapGround(new GridCell(1, 1), 0);
         session.TapEntity(7);
         session.Respawn();
@@ -416,7 +416,7 @@ public class ClientSessionTests
     {
         await using var rig = await GatewayRig.StartAsync();
         using var socket = new LoopbackSocket();
-        var config = new ClientConfig { ServerUrl = rig.Endpoint.ToString() };
+        var config = new ClientConfig { ServerUrl = rig.Endpoint.ToString(), AllowCleartext = true };
         DisplayBundle.TryRead(ClientBundleExporter.Export(rig.Content).FileBytes, out var bundle, out _).ShouldBe(BundleStatus.Ok);
         var session = new ClientSession(config, bundle!, socket, new Pcg32Random(1));
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -439,7 +439,7 @@ public class ClientSessionTests
         session.World.MapId.ShouldBe(rig.Start.MapId);
         session.World.Vitals.ShouldNotBeNull();
         bundle!.TryGetMap(session.World.MapId!, out var map).ShouldBeTrue();
-        session.World.Exp.ShouldNotBeNull();
+        await Until(() => session.World.Exp is not null, "the exp message (it follows the snapshot)");
 
         var start = session.World.Own!.Cell;
         var target = rig.NearStart((3, 0), (0, 3), (-3, 0));

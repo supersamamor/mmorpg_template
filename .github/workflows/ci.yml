@@ -57,3 +57,130 @@ jobs:
       # Until that file is committed the step prints the current hash and passes (--allow-missing); once it exists, a difference fails.
       - name: Client bundle matches the reference
         run: dotnet run --no-build --configuration Release --project src/Game.Tools -- export-client --check content/client-content.reference.json --allow-missing
+
+  # The client is built and exported on every push (T-216): an Android debug APK, a size and contents check, and the headless scripted runs against a real server.
+  # Separate from the job above on purpose: a slow export must not hold up the server checks. It has never run on GitHub (written without access to it).
+  client-export:
+    name: client export and scripted runs (Android debug APK, headless)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60 # hard stop for the whole job; every long step below has its own, shorter one
+    env:
+      # The pins of docs/MOBILE_BUILD.md. Change them there and here together.
+      GODOT_VERSION: 4.7.2
+      GODOT_RELEASE: 4.7.2-stable
+      JDK_VERSION: "17"
+      ANDROID_PLATFORM: android-35
+      ANDROID_BUILD_TOOLS: 35.0.1
+      # Fails the job when the debug APK grows past this (bytes). T-216 measured 44.3 MB; the unstripped one was 104.2 MB.
+      APK_MAX_BYTES: "60000000"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+      DOTNET_NOLOGO: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: microsoft
+          java-version: ${{ env.JDK_VERSION }}
+
+      # The runner image has an Android SDK; this installs exactly the pinned packages (idempotent).
+      - name: Android SDK packages
+        timeout-minutes: 10
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "build-tools;${ANDROID_BUILD_TOOLS}" "platforms;${ANDROID_PLATFORM}"
+
+      # Godot and the export templates (the .NET flavour; the folder name must end in .mono), cached by version. Only the templates this job uses are kept.
+      - name: Cache Godot and templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_RELEASE }}-mono-linux-templates-v1
+
+      - name: Install Godot and templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        timeout-minutes: 15
+        run: |
+          base="https://github.com/godotengine/godot/releases/download/${GODOT_RELEASE}"
+          mkdir -p ~/godot ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable.mono /tmp/godot-dl
+          cd /tmp/godot-dl
+          curl -fsSL --retry 3 -O "$base/SHA512-SUMS.txt"
+          for file in "Godot_v${GODOT_RELEASE}_mono_linux_x86_64.zip" "Godot_v${GODOT_RELEASE}_mono_export_templates.tpz"; do
+            curl -fsSL --retry 3 -O "$base/$file"
+            grep " $file\$" SHA512-SUMS.txt | sha512sum -c -
+          done
+          unzip -q "Godot_v${GODOT_RELEASE}_mono_linux_x86_64.zip" -d ~/godot
+          unzip -q -j -o "Godot_v${GODOT_RELEASE}_mono_export_templates.tpz" \
+            templates/version.txt templates/android_debug.apk templates/android_release.apk templates/android_source.zip \
+            templates/linux_release.x86_64 templates/linux_debug.x86_64 \
+            -d ~/.local/share/godot/export_templates/${GODOT_VERSION}.stable.mono
+          rm -rf /tmp/godot-dl
+
+      - name: Godot paths and editor settings
+        run: |
+          godot="$(find ~/godot -maxdepth 2 -name 'Godot_v*_mono_linux.x86_64' -type f | head -n 1)"
+          test -n "$godot"
+          chmod +x "$godot"
+          echo "GODOT=$godot" >> "$GITHUB_ENV"
+          mkdir -p ~/.config/godot ~/.local/share/godot/keystores
+          # The well-known Android debug credentials (docs/MOBILE_BUILD.md §2.3), not secrets. Release keystores never go into CI from the repo.
+          keytool -genkeypair -keyalg RSA -keysize 2048 -validity 10000 -alias androiddebugkey -keypass android -storepass android \
+            -keystore ~/.local/share/godot/keystores/debug.keystore -dname "CN=Android Debug,O=Android,C=US"
+          {
+            echo '[gd_resource type="EditorSettings" format=3]'
+            echo
+            echo '[resource]'
+            echo "export/android/java_sdk_path = \"${JAVA_HOME}\""
+            echo "export/android/android_sdk_path = \"${ANDROID_HOME}\""
+            echo "export/android/debug_keystore = \"${HOME}/.local/share/godot/keystores/debug.keystore\""
+            echo 'export/android/debug_keystore_user = "androiddebugkey"'
+            echo 'export/android/debug_keystore_pass = "android"'
+          } > ~/.config/godot/editor_settings-4.7.tres
+          "$godot" --version
+
+      # Builds the C# project and packs the display bundle (the PackClientBundle target).
+      - name: Build the client
+        timeout-minutes: 10
+        run: dotnet build client/GameClient.csproj --configuration Debug
+
+      # export-android.ps1 waits for the APK and its .idsig, then stops Godot, which does not exit after exporting (Godot 4.7.2, ADR-001).
+      - name: Export the Android debug APK
+        timeout-minutes: 20
+        shell: pwsh
+        run: ./client/export-android.ps1 -Godot $env:GODOT -TimeoutSeconds 1100
+
+      - name: Check the APK
+        run: |
+          apk=client/exports/android/game-client.apk
+          size=$(stat -c %s "$apk")
+          echo "APK: $size bytes (limit $APK_MAX_BYTES)"
+          test "$size" -le "$APK_MAX_BYTES"
+          unzip -l "$apk" > /tmp/apk.txt
+          # the bundle and the settings are in, the Mono static archives are out, arm64-v8a is the only architecture
+          grep -q 'assets/bundle/client-content.json' /tmp/apk.txt
+          grep -q 'assets/client_settings.json' /tmp/apk.txt
+          grep -q 'lib/arm64-v8a/libgodot_android.so' /tmp/apk.txt
+          if grep -E 'lib/[^ ]*\.a$' /tmp/apk.txt; then echo "static archives are back in the APK"; exit 1; fi
+          if grep -E 'lib/(armeabi-v7a|x86|x86_64)/' /tmp/apk.txt; then echo "another architecture is in the APK"; exit 1; fi
+
+      - name: Keep the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-client-debug-apk
+          path: client/exports/android/game-client.apk
+          retention-days: 3
+
+      # Real server processes on loopback, the real Godot socket, headless: play, warp, the four bye runs, and a Linux release export that must refuse ws://.
+      - name: Scripted runs
+        timeout-minutes: 25
+        shell: pwsh
+        run: ./client/run-e2e.ps1 -Run all -Godot $env:GODOT

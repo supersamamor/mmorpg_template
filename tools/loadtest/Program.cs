@@ -29,10 +29,10 @@ if (!File.Exists(serverDll))
     return 2;
 }
 
-var port = FreePort();
+var port = options.Port > 0 ? options.Port : FreePort();
 var runSeconds = options.WarmupSeconds + options.MeasureSeconds + 60;
 var graceMs = (runSeconds + 60) * 1000;   // characters parked in grace must outlast the run
-var maxSessions = options.Bots + options.Grace;
+var maxSessions = options.Bots + options.Grace + options.SpareSlots;   // spare slots leave room for a real client to join the bot-filled server
 var serverArgs = new List<string>
 {
     serverDll, "--duration", runSeconds.ToString(CultureInfo.InvariantCulture), "--seed", "214",
@@ -50,7 +50,7 @@ try
     var hash = await log.WaitForAsync(new Regex("Content hash: (\\S+)"), 60_000);
     await log.WaitForAsync(new Regex("Gateway listening on"), 60_000);
     var endpoint = new Uri($"ws://127.0.0.1:{port}/ws");
-    Console.WriteLine($"server pid {server.Id}, {options.Bots} bots ({options.FighterShare:P0} fighting), {options.Grace} in grace, " +
+    Console.WriteLine($"server pid {server.Id}, {options.Bots} bots ({options.FighterShare:P0} fighting), {options.Grace} in grace, {options.SpareSlots} spare slot(s), port {port}, " +
                       $"permessage-deflate {(options.Compression ? "on" : "off")}, warm-up {options.WarmupSeconds} s, measure {options.MeasureSeconds} s");
 
     // 1. Characters in their grace period: log in, then vanish without a close frame (a phone losing its signal).
@@ -112,7 +112,7 @@ try
                       $"{bots.Count(b => b.Bye is not null)} got bye ({string.Join(",", bots.Select(b => b.Bye).OfType<string>().Distinct())})");
 
     // 4. With characters in grace the server is full: a new login is refused, a resume still gets in.
-    if (options.Grace > 0)
+    if (options.Grace > 0 && options.SpareSlots == 0)
     {
         var late = await Bot.LoginAsync(endpoint, hash, "late", false, options.Compression, expectWelcome: false);
         var back = await Bot.ResumeAsync(endpoint, hash, parkedTokens[0], options.Compression);
@@ -149,10 +149,10 @@ static int FreePort()
 namespace Game.LoadTest
 {
     /// <summary>Command line: <c>--bots N --grace G --compression --warmup S --measure S --fighters 0.5 --server path</c>.</summary>
-    internal sealed record LoadTestOptions(int Bots, int Grace, bool Compression, int WarmupSeconds, int MeasureSeconds, double FighterShare, string? Server)
+    internal sealed record LoadTestOptions(int Bots, int Grace, bool Compression, int WarmupSeconds, int MeasureSeconds, double FighterShare, string? Server, int SpareSlots = 0, int Port = 0)
     {
         public const string Usage =
-            "usage: loadtest [--bots 50] [--grace 0] [--compression] [--warmup 30] [--measure 60] [--fighters 0.5] [--server path/Game.Server.dll]";
+            "usage: loadtest [--bots 50] [--grace 0] [--compression] [--warmup 30] [--measure 60] [--fighters 0.5] [--spare-slots 0] [--port 0] [--server path/Game.Server.dll]";
 
         public static LoadTestOptions? Parse(string[] args)
         {
@@ -171,6 +171,8 @@ namespace Game.LoadTest
                         "--measure" => o with { MeasureSeconds = int.Parse(Next(), CultureInfo.InvariantCulture) },
                         "--fighters" => o with { FighterShare = double.Parse(Next(), CultureInfo.InvariantCulture) },
                         "--server" => o with { Server = Next() },
+                        "--spare-slots" => o with { SpareSlots = int.Parse(Next(), CultureInfo.InvariantCulture) },
+                        "--port" => o with { Port = int.Parse(Next(), CultureInfo.InvariantCulture) },
                         _ => throw new FormatException("unknown option " + args[i]),
                     };
                 }
@@ -180,7 +182,7 @@ namespace Game.LoadTest
                 Console.Error.WriteLine(e.Message);
                 return null;
             }
-            return o.Bots > 0 && o.Grace >= 0 && o.MeasureSeconds >= 60 && o.WarmupSeconds >= 0 ? o : null;
+            return o.Bots > 0 && o.Grace >= 0 && o.SpareSlots >= 0 && o.Port is >= 0 and <= 65535 && o.MeasureSeconds >= 60 && o.WarmupSeconds >= 0 ? o : null;
         }
     }
 
