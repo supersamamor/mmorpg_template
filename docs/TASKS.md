@@ -71,6 +71,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-207 | Theme mounting + asset manifest loader, generated placeholder pack | Claude Code | Sonnet 5.5 | [T-207](../tasks/prompts/T-207.md) | T-206 | Review | ADR-002 #31 |
 | T-216 | Client build hardening: refuse `ws://` outside debug, strip the APK, CI export job, live `bye` tests | Claude Code | Sonnet 5.5 | [T-216](../tasks/prompts/T-216.md) | T-206 | Review | ADR-002 #64, #122 |
 | T-217 | AOI cap fairness: reserved slots by kind, own loot first, chasing monsters visible | Claude Code | Opus 5.5 | [T-217](../tasks/prompts/T-217.md) | T-215 | Review | ADR-002 #113, #121 |
+| T-218 | Client robustness: root-cause the headless exit crash with model preload; validator check for manifest `fallbacks` | Claude Code | Opus 5.5 | — | T-207 | Ready | ADR-002 #133, #135; prompt to be written |
 
 ## Phase 3 — Combat loop
 

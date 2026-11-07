@@ -242,3 +242,11 @@ When writing these prompts, copy in the decisions listed:
 | 129 | AOI phase cost rose about 40–70% (about 6 ms per 100 ms tick at 200 observers, every kind) (T-217) | **Decided: accept.** The tick has room and the p50 didn't rise. **→ T-803** if server data shows it matters. |
 | 130 | At 200 bots T-215 had fewer deaths than no cap, so row 113's "died more" only shows, weakly, at 50 bots (T-217) | **Noted:** the kills finding stands, and the fix is still right. Deaths follow how much fighting happens. |
 | 131 | A monster with 10 or more nearer chasers can land a first hit from out of view, appearing in the same delta as its hit (T-217) | **Decided: accept.** It's the cost of bounding a train. |
+
+## Addendum — T-207 (2026-11-08)
+| # | Question (source) | Decision |
+|---|---|---|
+| 132 | The export preset left out `themes/*/asset-manifest.json`, so a device build would draw every model as the missing marker (T-207) | **Done at merge:** added to every preset. `export-android.ps1` now mounts a copy of the themes first and re-imports; the APK was checked and holds the manifest, 80 imported assets and the bundle. |
+| 133 | Headless Godot exits with -1073741819 after PASS in about 1 of 4 runs with model preload on; preload is now skipped in headless, root cause not found (T-207) | **→ new T-218:** find the root cause. A crash on exit may also point to a real shutdown bug on devices. |
+| 134 | The exported APK also contains `themes/test` (T-207) | **→ T-802:** exclude test themes from store builds. It is under 1 MB, so harmless until then. |
+| 135 | Validator check that manifest `fallbacks` values exist (T-207) | **→ T-218.** Only a client test checks this today. |
