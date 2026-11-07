@@ -72,6 +72,13 @@ Keys of `audio.events` are "Events (event bus)" names.
 ## Map object types
 `spawn`, `warp`, `npc`, `zone` — zone kinds: `safe`, `pvp`
 
+## Map authoring metadata
+Names on nodes of a map's authoring scene (ARCHITECTURE §5.3, `MapMeta`).
+Root: `map_id`, `map_width`, `map_height`, `map_slope_limit_degrees`, `map_overrides`.
+Collision bodies: `map_walkable`, `map_blocks_los`.
+Markers: `map_marker` (a map object type); spawn `map_monster_id`, `map_w`, `map_h`, `map_count`, `map_respawn_seconds`; warp `map_target_map_id`, `map_target_x`, `map_target_y`; NPC `map_npc_id`, `map_facing`; zone `map_zone_kind`, `map_w`, `map_h`.
+Paint terms in `map_overrides`: `walk`, `block`, `los`, `open`.
+
 ## Attach points
 `head`, `face`, `mouth`, `back`, `hand_r`, `hand_l`
 

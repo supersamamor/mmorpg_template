@@ -1,0 +1,85 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://themes/default/maps/starter_meadow.tscn" id="1_visual"]
+
+[node name="StarterMeadowAuthoring" type="Node3D"]
+metadata/map_id = "map.starter_meadow"
+metadata/map_width = 48
+metadata/map_height = 32
+metadata/map_slope_limit_degrees = 40.0
+metadata/map_overrides = PackedStringArray("14,19:block", "14,25:block")
+
+[node name="Visual" parent="." instance=ExtResource("1_visual")]
+
+[node name="Markers" type="Node3D" parent="."]
+
+[node name="Spawn_gel_slime" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16.5, 0, 16.5)
+metadata/map_marker = "spawn"
+metadata/map_monster_id = "monster.gel_slime"
+metadata/map_w = 10
+metadata/map_h = 8
+metadata/map_count = 8
+metadata/map_respawn_seconds = 10.0
+
+[node name="Spawn_mossling" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20.5, 0, 3.5)
+metadata/map_marker = "spawn"
+metadata/map_monster_id = "monster.mossling"
+metadata/map_w = 9
+metadata/map_h = 8
+metadata/map_count = 6
+metadata/map_respawn_seconds = 12.0
+
+[node name="Spawn_rock_beetle" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 33.5, 0, 4.5)
+metadata/map_marker = "spawn"
+metadata/map_monster_id = "monster.rock_beetle"
+metadata/map_w = 10
+metadata/map_h = 7
+metadata/map_count = 5
+metadata/map_respawn_seconds = 15.0
+
+[node name="Spawn_sting_wasp" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 33.5, 0, 21.5)
+metadata/map_marker = "spawn"
+metadata/map_monster_id = "monster.sting_wasp"
+metadata/map_w = 10
+metadata/map_h = 8
+metadata/map_count = 4
+metadata/map_respawn_seconds = 15.0
+
+[node name="Spawn_thornback_boar" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 34.5, 0, 13.5)
+metadata/map_marker = "spawn"
+metadata/map_monster_id = "monster.thornback_boar"
+metadata/map_w = 10
+metadata/map_h = 6
+metadata/map_count = 3
+metadata/map_respawn_seconds = 20.0
+
+[node name="Warp_thistle_hollow" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 46.5, 0, 16.5)
+metadata/map_marker = "warp"
+metadata/map_target_map_id = "map.thistle_hollow"
+metadata/map_target_x = 2
+metadata/map_target_y = 7
+
+[node name="Npc_guide" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 11.5, 0, 10.5)
+metadata/map_marker = "npc"
+metadata/map_npc_id = "npc.guide"
+metadata/map_facing = "s"
+
+[node name="Npc_trainer" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, 0, 10.5)
+metadata/map_marker = "npc"
+metadata/map_npc_id = "npc.trainer"
+metadata/map_facing = "sw"
+
+[node name="Zone_safe" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, 0, 7.5)
+metadata/map_marker = "zone"
+metadata/map_zone_kind = "safe"
+metadata/map_w = 10
+metadata/map_h = 7

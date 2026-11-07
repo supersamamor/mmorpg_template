@@ -20,7 +20,7 @@ Read [`docs/VOCABULARY.md`](../docs/VOCABULARY.md) for ids, enums and formula va
 | `npcs/` | `npc.schema.json` | `npc.*` |
 | `dialogue/` | `dialogue.schema.json` | `dialogue.*` — node graphs |
 | `drops/` | `drop_table.schema.json` | `drop.*` |
-| `maps/` | `map.schema.json`, `map-grid.schema.json` | `map.*` metadata, plus the logic grid `<name>.grid.json` named by its `grid_file` (format: ARCHITECTURE §5.3). `maps/src/*.txt` are ASCII sources, not loaded |
+| `maps/` | `map.schema.json`, `map-grid.schema.json` | `map.*` metadata, plus the logic grid `<name>.grid.json` named by its `grid_file` (format: ARCHITECTURE §5.3). Exported from the map's authoring scene: [docs/MAP_AUTHORING.md](../docs/MAP_AUTHORING.md) |
 | `formulas.yaml` | `formula_set.schema.json` | derived stats, damage, hit and crit formulas |
 | `balance.yaml` | `balance.schema.json` | stat point awards and cost, stat range, damage and chance clamps |
 | `appearance.yaml` | `appearance.schema.json` | character-creation options: per gender (`male`, `female`) the body, faces and hairstyles; shared skin-tone and hair-colour palettes; defaults. Cosmetic only |
@@ -45,12 +45,12 @@ Read [`docs/VOCABULARY.md`](../docs/VOCABULARY.md) for ids, enums and formula va
   expression, regenerate, and do not hand-edit the numbers.
 - Run `dotnet run --project src/Game.Tools -- validate` after any change.
 
-## Map grids from ASCII (stopgap until T-208)
+## Map grids from ASCII (old stopgap)
 
-Until the Godot `map_authoring` exporter exists, logic grids are generated from ASCII art:
+Maps come from authored scenes now ([docs/MAP_AUTHORING.md](../docs/MAP_AUTHORING.md)). The old command remains for test grids; `validate` fails on a real map's grid written with it, because it has no scene hash:
 
 ```bash
-dotnet run --project src/Game.Tools -- grid from-ascii content/maps/src/starter_meadow.txt content/maps/starter_meadow.grid.json
+dotnet run --project src/Game.Tools -- grid from-ascii in.txt out.grid.json
 ```
 
 The `.txt` file has header lines, a line `---`, then one text row per grid row (all rows the same length, north row first):
@@ -70,7 +70,7 @@ The `.txt` file has header lines, a line `---`, then one text row per grid row (
 | `npc: npc.x  x y  facing` | NPC placement |
 | `zone: kind  x y w h` | rule zone (`safe`, `pvp`) |
 
-Lines starting with `//` are comments. Commit the `.txt` next to the generated `.grid.json`; a test fails when they differ.
+Lines starting with `//` are comments.
 
 ## Sounds
 

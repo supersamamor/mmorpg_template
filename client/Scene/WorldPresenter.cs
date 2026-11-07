@@ -17,6 +17,7 @@ public sealed class WorldPresenter
     private readonly UiState _ui;
     private readonly IEntityVisualSource _visuals;
     private readonly ClientConfig _config;
+    private readonly GroundHeights _ground;
     private readonly DetailPlanner _planner;
     private readonly MultiMesh _bars;
     private readonly MeshInstance3D _marker;
@@ -26,12 +27,14 @@ public sealed class WorldPresenter
     private bool _replan = true;
     private int _uiVersion = -1;
     private int _visualVersion;
+    private int _groundVersion;
     private long _frame;
 
     /// <summary>Builds the bar layer and markers under <paramref name="parent"/>.</summary>
-    public WorldPresenter(Node3D parent, ClientConfig config, WorldView world, UiState ui, IEntityVisualSource visuals)
+    public WorldPresenter(Node3D parent, ClientConfig config, WorldView world, UiState ui, IEntityVisualSource visuals, GroundHeights ground)
     {
         _config = config;
+        _ground = ground;
         _planner = new DetailPlanner(config.Lod0Count, config.FullRateAnimatedCount);
         _world = world;
         _ui = ui;
@@ -106,6 +109,14 @@ public sealed class WorldPresenter
 
         var entities = _world.Entities;
         var ownId = _world.OwnId;
+        if (_groundVersion != _ground.Version)
+        {
+            // The heights arrive a few frames after the scene: everything on the ground is placed again.
+            _groundVersion = _ground.Version;
+            for (var i = 0; i < entities.Count; i++) entities[i].PoseDirty = true;
+            _barsDirty = true;
+            _uiVersion = -1;
+        }
         for (var i = 0; i < entities.Count; i++)
         {
             var entity = entities[i];
@@ -124,7 +135,7 @@ public sealed class WorldPresenter
             }
             if (entity.PoseDirty)
             {
-                visual.SetPose((float)entity.X, (float)entity.Z, (float)entity.Yaw);
+                visual.SetPose((float)entity.X, _ground.At(entity.X, entity.Z), (float)entity.Z, (float)entity.Yaw);
                 entity.PoseDirty = false;
                 _replan = true; // distances to the player changed
                 if (entity.Hp.HasValue) _barsDirty = true;
@@ -192,7 +203,7 @@ public sealed class WorldPresenter
         {
             var entity = entities[i];
             if (entity.Hp is not { } hp || entity.Dead || (hp >= 1 && entity.Id != ownId)) continue;
-            _bars.SetInstanceTransform(count, new Transform3D(Basis.Identity, new Vector3((float)entity.X, BarHeight, (float)entity.Z)));
+            _bars.SetInstanceTransform(count, new Transform3D(Basis.Identity, new Vector3((float)entity.X, _ground.At(entity.X, entity.Z) + BarHeight, (float)entity.Z)));
             _bars.SetInstanceCustomData(count, new Color((float)hp, 0, 0, 0));
             count++;
         }
@@ -206,7 +217,7 @@ public sealed class WorldPresenter
             _uiVersion = _ui.Version;
             if (_ui.Marker is { } cell)
             {
-                _marker.Position = new Vector3(cell.X + 0.5f, 0.03f, cell.Y + 0.5f);
+                _marker.Position = new Vector3(cell.X + 0.5f, _ground.At(cell.X + 0.5, cell.Y + 0.5) + 0.03f, cell.Y + 0.5f);
                 _marker.Visible = true;
             }
             else
@@ -216,7 +227,7 @@ public sealed class WorldPresenter
             _ring.Visible = _ui.Target.HasValue;
         }
         if (_ui.Target is { } target && _world.Find(target) is { } entity)
-            _ring.Position = new Vector3((float)entity.X, 0.04f, (float)entity.Z);
+            _ring.Position = new Vector3((float)entity.X, _ground.At(entity.X, entity.Z) + 0.04f, (float)entity.Z);
     }
 
     private static MeshInstance3D Disc(Node3D parent, float size, Color color)

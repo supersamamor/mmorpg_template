@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://addons/map_authoring/ExportRunner.cs" id="1_runner"]
+
+[node name="ExportRunner" type="Node"]
+script = ExtResource("1_runner")

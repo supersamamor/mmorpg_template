@@ -16,6 +16,14 @@
     <!-- The server's own JSON mapping: it depends only on Game.Shared and System.Text.Json (ARCHITECTURE §10). -->
     <Compile Include="../src/Game.Server/Net/ProtocolJson.cs" Link="Linked/ProtocolJson.cs" />
   </ItemGroup>
+  <!-- The map authoring plugin and its exporter (T-208) are editor tools: no export configuration compiles them, so none of it reaches a phone. Debug is what the editor and the headless export run. -->
+  <ItemGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <Compile Include="../src/Game.Content/Maps/TscnFile.cs" Link="Linked/TscnFile.cs" />
+    <Compile Include="../src/Game.Content/Maps/MapSceneHash.cs" Link="Linked/MapSceneHash.cs" />
+  </ItemGroup>
+  <ItemGroup Condition=" '$(Configuration)' != 'Debug' ">
+    <Compile Remove="addons/map_authoring/**" />
+  </ItemGroup>
   <ItemGroup>
     <BundleInput Include="$(RepoRoot)/content/**/*" />
   </ItemGroup>

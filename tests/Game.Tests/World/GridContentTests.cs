@@ -129,20 +129,20 @@ public class GridContentTests : IDisposable
     }
 
     [Fact]
-    public void Committed_grids_match_their_ascii_sources()
+    public void Committed_grids_are_in_the_exporter_canonical_form()
     {
-        foreach (var txt in Directory.GetFiles(Path.Combine(RepoRoot(), "content", "maps", "src"), "*.txt"))
+        foreach (var file in Directory.GetFiles(Path.Combine(RepoRoot(), "content", "maps"), "*.grid.json"))
         {
-            var expected = GridFileJson.Write(AsciiGridConverter.Convert(File.ReadAllText(txt)));
-            var committed = Path.Combine(RepoRoot(), "content", "maps", Path.GetFileNameWithoutExtension(txt) + ".grid.json");
-            File.ReadAllText(committed).Replace("\r\n", "\n").ShouldBe(expected, $"{Path.GetFileName(committed)} is stale; run `grid from-ascii`");
+            var text = File.ReadAllText(file).Replace("\r\n", "\n");
+            text.ShouldBe(GridFileJson.Write(GridFileJson.Read(text)), Path.GetFileName(file));
         }
     }
 
     [Fact]
-    public void Ascii_sources_next_to_grids_are_ignored_by_the_loader()
+    public void Other_files_next_to_grids_are_ignored_by_the_loader()
     {
-        File.Exists(PathOf("maps/src/starter_meadow.txt")).ShouldBeTrue();
+        Directory.CreateDirectory(PathOf("maps/src"));
+        File.WriteAllText(PathOf("maps/src/notes.txt"), "not content");
 
         LoadErrors().ShouldBeEmpty();
     }

@@ -115,7 +115,7 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
   admin panel (T-804/T-805) reads it; there is no endpoint yet.
 - **One content boot.** `ContentBoot` (`Game.Content/Loading`) loads the content and runs every validation rule, including the theme
   manifest's asset keys and audio data. The server calls it at start and refuses to run on an error, printing the same lines
-  `Game.Tools validate` prints; `validate` adds only the JSON Schema check (YAML documents and `maps/*.grid.json`).
+  `Game.Tools validate` prints; `validate` adds only the JSON Schema check (YAML documents and `maps/*.grid.json`) and the map scene check (§5.3).
 - **Map instances:** each map runs in its own instance; warps move a character between instances.
 - **Persistence:** player state saved on interval, on map change, and on logout. Content is never in the DB.
 - **Mobile sessions are flaky** — the network layer assumes drops and app suspension (§10).
@@ -171,13 +171,19 @@ A map has three parts that share its id:
 | Logic grid | `content/maps/<name>.grid.json`, generated, committed | server, validator |
 | Metadata | `content/maps/<name>.yaml` (`MapDef`: name, scene key, music key, grid file, optional `respawn` cell for players who die here) | all |
 
-- **Authoring:** in the Godot editor. The `map_authoring` plugin bakes walkability from the
-  scene's collision shapes (one downward ray per cell, slope limit), then the designer paints
-  overrides. Spawns, warps, NPCs and zones are marker nodes with metadata that reference content
-  ids (e.g. `monster: monster.slime`, `count: 20`, `respawn: 10`).
-- **Export:** the plugin writes the grid file: size, cell flags (bit-packed), object lists
-  `spawns`, `warps`, `npcs`, `zones`, and a hash of the source scene. `validate` fails when the
-  scene changed after the last export.
+- **Authoring** (T-208; how-to: [MAP_AUTHORING.md](MAP_AUTHORING.md)): in the Godot editor. A map has two scene files in the theme. `maps/<name>.tscn` (the asset key's file) holds the look and the
+  collision and ships in the app. `maps/<name>.authoring.tscn` instances it and adds the root's `map_*` metadata (size, slope limit, painted cells) and the marker nodes. It holds spawn data, so hard rule 11 keeps it
+  out of the app: every export preset excludes it and the plugin (a test checks the presets).
+- **Bake:** one downward ray per cell centre against the scene's collision shapes, in its own physics world, in a separate headless process (`ExportRunner`), so the editor's camera and selection cannot reach it. A cell
+  is walkable when the ray hits a surface no steeper than `map_slope_limit_degrees` on a body not marked `map_walkable = false`; it blocks line of sight when that body has `map_blocks_los = true`. No hit is not walkable.
+  The limit lives in the scene so the hash covers it; the plugin's `config.json` only gives new maps their first value. Paint (`map_overrides`, sorted lines like `3,4:block+los`) goes on top after every bake.
+- **Export:** `client/export-maps.ps1 [-Map name] [-Check]` or the editor's Map dock (the same process). Markers are `Marker3D` nodes with `map_marker` (a `MapObjectTypes` term) and metadata that reference content ids
+  (VOCABULARY "Map authoring metadata"). A marker on a blocked cell or naming an unknown id (checked against the display bundle) is an error shown in the dock, and nothing is written. Output is canonical: lists sorted, the
+  same bytes as `GridFileJson.Write` (a test holds them together), so an unchanged scene exports to identical bytes.
+- **Staleness:** `validate` fails with `grid.scene_stale` (file and `source_scene_hash`) when a grid's hash differs from its scene's. `MapSceneHash` reads the `.tscn` text with no Godot, and the exporter uses the same code. It covers the
+  root, physics and unknown nodes, instanced scenes, `map_*` metadata, and the transforms of their ancestors, with resource references replaced by their content. It leaves out purely visual nodes, `uid`, `unique_id`, resource ids, section order, white space and line endings.
+  A non-text theme file counts by its SHA-256 (an LFS pointer's `oid` is the same value, so CI needs no LFS); its own dependencies are not followed. A map scene must be `.tscn`. The check is in `validate`, not in `ContentBoot`: the server reads grids, never scenes.
+- **Client** (`ThemeMapView`): shows the scene key's file through the fallback chain; a missing scene is `PlaceholderMap` with one warning. A few frames after a map loads, one ray per walkable cell fills `GroundHeights`, and entities read that, blended between cell centres, so nothing queries physics per frame.
 - **Grid file format** (`MapGridFile`, schema `schemas/map-grid.schema.json`, `format_version` 1; the loader rejects other versions).
   Cell `(0, 0)` is the north-west corner, `+x` is east, `+y` is south, so cell `(x, y)` maps to world `(x + 0.5, y + 0.5)` as in §4.
   Anything outside the grid is not walkable and blocks line of sight.
@@ -188,7 +194,7 @@ A map has three parts that share its id:
   | `map_id` | string | must equal the `MapDef` that names the file |
   | `width`, `height` | int | 1 to 4096 |
   | `cells` | string | base64 of `width * height` bytes, row-major (`index = y * width + x`). Bit `i` is the `i`-th term of `CellFlags.All`: bit 0 `walkable`, bit 1 `blocks_los`; other bits must be 0 |
-  | `source_scene_hash` | string | hash of the exported Godot scene; may be empty; stored, not yet checked (T-208) |
+  | `source_scene_hash` | string | `MapSceneHash` of the authoring scene at export; `validate` compares it (the loader allows empty, `validate` does not) |
   | `spawns[]` | object | `monster_id`, `area {x, y, w, h}`, `count` (≥ 1), `respawn_seconds` (≥ 0) |
   | `warps[]` | object | `cell {x, y}`, `target_map_id` (may be this map), `target_cell {x, y}` |
   | `npcs[]` | object | `npc_id`, `cell {x, y}`, `facing` (a `Directions` term) |
@@ -196,7 +202,7 @@ A map has three parts that share its id:
 
   Runtime access is the immutable `MapGrid` (`Game.Shared/World`), exposed by `ContentDatabase.GetGrid(mapId)`.
 - **Theme caveat:** a theme re-skins maps, it does not re-lay them out. A replacement scene must
-  match the existing grid, or the grid must be re-exported (that is a content change).
+  match the existing grid, or the grid must be re-exported (that is a content change). The same collision and markers give the same hash, so a pure re-skin stays valid.
 
 ### 5.4 Server content vs client content
 The server loads everything. The client gets only what it needs to display: names,
@@ -516,7 +522,7 @@ entity kind (`player`, `monster`, `npc`, `item`), then `fallbacks.missing` (a vi
 whose content names no model uses the kind stand-in silently. `fallbacks` is a table like `audio`, not an asset key.
 
 **Generated placeholder pack** (ADR-002 row 31): `themes/default` holds one real file per manifest key, written by `dotnet run --project tools/themegen` (`-- --check` verifies).
-Models are low-poly rigs (five shared rigs) with LOD0 and LOD1 and one material coloured from the key; icons are 64x64 PNG, sounds one silent OGG, scenes empty `.tscn`.
+Models are low-poly rigs (five shared rigs) with LOD0 and LOD1 and one material coloured from the key; icons are 64x64 PNG, sounds one silent OGG, effects an empty `.tscn`. Map scenes are not generated: they are authored (§5.3).
 `themes/test` is a partial theme (three models in other colours) used by tests.
 
 Rig names are theme-internal; the validator checks that a model, its animation library and its

@@ -154,9 +154,9 @@ public sealed class ModelVisual : IEntityVisual
     }
 
     /// <inheritdoc />
-    public void SetPose(float x, float z, float yaw)
+    public void SetPose(float x, float y, float z, float yaw)
     {
-        Root.Position = new Vector3(x, 0, z);
+        Root.Position = new Vector3(x, y, z);
         Root.Rotation = new Vector3(0, yaw, 0);
     }
 

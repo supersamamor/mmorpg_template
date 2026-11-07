@@ -24,5 +24,7 @@
   <ItemGroup>
     <!-- The client's pure core (no Godot), compiled here so its logic is tested without the engine. Its ProtocolJson comes from Game.Server. -->
     <Compile Include="../../client/Core/**/*.cs" Link="ClientCore/%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- The map authoring plugin's pure part (T-208). -->
+    <Compile Include="../../client/addons/map_authoring/Core/**/*.cs" Link="MapAuthoringCore/%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

@@ -69,6 +69,10 @@ public static class ValidationCodes
     public const string GridUnknownFlags = "grid.flags_unknown";
     /// <summary>Two warps share a cell.</summary>
     public const string GridWarpDuplicate = "grid.warp_duplicate";
+    /// <summary>A grid's <c>source_scene_hash</c> differs from its authoring scene: the scene changed after the last export.</summary>
+    public const string GridSceneStale = "grid.scene_stale";
+    /// <summary>A map's authoring scene, or a file it names, cannot be found or read.</summary>
+    public const string GridSceneMissing = "grid.scene_missing";
     /// <summary>A sound key has the wrong prefix for where it is used.</summary>
     public const string AudioPrefix = "audio.wrong_prefix";
     /// <summary>A sound entry of the manifest has a malformed shape (wrong type, unknown field).</summary>

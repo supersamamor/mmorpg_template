@@ -318,10 +318,10 @@
     "file": "portraits/npc/trainer.png"
   },
   "scene.map.starter_meadow": {
-    "file": "maps/placeholder.tscn"
+    "file": "maps/starter_meadow.tscn"
   },
   "scene.map.thistle_hollow": {
-    "file": "maps/placeholder.tscn"
+    "file": "maps/thistle_hollow.tscn"
   },
   "sfx.skill.buff": {
     "file": "audio/silence.ogg"

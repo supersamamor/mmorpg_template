@@ -1,0 +1,4 @@
+{
+  "default_slope_limit_degrees": 40.0,
+  "export_runner_scene": "res://addons/map_authoring/ExportRunner.tscn"
+}

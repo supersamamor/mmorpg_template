@@ -1,0 +1,323 @@
+[gd_scene format=3]
+
+[sub_resource type="BoxShape3D" id="ground_shape"]
+size = Vector3(48, 1, 32)
+
+[sub_resource type="Shader" id="checker"]
+code = "shader_type spatial;
+uniform vec3 a : source_color = vec3(0.36, 0.52, 0.31);
+uniform vec3 b : source_color = vec3(0.33, 0.48, 0.29);
+varying vec3 world;
+void vertex() {
+	world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+}
+void fragment() {
+	ALBEDO = mod(floor(world.x) + floor(world.z), 2.0) < 0.5 ? a : b;
+	ROUGHNESS = 1.0;
+	SPECULAR = 0.0;
+}
+"
+
+[sub_resource type="ShaderMaterial" id="ground_mat"]
+render_priority = 0
+shader = SubResource("checker")
+shader_parameter/a = null
+shader_parameter/b = null
+
+[sub_resource type="PlaneMesh" id="ground_mesh"]
+material = SubResource("ground_mat")
+size = Vector2(48, 32)
+
+[sub_resource type="BoxShape3D" id="rocks0_shape"]
+size = Vector3(48, 2, 1)
+
+[sub_resource type="StandardMaterial3D" id="rock_mat"]
+albedo_color = Color(0.42, 0.38, 0.35, 1)
+metallic_specular = 0.0
+
+[sub_resource type="BoxMesh" id="rocks0_mesh"]
+material = SubResource("rock_mat")
+size = Vector3(48, 2, 1)
+
+[sub_resource type="BoxShape3D" id="rocks1_shape"]
+size = Vector3(1, 2, 31)
+
+[sub_resource type="BoxMesh" id="rocks1_mesh"]
+material = SubResource("rock_mat")
+size = Vector3(1, 2, 31)
+
+[sub_resource type="BoxShape3D" id="rocks2_shape"]
+size = Vector3(1, 2, 31)
+
+[sub_resource type="BoxMesh" id="rocks2_mesh"]
+material = SubResource("rock_mat")
+size = Vector3(1, 2, 31)
+
+[sub_resource type="BoxShape3D" id="rocks3_shape"]
+size = Vector3(1, 2, 9)
+
+[sub_resource type="BoxMesh" id="rocks3_mesh"]
+material = SubResource("rock_mat")
+size = Vector3(1, 2, 9)
+
+[sub_resource type="BoxShape3D" id="rocks4_shape"]
+size = Vector3(3, 2, 2)
+
+[sub_resource type="BoxMesh" id="rocks4_mesh"]
+material = SubResource("rock_mat")
+size = Vector3(3, 2, 2)
+
+[sub_resource type="BoxShape3D" id="rocks5_shape"]
+size = Vector3(1, 2, 8)
+
+[sub_resource type="BoxMesh" id="rocks5_mesh"]
+material = SubResource("rock_mat")
+size = Vector3(1, 2, 8)
+
+[sub_resource type="BoxShape3D" id="rocks6_shape"]
+size = Vector3(46, 2, 1)
+
+[sub_resource type="BoxMesh" id="rocks6_mesh"]
+material = SubResource("rock_mat")
+size = Vector3(46, 2, 1)
+
+[sub_resource type="BoxShape3D" id="water0_shape"]
+size = Vector3(7, 1.02, 5)
+
+[sub_resource type="StandardMaterial3D" id="water_mat"]
+albedo_color = Color(0.16, 0.27, 0.42, 1)
+metallic_specular = 0.0
+
+[sub_resource type="BoxMesh" id="water0_mesh"]
+material = SubResource("water_mat")
+size = Vector3(7, 1.02, 5)
+
+[sub_resource type="BoxShape3D" id="water1_shape"]
+size = Vector3(1, 1.02, 3)
+
+[sub_resource type="BoxMesh" id="water1_mesh"]
+material = SubResource("water_mat")
+size = Vector3(1, 1.02, 3)
+
+[sub_resource type="BoxShape3D" id="water2_shape"]
+size = Vector3(1, 1.02, 3)
+
+[sub_resource type="BoxMesh" id="water2_mesh"]
+material = SubResource("water_mat")
+size = Vector3(1, 1.02, 3)
+
+[sub_resource type="BoxShape3D" id="water3_shape"]
+size = Vector3(1, 1.02, 1)
+
+[sub_resource type="BoxMesh" id="water3_mesh"]
+material = SubResource("water_mat")
+size = Vector3(1, 1.02, 1)
+
+[sub_resource type="BoxShape3D" id="water4_shape"]
+size = Vector3(1, 1.02, 1)
+
+[sub_resource type="BoxMesh" id="water4_mesh"]
+material = SubResource("water_mat")
+size = Vector3(1, 1.02, 1)
+
+[sub_resource type="PlaneMesh" id="deco_mesh_0"]
+material = SubResource("water_mat")
+size = Vector2(1, 1)
+
+[sub_resource type="PlaneMesh" id="deco_mesh_1"]
+material = SubResource("water_mat")
+size = Vector2(1, 1)
+
+[sub_resource type="StandardMaterial3D" id="warp_mat"]
+albedo_color = Color(0.55, 0.3, 0.8, 1)
+metallic_specular = 0.0
+
+[sub_resource type="PlaneMesh" id="deco_mesh_2"]
+material = SubResource("warp_mat")
+size = Vector2(1, 1)
+
+[sub_resource type="StandardMaterial3D" id="safe_mat"]
+albedo_color = Color(0.46, 0.56, 0.38, 1)
+metallic_specular = 0.0
+
+[sub_resource type="PlaneMesh" id="deco_mesh_3"]
+material = SubResource("safe_mat")
+size = Vector2(10, 7)
+
+[sub_resource type="BoxShape3D" id="ramp_shape"]
+size = Vector3(2.0616, 1, 5)
+
+[sub_resource type="BoxMesh" id="ramp_mesh"]
+material = SubResource("ground_mat")
+size = Vector3(2.0616, 1, 5)
+
+[sub_resource type="BoxShape3D" id="top_shape"]
+size = Vector3(3, 1, 5)
+
+[sub_resource type="BoxMesh" id="top_mesh"]
+material = SubResource("ground_mat")
+size = Vector3(3, 1, 5)
+
+[node name="StarterMeadow" type="Node3D"]
+
+[node name="Ground" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, -0.5, 16)
+
+[node name="Shape" type="CollisionShape3D" parent="Ground"]
+shape = SubResource("ground_shape")
+
+[node name="Mesh" type="MeshInstance3D" parent="Ground"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+mesh = SubResource("ground_mesh")
+
+[node name="Rocks" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+metadata/map_walkable = false
+metadata/map_blocks_los = true
+
+[node name="Shape0" type="CollisionShape3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 0.5)
+shape = SubResource("rocks0_shape")
+
+[node name="Mesh0" type="MeshInstance3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 0.5)
+mesh = SubResource("rocks0_mesh")
+
+[node name="Shape1" type="CollisionShape3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0, 16.5)
+shape = SubResource("rocks1_shape")
+
+[node name="Mesh1" type="MeshInstance3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.5, 0, 16.5)
+mesh = SubResource("rocks1_mesh")
+
+[node name="Shape2" type="CollisionShape3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 47.5, 0, 16.5)
+shape = SubResource("rocks2_shape")
+
+[node name="Mesh2" type="MeshInstance3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 47.5, 0, 16.5)
+mesh = SubResource("rocks2_mesh")
+
+[node name="Shape3" type="CollisionShape3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30.5, 0, 8.5)
+shape = SubResource("rocks3_shape")
+
+[node name="Mesh3" type="MeshInstance3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30.5, 0, 8.5)
+mesh = SubResource("rocks3_mesh")
+
+[node name="Shape4" type="CollisionShape3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 39.5, 0, 9)
+shape = SubResource("rocks4_shape")
+
+[node name="Mesh4" type="MeshInstance3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 39.5, 0, 9)
+mesh = SubResource("rocks4_mesh")
+
+[node name="Shape5" type="CollisionShape3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30.5, 0, 24)
+shape = SubResource("rocks5_shape")
+
+[node name="Mesh5" type="MeshInstance3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 30.5, 0, 24)
+mesh = SubResource("rocks5_mesh")
+
+[node name="Shape6" type="CollisionShape3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 31.5)
+shape = SubResource("rocks6_shape")
+
+[node name="Mesh6" type="MeshInstance3D" parent="Rocks"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24, 0, 31.5)
+mesh = SubResource("rocks6_mesh")
+
+[node name="Water" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+metadata/map_walkable = false
+
+[node name="Shape0" type="CollisionShape3D" parent="Water"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, -0.49, 22.5)
+shape = SubResource("water0_shape")
+
+[node name="Mesh0" type="MeshInstance3D" parent="Water"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, -0.49, 22.5)
+mesh = SubResource("water0_mesh")
+
+[node name="Shape1" type="CollisionShape3D" parent="Water"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.5, -0.49, 22.5)
+shape = SubResource("water1_shape")
+
+[node name="Mesh1" type="MeshInstance3D" parent="Water"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.5, -0.49, 22.5)
+mesh = SubResource("water1_mesh")
+
+[node name="Shape2" type="CollisionShape3D" parent="Water"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18.5, -0.49, 22.5)
+shape = SubResource("water2_shape")
+
+[node name="Mesh2" type="MeshInstance3D" parent="Water"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18.5, -0.49, 22.5)
+mesh = SubResource("water2_mesh")
+
+[node name="Shape3" type="CollisionShape3D" parent="Water"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.5, -0.49, 22.5)
+shape = SubResource("water3_shape")
+
+[node name="Mesh3" type="MeshInstance3D" parent="Water"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.5, -0.49, 22.5)
+mesh = SubResource("water3_mesh")
+
+[node name="Shape4" type="CollisionShape3D" parent="Water"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19.5, -0.49, 22.5)
+shape = SubResource("water4_shape")
+
+[node name="Mesh4" type="MeshInstance3D" parent="Water"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19.5, -0.49, 22.5)
+mesh = SubResource("water4_mesh")
+
+[node name="Decoration" type="Node3D" parent="."]
+
+[node name="WaterTip14_19" type="MeshInstance3D" parent="Decoration"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, 0.02, 19.5)
+mesh = SubResource("deco_mesh_0")
+
+[node name="WaterTip14_25" type="MeshInstance3D" parent="Decoration"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14.5, 0.02, 25.5)
+mesh = SubResource("deco_mesh_1")
+
+[node name="WarpPad" type="MeshInstance3D" parent="Decoration"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 46.5, 0.015, 16.5)
+mesh = SubResource("deco_mesh_2")
+
+[node name="SafeGround" type="MeshInstance3D" parent="Decoration"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0.01, 10.5)
+mesh = SubResource("deco_mesh_3")
+
+[node name="Hill" type="Node3D" parent="."]
+
+[node name="RampWest" type="StaticBody3D" parent="Hill"]
+transform = Transform3D(0.9701425, -0.2425356, 0, 0.2425356, 0.9701425, 0, 0, 0, 1, 22.121267, -0.2350713, 15.5)
+
+[node name="Shape" type="CollisionShape3D" parent="Hill/RampWest"]
+shape = SubResource("ramp_shape")
+
+[node name="Mesh" type="MeshInstance3D" parent="Hill/RampWest"]
+mesh = SubResource("ramp_mesh")
+
+[node name="Top" type="StaticBody3D" parent="Hill"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 24.5, 0, 15.5)
+
+[node name="Shape" type="CollisionShape3D" parent="Hill/Top"]
+shape = SubResource("top_shape")
+
+[node name="Mesh" type="MeshInstance3D" parent="Hill/Top"]
+mesh = SubResource("top_mesh")
+
+[node name="RampEast" type="StaticBody3D" parent="Hill"]
+transform = Transform3D(0.9701425, 0.2425356, 0, -0.2425356, 0.9701425, 0, 0, 0, 1, 26.878733, -0.2350713, 15.5)
+
+[node name="Shape" type="CollisionShape3D" parent="Hill/RampEast"]
+shape = SubResource("ramp_shape")
+
+[node name="Mesh" type="MeshInstance3D" parent="Hill/RampEast"]
+mesh = SubResource("ramp_mesh")
