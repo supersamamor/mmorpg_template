@@ -15,7 +15,10 @@ public class BannedSymbolsTests : IDisposable
 
     public void Dispose()
     {
-        try { Directory.Delete(_temp, recursive: true); } catch (IOException) { }
+        // Windows reports a file still held open (a new .exe being scanned, say) as access denied. A leftover temp folder must not fail the test.
+        try { Directory.Delete(_temp, recursive: true); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
     }
 
     private static string RepoRoot()
