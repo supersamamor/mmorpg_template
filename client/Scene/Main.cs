@@ -1,6 +1,7 @@
 using Game.Client.Core;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Net;
+using Game.Client.Scene.Audio;
 using Game.Shared.Protocol;
 using Game.Shared.Random;
 using Godot;
@@ -25,6 +26,7 @@ public partial class Main : Node3D
     private FollowCamera? _camera;
     private ThemeMapView? _map;
     private Hud? _hud;
+    private AudioDriver? _audio;
     private InputRouter? _input;
     private string? _loadedMap;
     private MapData? _mapData;
@@ -55,6 +57,9 @@ public partial class Main : Node3D
 
     /// <summary>The HUD.</summary>
     public Hud? Hud => _hud;
+
+    /// <summary>The audio system.</summary>
+    public AudioDriver? Audio => _audio;
 
     /// <summary>The map whose ground is on screen.</summary>
     public string? LoadedMap => _loadedMap;
@@ -120,7 +125,12 @@ public partial class Main : Node3D
         _camera = new FollowCamera(this, _config);
         _entities = new ThemedEntities(this, _config, _bundle!, catalog);
         _presenter = new WorldPresenter(this, _config, _session.World, _session.Ui, _entities, _map.Ground);
+        var sounds = SoundLoader.Load(_config);
+        _audio = new AudioDriver(this, _config, sounds, _bundle!, _session.World, new Pcg32Random((ulong)System.Random.Shared.NextInt64()), UserPrefsStore.Load());
+        _session.HitsReceived += _audio.OnHits;
+        _session.LevelUpReceived += _audio.OnLevelUp;
         _hud = new Hud(this, _config, _session, _bundle);
+        _hud.Audio = _audio;
         _input = new InputRouter(_config, _session, _bundle!, _camera, _hud, () => _mapData);
 
         GD.Print($"[client] bundle format {_bundle!.FormatVersion}, hash {_bundle.ContentHash}; server {_config.ServerUrl}; {(OS.IsDebugBuild() ? "debug" : "release")} build, cleartext {(_config.AllowCleartext ? "allowed" : "refused")}; renderer {RenderingServer.GetCurrentRenderingMethod()}");
@@ -142,6 +152,7 @@ public partial class Main : Node3D
         _presenter!.Sync(delta);
         if (world.Own is { } own) _camera!.Follow((float)own.X, (float)own.Z);
         _hud!.Refresh();
+        _audio!.Update(Clocks.View());
         _input!.Tick();
 
         if (!CountAllocations) return;
@@ -174,6 +185,8 @@ public partial class Main : Node3D
     /// <inheritdoc />
     public override void _Notification(int what)
     {
+        if (what == NotificationApplicationPaused) _audio?.OnBackgrounded();
+        else if (what == NotificationApplicationResumed) _audio?.OnForegrounded();
         if (_session is null) return;
         if (what == NotificationApplicationPaused) _session.OnBackgrounded();
         else if (what == NotificationApplicationResumed) _session.OnForegrounded(Clocks.Wall());
@@ -191,6 +204,7 @@ public partial class Main : Node3D
         }
         _mapData = map;
         _map!.Load(map!);
+        _audio?.OnMapLoaded(map!);
     }
 
     private void LoadSettings(string[] args)

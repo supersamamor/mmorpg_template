@@ -11,6 +11,11 @@ config/icon="res://icon.svg"
 ; §9: draw only when something changed, and rest between frames.
 run/low_processor_mode=true
 
+[audio]
+
+; Buses music, sfx, ui, ambient (ARCHITECTURE §7.8); the player's volume per bus is set in code from the stored preferences.
+buses/default_bus_layout="res://default_bus_layout.tres"
+
 [display]
 
 window/size/viewport_width=1280

@@ -3,8 +3,10 @@ using Game.Client.Core;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Net;
 using Game.Client.Core.Ui;
-using Game.Shared.Protocol;
+using Game.Client.Core.Audio;
+using Game.Client.Scene.Audio;
 using Game.Shared.Vocabulary;
+using Game.Shared.Protocol;
 using Godot;
 
 namespace Game.Client.Scene;
@@ -55,6 +57,13 @@ public sealed class Hud
     private readonly Label _connection = Wrapped(HorizontalAlignment.Right);
     private readonly Button _uiSize = new();
     private readonly Button _logout = new() { Text = UiText.Logout };
+    private readonly Button _soundButton = new() { Text = UiText.Sound };
+    private readonly CenterContainer _soundCenter = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+    private readonly PanelContainer _soundPanel = new() { MouseFilter = Control.MouseFilterEnum.Stop };
+    private readonly GridContainer _soundGrid = new() { Columns = 2, MouseFilter = Control.MouseFilterEnum.Ignore };
+    private readonly Button _soundMute = new();
+    private readonly Button _soundClose = new() { Text = UiText.Close };
+    private readonly Button[] _soundBus = new Button[BusMixer.Buses.Length];
 
     private readonly VBoxContainer _bottom = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly GridContainer _hotbar = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -123,11 +132,14 @@ public sealed class Hud
 
         _right.AddChild(_connection);
         _right.AddChild(_uiSize);
+        _right.AddChild(_soundButton);
+        _soundButton.SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd;
+        _soundButton.Pressed += () => { Tap(); SetSoundPanel(!_soundCenter.Visible); };
         _right.AddChild(_logout);
         _logout.SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd;
         _uiSize.SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd;
-        _uiSize.Pressed += CycleScale;
-        _logout.Pressed += () => _session?.Logout(Clocks.Wall());
+        _uiSize.Pressed += () => { Tap(); CycleScale(); };
+        _logout.Pressed += () => { Tap(); _session?.Logout(Clocks.Wall()); };
         _logout.Visible = false;
 
         _topRow.SetAnchorsPreset(Control.LayoutPreset.TopWide);
@@ -135,6 +147,7 @@ public sealed class Hud
         _topRow.AddChild(_center);
         _topRow.AddChild(_right);
         _safe.AddChild(_topRow);
+        BuildSoundPanel();
 
         // The bottom edge: the one-line flash above the hotbar, both centred, with the whole safe width to wrap in.
         _bottom.AnchorLeft = 0;
@@ -174,6 +187,7 @@ public sealed class Hud
         _nameEdit.Text = config.DevName;
         _interactive.Add(_logout);
         _interactive.Add(_uiSize);
+        _interactive.Add(_soundButton);
         _interactive.Add(_nameEdit);
         _interactive.Add(_panelButton);
 
@@ -326,6 +340,77 @@ public sealed class Hud
         _info.Visible = false;
     }
 
+    /// <summary>The audio system, whose volumes the sound panel sets. Null until the world exists.</summary>
+    public AudioDriver? Audio { get; set; }
+
+    /// <summary>The sound panel is open.</summary>
+    public bool SoundPanelShown => _soundCenter.Visible;
+
+    /// <summary>Opens or closes the sound panel.</summary>
+    public void SetSoundPanel(bool open)
+    {
+        _soundCenter.Visible = open;
+        RefreshSoundButtons();
+    }
+
+    /// <summary>The sound panel's buttons: the mute switch and one volume button per bus (for the scripted run).</summary>
+    public IReadOnlyList<Button> SoundButtons => new List<Button>(_soundBus) { _soundMute };
+
+    private void Tap() => Audio?.PlayUi(AudioCategories.UiTap);
+
+    private void BuildSoundPanel()
+    {
+        _soundCenter.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
+        _soundCenter.AddChild(_soundPanel);
+        _soundPanel.AddChild(_soundGrid);
+        _safe.AddChild(_soundCenter);
+        _soundGrid.AddChild(_soundMute);
+        _soundGrid.AddChild(_soundClose);
+        _soundMute.Pressed += () =>
+        {
+            Tap();
+            if (Audio is null) return;
+            Audio.Director.Mixer.Muted = !Audio.Director.Mixer.Muted;
+            Audio.SavePreferences();
+            RefreshSoundButtons();
+        };
+        _soundClose.Pressed += () => { Tap(); SetSoundPanel(false); };
+        var names = new[] { "Music", "Effects", "Interface", "Ambience" };
+        for (var i = 0; i < _soundBus.Length; i++)
+        {
+            var bus = BusMixer.Buses[i];
+            var name = names[i];
+            var button = _soundBus[i] = new Button();
+            _soundGrid.AddChild(button);
+            _interactive.Add(button);
+            button.Pressed += () =>
+            {
+                if (Audio is null) return;
+                var mixer = Audio.Director.Mixer;
+                mixer.SetVolume(bus, NextVolume(mixer.Volume(bus)));
+                Audio.SavePreferences();
+                RefreshSoundButtons();
+                Tap();
+            };
+            button.Text = UiText.BusVolume(name, 1);
+            button.SetMeta("bus_name", name);
+        }
+        _interactive.Add(_soundMute);
+        _interactive.Add(_soundPanel);
+        _interactive.Add(_soundClose);
+    }
+
+    /// <summary>The next step of a volume button: 0, 25, 50, 75, 100 per cent, then back to 0.</summary>
+    public static double NextVolume(double volume) => volume >= 0.99 ? 0 : Math.Floor(volume * 4 + 0.001) / 4 + 0.25;
+
+    private void RefreshSoundButtons()
+    {
+        if (Audio is null) return;
+        var mixer = Audio.Director.Mixer;
+        _soundMute.Text = UiText.Mute(mixer.Muted);
+        for (var i = 0; i < _soundBus.Length; i++) _soundBus[i].Text = UiText.BusVolume((string)_soundBus[i].GetMeta("bus_name"), mixer.Volume(BusMixer.Buses[i]));
+    }
+
     /// <summary>The player cycles the UI size: the next step, stored in the user's preferences.</summary>
     public void CycleScale() => SetScale(UiScale.Next(_scale, _config.UiScaleMin, _config.UiScaleMax, _config.UiScaleStep), true);
 
@@ -382,6 +467,12 @@ public sealed class Hud
         var buttonHeight = Target(ButtonDp);
         _logout.CustomMinimumSize = new Vector2(Dp(RightColumnDp), buttonHeight);
         _uiSize.CustomMinimumSize = new Vector2(Dp(RightColumnDp), buttonHeight);
+        _soundButton.CustomMinimumSize = new Vector2(Dp(RightColumnDp), buttonHeight);
+        _soundGrid.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(Dp(8)));
+        _soundGrid.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(Dp(8)));
+        _soundCenter.Position = Vector2.Zero; // inside _safe, which is already at the safe area
+        _soundCenter.Size = new Vector2((float)safe.Width, (float)safe.Height);
+        foreach (var button in _soundGrid.GetChildren()) ((Control)button).CustomMinimumSize = new Vector2(Dp(140), buttonHeight);
         _uiSize.Text = UiText.UiSize(scale);
 
         // The hotbar: physical dp, so its slots are never below the platform's smallest target, and a narrow screen takes more rows.
@@ -563,6 +654,7 @@ public sealed class Hud
     /// <summary>A slot was pressed: the model decides what it comes to; the client sends nothing yet (T-502 binds the activator).</summary>
     private void OnSlotPressed(int index, Button slot)
     {
+        Tap();
         LastHotbarPress = _hotbarModel!.Press(index);
         HotbarPresses++;
         // Feedback for every press, empty or not.

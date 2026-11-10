@@ -95,6 +95,12 @@ public sealed class ClientSession
         if (Connection.Phase == ConnectionPhase.Online) Send(new RespawnMessage());
     }
 
+    /// <summary>Raised when a delta carried hits, with the view time they arrived (the audio system queues them for their impact moment).</summary>
+    public event Action<IReadOnlyList<HitRecord>, double>? HitsReceived;
+
+    /// <summary>Raised when a <c>level_up</c> arrived.</summary>
+    public event Action<LevelUpMessage>? LevelUpReceived;
+
     /// <summary>One frame: applies what arrived, runs timers, moves the view. Allocates nothing when nothing arrived and no timer fired.</summary>
     public void Update(double wallNow, double viewNow)
     {
@@ -138,6 +144,7 @@ public sealed class ClientSession
                 {
                     Ui.OnHits(hits, World, viewNow); // before the deltas: a target that died here is still named
                     World.ApplyHits(hits, viewNow);
+                    HitsReceived?.Invoke(hits, viewNow);
                 }
                 World.ApplyDelta(delta, viewNow);
                 if (delta.Appeared.Count > 0) Ui.OnAppeared(delta.Appeared, viewNow);
@@ -168,6 +175,7 @@ public sealed class ClientSession
                 break;
             case LevelUpMessage level:
                 Ui.OnLevelUp(level, viewNow);
+                LevelUpReceived?.Invoke(level);
                 break;
             case ByeMessage bye:
                 Connection.OnBye(bye.Reason, wallNow);

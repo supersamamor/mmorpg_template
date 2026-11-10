@@ -24,5 +24,12 @@
   "hotbar_slots": 6,
   "hotbar_rows": 1,
   "hotbar_slot_dp": 56,
-  "hotbar_gap_dp": 8
+  "hotbar_gap_dp": 8,
+
+  "audio_max_voices": 24,
+  "audio_cooldown_seconds": 0.08,
+  "audio_cull_distance": 30,
+  "audio_crossfade_seconds": 2,
+  "audio_effects_budget_mb": 48,
+  "audio_trace": false
 }

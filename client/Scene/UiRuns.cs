@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using Game.Client.Core;
+using Game.Client.Core.Audio;
+using Game.Shared.Vocabulary;
 using Game.Client.Core.Net;
 using Game.Client.Core.Ui;
 using Godot;
@@ -50,6 +52,7 @@ public sealed class UiRuns
         await LongPressAsync();
         await HotbarAsync();
         await ScaleButtonAsync(originalScale);
+        await SoundPanelAsync();
         await TapAsync();
         await MeasureAsync();
         await ShotAsync();
@@ -63,6 +66,42 @@ public sealed class UiRuns
         await LayoutMatrixAsync("longest refusal text");
         Hud.SetScale(originalScale, false);
         UserPrefsStore.Save(originalPreferences);
+        originalPreferences.ApplyTo(_main.Audio!.Director.Mixer);
+    }
+
+    /// <summary>The sound settings: the panel fits at every screen shape, the buttons change the mixer and the engine's buses, and the choice is stored.</summary>
+    private async Task SoundPanelAsync()
+    {
+        var audio = _main.Audio!;
+        var mixer = audio.Director.Mixer;
+        Hud.SetSoundPanel(true);
+        await FramesAsync(2);
+        Check(Hud.SoundPanelShown, "the sound panel opens");
+        var scaleBefore = Hud.Scale;
+        await LayoutMatrixAsync("sound panel open");
+        Hud.SetScale(scaleBefore, false); // the matrix leaves the last fake screen laid out: back to the real one
+        Hud.ForceRefresh();
+        await FramesAsync(3);
+        var buttons = Hud.SoundButtons; // the four buses in order, then mute
+        var sfx = BusMixer.IndexOf(AudioBuses.Sfx);
+        var before = mixer.Volume(AudioBuses.Sfx);
+        buttons[sfx].EmitSignal(BaseButton.SignalName.Pressed);
+        await FramesAsync(3);
+        Check(Math.Abs(mixer.Volume(AudioBuses.Sfx) - Hud.NextVolume(before)) < 1e-9, $"the effects button goes {before} -> {Hud.NextVolume(before)}");
+        var busIndex = AudioServer.GetBusIndex(AudioBuses.Sfx);
+        Check(Math.Abs(AudioServer.GetBusVolumeDb(busIndex) - BusMixer.ToDb(mixer.Volume(AudioBuses.Sfx))) < 0.01, "and the engine bus follows");
+        Check(Math.Abs(UserPrefsStore.Load().Volumes[sfx] - mixer.Volume(AudioBuses.Sfx)) < 1e-6, "and the choice is stored");
+        buttons[4].EmitSignal(BaseButton.SignalName.Pressed);
+        await FramesAsync(3);
+        Check(mixer.Muted && AudioServer.IsBusMute(busIndex) && AudioServer.IsBusMute(AudioServer.GetBusIndex(AudioBuses.Music)), "mute silences every bus");
+        Check(UserPrefsStore.Load().Muted, "and is stored");
+        buttons[4].EmitSignal(BaseButton.SignalName.Pressed);
+        await FramesAsync(3);
+        Check(!mixer.Muted, "unmuting brings the sound back");
+        Check(Hud.FindProblems().Count == 0, "and the panel still fits");
+        Print($"sound: panel fits every screen; effects volume {before} -> {mixer.Volume(AudioBuses.Sfx)} reached the engine bus and the preferences; mute and unmute worked");
+        Hud.SetSoundPanel(false);
+        await FramesAsync(2);
     }
 
     // ---- layout ----
