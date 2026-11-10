@@ -500,6 +500,30 @@ Every sound is an **asset key** resolved by the theme (§8), so replacing a soun
 - **Playback:** music crossfades on map change; sound effects play from a pool with a voice cap and per-key cooldown so 30 hits in one
   tick don't stack; sounds far outside the camera are skipped. On mobile the client pauses audio in the background, follows the iOS
   silent switch for effects, and gives up audio focus on Android when another app plays.
+- **Client implementation** (T-305): the pure rules are in `client/Core/Audio` (tested without the engine), the players and buses in `client/Scene/Audio`.
+  - *Resolution:* every request goes through `AudioResolver` and the theme chain (`SoundCatalog`: active theme, then `default`; a key counts as found when an entry lists it
+    and a file exists). The order is the content key, then the category default, then silence with one warning per key. A variation is picked at random from `files`
+    with the injected `IRandom`, with the entry's `volume_db`, a random pitch from its range, and its bus. Loading is always on the main thread (§7.7: the headless dummy renderer).
+  - *Voices (§9, client config `audio_*`):* 24 players made at start, no allocation per sound after warm-up. A per-key cooldown (0.08 s) comes first, then a free voice,
+    then stealing: lowest priority, then oldest; a sound is never cut for a less important one (priorities: interface and events > own actions > ordinary > other
+    characters' combat). Sounds further than `audio_cull_distance` (30 world units) from the camera focus are skipped; interface sounds and events have no place and are not.
+  - *Music and ambience:* one `CrossfadeChannel` each with two players, an equal-power fade of `audio_crossfade_seconds` (2 s), started on every map load, a warp included.
+    A map without music fades the old one out. OGG is decoded as it plays, from the compressed bytes in memory (Godot does not read OGG from disk while playing); only the
+    streams in use are kept.
+  - *Effects memory:* each loaded effect is charged its decoded size (length × 44.1 kHz × 2 channels × 2 bytes, an upper bound) to a `SoundBudget`; over `audio_effects_budget_mb`
+    (48) the least recently used are let go.
+  - *Buses and settings:* `music`, `sfx`, `ui`, `ambient` (`default_bus_layout.tres`). The player's volume per bus and the mute switch live in `UserPreferences` and are set in
+    the HUD's Sound panel; the engine's bus volume is their decibel value.
+  - *What plays when:* map music and ambience on load; a monster's aggro sound the first time it hits anyone (the wire has no aggro message); hit and die sounds from the bundle's
+    `sounds` or the defaults; a weapon's swing and impact from `weapon.<type>.swing|impact`, on the same moments as the combat visuals (`IImpactSource`: swing = the attack clip
+    starts, impact = the hit lands; until T-303's source is plugged in, `ImpactScheduler` uses seen time plus the render delay); level up from `audio.events`; the interface tap on HUD
+    buttons. The wire does not say which weapon a character holds, so every character swings as `unarmed` until T-401. Item use and equip, and item acquired, have hooks
+    (`AudioDriver.OnItemUsed|OnItemEquipped|OnItemAcquired`) that T-401 calls.
+  - *Debug trace:* client setting `audio_trace` (`--set audio_trace=1`, or `run-e2e.ps1 -AudioTrace`) logs one `[audio]` line per play, skip (with the reason), steal, crossfade, bus change and pause.
+  - *Phone:* the pause in the background is the engine's pause notification and is pure state (`AppAudioState`, which also freezes the audio clock). **Godot 4.7.2 cannot do from C#:**
+    the iOS silent switch (it has no API for reading it; making effects follow it while music does not needs native code that sets the audio session category and reads the switch)
+    and Android audio focus (the engine never requests it; it needs a small Android plugin calling `AudioManager`). `PlatformAudio` reads an engine singleton `GameAudioPlatform`
+    (`is_silent_switch_on()`, `has_audio_focus()`) if a plugin provides one; none exists yet. None of it has run on a device (ADR-002 row 112).
 - **Validated at load** (`validate`, the `audio` rule): every sound key used by content, defaults or events exists in the manifest with the right
   prefix (`sfx.` for monster, item, skill, default and event sounds; `music.`, `ambience.` for maps); categories, weapon types, events and buses
   are known terms; `volume_db` is within -60 to 12; `pitch` is `[min, max]` with 0 < min ≤ max; `files` is not empty and every file ends in `.ogg`.

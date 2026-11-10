@@ -116,6 +116,18 @@ public static class UiText
     }
 
     /// <summary>The button that cycles the UI size, showing the current one (a percentage).</summary>
+    /// <summary>The sound settings button.</summary>
+    public const string Sound = "Sound";
+
+    /// <summary>Closes the sound settings.</summary>
+    public const string Close = "Close";
+
+    /// <summary>A bus volume button, e.g. <c>Music 70%</c>.</summary>
+    public static string BusVolume(string name, double volume) => name + " " + Math.Round(volume * 100).ToString(CultureInfo.InvariantCulture) + "%";
+
+    /// <summary>The mute switch.</summary>
+    public static string Mute(bool muted) => muted ? "Sound off" : "Sound on";
+
     public static string UiSize(double scale) => "UI " + Math.Round(scale * 100).ToString(CultureInfo.InvariantCulture) + "%";
 
     /// <summary>The small connection indicator: a phase in one or two words.</summary>

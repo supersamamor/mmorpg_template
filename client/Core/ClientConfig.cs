@@ -232,6 +232,26 @@ public sealed class ClientConfig
     /// <summary>Simulated bottom inset (the home indicator), in dp.</summary>
     public double DebugNotchBottomDp { get; set; } = 21;
 
+    // ---- audio (ARCHITECTURE §7.8, §9) ----
+
+    /// <summary>Simultaneous sound effect voices (§9: at most 24).</summary>
+    public int AudioMaxVoices { get; set; } = 24;
+
+    /// <summary>Minimum seconds between two plays of the same sound key, so 30 hits in one tick do not stack.</summary>
+    public double AudioCooldownSeconds { get; set; } = 0.08;
+
+    /// <summary>Sounds from further than this many world units from the camera focus are skipped (the camera sees about 15).</summary>
+    public double AudioCullDistance { get; set; } = 30;
+
+    /// <summary>Seconds a music or ambience change takes to crossfade.</summary>
+    public double AudioCrossfadeSeconds { get; set; } = 2;
+
+    /// <summary>Decoded effect sounds kept in memory, in megabytes (§9: 48).</summary>
+    public double AudioEffectsBudgetMb { get; set; } = 48;
+
+    /// <summary>Logs every sound played, skipped, stolen and crossfaded (the debug audio trace). Off by default.</summary>
+    public bool AudioTrace { get; set; }
+
     /// <summary>Applies a <c>client_settings.json</c> document. Unknown keys are ignored; a malformed document throws <see cref="JsonException"/>.</summary>
     public void ApplyJson(ReadOnlySpan<byte> utf8)
     {
@@ -339,6 +359,12 @@ public sealed class ClientConfig
             case "hotbar_rows": HotbarRows = Math.Max(1, Math.Min(4, (int)Number(value))); break;
             case "hotbar_slot_dp": HotbarSlotDp = Number(value); break;
             case "hotbar_gap_dp": HotbarGapDp = Number(value); break;
+            case "audio_max_voices": AudioMaxVoices = Math.Max(1, Math.Min(64, (int)Number(value))); break;
+            case "audio_cooldown_seconds": AudioCooldownSeconds = Math.Max(0, Number(value)); break;
+            case "audio_cull_distance": AudioCullDistance = Math.Max(1, Number(value)); break;
+            case "audio_crossfade_seconds": AudioCrossfadeSeconds = Math.Max(0, Number(value)); break;
+            case "audio_effects_budget_mb": AudioEffectsBudgetMb = Math.Max(1, Number(value)); break;
+            case "audio_trace": AudioTrace = Number(value) != 0; break;
             case "debug_notch": DebugNotch = Number(value) != 0; break;
             case "debug_notch_left_dp": DebugNotchLeftDp = Number(value); break;
             case "debug_notch_top_dp": DebugNotchTopDp = Number(value); break;

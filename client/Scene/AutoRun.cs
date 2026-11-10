@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using Game.Client.Core;
+using Game.Client.Core.Audio;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Combat;
 using Game.Client.Core.Net;
@@ -126,6 +127,7 @@ public sealed class AutoRun
         }
         Check(kills > 0, "killed a monster");
         Check(drop is not null, "saw a drop");
+        CheckAudioAfterFight();
         Print($"drop: {_main.Bundle!.NameOf(drop!.DisplayKey)} x{drop.Quantity} at {drop.Cell}, mine={drop.Mine}, after {kills} kill(s); exp {Exp()}");
         await ShotAsync();
 
@@ -371,6 +373,7 @@ public sealed class AutoRun
             Print("warp: this map has none, skipped");
             return;
         }
+        var crossfades = _main.Audio!.Director.Stats.Crossfades;
         var own = Own().Cell;
         var warp = map.Warps[0];
         foreach (var candidate in map.Warps)
@@ -397,7 +400,30 @@ public sealed class AutoRun
         await UntilAsync(() => _main.LoadedMap == World.MapId && World.Own is not null, 10, "the new map");
         var next = CurrentMap();
         Check(next.Id != map.Id, "the map changed");
+        var audio = _main.Audio!;
+        var crossfadesBefore = crossfades;
         Print($"warp: now on {next.Id} \"{next.Name}\" {next.Width}x{next.Height}, ground rebuilt ({triangles} -> {_main.Map.Triangles} triangles), {World.Entities.Count} entities, own at {Own().Cell}");
+        await SecondsAsync(Config.AudioCrossfadeSeconds + 0.5);
+        Check(audio.Director.Stats.Crossfades >= crossfadesBefore + 2, "the warp crossfaded the music and the ambience");
+        Check(audio.Director.Playing(AudioDirector.MusicChannel) == next.MusicKey, "the new map's music is the one playing");
+        Check(audio.Director.FadingOut(AudioDirector.MusicChannel) is null, "the old music has faded out and let go");
+        Print($"warp: audio crossfaded to {next.MusicKey} and {next.AmbienceKey}; {audio.Director.Stats.Crossfades} crossfades so far");
+    }
+
+    private ClientConfig Config => _main.Config;
+
+    /// <summary>After a fight the sound system must have played, the map's music must be on, and the pool must have held its cap.</summary>
+    private void CheckAudioAfterFight()
+    {
+        var audio = _main.Audio!;
+        var stats = audio.Director.Stats;
+        Print($"audio: played {stats.Played}, skipped: cooldown {stats.Cooldown}, distance {stats.Distance}, full {stats.Full}, muted {stats.Muted}, paused {stats.Paused}; stolen {stats.Stolen}, silent {stats.Silent}, load failures {stats.LoadFailed}, crossfades {stats.Crossfades}");
+        Print($"audio: music {audio.Director.Playing(AudioDirector.MusicChannel)}, ambience {audio.Director.Playing(AudioDirector.AmbientChannel)}; engine voices playing {audio.Sink.PlayingVoices()} of {Config.AudioMaxVoices}; effects {audio.Sink.LoadedEffects} files, {audio.Sink.Budget.Used / 1024.0 / 1024.0:0.00} MB of {audio.Sink.Budget.Limit / 1024 / 1024} MB");
+        Check(stats.Played > 0, "the fight made sound");
+        Check(stats.LoadFailed == 0, "every sound file loaded");
+        Check(audio.Director.Playing(AudioDirector.MusicChannel) == CurrentMap().MusicKey && CurrentMap().MusicKey is not null, "the map's music is playing");
+        Check(audio.Sink.PlayingVoices() <= Config.AudioMaxVoices, "no more voices than the cap");
+        Check(audio.Sink.Budget.Used <= audio.Sink.Budget.Limit, "effects stay within the memory budget");
     }
 
     private async Task WalkTowardMapMiddleAsync()

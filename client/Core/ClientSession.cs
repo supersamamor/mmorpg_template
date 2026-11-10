@@ -102,6 +102,9 @@ public sealed class ClientSession
         if (Connection.Phase == ConnectionPhase.Online) Send(new RespawnMessage());
     }
 
+    /// <summary>Raised when a <c>level_up</c> arrived.</summary>
+    public event Action<LevelUpMessage>? LevelUpReceived;
+
     /// <summary>One frame: applies what arrived, runs timers, moves the view. Allocates nothing when nothing arrived and no timer fired.</summary>
     public void Update(double wallNow, double viewNow)
     {
@@ -175,6 +178,7 @@ public sealed class ClientSession
                 break;
             case LevelUpMessage level:
                 Ui.OnLevelUp(level, viewNow);
+                LevelUpReceived?.Invoke(level);
                 break;
             case ByeMessage bye:
                 Connection.OnBye(bye.Reason, wallNow);

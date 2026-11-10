@@ -12,6 +12,7 @@ param(
     [ValidateSet("play", "death", "warp", "ui", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
+    [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
     [string] $Screenshot = "",
     [int] $Port = 7790,
     [int] $Seed = 206,
@@ -110,7 +111,7 @@ function Wait-GodotClient($run, [int] $TimeoutSeconds, [scriptblock] $OnMarker =
             $run.Position = $stream.Position
         } finally { $stream.Dispose() }
         foreach ($line in ($chunk -split "`r?`n")) {
-            if ($line -match "^\[(e2e|client)\]|ERROR|Unhandled") {
+            if ($line -match "^\[(e2e|client|audio)\]|ERROR|Unhandled") {
                 if ($line -match "EditorSettings not instantiated") { continue }   # Godot 4.7.2's harmless line at exit
                 Write-Host $line
                 [void]$text.AppendLine($line)
@@ -142,6 +143,7 @@ function Get-RunClientArgs([string[]] $Mode, [string[]] $Extra) {
     $list = @($Mode) + @("--server", "ws://127.0.0.1:$Port/ws", "--name", "e2e")
     if ($Monster) { $list += @("--e2e-monster", $Monster) }
     if ($Screenshot) { $list += @("--screenshot", $Screenshot) }
+    if ($AudioTrace) { $list += @("--set", "audio_trace=1") }
     return $list + $Extra + $ClientArgs
 }
 

@@ -39,8 +39,11 @@ public readonly struct MapZone
 /// <summary>A map's display data: size, cell flags and the cells worth showing.</summary>
 public sealed class MapData
 {
-    internal MapData(string id, string name, string sceneKey, int width, int height, byte[] cells, IReadOnlyList<GridCell> warps, IReadOnlyList<MapZone> zones)
+    internal MapData(string id, string name, string sceneKey, int width, int height, byte[] cells, IReadOnlyList<GridCell> warps, IReadOnlyList<MapZone> zones,
+        string? musicKey = null, string? ambienceKey = null)
     {
+        MusicKey = musicKey;
+        AmbienceKey = ambienceKey;
         Id = id;
         Name = name;
         SceneKey = sceneKey;
@@ -59,6 +62,12 @@ public sealed class MapData
 
     /// <summary>The asset key of its visual scene.</summary>
     public string SceneKey { get; }
+
+    /// <summary>The asset key of its music, or null.</summary>
+    public string? MusicKey { get; }
+
+    /// <summary>The asset key of its ambience loop, or null.</summary>
+    public string? AmbienceKey { get; }
 
     /// <summary>Width in cells.</summary>
     public int Width { get; }
@@ -96,6 +105,10 @@ public sealed class DisplayBundle
 
     private readonly Dictionary<string, string> _names = new Dictionary<string, string>(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _models = new Dictionary<string, string>(StringComparer.Ordinal);
+    private readonly Dictionary<string, string?[]> _monsterSounds = new Dictionary<string, string?[]>(StringComparer.Ordinal);
+    private readonly Dictionary<string, string?[]> _itemSounds = new Dictionary<string, string?[]>(StringComparer.Ordinal);
+    private readonly Dictionary<string, string?[]> _skillSounds = new Dictionary<string, string?[]>(StringComparer.Ordinal);
+    private readonly SortedSet<string> _soundKeys = new SortedSet<string>(StringComparer.Ordinal);
     private readonly SortedSet<string> _modelKeys = new SortedSet<string>(StringComparer.Ordinal);
     private readonly Dictionary<string, MapData> _maps = new Dictionary<string, MapData>(StringComparer.Ordinal);
 
@@ -127,6 +140,18 @@ public sealed class DisplayBundle
     /// <summary>Every distinct model key the bundle names, in order (for preloading).</summary>
     public IReadOnlyCollection<string> ModelKeys => _modelKeys;
 
+    /// <summary>Every distinct sound key the bundle names (monster, item, skill and map sounds), for preloading.</summary>
+    public IReadOnlyCollection<string> SoundKeys => _soundKeys;
+
+    /// <summary>The sound key content gave a monster for <paramref name="slot"/> (0 aggro, 1 hit, 2 die), or null.</summary>
+    public string? MonsterSound(string? displayKey, int slot) => displayKey is not null && _monsterSounds.TryGetValue(displayKey, out var keys) ? keys[slot] : null;
+
+    /// <summary>The use sound of an item (0) or its equip sound (1), or null.</summary>
+    public string? ItemSound(string? itemId, int slot) => itemId is not null && _itemSounds.TryGetValue(itemId, out var keys) ? keys[slot] : null;
+
+    /// <summary>A skill's sound key, or null.</summary>
+    public string? SkillSound(string? skillId) => skillId is not null && _skillSounds.TryGetValue(skillId, out var keys) ? keys[0] : null;
+
     /// <summary>A map's display data.</summary>
     public bool TryGetMap(string id, out MapData? map) => _maps.TryGetValue(id, out map);
 
@@ -153,6 +178,7 @@ public sealed class DisplayBundle
                 {
                     var id = Text(entry, "id");
                     result._names[id] = Text(entry, "name");
+                    ReadSounds(result, list, id, entry);
                     if (entry.TryGetProperty(modelField, out var model) && model.ValueKind == JsonValueKind.String && model.GetString() is { Length: > 0 } key)
                     {
                         result._models[id] = key;
@@ -163,6 +189,8 @@ public sealed class DisplayBundle
             foreach (var map in root.GetProperty("maps").EnumerateArray())
             {
                 var data = ReadMap(map);
+                if (data.MusicKey is not null) result._soundKeys.Add(data.MusicKey);
+                if (data.AmbienceKey is not null) result._soundKeys.Add(data.AmbienceKey);
                 result._maps[data.Id] = data;
                 result._names[data.Id] = data.Name;
             }
@@ -173,6 +201,27 @@ public sealed class DisplayBundle
         {
             return BundleStatus.Corrupt;
         }
+    }
+
+    private static void ReadSounds(DisplayBundle bundle, string list, string id, JsonElement entry)
+    {
+        string?[]? keys = null;
+        if (list == "monsters" && entry.TryGetProperty("sounds", out var sounds) && sounds.ValueKind == JsonValueKind.Object)
+        {
+            keys = new[] { OptionalText(sounds, "aggro"), OptionalText(sounds, "hit"), OptionalText(sounds, "die") };
+        }
+        else if (list == "items")
+        {
+            keys = new[] { OptionalText(entry, "use_sfx"), OptionalText(entry, "equip_sfx") };
+        }
+        else if (list == "skills")
+        {
+            keys = new[] { OptionalText(entry, "sfx") };
+        }
+        if (keys is null) return;
+        foreach (var key in keys)
+            if (key is not null) bundle._soundKeys.Add(key);
+        (list == "monsters" ? bundle._monsterSounds : list == "items" ? bundle._itemSounds : bundle._skillSounds)[id] = keys;
     }
 
     private static MapData ReadMap(JsonElement map)
@@ -193,8 +242,11 @@ public sealed class DisplayBundle
             var area = zone.GetProperty("area");
             zones.Add(new MapZone(Text(zone, "kind"), new GridRect(area[0].GetInt32(), area[1].GetInt32(), area[2].GetInt32(), area[3].GetInt32())));
         }
-        return new MapData(Text(map, "id"), Text(map, "name"), Text(map, "scene"), width, height, cells, warps, zones);
+        return new MapData(Text(map, "id"), Text(map, "name"), Text(map, "scene"), width, height, cells, warps, zones, OptionalText(map, "music"), OptionalText(map, "ambience"));
     }
+
+    private static string? OptionalText(JsonElement element, string name) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } text ? text : null;
 
     private static string Text(JsonElement element, string name) => element.GetProperty(name).GetString() ?? throw new FormatException(name);
 }
