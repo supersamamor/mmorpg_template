@@ -284,3 +284,13 @@ When writing these prompts, copy in the decisions listed:
 | 155 | In a crowd of about 37 characters on screen, draw calls peak at 117, over the §9 limit of 100. The characters alone are about 80; effects add about 12 (T-303) | **→ T-220:** bring the crowd peak under 100 (for example simpler distant characters, or merged meshes), measured with `loadtest --spare-slots`. |
 | 156 | The target HP bar updates when the server's `hp` arrives, up to about 0.4 s before the blow lands on screen (T-303) | **Decided: accept for v1.** Revisit if players notice; it only shows a fraction. |
 | 157 | Corpse fade uses transparency plus sinking; transparency on the Mobile renderer is unconfirmed (T-303) | **Decided:** the sink alone is a visible fade. Transparency stays on the phone checklist (row 112). |
+
+## Addendum — T-305 (2026-11-10)
+| # | Question (source) | Decision |
+|---|---|---|
+| 158 | Client audio: 24 voices made at start; a per-key cooldown of 0.08 s; stealing by priority then age, never for a less important sound; skip beyond 30 world units; 2 s equal-power crossfade; a 48 MB LRU for decoded effects (an upper-bound estimate). All are client config `audio_*` (T-305) | **Decided: accepted.** |
+| 159 | Swing sounds play when the attacker's `AttackCount` goes up, which is when the attack clip starts; impact, hit and aggro sounds play on `CombatTimeline.Impact` (T-305, row 151) | **Decided: accepted.** One timing source for visuals and audio. |
+| 160 | The wire doesn't say which weapon a character holds, so everyone swings as `unarmed`; item use, equip and acquire have hooks for T-401 (T-305) | **→ T-401** sends or derives the weapon type and calls the hooks. |
+| 161 | Godot 4.7.2 can't read the iOS silent switch or request Android audio focus from C#. `PlatformAudio` reads an optional `GameAudioPlatform` singleton; no plugin exists yet (T-305) | **→ Backlog:** small native plugins for iOS and Android, done together with the phone test (T-005). Until then the log says plainly that both are not handled. |
+| 162 | `BannedSymbolsTests` failed once after 7 minutes while other sessions were building (T-305) | **Decided:** load-related. It passed 6 of 6 runs at merge. Watch it; it needs its own fix if it fails on an idle machine. |
+| 163 | The headless release export hung at exit once at merge, with the file already written. `run-e2e.ps1` then ran that file even though Godot never exited, and a stale exe from an earlier run would also be accepted (T-305 merge) | **→ T-220:** time out the export at exit, check its exit code, and delete the old exe before exporting. |

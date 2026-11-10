@@ -516,7 +516,7 @@ Every sound is an **asset key** resolved by the theme (§8), so replacing a soun
     the HUD's Sound panel; the engine's bus volume is their decibel value.
   - *What plays when:* map music and ambience on load; a monster's aggro sound the first time it hits anyone (the wire has no aggro message); hit and die sounds from the bundle's
     `sounds` or the defaults; a weapon's swing and impact from `weapon.<type>.swing|impact`, on the same moments as the combat visuals (`IImpactSource`: swing = the attack clip
-    starts, impact = the hit lands; until T-303's source is plugged in, `ImpactScheduler` uses seen time plus the render delay); level up from `audio.events`; the interface tap on HUD
+    starts, impact = the hit lands, from T-303's `CombatTimeline.Impact` through `CombatImpactSource`); level up from `audio.events`; the interface tap on HUD
     buttons. The wire does not say which weapon a character holds, so every character swings as `unarmed` until T-401. Item use and equip, and item acquired, have hooks
     (`AudioDriver.OnItemUsed|OnItemEquipped|OnItemAcquired`) that T-401 calls.
   - *Debug trace:* client setting `audio_trace` (`--set audio_trace=1`, or `run-e2e.ps1 -AudioTrace`) logs one `[audio]` line per play, skip (with the reason), steal, crossfade, bus change and pause.

@@ -75,6 +75,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-211 | Touch input + mobile UI shell: safe area, scaling, gestures, hotbar seam | Claude Code | Sonnet 5.5 | [T-211](../tasks/prompts/T-211.md) | T-206, T-207 | Review | ADR-002 #120 |
 | T-218 | Client robustness: root-cause the headless exit crash with model preload; validator check for manifest `fallbacks` | Claude Code | Opus 5.5 | [T-218](../tasks/prompts/T-218.md) | T-207 | Review | ADR-002 #133, #135 |
 | T-219 | Phase 2 leftovers: terrain-aware tap picking, theme-chain key checks, `MapGridFile` comment, `export-maps -Check` in CI | Claude Code | Sonnet 5.5 | [T-219](../tasks/prompts/T-219.md) | T-208, T-218 | Review | ADR-002 #142, #143, #145, #146 |
+| T-220 | Phase 3 leftovers: crowd draw calls under 100, release-export guard in `run-e2e.ps1`, scripted hill tap, audio key chain | Claude Code | Opus 5.5 | [T-220](../tasks/prompts/T-220.md) | T-219, T-303, T-305 | Ready | ADR-002 #148, #149, #155, #163 |
 
 ## Phase 3 — Combat loop
 
