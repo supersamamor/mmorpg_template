@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Game.Client.Core.World;
 using Game.Client.Core;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Net;
@@ -53,6 +54,7 @@ public sealed class Hud
     private readonly Label _banner = Wrapped(HorizontalAlignment.Center);
     private readonly PanelContainer _targetFrame = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
     private readonly Label _target = Wrapped(HorizontalAlignment.Center);
+    private readonly ProgressBar _targetBar = Bar(new Color(0.9f, 0.35f, 0.3f));
     private readonly Label _flash = Wrapped(HorizontalAlignment.Center);
     private readonly Label _connection = Wrapped(HorizontalAlignment.Right);
     private readonly Button _uiSize = new();
@@ -87,6 +89,10 @@ public sealed class Hud
     private int _statsVersion = -1;
     private int _connectionVersion = -1;
     private int _hotbarVersion = -1;
+    private long _shownTarget = -1;
+    private int _shownTargetHp = -1;
+    private int _levelUpSerial;
+    private double _levelFlashEnds;
     private int _infoToken;
     private bool _infoPlacePending;
     private int _infoPlaceFrames;
@@ -126,7 +132,11 @@ public sealed class Hud
 
         _banner.Visible = false;
         _flash.Visible = false;
-        _targetFrame.AddChild(_target);
+        var targetBox = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        targetBox.AddChild(_target);
+        targetBox.AddChild(_targetBar);
+        _targetBar.Visible = false;
+        _targetFrame.AddChild(targetBox);
         _center.AddChild(_banner);
         _center.AddChild(_targetFrame);
 
@@ -264,6 +274,7 @@ public sealed class Hud
         _statsVersion = -1;
         _connectionVersion = -1;
         _hotbarVersion = -1;
+        _shownTarget = -1;
     }
 
     /// <summary>Presses the panel's button, as a tap on it would.</summary>
@@ -463,6 +474,7 @@ public sealed class Hud
         _hpBar.CustomMinimumSize = new Vector2(0, Dp(10));
         _spBar.CustomMinimumSize = new Vector2(0, Dp(8));
         _expBar.CustomMinimumSize = new Vector2(0, Dp(6));
+        _targetBar.CustomMinimumSize = new Vector2(0, Dp(8));
 
         var buttonHeight = Target(ButtonDp);
         _logout.CustomMinimumSize = new Vector2(Dp(RightColumnDp), buttonHeight);
@@ -544,6 +556,8 @@ public sealed class Hud
             _targetFrame.Visible = targetName.Length > 0;
         }
         if (panelChanged) RefreshPanel();
+        RefreshTargetHp(ui, world);
+        RefreshLevelFlash(ui);
 
         if (_statsVersion != world.StatsVersion)
         {
@@ -563,6 +577,50 @@ public sealed class Hud
         }
 
         if (_hotbarModel is not null && _hotbarVersion != _hotbarModel.Version) RefreshHotbar();
+    }
+
+    /// <summary>
+    /// The target frame's HP bar (ARCHITECTURE §7.4, ADR-002 row 139): only the fraction the server sends, never a number, and only redrawn when the target
+    /// changes or the entity's <c>HpVersion</c> counter moves. A frame with the same target and the same counter costs one lookup and two comparisons.
+    /// </summary>
+    private void RefreshTargetHp(UiState ui, WorldView world)
+    {
+        var entity = ui.Target is { } id ? world.Find(id) : null;
+        var shownId = entity?.Id ?? -1;
+        var version = entity?.HpVersion ?? -1;
+        if (shownId == _shownTarget && version == _shownTargetHp) return;
+        _shownTarget = shownId;
+        _shownTargetHp = version;
+        if (entity?.Hp is { } fraction)
+        {
+            _targetBar.MaxValue = 1;
+            _targetBar.Value = fraction;
+            _targetBar.Visible = true;
+        }
+        else
+        {
+            _targetBar.Visible = false;
+        }
+    }
+
+    /// <summary>A level gained pulses the level line for a moment; nothing runs when it is not pulsing.</summary>
+    private void RefreshLevelFlash(UiState ui)
+    {
+        if (ui.LevelUpSerial != _levelUpSerial)
+        {
+            _levelUpSerial = ui.LevelUpSerial;
+            _levelFlashEnds = Clocks.View() + _config.LevelUpFlashSeconds;
+        }
+        if (_levelFlashEnds == 0) return;
+        var left = _levelFlashEnds - Clocks.View();
+        if (left <= 0)
+        {
+            _levelFlashEnds = 0;
+            _left.Modulate = Colors.White;
+            return;
+        }
+        var pulse = (float)(0.5 + 0.5 * Math.Sin(left * 14));
+        _left.Modulate = new Color(1f, 1f, 1f).Lerp(new Color(1f, 0.9f, 0.3f), pulse);
     }
 
     /// <summary>

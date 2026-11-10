@@ -1,4 +1,5 @@
 using Game.Client.Core.Bundle;
+using Game.Client.Core.Combat;
 using Game.Client.Core.Net;
 using Game.Client.Core.Ui;
 using Game.Client.Core.World;
@@ -30,7 +31,12 @@ public sealed class ClientSession
         World = new WorldView(config);
         Ui = new UiState(config, bundle);
         Hotbar = new HotbarModel(config.HotbarSlots);
+        Numbers = new DamageNumberPool(config.MaxDamageNumbers, config.DamageNumberSeconds, config.DamageNumberLaneSeconds);
+        World.Combat.Impact += Numbers.OnImpact;
     }
+
+    /// <summary>The floating damage numbers, started at each hit's impact moment.</summary>
+    public DamageNumberPool Numbers { get; }
 
     /// <summary>The connection.</summary>
     public ConnectionMachine Connection { get; }
@@ -52,6 +58,7 @@ public sealed class ClientSession
     {
         World.Reset();
         Ui.Reset();
+        Numbers.Clear();
         Connection.Login(name, wallNow);
         RunCommands();
     }
@@ -94,9 +101,6 @@ public sealed class ClientSession
     {
         if (Connection.Phase == ConnectionPhase.Online) Send(new RespawnMessage());
     }
-
-    /// <summary>Raised when a delta carried hits, with the view time they arrived (the audio system queues them for their impact moment).</summary>
-    public event Action<IReadOnlyList<HitRecord>, double>? HitsReceived;
 
     /// <summary>Raised when a <c>level_up</c> arrived.</summary>
     public event Action<LevelUpMessage>? LevelUpReceived;
@@ -143,8 +147,7 @@ public sealed class ClientSession
                 if (delta.Hits is { Count: > 0 } hits)
                 {
                     Ui.OnHits(hits, World, viewNow); // before the deltas: a target that died here is still named
-                    World.ApplyHits(hits, viewNow);
-                    HitsReceived?.Invoke(hits, viewNow);
+                    World.ApplyHits(hits, viewNow, delta.Tick);
                 }
                 World.ApplyDelta(delta, viewNow);
                 if (delta.Appeared.Count > 0) Ui.OnAppeared(delta.Appeared, viewNow);

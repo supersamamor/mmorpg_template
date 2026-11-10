@@ -153,6 +153,41 @@ public sealed class ClientConfig
     /// <summary>How long a hit's one-line flash stays, in seconds.</summary>
     public double FlashSeconds { get; set; } = 2.5;
 
+    // ---- combat presentation (T-303, §7.6) ----
+
+    /// <summary>Seconds from the start of an attack swing to its impact when the theme says nothing for the attacker's model or rig.</summary>
+    public double ImpactDelaySeconds { get; set; } = 0.2;
+
+    /// <summary>The longest impact delay a theme may ask for, in seconds.</summary>
+    public double MaxImpactDelaySeconds { get; set; } = 1;
+
+    /// <summary>A hit still waiting when the clock is this far past its moment (a stall, a resume) is dropped, never replayed, in seconds.</summary>
+    public double StaleHitSeconds { get; set; } = 0.5;
+
+    /// <summary>Most floating damage numbers at once; past it the oldest is dropped.</summary>
+    public int MaxDamageNumbers { get; set; } = 16;
+
+    /// <summary>How long a damage number floats, in seconds.</summary>
+    public double DamageNumberSeconds { get; set; } = 0.9;
+
+    /// <summary>Numbers on one target closer in time than this take different sideways lanes, in seconds.</summary>
+    public double DamageNumberLaneSeconds { get; set; } = 0.5;
+
+    /// <summary>Most hit, death and level-up effects playing at once; past it the oldest ends early.</summary>
+    public int MaxEffects { get; set; } = 10;
+
+    /// <summary>How long a hit effect plays, in seconds.</summary>
+    public double EffectSeconds { get; set; } = 0.35;
+
+    /// <summary>How long a death or level-up effect plays, in seconds.</summary>
+    public double LongEffectSeconds { get; set; } = 0.7;
+
+    /// <summary>How long a corpse takes to fade out once it leaves view, in seconds.</summary>
+    public double CorpseFadeSeconds { get; set; } = 0.6;
+
+    /// <summary>How long the HUD pulses after a level-up, in seconds.</summary>
+    public double LevelUpFlashSeconds { get; set; } = 0.8;
+
     // ---- UI shell (T-211, §7.4) ----
 
     /// <summary>Smallest UI scale the player can choose.</summary>
@@ -302,6 +337,17 @@ public sealed class ClientConfig
             case "touch_target_dp": TouchTargetDp = Number(value); break;
             case "tap_marker_seconds": TapMarkerSeconds = Number(value); break;
             case "flash_seconds": FlashSeconds = Number(value); break;
+            case "impact_delay_seconds": ImpactDelaySeconds = Number(value); break;
+            case "max_impact_delay_seconds": MaxImpactDelaySeconds = Number(value); break;
+            case "stale_hit_seconds": StaleHitSeconds = Number(value); break;
+            case "max_damage_numbers": MaxDamageNumbers = Math.Max(1, (int)Number(value)); break;
+            case "damage_number_seconds": DamageNumberSeconds = Number(value); break;
+            case "damage_number_lane_seconds": DamageNumberLaneSeconds = Number(value); break;
+            case "max_effects": MaxEffects = Math.Max(1, (int)Number(value)); break;
+            case "effect_seconds": EffectSeconds = Number(value); break;
+            case "long_effect_seconds": LongEffectSeconds = Number(value); break;
+            case "corpse_fade_seconds": CorpseFadeSeconds = Number(value); break;
+            case "level_up_flash_seconds": LevelUpFlashSeconds = Number(value); break;
             case "long_press_seconds": LongPressSeconds = Number(value); break;
             case "pinch_dead_zone": PinchDeadZone = Number(value); break;
             case "info_panel_seconds": InfoPanelSeconds = Number(value); break;

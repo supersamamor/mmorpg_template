@@ -11,8 +11,8 @@ using Godot;
 namespace Game.Client.Scene.Audio;
 
 /// <summary>
-/// Turns what the view model shows into sound requests (ARCHITECTURE §7.8) and owns the engine side. It reads: the swings and impacts of an <see cref="IImpactSource"/>
-/// (the timing source shared with the combat visuals), monsters that died, the map's music and ambience, level ups and interface taps. It decides nothing about the game:
+/// Turns what the view model shows into sound requests (ARCHITECTURE §7.8) and owns the engine side. It reads: the impacts of an <see cref="IImpactSource"/>
+/// (<c>World.Combat.Impact</c>, shared with the combat visuals), attack clips starting, monsters that died, the map's music and ambience, level ups and interface taps. It decides nothing about the game:
 /// every sound follows something the server already said. Allocates nothing per frame after warm-up when the trace is off.
 /// </summary>
 public sealed class AudioDriver
@@ -21,6 +21,7 @@ public sealed class AudioDriver
     {
         public bool Dead;
         public bool Aggro;
+        public int Attacks;
         public int Stamp;
     }
 
@@ -44,8 +45,7 @@ public sealed class AudioDriver
         _sink = new GodotAudioSink(parent, config, message => GD.PushWarning(message));
         Director = new AudioDirector(catalog, random, _sink, config, config.AudioTrace ? Print : null);
         Preferences.ApplyTo(Director.Mixer);
-        Scheduler = new ImpactScheduler();
-        _impacts = Scheduler;
+        _impacts = new CombatImpactSource(world.Combat);
         _platform = new PlatformAudio(Director.App);
         WeaponTypeOf = DefaultWeaponType;
         foreach (var key in bundle.SoundKeys.Concat(catalog.Defaults.Values).Concat(catalog.Events.Values))
@@ -62,22 +62,11 @@ public sealed class AudioDriver
     /// <summary>The player's stored choices; the HUD saves them.</summary>
     public UserPreferences Preferences { get; }
 
-    /// <summary>The interim impact timing, fed with <see cref="OnHits"/> until the combat visuals' source takes over (<see cref="UseImpactSource"/>).</summary>
-    public ImpactScheduler Scheduler { get; }
-
     /// <summary>Weapon type of an entity's attacks, or null for none. T-401 (equipment) replaces the default, which says unarmed for every character: the wire does not carry weapons yet.</summary>
     public Func<EntityView, string?> WeaponTypeOf { get; set; }
 
-    /// <summary>Plugs in another timing source (the combat visuals').</summary>
+    /// <summary>Plugs in another timing source (the default is <see cref="CombatImpactSource"/> over <c>World.Combat</c>).</summary>
     public void UseImpactSource(IImpactSource source) => _impacts = source;
-
-    /// <summary>A delta's hits arrived (the interim timing source only).</summary>
-    public void OnHits(IReadOnlyList<HitRecord> hits, double viewNow)
-    {
-        if (!ReferenceEquals(_impacts, Scheduler)) return;
-        for (var i = 0; i < hits.Count; i++)
-            Scheduler.Queue(new ImpactEvent(hits[i].Attacker, hits[i].Target, hits[i].Amount, hits[i].Result), viewNow, _world.RenderDelay);
-    }
 
     /// <summary><c>level_up</c> arrived.</summary>
     public void OnLevelUp(LevelUpMessage level) => Director.PlayEvent(level.BaseLevel is not null ? EventNames.LevelUp : EventNames.JobLevelUp);
@@ -85,7 +74,6 @@ public sealed class AudioDriver
     /// <summary>A map was loaded (login, warp): its music and ambience crossfade in.</summary>
     public void OnMapLoaded(MapData map)
     {
-        Scheduler.Clear();
         _seen.Clear();
         Director.SetMap(map.MusicKey, map.AmbienceKey);
     }
@@ -121,22 +109,12 @@ public sealed class AudioDriver
         var realNow = Clocks.View();
         _platform.Poll(realNow);
         Director.Tick(realNow);
-        if (ReferenceEquals(_impacts, Scheduler)) Scheduler.Advance(viewNow);
 
         var own = _world.Own;
-        var swings = _impacts.Swings;
-        for (var i = 0; i < swings.Count; i++) Swing(swings[i], own);
         var impacts = _impacts.Impacts;
         for (var i = 0; i < impacts.Count; i++) Impact(impacts[i], own);
+        _impacts.Clear();
         WatchEntities(own);
-    }
-
-    private void Swing(in ImpactEvent hit, EntityView? own)
-    {
-        if (_world.Find(hit.Attacker) is not { } attacker || attacker.Kind != EntityKinds.Player) return;
-        var weapon = WeaponTypeOf(attacker);
-        if (weapon is null) return;
-        Director.PlayWeaponSwing(weapon, attacker.Id == _world.OwnId ? AudioPriority.High : AudioPriority.Low, Distance(own, attacker));
     }
 
     private void Impact(in ImpactEvent hit, EntityView? own)
@@ -161,7 +139,10 @@ public sealed class AudioDriver
             Director.PlayCategory(_bundle.MonsterSound(target.DisplayKey, 1), AudioCategories.MonsterHit, priority, distance);
     }
 
-    /// <summary>A monster that died since the last frame. Entities seen for the first time are only noted, so a snapshot of corpses is silent.</summary>
+    /// <summary>
+    /// Per entity, once a frame: a character whose attack clip started (its <c>AttackCount</c> went up, which the combat timeline does at swing time) plays its weapon's swing sound,
+    /// and a monster that died plays its die sound. Entities seen for the first time are only noted, so a snapshot of corpses or of attackers mid-swing is silent.
+    /// </summary>
     private void WatchEntities(EntityView? own)
     {
         _stamp++;
@@ -169,14 +150,18 @@ public sealed class AudioDriver
         for (var i = 0; i < entities.Count; i++)
         {
             var entity = entities[i];
-            if (entity.Kind != EntityKinds.Monster) continue;
+            var monster = entity.Kind == EntityKinds.Monster;
+            if (!monster && entity.Kind != EntityKinds.Player) continue;
             if (!_seen.TryGetValue(entity.Id, out var state))
             {
-                _seen[entity.Id] = new Seen { Dead = entity.Dead, Stamp = _stamp };
+                _seen[entity.Id] = new Seen { Dead = entity.Dead, Attacks = entity.AttackCount, Stamp = _stamp };
                 continue;
             }
             state.Stamp = _stamp;
-            if (entity.Dead && !state.Dead)
+            if (entity.AttackCount > state.Attacks && !monster && WeaponTypeOf(entity) is { } weapon)
+                Director.PlayWeaponSwing(weapon, entity.Id == _world.OwnId ? AudioPriority.High : AudioPriority.Low, Distance(own, entity));
+            state.Attacks = entity.AttackCount;
+            if (monster && entity.Dead && !state.Dead)
                 Director.PlayCategory(_bundle.MonsterSound(entity.DisplayKey, 2), AudioCategories.MonsterDie, AudioPriority.Normal, Distance(own, entity));
             state.Dead = entity.Dead;
         }

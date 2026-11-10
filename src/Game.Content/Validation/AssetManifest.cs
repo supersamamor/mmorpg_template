@@ -32,6 +32,24 @@ public static class AssetManifest
         }
     }
 
+    /// <summary>
+    /// The keys the client can resolve for <paramref name="theme"/>: the theme's own manifest, then <c>default</c> (ARCHITECTURE §7.7), so a partial theme may point at a key only <c>default</c> has.
+    /// A key in both takes the theme's metadata. The theme's own manifest must exist; a missing <c>default</c> one adds nothing.
+    /// </summary>
+    public static IReadOnlySet<string> LoadChainKeys(string themesDir, string theme)
+    {
+        var own = (AssetKeySet)LoadKeys(PathFor(themesDir, theme));
+        var defaultPath = PathFor(themesDir, DefaultTheme);
+        if (theme == DefaultTheme || !File.Exists(defaultPath)) return own;
+        var fallback = (AssetKeySet)LoadKeys(defaultPath);
+        var info = new Dictionary<string, AssetInfo>(StringComparer.Ordinal);
+        foreach (var key in fallback) info[key] = fallback.InfoOf(key)!;
+        foreach (var key in own) info[key] = own.InfoOf(key)!;
+        return new AssetKeySet(info);
+    }
+
+    private const string DefaultTheme = "default";
+
     private static string? Text(JsonElement entry, string property) =>
         entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty(property, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
 }

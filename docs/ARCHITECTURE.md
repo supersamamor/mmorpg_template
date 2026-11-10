@@ -404,7 +404,7 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
 - **Text is never baked into textures.** Every size is dp times the scale; labels wrap rather than cut. A scripted check lays the HUD out for six screen shapes (small
   16:9, 19.5:9, a large phone, an iPhone, two desktop windows) with and without the notch at every UI scale, filled with the longest words, and fails on anything outside
   the safe area, smaller than its text needs, or under the touch minimum.
-- **Layout.** Top left: level and EXP, HP and SP with bars. Top centre: connection notice and the target frame (the target's name). Top right: connection state, the UI size
+- **Layout.** Top left: level and EXP, HP and SP with bars. Top centre: connection notice and the target frame (the target's name and an HP bar: only the fraction the server sends, redrawn when the entity's `HpVersion` counter moves; never a number). A level-up pulses the top-left block for `level_up_flash_seconds`. Top right: connection state, the UI size
   button, log out. Bottom: the one-line flash, then the hotbar (slot count, rows and size are client config; a narrow screen shrinks slots to the minimum and then adds rows).
   The login, death, stop and refusal screens are one full-screen panel whose content stays inside the safe area.
 - **Where the client's own words live (ADR-002 row 120).** In `client/Core/UiText.cs`: one static class of constants and small formatting functions in English, and nowhere
@@ -445,6 +445,27 @@ Chosen once at character creation; **cosmetic only** (never changes stats or rul
 Animation ids (VOCABULARY) are shared by every model on the same rig. Server events
 (`attack`, `cast`, `hit`, `die`) map to animation ids. The client may delay a damage number to
 the impact frame, but that is visual only — outcomes are already decided by the server.
+
+**Hit timing (T-303).** A delta's `hits` go to `WorldView.Combat` (`CombatTimeline`, pure and tested). A hit received at view time `t` swings the attacker at
+`t + render delay` (the moment the attacker's movement reaches the same cell on screen, so a swing never shows before it is in range) and **lands** at the swing
+plus the attacker's impact delay: `impact_delay` on its model's manifest entry, else its animation library's (per rig), else the client default (`impact_delay_seconds`,
+0.2 s), clamped to `max_impact_delay_seconds`. At the landing the target plays its hit clip (not on a miss) and `CombatTimeline.Impact` fires once with a `HitImpact`
+(attacker, target, amount, hit/crit/miss, dealt/taken/other, world position, time). **That event is the one timing source**: damage numbers, effects and audio (T-305)
+subscribe to it. A hit still pending when the clock is more than `stale_hit_seconds` past its moment (a stall, a resume) is dropped, a snapshot (the end of a catch-up,
+row 101) clears everything pending, and a delta tick that is not newer than the last is ignored, so old hits are never replayed. A death waits for the last pending
+hit on the entity (`EntityView.DeadShown`), then plays the die clip once, holds the last frame, and starts the death effect; an entity that appears already dead lies
+down at once. A dead body that leaves view fades out and sinks over `corpse_fade_seconds` before its visual returns to the pool. The player's own death screen is
+unchanged (row 102).
+
+**Damage numbers.** `DamageNumberPool` (pure) holds up to `max_damage_numbers` (16) numbers; at the cap the **oldest is dropped** (not merged) and counted. Numbers on
+one target within `damage_number_lane_seconds` take different sideways lanes (0, +1, -1, +2, -2, ...). Style = who (dealt by you, taken by you, others) x hit/crit/miss;
+a crit is larger with a pop and an accent colour, a miss shows `UiText.MissWord`. `client/Scene/CombatFx.cs` draws them as pooled `Label`s on a canvas layer under the
+HUD's, anchored to the world through the camera, sized in dp x UI scale like the HUD, and moves nothing when no number is showing. Digit strings are cached, so a hit
+allocates nothing after warm-up.
+
+**Effects.** `effect.hit`, `effect.crit`, `effect.death` and `effect.level_up` (VOCABULARY "Effect names") resolve through `ThemeCatalog.ResolveEffect` (the manifest entry tagged with that name in
+each theme layer, then the name chain) to a tiny scene; instances are pooled per scene, at most `max_effects` (10) play at once (the oldest ends early; hits between others use only half of them), and the client pops and
+shrinks them (no animation player, no transparency), so each costs one draw call and a few dozen triangles.
 
 ### 7.7 Theme mounting
 `themes/<theme>` is mounted into the Godot project at `res://themes/<theme>` (a directory junction in dev, made by `client/mount-themes.ps1`; copied and packed at export).

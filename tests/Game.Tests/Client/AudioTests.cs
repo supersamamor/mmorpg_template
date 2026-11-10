@@ -597,35 +597,26 @@ public class AudioTests
     // ---- hit timing ----
 
     [Fact]
-    public void A_hit_is_due_at_the_render_delay_and_never_replays()
+    public void Audio_hears_hits_when_the_combat_timeline_lands_them_and_never_replays_them()
     {
-        var scheduler = new ImpactScheduler();
-        scheduler.Queue(new ImpactEvent(1, 2, 5, HitResults.Hit), now: 10, renderDelay: 0.2);
-        scheduler.Advance(10.1);
-        scheduler.Impacts.ShouldBeEmpty();
-        scheduler.Pending.ShouldBe(1);
-        scheduler.Advance(10.2);
-        scheduler.Swings.Count.ShouldBe(1);
-        scheduler.Impacts.Single().Target.ShouldBe(2);
-        scheduler.Advance(10.3);
-        scheduler.Impacts.ShouldBeEmpty();
-        scheduler.Pending.ShouldBe(0);
-    }
+        var world = new Game.Client.Core.World.WorldView(new ClientConfig());
+        world.ApplyWelcome(new Game.Shared.Protocol.WelcomeMessage(1, 1, "map.a", 10)); // render delay 200 ms
+        var records = new List<Game.Shared.Protocol.EntityRecord>
+        {
+            new(1, Game.Shared.Protocol.EntityKinds.Player, null, new Game.Shared.World.GridCell(1, 1), Directions.N, null, 0, 1),
+            new(2, Game.Shared.Protocol.EntityKinds.Monster, "monster.a", new Game.Shared.World.GridCell(2, 1), Directions.N, null, 0, 1),
+        };
+        world.ApplySnapshot(new Game.Shared.Protocol.SnapshotMessage(0, "map.a", 1, records), 0);
+        var source = new CombatImpactSource(world.Combat);
 
-    [Fact]
-    public void A_late_batch_delivers_each_hit_once_and_a_clear_forgets_the_waiting_ones()
-    {
-        var scheduler = new ImpactScheduler(4);
-        for (var i = 0; i < 6; i++) scheduler.Queue(new ImpactEvent(1, i, 1, HitResults.Hit), now: i, renderDelay: 0.1);
-        scheduler.Pending.ShouldBe(4); // the oldest two were dropped
-        scheduler.Advance(100);
-        scheduler.Impacts.Select(h => h.Target).ShouldBe(new long[] { 2, 3, 4, 5 });
-        scheduler.Advance(101);
-        scheduler.Impacts.ShouldBeEmpty();
-        scheduler.Queue(new ImpactEvent(1, 9, 1, HitResults.Miss), 200, 0.1);
-        scheduler.Clear();
-        scheduler.Advance(300);
-        scheduler.Impacts.ShouldBeEmpty();
+        world.ApplyHits([new Game.Shared.Protocol.HitRecord(1, 2, 9, HitResults.Crit), new Game.Shared.Protocol.HitRecord(2, 1, 0, HitResults.Miss)], now: 10, tick: 5);
+        world.Advance(10.1);
+        source.Impacts.ShouldBeEmpty(); // not before the render delay plus the impact delay
+        world.Advance(10.7);
+        source.Impacts.Select(h => (h.Attacker, h.Target, h.Amount, h.Result)).ShouldBe(new[] { (1L, 2L, 9, HitResults.Crit), (2L, 1L, 0, HitResults.Miss) }, ignoreOrder: true);
+        source.Clear();
+        world.Advance(11);
+        source.Impacts.ShouldBeEmpty();
     }
 
     // ---- the bundle ----

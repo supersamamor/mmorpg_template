@@ -3,6 +3,7 @@ using System.Globalization;
 using Game.Client.Core;
 using Game.Client.Core.Audio;
 using Game.Client.Core.Bundle;
+using Game.Client.Core.Combat;
 using Game.Client.Core.Net;
 using Game.Client.Core.World;
 using Game.Shared.Protocol;
@@ -207,7 +208,24 @@ public sealed class AutoRun
         OS.LowProcessorUsageMode = false; // measure every frame, not only frames that drew
         await SecondsAsync(5); // shaders settle
 
+        var impacts = 0;
+        var dealt = 0;
+        var taken = 0;
+        var crits = 0;
+        ImpactHandler count = (in HitImpact impact) =>
+        {
+            impacts++;
+            if (impact.Side == HitSide.Dealt) dealt++;
+            else if (impact.Side == HitSide.Taken) taken++;
+            if (impact.Kind == HitKind.Crit) crits++;
+        };
+        World.Combat.Impact += count;
+        var droppedBefore = World.Combat.Dropped;
+        int maxNumbers = 0, maxEffects = 0, maxPending = 0, calmFrames = 0, fxFrames = 0;
+        double calmDraws = 0, fxDraws = 0, maxShown = 0;
         _main.CountAllocations = true;
+        if (Array.IndexOf(_args, "--fight") >= 0) _ = HuntOneAsync(60); // the player fights too, so dealt and taken numbers show
+        var shot = false;
         var frames = 0;
         double worstMs = 0, maxTriangles = 0, maxDraws = 0, sumDraws = 0, sumTriangles = 0, sumOnScreen = 0;
         var clock = Stopwatch.StartNew();
@@ -225,17 +243,45 @@ public sealed class AutoRun
             sumDraws += draws;
             sumTriangles += triangles;
             sumOnScreen += CountOnScreen();
+            if (_main.Fx is { } fx)
+            {
+                var (numbers, effects) = fx.Active;
+                maxNumbers = Math.Max(maxNumbers, numbers);
+                maxEffects = Math.Max(maxEffects, effects);
+                maxShown = Math.Max(maxShown, fx.Shown);
+                if (fx.Shown == 0 && effects == 0)
+                {
+                    calmFrames++;
+                    calmDraws += draws;
+                }
+                else
+                {
+                    fxFrames++;
+                    fxDraws += draws;
+                }
+            }
+            maxPending = Math.Max(maxPending, World.Combat.PendingCount);
             frames++;
+            if (!shot && _screenshot is not null && clock.Elapsed.TotalSeconds > 3 && _main.Fx is { } shotFx && shotFx.ShownInside(0.05f) >= 3)
+            {
+                shot = true; // mid-fight, numbers and effects up (the pause shows in the worst frame time)
+                var (n, e) = (shotFx.Shown, shotFx.Active.Effects);
+                Print($"measure: screenshot with {n} numbers drawn and {e} effects playing; {shotFx.Describe()}");
+                await ShotAsync();
+            }
         }
         _main.CountAllocations = false;
+        World.Combat.Impact -= count;
         var seconds = clock.Elapsed.TotalSeconds;
         var (quietBytes, quietFrames, busyBytes, busyFrames) = _main.Allocations;
         Print($"measure: cap {_main.Config.FpsCap}, {frames} frames in {seconds:0.0} s = {frames / seconds:0.0} fps, worst {worstMs:0.0} ms");
         Print($"measure: entities on screen avg {sumOnScreen / frames:0.0}; in view {World.Entities.Count}");
         Print($"measure: draw calls avg {sumDraws / frames:0.0}, max {maxDraws:0}; triangles avg {sumTriangles / frames:0}, max {maxTriangles:0}; ground {_main.Map!.Triangles}");
         Print($"measure: frame path allocated {quietBytes} bytes in {quietFrames} frames with no message; {busyBytes} bytes in {busyFrames} frames with messages");
+        Print($"measure: combat {impacts} impacts in {seconds:0.0} s ({impacts / seconds:0.0}/s; {dealt} dealt, {taken} taken, {crits} crits), at most {maxNumbers} numbers ({maxShown} drawn), {maxEffects} effects and {maxPending} pending hits at once; {World.Combat.Dropped - droppedBefore} hits dropped, {Session.Numbers.DroppedForCap} numbers dropped for the cap, {_main.Fx?.Totals.Effects} effects started");
+        Print($"measure: draw calls avg {(calmFrames > 0 ? calmDraws / calmFrames : 0):0.0} in {calmFrames} frames with no number or effect on screen, {(fxFrames > 0 ? fxDraws / fxFrames : 0):0.0} in {fxFrames} frames with some");
         Print($"measure: static memory {OS.GetStaticMemoryUsage() / (1024 * 1024)} MB; video {Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / (1024 * 1024):0} MB; adapter {RenderingServer.GetVideoAdapterName()}");
-        await ShotAsync();
+        if (!shot) await ShotAsync();
 
         Session.Logout(Clocks.Wall());
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen, 10, "bye logout");

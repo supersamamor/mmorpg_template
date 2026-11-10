@@ -17,10 +17,17 @@ public sealed class GroundHeights
     /// <summary>Goes up when the heights change, so whoever placed things on the ground places them again.</summary>
     public int Version { get; private set; }
 
+    /// <summary>The highest walkable cell's height; 0 when flat or before heights arrive.</summary>
+    public float MaxHeight { get; private set; }
+
+    /// <summary>The lowest walkable cell's height; 0 when flat or before heights arrive.</summary>
+    public float MinHeight { get; private set; }
+
     /// <summary>Back to flat ground: every point has height 0.</summary>
     public void Clear()
     {
         _width = _height = 0;
+        MaxHeight = MinHeight = 0;
         Version++;
     }
 
@@ -31,6 +38,14 @@ public sealed class GroundHeights
         _height = height;
         _heights = heights;
         _flags = flags;
+        float max = float.MinValue, min = float.MaxValue;
+        for (var i = 0; i < heights.Length && i < flags.Length; i++)
+        {
+            if ((flags[i] & CellFlagBits.Walkable) == 0) continue;
+            if (heights[i] > max) max = heights[i];
+            if (heights[i] < min) min = heights[i];
+        }
+        (MaxHeight, MinHeight) = max < min ? (0f, 0f) : (max, min);
         Version++;
     }
 

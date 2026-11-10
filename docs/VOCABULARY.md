@@ -181,6 +181,12 @@ does not see, `invalid_target` for itself or anything but a monster.
 ## Hit results
 In `DamageDealt`: `hit`, `crit`, `miss`
 
+## Effect names (client)
+Presentation hooks the client plays on combat events; theme data, not content. A manifest entry names the effect it plays with an `"effect"` field (`vfx.hit.normal` -> `effect.hit`, `vfx.hit.crit` -> `effect.crit`,
+`vfx.death.generic` -> `effect.death`, `vfx.level_up` -> `effect.level_up`), so a theme re-skins an effect by tagging another key. A theme that leaves a name out, or
+whose file is missing, falls down the chain `effect.level_up` -> `effect.crit` -> `effect.hit`, `effect.death` -> `effect.hit`, then shows nothing.
+A model or animation-library entry may carry `impact_delay` (seconds from the start of the attack clip to the blow landing; the client default applies when absent).
+
 ## Currency
 Engine id `currency`; the display name is data (`currency_name` in `balance.yaml`, default "crowns").
 The reward type is also `currency`.

@@ -15,8 +15,7 @@ public sealed class EntityView
     private readonly Step[] _steps = new Step[StepCapacity];
     private int _stepCount;
     private double _targetYaw;
-    private double _attackAt = double.NaN;
-    private double _hitAt = double.NaN;
+    private double _deathAt = double.NaN;
 
     /// <summary>Entity id.</summary>
     public long Id { get; private set; }
@@ -39,8 +38,17 @@ public sealed class EntityView
     /// <summary>HP fraction 0–1, or null for an entity without HP.</summary>
     public double? Hp { get; private set; }
 
-    /// <summary>True while dead.</summary>
+    /// <summary>Counts every change to <see cref="Hp"/> (and each time the entity is placed), so a target frame redraws its bar only when the fraction moved.</summary>
+    public int HpVersion { get; private set; }
+
+    /// <summary>True while dead, as the server says. The picture waits for the killing blow: see <see cref="DeadShown"/>.</summary>
     public bool Dead { get; private set; }
+
+    /// <summary>True once the death is on screen: the server said dead and the last pending hit on this entity has landed (at once for an entity that appears dead).</summary>
+    public bool DeadShown { get; private set; }
+
+    /// <summary>Set the moment <see cref="DeadShown"/> goes up from a death seen live; the presenter plays the death effect and clears it.</summary>
+    public bool DeathFxPending { get; set; }
 
     /// <summary>A ground item's quantity.</summary>
     public int Quantity { get; private set; }
@@ -80,14 +88,16 @@ public sealed class EntityView
         Id = record.Id;
         _stepCount = 0;
         AttackCount = HitCount = 0;
-        _attackAt = _hitAt = double.NaN;
+        _deathAt = double.NaN;
+        DeathFxPending = false;
         Kind = record.Kind;
         DisplayKey = record.DisplayKey;
         Cell = record.Cell;
         Next = record.Next;
         Speed = record.Speed;
         Hp = record.Hp;
-        Dead = record.Dead;
+        HpVersion++;
+        Dead = DeadShown = record.Dead;
         Quantity = record.Quantity;
         Mine = record.Mine ?? false;
         X = Center(record.Cell.X);
@@ -103,8 +113,26 @@ public sealed class EntityView
         var fields = change.Fields;
         if ((fields & ChangedFields.Facing) != 0 && change.Facing is not null) _targetYaw = YawOf(change.Facing, _targetYaw);
         if ((fields & ChangedFields.DisplayKey) != 0) { DisplayKey = change.DisplayKey; LookDirty = true; }
-        if ((fields & ChangedFields.Hp) != 0) { Hp = change.Hp; LookDirty = true; }
-        if ((fields & ChangedFields.Dead) != 0) { Dead = change.Dead; LookDirty = true; }
+        if ((fields & ChangedFields.Hp) != 0)
+        {
+            if (Hp != change.Hp) HpVersion++;
+            Hp = change.Hp;
+            LookDirty = true;
+        }
+        if ((fields & ChangedFields.Dead) != 0)
+        {
+            Dead = change.Dead;
+            LookDirty = true;
+            if (!change.Dead)
+            {
+                DeadShown = false;
+                _deathAt = double.NaN;
+            }
+            else if (!DeadShown)
+            {
+                _deathAt = now + delay; // at render time, or later when a hit on it is still to land (WorldView)
+            }
+        }
         if ((fields & ChangedFields.Mine) != 0) { Mine = change.Mine; LookDirty = true; }
         if ((fields & ChangedFields.Speed) != 0) Speed = change.Speed;
 
@@ -118,27 +146,27 @@ public sealed class EntityView
         else Settle(now, delay, snapDistance, glideSpeed);
     }
 
-    /// <summary>
-    /// A <c>hits</c> entry named this entity as attacker, seen at view time <paramref name="now"/>. The attack animation waits until render time catches up with
-    /// it, like every other change, so it lines up with the movement on screen.
-    /// </summary>
-    internal void QueueAttack(double now) => _attackAt = now;
+    /// <summary>The attack swing starts on screen (<c>CombatTimeline</c> decides when).</summary>
+    internal void MarkAttack() => AttackCount++;
 
-    /// <summary>A <c>hits</c> entry named this entity as the target, seen at view time <paramref name="now"/>.</summary>
-    internal void QueueHit(double now) => _hitAt = now;
+    /// <summary>A hit lands on this entity on screen.</summary>
+    internal void MarkHit() => HitCount++;
 
-    /// <summary>Walks the queue to render time and turns toward the facing. Allocates nothing.</summary>
-    internal void Advance(double renderTime, double dt, double turnRate)
+    /// <summary>Delays the death picture until <paramref name="at"/> (view time) if that is later than already planned.</summary>
+    internal void DelayDeath(double at)
     {
-        if (_attackAt <= renderTime)
+        if (Dead && !DeadShown && at > _deathAt) _deathAt = at;
+    }
+
+    /// <summary>Walks the queue to render time, shows a death whose time came, and turns toward the facing. Allocates nothing.</summary>
+    internal void Advance(double now, double renderTime, double dt, double turnRate)
+    {
+        if (Dead && !DeadShown && now >= _deathAt)
         {
-            AttackCount++;
-            _attackAt = double.NaN;
-        }
-        if (_hitAt <= renderTime)
-        {
-            HitCount++;
-            _hitAt = double.NaN;
+            DeadShown = true;
+            DeathFxPending = true;
+            LookDirty = true;
+            _deathAt = double.NaN;
         }
         if (_stepCount > 0) AdvanceSteps(renderTime);
         if (Yaw != _targetYaw)

@@ -74,7 +74,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-208 | Map authoring plugin: bake walkability, markers, grid export, staleness check, authored sample maps | Claude Code | Opus 5.5 | [T-208](../tasks/prompts/T-208.md) | T-201, T-207 | Review | |
 | T-211 | Touch input + mobile UI shell: safe area, scaling, gestures, hotbar seam | Claude Code | Sonnet 5.5 | [T-211](../tasks/prompts/T-211.md) | T-206, T-207 | Review | ADR-002 #120 |
 | T-218 | Client robustness: root-cause the headless exit crash with model preload; validator check for manifest `fallbacks` | Claude Code | Opus 5.5 | [T-218](../tasks/prompts/T-218.md) | T-207 | Review | ADR-002 #133, #135 |
-| T-219 | Phase 2 leftovers: terrain-aware tap picking, theme-chain key checks, `MapGridFile` comment, `export-maps -Check` in CI | Claude Code | Sonnet 5.5 | [T-219](../tasks/prompts/T-219.md) | T-208, T-218 | In Progress | ADR-002 #142, #143, #145, #146 |
+| T-219 | Phase 2 leftovers: terrain-aware tap picking, theme-chain key checks, `MapGridFile` comment, `export-maps -Check` in CI | Claude Code | Sonnet 5.5 | [T-219](../tasks/prompts/T-219.md) | T-208, T-218 | Review | ADR-002 #142, #143, #145, #146 |
 
 ## Phase 3 — Combat loop
 
@@ -85,7 +85,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-302 | Auto-attack, death, EXP distribution, drops | Claude Code | Opus 5.5 | [T-302](../tasks/prompts/T-302.md) | T-105, T-106, T-301 | Review | Server world only; wire side (attack messages, HP and ground items in views) is a follow-up in `Net/**` |
 | T-307 | Combat over the wire: attack/respawn messages, HP fraction + dead flag + ground items in views, hits batch, own EXP/HP | Claude Code | Opus 5.5 | [T-307](../tasks/prompts/T-307.md) | T-302, T-205, T-204 | Review | Restricted `Net/**` — **approved by owner 2026-11-02**; ADR-002 #60 |
 | T-308 | Combat + AI polish: HP/SP regen, heal on return, corpse time, only players trigger warps | Claude Code | Sonnet 5.5 | [T-308](../tasks/prompts/T-308.md) | T-302 | Review | Starts after T-302 merges; ADR-002 #37–39 |
-| T-303 | Combat presentation: attack and hit timing, damage numbers, hit and death effects, target HP bar, level-up flash | Claude Code | Sonnet 5.5 | [T-303](../tasks/prompts/T-303.md) | T-207, T-211, T-307 | In Progress | ADR-002 #139 |
+| T-303 | Combat presentation: attack and hit timing, damage numbers, hit and death effects, target HP bar, level-up flash | Claude Code | Sonnet 5.5 | [T-303](../tasks/prompts/T-303.md) | T-207, T-211, T-307 | Review | ADR-002 #139 |
 | T-305 | Client audio: theme resolution and fallback, music crossfade, voice pool and cooldowns, buses and volume settings, mobile background / silent switch / audio focus | Claude Code | Sonnet 5.5 | [T-305](../tasks/prompts/T-305.md) | T-207, T-304 | Review | Proven by a debug trace until T-306 sounds exist |
 | T-309 | Early-game balance: a new character beats a Gel Slime without spending points; pinned matchups + seeded duel sim | Claude Code | Sonnet 5.5 | [T-309](../tasks/prompts/T-309.md) | T-307, T-112 | Review | Found by the T-307 smoke test; ADR-002 #99 |
 

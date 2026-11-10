@@ -27,12 +27,13 @@ public static class ContentBoot
         if (load.Database is null)
             return new ContentBootResult(null, ValidationReportFormatter.FromLoadErrors(load.Errors));
 
-        var manifest = AssetManifest.PathFor(Path.Combine(Path.GetFullPath(contentDir), "..", "themes"), theme);
+        var themesDir = Path.Combine(Path.GetFullPath(contentDir), "..", "themes");
+        var manifest = AssetManifest.PathFor(themesDir, theme);
         IReadOnlySet<string> assetKeys;
         AudioManifest audio;
         try
         {
-            assetKeys = AssetManifest.LoadKeys(manifest);
+            assetKeys = AssetManifest.LoadChainKeys(themesDir, theme); // the client's chain: the theme, then default
             audio = AudioManifest.Load(manifest, $"themes/{theme}/asset-manifest.json");
         }
         catch (InvalidDataException e)

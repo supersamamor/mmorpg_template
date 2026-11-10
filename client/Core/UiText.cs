@@ -72,6 +72,9 @@ public static class UiText
     /// <summary>The line while a connection is being made, with no notice.</summary>
     public const string Connecting = "Connecting...";
 
+    /// <summary>The word a floating number shows for a missed attack.</summary>
+    public const string MissWord = "Miss";
+
     /// <summary>The flash when this client hits something.</summary>
     public static string YouHit(string target, int amount, string result)
     {
