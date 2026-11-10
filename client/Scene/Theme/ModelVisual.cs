@@ -39,6 +39,7 @@ public sealed class ModelVisual : IEntityVisual
     private EntityLook _look;
     private int _lod;
     private double _pending;
+    private float _fade;
 
     /// <summary>Creates a visual for a resolved model. It is hidden and not ready until <see cref="TryBuild"/> succeeds.</summary>
     public ModelVisual(ModelStore store, ThemeCatalog catalog, ModelResolution resolution)
@@ -67,6 +68,7 @@ public sealed class ModelVisual : IEntityVisual
         _baseline = true;
         _firstClip = true;
         _pending = 0;
+        SetFade(0);
         if (_ready && !_using && _resolution.Path is not null)
         {
             _store.Use(_resolution.Path);
@@ -79,6 +81,7 @@ public sealed class ModelVisual : IEntityVisual
     {
         _wantVisible = false;
         Root.Visible = false;
+        SetFade(0);
         _player?.Stop();
         if (_ring is not null) _ring.Visible = false;
         if (_using && _resolution.Path is not null) _store.Unuse(_resolution.Path);
@@ -172,6 +175,17 @@ public sealed class ModelVisual : IEntityVisual
     {
         _wantVisible = visible;
         Root.Visible = visible && _ready;
+    }
+
+    /// <inheritdoc />
+    public void SetFade(float amount)
+    {
+        amount = Mathf.Clamp(amount, 0f, 1f);
+        if (amount == _fade) return;
+        _fade = amount;
+        if (_lod0 is not null) _lod0.Transparency = amount;
+        if (_lod1 is not null) _lod1.Transparency = amount;
+        if (_content is not null) _content.Position = new Vector3(0, -0.5f * amount, 0); // it sinks as it fades, so the fade reads even where transparency is not drawn
     }
 
     /// <inheritdoc />

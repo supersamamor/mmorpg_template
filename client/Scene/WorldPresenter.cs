@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using Game.Client.Core;
 using Game.Client.Core.World;
 using Godot;
@@ -29,6 +31,15 @@ public sealed class WorldPresenter
     private int _visualVersion;
     private int _groundVersion;
     private long _frame;
+    private readonly List<Corpse> _corpses = new();
+
+    /// <summary>A death became visible (after its killing blow landed): world x, ground height, world z. The combat effects play there.</summary>
+    public event Action<float, float, float>? DeathShown;
+
+    /// <summary>Corpses fading out after leaving view (for measuring).</summary>
+    public int FadingCorpses => _corpses.Count;
+
+    private readonly record struct Corpse(IEntityVisual Visual, double Start);
 
     /// <summary>Builds the bar layer and markers under <paramref name="parent"/>.</summary>
     public WorldPresenter(Node3D parent, ClientConfig config, WorldView world, UiState ui, IEntityVisualSource visuals, GroundHeights ground)
@@ -101,11 +112,18 @@ public sealed class WorldPresenter
         for (var i = 0; i < removed.Count; i++)
         {
             var entity = removed[i];
-            if (entity.Visual is IEntityVisual visual) _visuals.Release(visual);
+            if (entity.Visual is IEntityVisual visual)
+            {
+                // A body that leaves view fades out instead of vanishing (§7.6); anything else goes back to the pool at once.
+                if (entity.DeadShown) _corpses.Add(new Corpse(visual, Clocks.View()));
+                else _visuals.Release(visual);
+            }
             _barsDirty = true;
             _replan = true;
         }
         if (removed.Count > 0) _world.ClearRemoved();
+
+        if (_corpses.Count > 0) FadeCorpses(dt);
 
         var entities = _world.Entities;
         var ownId = _world.OwnId;
@@ -129,7 +147,7 @@ public sealed class WorldPresenter
             var visual = (IEntityVisual)entity.Visual;
             if (entity.LookDirty)
             {
-                visual.SetLook(new EntityLook(entity.Id == ownId, entity.Dead, entity.Mine));
+                visual.SetLook(new EntityLook(entity.Id == ownId, entity.DeadShown, entity.Mine));
                 entity.LookDirty = false;
                 _barsDirty = true;
             }
@@ -141,6 +159,11 @@ public sealed class WorldPresenter
                 if (entity.Hp.HasValue) _barsDirty = true;
             }
             visual.SetMotion(entity.IsWalking, entity.AttackCount, entity.HitCount);
+            if (entity.DeathFxPending)
+            {
+                entity.DeathFxPending = false;
+                DeathShown?.Invoke((float)entity.X, _ground.At(entity.X, entity.Z), (float)entity.Z);
+            }
         }
 
         if (_visualVersion != _visuals.Version)
@@ -154,6 +177,25 @@ public sealed class WorldPresenter
 
         if (_barsDirty) RewriteBars();
         SyncMarkers();
+    }
+
+    private void FadeCorpses(double dt)
+    {
+        var now = Clocks.View();
+        var seconds = Math.Max(0.01, _config.CorpseFadeSeconds);
+        for (var i = _corpses.Count - 1; i >= 0; i--)
+        {
+            var corpse = _corpses[i];
+            var t = (float)((now - corpse.Start) / seconds);
+            if (t >= 1f)
+            {
+                _visuals.Release(corpse.Visual);
+                _corpses.RemoveAt(i);
+                continue;
+            }
+            corpse.Visual.SetFade(t);
+            corpse.Visual.Animate(dt, true, _frame, 1); // a dying body may still be going down
+        }
     }
 
     /// <summary>Ranks the animated characters by distance to the player: the nearest few get the full level of detail, the nearest 40 the full animation rate (§9).</summary>

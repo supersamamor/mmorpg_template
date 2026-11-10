@@ -2,6 +2,7 @@
   "anim.humanoid": {
     "file": "anims/humanoid.glb",
     "rig": "humanoid",
+    "impact_delay": 0.25,
     "clips": {
       "idle": "Idle",
       "walk": "Walk",
@@ -16,6 +17,7 @@
   "anim.blob": {
     "file": "anims/blob.glb",
     "rig": "blob",
+    "impact_delay": 0.3,
     "clips": {
       "idle": "Idle",
       "walk": "Walk",
@@ -27,6 +29,7 @@
   "anim.sprout": {
     "file": "anims/sprout.glb",
     "rig": "sprout",
+    "impact_delay": 0.3,
     "clips": {
       "idle": "Idle",
       "walk": "Walk",
@@ -38,6 +41,7 @@
   "anim.insect": {
     "file": "anims/insect.glb",
     "rig": "insect",
+    "impact_delay": 0.2,
     "clips": {
       "idle": "Idle",
       "walk": "Walk",
@@ -49,6 +53,7 @@
   "anim.quadruped": {
     "file": "anims/quadruped.glb",
     "rig": "quadruped",
+    "impact_delay": 0.25,
     "clips": {
       "idle": "Idle",
       "walk": "Walk",
@@ -343,6 +348,22 @@
   },
   "sfx.skill.warp": {
     "file": "audio/silence.ogg"
+  },
+  "vfx.death.generic": {
+    "file": "vfx/death/generic.tscn",
+    "effect": "effect.death"
+  },
+  "vfx.hit.crit": {
+    "file": "vfx/hit/crit.tscn",
+    "effect": "effect.crit"
+  },
+  "vfx.hit.normal": {
+    "file": "vfx/hit/normal.tscn",
+    "effect": "effect.hit"
+  },
+  "vfx.level_up": {
+    "file": "vfx/level_up.tscn",
+    "effect": "effect.level_up"
   },
   "vfx.skill.buff": {
     "file": "vfx/placeholder.tscn"

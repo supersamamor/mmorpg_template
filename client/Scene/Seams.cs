@@ -37,6 +37,9 @@ public interface IEntityVisual
     /// <summary>What the entity is doing, every frame: whether it is walking, and counters that go up on each attack made and each hit taken.</summary>
     void SetMotion(bool walking, int attackCount, int hitCount);
 
+    /// <summary>Fades a corpse out: 0 is whole, 1 is gone (it also sinks a little). Anything else puts it back to 0.</summary>
+    void SetFade(float amount);
+
     /// <summary>Moves the animation forward. At the reduced rate the time collects and is applied every <paramref name="reducedEvery"/> frames.</summary>
     void Animate(double dt, bool fullRate, long frame, int reducedEvery);
 }
@@ -52,6 +55,9 @@ public interface IEntityVisualSource
 
     /// <summary>Back to the pool.</summary>
     void Release(IEntityVisual visual);
+
+    /// <summary>Seconds from the start of an entity's attack clip to its impact, from the theme (the model's, else its rig's, else the client default).</summary>
+    double ImpactDelayOf(Game.Client.Core.World.EntityView attacker);
 
     /// <summary>Once a frame: finishes loads and creates the instances that were put off to spare the frame.</summary>
     void Update();

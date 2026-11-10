@@ -94,7 +94,12 @@ public static class Pack
         if (key.StartsWith("portrait.", StringComparison.Ordinal)) return ($"portraits/{rest}.png", Media.Png(color, hash));
         if (key.StartsWith("sfx.", StringComparison.Ordinal) || key.StartsWith("music.", StringComparison.Ordinal) || key.StartsWith("ambience.", StringComparison.Ordinal))
             return ("audio/silence.ogg", Media.SilentOgg());
-        if (key.StartsWith("vfx.", StringComparison.Ordinal)) return ("vfx/placeholder.tscn", Encoding.UTF8.GetBytes(Media.VfxScene));
+        if (key.StartsWith("vfx.", StringComparison.Ordinal))
+        {
+            // The combat effects (T-303) each get a small scene of their own; the other effect keys share the empty placeholder until their tasks arrive.
+            var combat = Media.CombatVfxScene(key);
+            return combat is null ? ("vfx/placeholder.tscn", Encoding.UTF8.GetBytes(Media.VfxScene)) : ($"vfx/{rest}.tscn", Encoding.UTF8.GetBytes(combat));
+        }
         throw new InvalidOperationException($"No generator for asset key '{key}'; add one to tools/themegen/Pack.cs.");
     }
 

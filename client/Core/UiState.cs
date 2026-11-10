@@ -35,6 +35,9 @@ public sealed class UiState
     /// <summary>The flash line; empty when nothing shows.</summary>
     public string Flash { get; private set; } = string.Empty;
 
+    /// <summary>Counts level-ups (base or job), so the presenter plays its effect and the HUD flashes once per level.</summary>
+    public int LevelUpSerial { get; private set; }
+
     /// <summary>Counts changes to anything here, so a HUD redraws only on a change.</summary>
     public int Version { get; private set; }
 
@@ -121,6 +124,7 @@ public sealed class UiState
     /// <summary><c>level_up</c>.</summary>
     public void OnLevelUp(LevelUpMessage level, double now)
     {
+        LevelUpSerial++;
         if (level.BaseLevel is { } baseLevel) SetFlash(UiText.LevelUp(baseLevel), now);
         else if (level.JobLevel is { } jobLevel) SetFlash(UiText.JobLevelUp(jobLevel), now);
     }
