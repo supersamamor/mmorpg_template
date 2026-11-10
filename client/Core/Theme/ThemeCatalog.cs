@@ -61,6 +61,8 @@ public sealed class ThemeCatalog
     private readonly Action<string> _warn;
     private readonly HashSet<string> _warned = new HashSet<string>(StringComparer.Ordinal);
     private readonly Dictionary<string, ModelResolution> _byKey = new Dictionary<string, ModelResolution>(StringComparer.Ordinal);
+    private readonly Dictionary<string, string?> _effects = new Dictionary<string, string?>(StringComparer.Ordinal);
+    private readonly Dictionary<string, double> _impactDelays = new Dictionary<string, double>(StringComparer.Ordinal);
     private readonly Dictionary<string, ModelResolution> _byKind = new Dictionary<string, ModelResolution>(StringComparer.Ordinal);
 
     /// <summary>Creates a catalog over <paramref name="layers"/> (active theme first).</summary>
@@ -132,6 +134,56 @@ public sealed class ThemeCatalog
         if (TryFind(model.Anims, out path, out var library)) return library;
         Warn(model.Anims, Why(model.Anims));
         return null;
+    }
+
+    /// <summary>
+    /// The scene file for an effect name (T-303, <see cref="EffectNames"/>): each theme layer's manifest entry tagged with that name (<c>"effect"</c>) gives the asset key, whose file must
+    /// exist; if no layer has a usable one the built-in chain (<see cref="EffectNames.DefaultFallback"/>) moves to the next name. False when nothing in the chain is
+    /// found, so the effect is simply not shown; one warning per problem key. Cached.
+    /// </summary>
+    public bool ResolveEffect(string name, out string path)
+    {
+        if (_effects.TryGetValue(name, out var cached))
+        {
+            path = cached ?? string.Empty;
+            return cached is not null;
+        }
+        var current = (string?)name;
+        for (var depth = 0; depth < 4 && current is not null; depth++)
+        {
+            for (var i = 0; i < _layers.Count; i++)
+            {
+                if (!_layers[i].TryGetEffect(current, out var key)) continue;
+                if (TryFind(key, out path, out _))
+                {
+                    _effects[name] = path;
+                    return true;
+                }
+                Warn(key, Why(key));
+            }
+            current = EffectNames.DefaultFallback(current);
+        }
+        Warn(name, "no usable scene in any theme; the effect is not shown");
+        _effects[name] = null;
+        path = string.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// Seconds from the start of the attack clip to its impact for a model: the model's own <c>impact_delay</c>, else its animation library's (the rig's), else
+    /// <paramref name="fallback"/>. Cached per model, so asking again allocates nothing.
+    /// </summary>
+    public double ImpactDelayOf(ModelResolution model, double fallback)
+    {
+        var cacheKey = model.Path ?? string.Empty;
+        if (_impactDelays.TryGetValue(cacheKey, out var cached)) return cached;
+        var value = fallback;
+        if (model.Asset is { } asset)
+        {
+            if (asset.ImpactDelay is { } own) value = own;
+            else if (asset.Anims is not null && TryFind(asset.Anims, out _, out var library) && library.ImpactDelay is { } rig) value = rig;
+        }
+        return _impactDelays[cacheKey] = value;
     }
 
     private ModelResolution FallbackFor(string kind)

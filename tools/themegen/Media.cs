@@ -218,5 +218,25 @@ internal static class Media
 
     // ---------------- Godot scenes ----------------
 
-    public const string VfxScene = "[gd_scene format=3]\n\n[node name=\"PlaceholderEffect\" type=\"Node3D\"]\n";
+    /// <summary>
+    /// A small unshaded placeholder for one of the combat effects (T-303): one low-poly mesh and one material, nothing animated (the client pops and shrinks it).
+    /// Null for any other key, which keeps using <see cref="VfxScene"/>.
+    /// </summary>
+    public static string? CombatVfxScene(string key)
+    {
+        const string Sphere = "[sub_resource type=\"SphereMesh\" id=\"mesh\"]\nradius = {0}\nheight = {1}\nradial_segments = 8\nrings = 4\n";
+        var (name, mesh, color) = key switch
+        {
+            "vfx.hit.normal" => ("HitNormal", string.Format(Sphere, "0.3", "0.6"), "Color(1, 0.95, 0.6, 1)"),
+            "vfx.hit.crit" => ("HitCrit", string.Format(Sphere, "0.45", "0.9"), "Color(1, 0.55, 0.1, 1)"),
+            "vfx.death.generic" => ("DeathGeneric", string.Format(Sphere, "0.4", "0.5"), "Color(0.75, 0.75, 0.8, 1)"),
+            "vfx.level_up" => ("LevelUp", "[sub_resource type=\"TorusMesh\" id=\"mesh\"]\ninner_radius = 0.5\nouter_radius = 0.62\nrings = 16\nring_segments = 6\n", "Color(1, 0.85, 0.25, 1)"),
+            _ => ((string?)null, string.Empty, string.Empty),
+        };
+        if (name is null) return null;
+        return "[gd_scene load_steps=3 format=3]\n\n" + mesh + "\n[sub_resource type=\"StandardMaterial3D\" id=\"mat\"]\nshading_mode = 0\nalbedo_color = " + color + "\n\n"
+            + "[node name=\"" + name + "\" type=\"Node3D\"]\n\n[node name=\"Flash\" type=\"MeshInstance3D\" parent=\".\"]\ncast_shadow = 0\nmesh = SubResource(\"mesh\")\nsurface_material_override/0 = SubResource(\"mat\")\n";
+    }
+
+    public const string VfxScene ="[gd_scene format=3]\n\n[node name=\"PlaceholderEffect\" type=\"Node3D\"]\n";
 }

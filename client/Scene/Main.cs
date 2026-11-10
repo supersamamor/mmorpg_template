@@ -25,6 +25,7 @@ public partial class Main : Node3D
     private FollowCamera? _camera;
     private ThemeMapView? _map;
     private Hud? _hud;
+    private CombatFx? _fx;
     private InputRouter? _input;
     private string? _loadedMap;
     private MapData? _mapData;
@@ -55,6 +56,9 @@ public partial class Main : Node3D
 
     /// <summary>The HUD.</summary>
     public Hud? Hud => _hud;
+
+    /// <summary>The combat effects (for measuring).</summary>
+    public CombatFx? Fx => _fx;
 
     /// <summary>The map whose ground is on screen.</summary>
     public string? LoadedMap => _loadedMap;
@@ -121,6 +125,9 @@ public partial class Main : Node3D
         _entities = new ThemedEntities(this, _config, _bundle!, catalog);
         _presenter = new WorldPresenter(this, _config, _session.World, _session.Ui, _entities, _map.Ground);
         _hud = new Hud(this, _config, _session, _bundle);
+        _session.World.Combat.ImpactDelay = _entities.ImpactDelayOf;
+        _fx = new CombatFx(this, _config, _session, _camera, _hud, catalog);
+        _presenter.DeathShown += _fx.OnDeath;
         _input = new InputRouter(_config, _session, _bundle!, _camera, _hud, () => _mapData, _map.Ground);
 
         GD.Print($"[client] bundle format {_bundle!.FormatVersion}, hash {_bundle.ContentHash}; server {_config.ServerUrl}; {(OS.IsDebugBuild() ? "debug" : "release")} build, cleartext {(_config.AllowCleartext ? "allowed" : "refused")}; renderer {RenderingServer.GetCurrentRenderingMethod()}");
@@ -140,6 +147,7 @@ public partial class Main : Node3D
         var world = _session.World;
         if (_loadedMap != world.MapId) LoadMap(world.MapId);
         _presenter!.Sync(delta);
+        _fx!.Update(Clocks.View(), _map!.Ground);
         if (world.Own is { } own) _camera!.Follow((float)own.X, (float)own.Z);
         _hud!.Refresh();
         _input!.Tick();
@@ -190,6 +198,7 @@ public partial class Main : Node3D
             return;
         }
         _mapData = map;
+        _session!.Numbers.Clear();
         _map!.Load(map!);
     }
 

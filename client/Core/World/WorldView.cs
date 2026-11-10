@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Game.Client.Core.Combat;
 using Game.Shared.Protocol;
 
 namespace Game.Client.Core.World;
@@ -20,7 +21,14 @@ public sealed class WorldView
     private double _lastAdvance = double.NaN;
 
     /// <summary>Creates an empty view. The render delay is 0 until <c>welcome</c> gives the tick rate.</summary>
-    public WorldView(ClientConfig config) => _config = config;
+    public WorldView(ClientConfig config)
+    {
+        _config = config;
+        Combat = new CombatTimeline(this, config);
+    }
+
+    /// <summary>Hits turned into timed presentation. Subscribe to <see cref="CombatTimeline.Impact"/> for the moment each one lands.</summary>
+    public CombatTimeline Combat { get; }
 
     /// <summary>The current map id, or null before the first <c>welcome</c>.</summary>
     public string? MapId { get; private set; }
@@ -69,6 +77,7 @@ public sealed class WorldView
         Tick = snapshot.Tick;
         OwnId = snapshot.Id;
         MapId = snapshot.MapId;
+        Combat.Clear(snapshot.Tick); // a snapshot is state, not history (ADR-002 row 101): pending hits are not replayed after it
         _seen.Clear();
         for (var i = 0; i < snapshot.Entities.Count; i++)
         {
@@ -90,25 +99,21 @@ public sealed class WorldView
         {
             var change = delta.Changed[i];
             if (_byId.TryGetValue(change.Id, out var entity))
+            {
                 entity.Apply(change, now, _renderDelay, _config.SnapDistanceCells, _config.GlideCellsPerSecond);
+                if ((change.Fields & ChangedFields.Dead) != 0 && entity.Dead) entity.DelayDeath(Combat.LatestImpactOn(entity.Id, 0)); // the death waits for the killing blow
+            }
         }
         for (var i = 0; i < delta.Disappeared.Count; i++) Remove(delta.Disappeared[i]);
         if (delta.Vitals is { } vitals) SetVitals(vitals);
     }
 
     /// <summary>
-    /// A delta's <c>hits</c>: the attacker plays an attack and a target that was not missed plays a hit reaction, both when render time reaches this moment.
-    /// Visual only; the outcome was decided by the server. Entities that are not in view are ignored.
+    /// A delta's <c>hits</c>: each swings its attacker when render time reaches this moment and lands after the attacker's impact delay (<see cref="Combat"/>).
+    /// Visual only; the outcome was decided by the server. Entities that are not in view are ignored. <paramref name="tick"/> is the delta's tick; a tick that is
+    /// not newer than the last is a duplicate and shows nothing. Below 0 means unknown.
     /// </summary>
-    public void ApplyHits(IReadOnlyList<HitRecord> hits, double now)
-    {
-        for (var i = 0; i < hits.Count; i++)
-        {
-            var hit = hits[i];
-            if (_byId.TryGetValue(hit.Attacker, out var attacker)) attacker.QueueAttack(now);
-            if (hit.Result != Game.Shared.Vocabulary.HitResults.Miss && _byId.TryGetValue(hit.Target, out var target)) target.QueueHit(now);
-        }
-    }
+    public void ApplyHits(IReadOnlyList<HitRecord> hits, double now, long tick = -1) => Combat.Apply(hits, now, tick);
 
     /// <summary><c>exp</c>: own levels and EXP.</summary>
     public void ApplyExp(ExpMessage exp)
@@ -128,9 +133,10 @@ public sealed class WorldView
         for (var i = 0; i < _entities.Count; i++)
         {
             var entity = _entities[i];
-            entity.Advance(renderTime, dt, turnRate);
+            entity.Advance(now, renderTime, dt, turnRate);
             moved |= entity.PoseDirty;
         }
+        Combat.Advance(now);
         return moved;
     }
 

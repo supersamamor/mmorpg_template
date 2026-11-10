@@ -1,6 +1,7 @@
 using Game.Client.Core;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Theme;
+using Game.Client.Core.World;
 using Game.Shared.Protocol;
 using Godot;
 
@@ -49,6 +50,10 @@ public sealed class ThemedEntities : IEntityVisualSource
 
     /// <inheritdoc />
     public int Version => _version;
+
+    /// <inheritdoc />
+    public double ImpactDelayOf(EntityView attacker) =>
+        _catalog.ImpactDelayOf(_catalog.ResolveModel(_bundle.ModelKeyOf(attacker.DisplayKey), attacker.Kind), _config.ImpactDelaySeconds);
 
     /// <summary>Starts loading, in the background, every model the bundle names and the fallback models (so the first sight of one does not wait on the disk).</summary>
     public void Preload()

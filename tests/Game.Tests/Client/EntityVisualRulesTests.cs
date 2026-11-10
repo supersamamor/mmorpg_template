@@ -177,7 +177,10 @@ public class EntityVisualRulesTests
         world.Find(2)!.HitCount.ShouldBe(0);
 
         world.Advance(5.25);
-        world.Find(1)!.AttackCount.ShouldBe(1);
+        world.Find(1)!.AttackCount.ShouldBe(1, "the swing starts at render time");
+        world.Find(2)!.HitCount.ShouldBe(0, "the blow lands an impact delay (0.2 s by default) after the swing starts");
+
+        world.Advance(5.45);
         world.Find(1)!.HitCount.ShouldBe(0);
         world.Find(2)!.HitCount.ShouldBe(1);
         world.Find(2)!.AttackCount.ShouldBe(0);
