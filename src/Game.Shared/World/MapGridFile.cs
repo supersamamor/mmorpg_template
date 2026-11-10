@@ -34,7 +34,7 @@ namespace Game.Shared.World
         /// </summary>
         public string Cells { get; init; } = string.Empty;
 
-        /// <summary>Hash of the Godot scene the grid was exported from. Empty until the exporter exists (T-208); stored, not checked.</summary>
+        /// <summary>Hash of the Godot scene the grid was exported from. Compared with the scene file's hash by <c>validate</c> and by the exporter's <c>-Check</c>, so a scene edited without re-exporting is reported; empty only for grids not exported from a scene.</summary>
         public string SourceSceneHash { get; init; } = string.Empty;
 
         /// <summary>Monster spawn areas (map object type <c>spawn</c>).</summary>

@@ -2,6 +2,7 @@ using Game.Client.Core;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Input;
 using Game.Client.Core.Ui;
+using Game.Client.Core.World;
 using Game.Shared.Protocol;
 using Godot;
 
@@ -21,11 +22,13 @@ public sealed class InputRouter
     private readonly Hud _hud;
     private readonly Func<MapData?> _map;
     private readonly TapGestures _gestures;
+    private readonly GroundHeights _ground;
     private int _uiTouches; // bit per touch index that began on the UI
 
     /// <summary>Creates the router. <paramref name="map"/> gives the map whose ground is shown, for the "nothing there to tap" check.</summary>
-    public InputRouter(ClientConfig config, ClientSession session, DisplayBundle bundle, FollowCamera camera, Hud hud, Func<MapData?> map)
+    public InputRouter(ClientConfig config, ClientSession session, DisplayBundle bundle, FollowCamera camera, Hud hud, Func<MapData?> map, GroundHeights ground)
     {
+        _ground = ground;
         _config = config;
         _session = session;
         _bundle = bundle;
@@ -101,7 +104,7 @@ public sealed class InputRouter
             _session.TapEntity(id);
             return;
         }
-        if (!_camera.TryGround(position, out var ground)) return;
+        if (!_camera.TryTerrain(position, _ground, out var ground)) return;
         var x = TouchTargets.CellOf(ground.X);
         var y = TouchTargets.CellOf(ground.Z);
         if (_map() is { } map && !map.Inside(x, y)) return; // nothing there to tap; everything else goes to the server
@@ -127,7 +130,7 @@ public sealed class InputRouter
         {
             var entity = entities[i];
             if (monstersOnly && (entity.Kind != EntityKinds.Monster || entity.Dead)) continue;
-            var world = new Vector3((float)entity.X, 0.45f, (float)entity.Z);
+            var world = new Vector3((float)entity.X, _ground.At(entity.X, entity.Z) + 0.45f, (float)entity.Z); // as high as the monster is drawn
             if (camera.IsPositionBehind(world)) continue;
             var center = camera.UnprojectPosition(world);
             // The shape's size on screen counts too, so a close-up monster is as easy to hit as it looks.

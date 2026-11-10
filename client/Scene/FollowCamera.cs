@@ -1,4 +1,5 @@
 using Game.Client.Core;
+using Game.Client.Core.World;
 using Godot;
 
 namespace Game.Client.Scene;
@@ -65,6 +66,17 @@ public sealed class FollowCamera
         ground = default;
         if (direction.Y >= -1e-4f) return false;
         ground = origin + direction * (-origin.Y / direction.Y);
+        return true;
+    }
+
+    /// <summary>The ground point under a canvas position on the terrain (<see cref="GroundHeights"/>); falls back to <see cref="TryGround"/> when the heights are flat. Its <c>Y</c> is the terrain height there.</summary>
+    public bool TryTerrain(Vector2 canvas, GroundHeights ground, out Vector3 point)
+    {
+        point = default;
+        var o = Camera.ProjectRayOrigin(canvas);
+        var d = Camera.ProjectRayNormal(canvas);
+        if (!TerrainRay.TryHit(ground, o.X, o.Y, o.Z, d.X, d.Y, d.Z, out var x, out var z)) return false;
+        point = new Vector3((float)x, ground.At(x, z), (float)z);
         return true;
     }
 
