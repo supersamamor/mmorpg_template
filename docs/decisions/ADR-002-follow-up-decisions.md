@@ -270,3 +270,17 @@ When writing these prompts, copy in the decisions listed:
 | 145 | `MapGridFile`'s doc comment still says the scene hash is "stored, not checked" (T-208) | **→ T-219:** fix the comment and regenerate the schema. |
 | 146 | Run `client/export-maps.ps1 -Check` in CI's Godot job (T-208) | **→ T-219.** |
 | 147 | Map scenes ship separately from their `.authoring.tscn` (spawns and markers); every export preset excludes the authoring scenes and the plugin (T-208) | **Decided: accepted.** That keeps spawn data out of the client (hard rule 11), and a test checks the presets. |
+
+## Addendum — T-219, T-303 (2026-11-10)
+| # | Question (source) | Decision |
+|---|---|---|
+| 148 | Terrain picking: march down the ray between the terrain's lowest and highest points, then bisect, using `GroundHeights` only (no physics query). On the sample hill the error goes from 0.44 cells to under 0.01, measured in unit tests (T-219) | **Decided: accepted.** A scripted tap on the hill that asserts the cell the server receives → **T-220**. |
+| 149 | Theme-chain key checks merge the active theme's keys with `default`'s; the theme's entry wins (T-219) | **Decided: accepted.** The audio-key check (`AudioRule`) may have the same gap → **T-220** checks it. |
+| 150 | NuGet's vulnerability feed timed out during restore (T-219) | **Decided: no change.** It was a network problem on one machine; CI keeps the audit on. |
+| 151 | Hit timing: the swing starts at arrival plus the render delay; the blow lands after the attacker's `impact_delay` (model entry → animation library → client default 0.2 s, clamped to 1 s). `CombatTimeline.Impact` is the one timing source; audio uses it too (T-303, T-305) | **Decided: accepted.** |
+| 152 | No replay: hits more than 0.5 s late are dropped, a snapshot clears pending hits, and old delta ticks are ignored (T-303) | **Decided: accepted**, closes row 101. |
+| 153 | Damage numbers: cap 16, the oldest is dropped (not merged); numbers on one target take sideways lanes (T-303) | **Decided: accepted.** Dropping keeps every number readable; merging would hide crits. |
+| 154 | Effects are named in the manifest by an `effect` field (`effect.hit`, `effect.crit`, `effect.death`, `effect.level_up`) with a fixed fallback level_up → crit → hit and death → hit, because client code may not name `vfx.*` keys (T-303) | **Decided: accepted.** A shared effect-name vocabulary waits until skills need one (T-501/T-502). |
+| 155 | In a crowd of about 37 characters on screen, draw calls peak at 117, over the §9 limit of 100. The characters alone are about 80; effects add about 12 (T-303) | **→ T-220:** bring the crowd peak under 100 (for example simpler distant characters, or merged meshes), measured with `loadtest --spare-slots`. |
+| 156 | The target HP bar updates when the server's `hp` arrives, up to about 0.4 s before the blow lands on screen (T-303) | **Decided: accept for v1.** Revisit if players notice; it only shows a fraction. |
+| 157 | Corpse fade uses transparency plus sinking; transparency on the Mobile renderer is unconfirmed (T-303) | **Decided:** the sink alone is a visible fade. Transparency stays on the phone checklist (row 112). |
