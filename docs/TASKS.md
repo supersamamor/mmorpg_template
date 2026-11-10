@@ -74,7 +74,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-208 | Map authoring plugin: bake walkability, markers, grid export, staleness check, authored sample maps | Claude Code | Opus 5.5 | [T-208](../tasks/prompts/T-208.md) | T-201, T-207 | Review | |
 | T-211 | Touch input + mobile UI shell: safe area, scaling, gestures, hotbar seam | Claude Code | Sonnet 5.5 | [T-211](../tasks/prompts/T-211.md) | T-206, T-207 | Review | ADR-002 #120 |
 | T-218 | Client robustness: root-cause the headless exit crash with model preload; validator check for manifest `fallbacks` | Claude Code | Opus 5.5 | [T-218](../tasks/prompts/T-218.md) | T-207 | Review | ADR-002 #133, #135 |
-| T-219 | Phase 2 leftovers: terrain-aware tap picking, theme-chain key checks, `MapGridFile` comment, `export-maps -Check` in CI | Claude Code | Sonnet 5.5 | [T-219](../tasks/prompts/T-219.md) | T-208, T-218 | In Progress | ADR-002 #142, #143, #145, #146 |
+| T-219 | Phase 2 leftovers: terrain-aware tap picking, theme-chain key checks, `MapGridFile` comment, `export-maps -Check` in CI | Claude Code | Sonnet 5.5 | [T-219](../tasks/prompts/T-219.md) | T-208, T-218 | Review | ADR-002 #142, #143, #145, #146 |
 
 ## Phase 3 — Combat loop
 

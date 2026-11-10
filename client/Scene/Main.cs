@@ -121,7 +121,7 @@ public partial class Main : Node3D
         _entities = new ThemedEntities(this, _config, _bundle!, catalog);
         _presenter = new WorldPresenter(this, _config, _session.World, _session.Ui, _entities, _map.Ground);
         _hud = new Hud(this, _config, _session, _bundle);
-        _input = new InputRouter(_config, _session, _bundle!, _camera, _hud, () => _mapData);
+        _input = new InputRouter(_config, _session, _bundle!, _camera, _hud, () => _mapData, _map.Ground);
 
         GD.Print($"[client] bundle format {_bundle!.FormatVersion}, hash {_bundle.ContentHash}; server {_config.ServerUrl}; {(OS.IsDebugBuild() ? "debug" : "release")} build, cleartext {(_config.AllowCleartext ? "allowed" : "refused")}; renderer {RenderingServer.GetCurrentRenderingMethod()}");
         if (AutoRun.Wanted(args)) _ = new AutoRun(this, args).RunAsync();

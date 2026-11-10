@@ -184,3 +184,10 @@ jobs:
         timeout-minutes: 25
         shell: pwsh
         run: ./client/run-e2e.ps1 -Run all -Godot $env:GODOT
+
+      # The committed grids must equal a fresh headless export of their scenes (T-208, ARCHITECTURE §5.3). `validate` only compares hashes; this compares every byte.
+      # Like the rest of this job, it has never run on GitHub (T-219 added it without access to it).
+      - name: Check the exported map grids
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./client/export-maps.ps1 -Check -Godot $env:GODOT

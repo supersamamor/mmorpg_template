@@ -26,7 +26,7 @@
     },
     "source_scene_hash": {
       "type": "string",
-      "description": "Hash of the Godot scene the grid was exported from. Empty until the exporter exists (T-208); stored, not checked."
+      "description": "Hash of the Godot scene the grid was exported from. Compared with the scene file's hash by validate and by the exporter's -Check, so a scene edited without re-exporting is reported; empty only for grids not exported from a scene."
     },
     "spawns": {
       "type": "array",
