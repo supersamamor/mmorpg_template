@@ -7,6 +7,8 @@ namespace Game.Content.Validation.Rules;
 /// Theme manifest, when the validator was given one: each sound entry is well formed (files are <c>.ogg</c>, volume and pitch
 /// in range, bus known), and <c>audio.defaults</c> / <c>audio.events</c> name known categories and events and existing
 /// <c>sfx.</c> keys. A missing optional content key is not an error.
+/// Keys resolve through <see cref="ValidationContext.AssetKeys"/>, which <c>ContentBoot</c> fills with the client's theme chain
+/// (<see cref="AssetManifest.LoadChainKeys"/>: the active theme, then <c>default</c>), so a partial theme may name a sound only <c>default</c> has (T-220).
 /// </summary>
 public sealed class AudioRule : IValidationRule
 {

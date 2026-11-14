@@ -1,15 +1,16 @@
 # Scripted client runs against a real local server (docs/MOBILE_BUILD.md §8). Exit code 0 means every run passed. Works in Windows PowerShell 5.1 and PowerShell 7 (Linux in CI).
 #   .\client\run-e2e.ps1                                  play: login, map, walk, kill, drop, dropped socket, resume, background, logout (real content, headless)
 #   .\client\run-e2e.ps1 -Run warp                        the warp to the second map, on a temporary content copy with weak monsters (real content kills a new character on the way)
-#   .\client\run-e2e.ps1 -Run ui                          the UI shell: layouts for every screen shape and UI scale, gestures, hotbar, cost (more: -Windowed -Screenshot x.png -Resolution 1560x720 -ClientArgs "--set","debug_notch=1")
+#   .\client\run-e2e.ps1 -Run hill                        taps a raised cell on the sample hill; the server must walk the character to exactly that cell
+#   .\client\run-e2e.ps1 -Run ui                        the UI shell: layouts for every screen shape and UI scale, gestures, hotbar, cost (more: -Windowed -Screenshot x.png -Resolution 1560x720 -ClientArgs "--set","debug_notch=1")
 #   .\client\run-e2e.ps1 -Run bye                      the four live bye runs: resume_failed, replaced, shutdown, grace_expiry (each can be named alone)
 #   .\client\run-e2e.ps1 -Run release                     exports a desktop RELEASE build and checks that it refuses ws:// and does not refuse wss://
-#   .\client\run-e2e.ps1 -Run all                         play, warp, ui, bye, release
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, bye, release
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "ui", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -21,7 +22,9 @@ param(
     [string[]] $ClientArgs = @(),    # more arguments for the client, e.g. --set grace_seconds=30
     [string] $Godot = "",            # the Godot .NET console binary; default: $env:GODOT, then the winget install
     [int] $Repeat = 1,               # run each scenario this many times and print the count of each exit code (T-218)
-    [string] $KeepLogs = ""          # keep each client run's stdout and stderr in this folder
+    [string] $KeepLogs = "",         # keep each client run's stdout and stderr in this folder
+    [int] $ExportTimeoutSeconds = 900,   # release: the whole export (it builds the C# project first)
+    [int] $ExportExitSeconds = 60        # release: from every exported file written (and no longer growing) to Godot's exit (ADR-002 row 163)
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -69,15 +72,19 @@ function Start-GameServer([switch] $Easy, [string[]] $Extra = @()) {
     return [pscustomobject]@{ Process = $process; Log = $log }
 }
 
+# Stops a process and its direct children: `dotnet run` starts the server as a child, and Godot's Windows console wrapper (.console.exe) starts the game exe.
+function Stop-ProcessTree([int] $Id) {
+    if ((Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
+        Get-CimInstance Win32_Process -Filter "ParentProcessId = $Id" -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+    } else {
+        & pkill -KILL -P $Id 2>$null
+    }
+    Stop-Process -Id $Id -Force -ErrorAction SilentlyContinue
+}
+
 function Stop-GameServer($server) {
     if (-not $server) { return }
-    # `dotnet run` starts the server as a child; stop it first.
-    if ((Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
-        Get-CimInstance Win32_Process -Filter "ParentProcessId = $($server.Process.Id)" -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-    } else {
-        & pkill -KILL -P $server.Process.Id 2>$null
-    }
-    Stop-Process -Id $server.Process.Id -Force -ErrorAction SilentlyContinue
+    Stop-ProcessTree $server.Process.Id
     Remove-Item $server.Log, "$($server.Log).err" -ErrorAction SilentlyContinue
 }
 
@@ -121,7 +128,7 @@ function Wait-GodotClient($run, [int] $TimeoutSeconds, [scriptblock] $OnMarker =
         if ($OnTick) { & $OnTick }
         if ($exited) { break }
         if ($clock.Elapsed.TotalSeconds -gt $TimeoutSeconds) {
-            Stop-Process -Id $run.Process.Id -Force -ErrorAction SilentlyContinue
+            Stop-ProcessTree $run.Process.Id
             Write-Host "[run-e2e] the client did not finish in $TimeoutSeconds s"
             return [pscustomobject]@{ Code = 124; Text = $text.ToString() }
         }
@@ -170,6 +177,12 @@ function Invoke-Scenario([string] $Name) {
                 $server = Start-GameServer -Easy
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-ui" @()) -EngineArgs $engineArgs
                 return (Wait-GodotClient $run 300).Code
+            }
+            "hill" {
+                # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
+                $server = Start-GameServer -Easy
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-hill" @()) -EngineArgs $engineArgs
+                return (Wait-GodotClient $run 180).Code
             }
             "warp" {
                 $server = Start-GameServer -Easy
@@ -232,12 +245,55 @@ function Invoke-Release {
     $output = if ($linux) { "exports/linux/game-client.x86_64" } else { "exports/windows/game-client.exe" }
     $exe = Join-Path $client $output
     $console = if ($linux) { $exe } else { [IO.Path]::ChangeExtension($exe, ".console.exe") }
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $exe) | Out-Null
-    $export = Start-Process $godot -PassThru -NoNewWindow -RedirectStandardOutput ([IO.Path]::GetTempFileName()) -RedirectStandardError ([IO.Path]::GetTempFileName()) `
+    $folder = Split-Path -Parent $exe
+    New-Item -ItemType Directory -Force -Path $folder | Out-Null
+    # A stale build from an earlier run must never pass for this one (ADR-002 row 163): every file of the last export goes first.
+    $stem = [IO.Path]::GetFileNameWithoutExtension($exe)
+    # A client stopped a moment ago may still hold the exe for a second or two, so the delete is retried for up to 10 s.
+    $old = { @(Get-ChildItem $folder -File | Where-Object { $_.Name -eq [IO.Path]::GetFileName($exe) -or $_.Name -like "$stem.*" }) }
+    for ($try = 0; $try -lt 20 -and (& $old).Count -gt 0; $try++) {
+        & $old | Remove-Item -Force -ErrorAction SilentlyContinue
+        if ((& $old).Count -gt 0) { Start-Sleep -Milliseconds 500 }
+    }
+    if ((& $old).Count -gt 0) { Write-Host "[run-e2e] could not delete the old export: $((& $old | ForEach-Object Name) -join ', ')"; return 1 }
+    $expected = @($exe, $console) + $(if ($linux) { @() } else { @([IO.Path]::ChangeExtension($exe, ".pck")) }) | Select-Object -Unique
+    $exportLog = [IO.Path]::GetTempFileName()
+    $export = Start-Process $godot -PassThru -NoNewWindow -RedirectStandardOutput $exportLog -RedirectStandardError "$exportLog.err" `
         -ArgumentList @("--headless", "--path", "`"$client`"", "--export-release", "`"$preset`"", "`"$exe`"")
     $null = $export.Handle
-    if (-not $export.WaitForExit(900000)) { Stop-Process -Id $export.Id -Force; Write-Host "[run-e2e] the release export did not finish"; return 1 }
-    if (-not (Test-Path $console)) { Write-Host "[run-e2e] the release export wrote no $console (exit code $($export.ExitCode))"; return 1 }
+    # Bounded waits: $ExportTimeoutSeconds for the whole export, and $ExportExitSeconds from the moment every file is written and has stopped
+    # growing to Godot's exit. Godot 4.7.2 once hung at exit with the files already written (row 163); that is reported, not waited out.
+    $clock = [Diagnostics.Stopwatch]::StartNew()
+    $writtenAt = $null
+    $lastSizes = ""
+    while (-not $export.HasExited) {
+        Start-Sleep -Milliseconds 500
+        $present = @($expected | Where-Object { Test-Path $_ })
+        $sizes = ($present | ForEach-Object { (Get-Item $_).Length }) -join ","
+        if ($present.Count -eq $expected.Count -and $sizes -eq $lastSizes) { if (-not $writtenAt) { $writtenAt = $clock.Elapsed.TotalSeconds } }
+        else { $writtenAt = $null }
+        $lastSizes = $sizes
+        if ($writtenAt -and ($clock.Elapsed.TotalSeconds - $writtenAt) -gt $ExportExitSeconds) {
+            Stop-ProcessTree $export.Id
+            Write-Host ("[run-e2e] EXPORT HUNG AT EXIT: Godot wrote every file ({0}) by {1:0} s but had not exited {2} s later; stopped it. The build is not trusted." -f (($expected | ForEach-Object { Split-Path -Leaf $_ }) -join ", "), $writtenAt, $ExportExitSeconds)
+            return 1
+        }
+        if ($clock.Elapsed.TotalSeconds -gt $ExportTimeoutSeconds) {
+            Stop-ProcessTree $export.Id
+            Write-Host "[run-e2e] the release export did not finish in $ExportTimeoutSeconds s (files written: $(@($expected | Where-Object { Test-Path $_ }).Count) of $($expected.Count)); stopped it"
+            return 1
+        }
+    }
+    $export.WaitForExit()
+    $exportCode = $export.ExitCode
+    if ($exportCode -ne 0) {
+        Get-Content $exportLog, "$exportLog.err" -ErrorAction SilentlyContinue | Where-Object { $_ -match "ERROR|error" } | Select-Object -Last 20 | ForEach-Object { Write-Host $_ }
+    }
+    Remove-Item $exportLog, "$exportLog.err" -ErrorAction SilentlyContinue
+    if ($exportCode -ne 0) { Write-Host "[run-e2e] the release export failed (exit code $exportCode)"; return 1 }
+    $missing = @($expected | Where-Object { -not (Test-Path $_) })
+    if ($missing.Count -gt 0) { Write-Host "[run-e2e] the release export exited 0 but wrote no $($missing -join ', ')"; return 1 }
+    Write-Host ("[run-e2e] release export: exit code 0 after {0:0} s" -f $clock.Elapsed.TotalSeconds)
     Write-Host "[run-e2e] exported $preset to $output"
 
     # 1. ws:// is refused, and --set cannot turn it back on.
@@ -258,7 +314,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "ui", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 $failed = @()

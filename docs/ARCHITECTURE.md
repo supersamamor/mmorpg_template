@@ -459,7 +459,7 @@ unchanged (row 102).
 
 **Damage numbers.** `DamageNumberPool` (pure) holds up to `max_damage_numbers` (16) numbers; at the cap the **oldest is dropped** (not merged) and counted. Numbers on
 one target within `damage_number_lane_seconds` take different sideways lanes (0, +1, -1, +2, -2, ...). Style = who (dealt by you, taken by you, others) x hit/crit/miss;
-a crit is larger with a pop and an accent colour, a miss shows `UiText.MissWord`. `client/Scene/CombatFx.cs` draws them as pooled `Label`s on a canvas layer under the
+a crit is larger with a pop and an accent colour, a miss shows `UiText.MissWord`. `client/Scene/CombatFx.cs` draws them all from one canvas item (outlines, then fills, grouped by font size, so they batch into a few draw calls; T-220) on a canvas layer under the
 HUD's, anchored to the world through the camera, sized in dp x UI scale like the HUD, and moves nothing when no number is showing. Digit strings are cached, so a hit
 allocates nothing after warm-up.
 
