@@ -42,6 +42,9 @@ public sealed class ThemeMapView : IMapView
     /// <summary>True when the current map came from the theme, false when it is the placeholder.</summary>
     public bool ShowsScene => _scene is not null;
 
+    /// <summary>The theme's map scene while one is shown (for measuring), else null.</summary>
+    public Node3D? Scene => _scene;
+
     /// <inheritdoc />
     public void Load(MapData map)
     {

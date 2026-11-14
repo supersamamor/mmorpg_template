@@ -15,7 +15,7 @@ namespace Game.Client.Scene;
 
 /// <summary>
 /// The scripted runs (docs/MOBILE_BUILD.md): <c>--e2e</c> plays login → map → walk → kill → drop → dropped socket → resume → warp → logout against a real
-/// server, tapping through the same input path as a finger; <c>--e2e-death</c> gets killed, drops the socket while dead and checks the death screen
+/// server, tapping through the same input path as a finger; <c>--e2e-hill</c> taps a cell on the hill and checks the server walks there; <c>--e2e-death</c> gets killed, drops the socket while dead and checks the death screen
 /// comes back; <c>--measure N</c> reports fps, draw calls, triangles and allocations with N entities on screen. Which monster to hunt comes from the
 /// command line, never from code. Nothing here is needed to play, and none of it can do more than a player's intents.
 /// </summary>
@@ -41,7 +41,7 @@ public sealed class AutoRun
 
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
-        Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 ||
+        Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
         Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -69,6 +69,7 @@ public sealed class AutoRun
             if (Array.IndexOf(_args, "--measure") >= 0) await MeasureAsync();
             else if (Array.IndexOf(_args, "--e2e-death") >= 0) await DeathRunAsync();
             else if (Array.IndexOf(_args, "--e2e-warp") >= 0) await WarpRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-hill") >= 0) await HillRunAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
@@ -162,6 +163,161 @@ public sealed class AutoRun
         Print("logout: bye logout");
     }
 
+    /// <summary>
+    /// A tap on the map's hill (T-220, ADR-002 row 148): walk to flat ground beside the highest cells, tap a raised cell on screen through the same input
+    /// path as a finger, and check that the server moved the character to exactly that cell. The cell is chosen so that the old y = 0 plane pick would
+    /// have chosen a different one, so the run fails if picking stops using the terrain heights.
+    /// </summary>
+    private async Task HillRunAsync()
+    {
+        await LoginAsync();
+        var ground = _main.Map!.Ground;
+        await UntilAsync(() => ground.MaxHeight > MinHillHeight, 10, "the map's ground heights");
+        var map = CurrentMap();
+        Print($"hill: ground heights {ground.MinHeight:0.00} to {ground.MaxHeight:0.00}");
+
+        // The highest walkable cells, and the nearest flat cell beside them to stand on (the hill may start off screen).
+        GridCell? peak = null;
+        for (var y = 0; y < map.Height; y++)
+            for (var x = 0; x < map.Width; x++)
+                if (map.IsWalkable(x, y) && ground.At(x + 0.5, y + 0.5) >= ground.MaxHeight - 0.01f && (peak is null || GridDistanceSquared(new GridCell(x, y), Own().Cell) < GridDistanceSquared(peak.Value, Own().Cell)))
+                    peak = new GridCell(x, y);
+        Check(peak is not null, "the map has a hill");
+        GridCell? stand = null;
+        for (var y = 0; y < map.Height; y++)
+            for (var x = 0; x < map.Width; x++)
+            {
+                var c = new GridCell(x, y);
+                var d = GridDistanceSquared(c, peak!.Value);
+                if (map.IsWalkable(x, y) && ground.At(x + 0.5, y + 0.5) < 0.01f && d >= 9 && (stand is null || d < GridDistanceSquared(stand.Value, peak.Value)))
+                    stand = c;
+            }
+        Check(stand is not null, "flat ground beside the hill");
+        Print($"hill: walking to {stand} beside the top at {peak}");
+        Session.TapGround(stand!.Value, Clocks.View()); // may be off screen, so it is the intent a far tap would make
+        await UntilAsync(() => Own().Cell.X == stand.Value.X && Own().Cell.Y == stand.Value.Y && !Own().IsWalking, 60, "walking beside the hill");
+        await SecondsAsync(1); // the camera settles
+
+        // A raised cell on screen whose tap a flat y = 0 pick would put in another cell.
+        var camera = _main.Camera!.Camera;
+        var visible = _main.GetViewport().GetVisibleRect();
+        GridCell? target = null;
+        GridCell flat = default;
+        Vector2 point = default;
+        float height = 0;
+        // The y = 0 error is under half a cell here, so a cell's centre never crosses into another cell: points inside the cell are tried as well.
+        for (var y = 0; y < map.Height && target is null; y++)
+            for (var x = 0; x < map.Width && target is null; x++)
+            {
+                if (!map.IsWalkable(x, y) || ground.At(x + 0.5, y + 0.5) < MinHillHeight) continue;
+                for (var i = 0; i < HillSamples.Length * HillSamples.Length && target is null; i++)
+                {
+                    float px = x + HillSamples[i % HillSamples.Length], pz = y + HillSamples[i / HillSamples.Length];
+                    var h = ground.At(px, pz);
+                    var world = new Vector3(px, h, pz);
+                    if (camera.IsPositionBehind(world)) continue;
+                    var screen = camera.UnprojectPosition(world);
+                    if (!visible.Grow(-40).HasPoint(screen)) continue;
+                    var origin = camera.ProjectRayOrigin(screen);
+                    var normal = camera.ProjectRayNormal(screen);
+                    if (normal.Y > -1e-4f) continue;
+                    var onPlane = origin + normal * (-origin.Y / normal.Y);
+                    var planeCell = new GridCell((int)Math.Floor(onPlane.X), (int)Math.Floor(onPlane.Z));
+                    if (planeCell.X == x && planeCell.Y == y) continue;
+                    (target, flat, point, height) = (new GridCell(x, y), planeCell, screen, h);
+                }
+            }
+        Check(target is not null, "a raised cell on screen that the y = 0 plane would pick wrongly");
+        Print($"hill: tap at screen {point} on cell {target} (height {height:0.00}); a y = 0 pick would have sent {flat}");
+
+        _main.HandleInput(new InputEventScreenTouch { Index = 0, Position = point, Pressed = true });
+        await FrameAsync();
+        _main.HandleInput(new InputEventScreenTouch { Index = 0, Position = point, Pressed = false });
+        Check(Session.Ui.Marker is { } m && m.X == target!.Value.X && m.Y == target.Value.Y, $"the tap marker is on {target}");
+        await UntilAsync(() => Own().Cell.X == target!.Value.X && Own().Cell.Y == target.Value.Y && !Own().IsWalking, 30, $"the server walking the character to {target}");
+        Print($"hill: the server received {target} and walked the character there; drawn at height {ground.At(Own().X, Own().Z):0.00}");
+
+        Session.Logout(Clocks.Wall());
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen, 10, "bye logout");
+        Print("logout: bye logout");
+    }
+
+    /// <summary>
+    /// Where the draw calls come from (T-220): each group is hidden for a few frames and the drop in each pass is printed. The groups are the
+    /// entity visuals (models, rings), the HUD, the damage numbers, and the map scene; HP bars are one multimesh (one call) and effects one call each.
+    /// </summary>
+    private async Task BreakdownAsync()
+    {
+        async Task<(double Opaque, double Shadow, double Canvas)> Sample()
+        {
+            await FramesAsync(3);
+            double o = 0, sh = 0, c = 0;
+            for (var i = 0; i < 6; i++)
+            {
+                await FrameAsync();
+                var d = PassDraws();
+                (o, sh, c) = (o + d.Opaque, sh + d.Shadow, c + d.Canvas);
+            }
+            return (o / 6, sh / 6, c / 6);
+        }
+        async Task Without(string what, Action<bool> show)
+        {
+            var with = await Sample();
+            show(false);
+            var without = await Sample();
+            show(true);
+            Print($"measure: breakdown {what}: 3D {with.Opaque - without.Opaque:0.0}, shadow {with.Shadow - without.Shadow:0.0}, canvas {with.Canvas - without.Canvas:0.0} (on screen {CountOnScreen()})");
+        }
+        var entities = new List<Node3D>();
+        foreach (var e in World.Entities)
+            if (e.Visual is ModelVisual { Root.Visible: true } v) entities.Add(v.Root);
+        var meshes = 0;
+        var surfaces = 0;
+        void CountMeshes(Node node)
+        {
+            if (node is MeshInstance3D { Mesh: not null } m && m.IsVisibleInTree()) { meshes++; surfaces += m.Mesh.GetSurfaceCount(); }
+            foreach (var child in node.GetChildren()) CountMeshes(child);
+        }
+        var shapes = new Dictionary<string, int>();
+        foreach (var n in entities)
+        {
+            var before = meshes;
+            CountMeshes(n);
+            if (meshes - before > 1)
+            {
+                var names = new List<string>();
+                void Names(Node node)
+                {
+                    if (node is MeshInstance3D { Mesh: not null } m && m.IsVisibleInTree()) names.Add(m.Name);
+                    foreach (var child in node.GetChildren()) Names(child);
+                }
+                Names(n);
+                var shape = string.Join(",", names);
+                shapes[shape] = shapes.GetValueOrDefault(shape) + 1;
+            }
+        }
+        foreach (var (shape, count) in shapes) Print($"measure: {count} visuals draw several meshes: {shape}");
+        await Without($"entity visuals ({entities.Count} shown, {meshes} visible meshes, {surfaces} surfaces)", on => { foreach (var n in entities) n.Visible = on; });
+        await Without("HUD", on => _main.Hud!.SetVisible(on));
+        if (_main.FindChild("DamageNumbers", true, false) is CanvasLayer numbers) await Without($"damage numbers ({_main.Fx?.Shown} drawn)", on => numbers.Visible = on);
+        if (_main.Map?.Scene is { } scene) await Without("map scene", on => scene.Visible = on);
+    }
+
+    /// <summary>This frame's draw calls by pass (3D, shadow, canvas), with the entity counts that explain them.</summary>
+    private (long Opaque, long Shadow, long Canvas, int OnScreen, int Lod0, int Lod1) PassDraws()
+    {
+        var vp = _main.GetViewport().GetViewportRid();
+        long Info(RenderingServer.ViewportRenderInfoType type) => RenderingServer.ViewportGetRenderInfo(vp, type, RenderingServer.ViewportRenderInfo.DrawCallsInFrame);
+        var (lod0, lod1, _) = _main.Presenter!.DetailCounts();
+        return (Info(RenderingServer.ViewportRenderInfoType.Visible), Info(RenderingServer.ViewportRenderInfoType.Shadow), Info(RenderingServer.ViewportRenderInfoType.Canvas), CountOnScreen(), lod0, lod1);
+    }
+
+    /// <summary>Lowest height that counts as "on the hill" for the hill run.</summary>
+    private const float MinHillHeight = 0.2f;
+
+    /// <summary>Where inside a cell the hill run tries to tap (fractions of a cell), away from the edges.</summary>
+    private static readonly float[] HillSamples = { 0.5f, 0.2f, 0.8f };
+
     private async Task DeathRunAsync()
     {
         await LoginAsync();
@@ -228,6 +384,7 @@ public sealed class AutoRun
         var shot = false;
         var frames = 0;
         double worstMs = 0, maxTriangles = 0, maxDraws = 0, sumDraws = 0, sumTriangles = 0, sumOnScreen = 0;
+        var peak = (Opaque: 0L, Shadow: 0L, Canvas: 0L, OnScreen: 0, Lod0: 0, Lod1: 0);
         var clock = Stopwatch.StartNew();
         var last = clock.Elapsed.TotalMilliseconds;
         while (clock.Elapsed.TotalSeconds < 15)
@@ -238,6 +395,7 @@ public sealed class AutoRun
             last = now;
             var draws = Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
             var triangles = Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame);
+            if (draws > maxDraws) peak = PassDraws();
             maxDraws = Math.Max(maxDraws, draws);
             maxTriangles = Math.Max(maxTriangles, triangles);
             sumDraws += draws;
@@ -279,6 +437,8 @@ public sealed class AutoRun
         Print($"measure: draw calls avg {sumDraws / frames:0.0}, max {maxDraws:0}; triangles avg {sumTriangles / frames:0}, max {maxTriangles:0}; ground {_main.Map!.Triangles}");
         Print($"measure: frame path allocated {quietBytes} bytes in {quietFrames} frames with no message; {busyBytes} bytes in {busyFrames} frames with messages");
         Print($"measure: combat {impacts} impacts in {seconds:0.0} s ({impacts / seconds:0.0}/s; {dealt} dealt, {taken} taken, {crits} crits), at most {maxNumbers} numbers ({maxShown} drawn), {maxEffects} effects and {maxPending} pending hits at once; {World.Combat.Dropped - droppedBefore} hits dropped, {Session.Numbers.DroppedForCap} numbers dropped for the cap, {_main.Fx?.Totals.Effects} effects started");
+        await BreakdownAsync();
+        Print($"measure: peak frame by pass: 3D {peak.Opaque}, shadow {peak.Shadow}, canvas (HUD, numbers) {peak.Canvas}; {peak.OnScreen} entities on screen, visuals at LOD0 {peak.Lod0}, LOD1 {peak.Lod1}");
         Print($"measure: draw calls avg {(calmFrames > 0 ? calmDraws / calmFrames : 0):0.0} in {calmFrames} frames with no number or effect on screen, {(fxFrames > 0 ? fxDraws / fxFrames : 0):0.0} in {fxFrames} frames with some");
         Print($"measure: static memory {OS.GetStaticMemoryUsage() / (1024 * 1024)} MB; video {Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / (1024 * 1024):0} MB; adapter {RenderingServer.GetVideoAdapterName()}");
         if (!shot) await ShotAsync();

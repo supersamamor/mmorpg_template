@@ -7,7 +7,8 @@ using Godot;
 namespace Game.Client.Scene;
 
 /// <summary>
-/// Reads the view model and draws it, and nothing else: entity visuals, one batched layer of HP bars, the tap marker and the target ring. It touches
+/// Reads the view model and draws it, and nothing else: entity visuals, one batched layer of HP bars, one batched layer of the rings under the player and
+/// under ground items this client may pick up (T-220: a ring each was one draw call, and a crowd fight leaves many drops), the tap marker and the target ring. It touches
 /// only what changed, so a still scene costs a few comparisons (§9), and it allocates nothing per frame after warm-up.
 /// </summary>
 public sealed class WorldPresenter
@@ -22,6 +23,7 @@ public sealed class WorldPresenter
     private readonly GroundHeights _ground;
     private readonly DetailPlanner _planner;
     private readonly MultiMesh _bars;
+    private readonly MultiMesh _rings;
     private readonly MeshInstance3D _marker;
     private readonly MeshInstance3D _ring;
     private bool[] _fullRate = new bool[64];
@@ -79,6 +81,22 @@ public sealed class WorldPresenter
         {
             Multimesh = _bars,
             MaterialOverride = new ShaderMaterial { Shader = shader },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            CustomAabb = new Aabb(new Vector3(-4096, -8, -4096), new Vector3(8192, 16, 8192)),
+        });
+
+        _rings = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseColors = true,
+            Mesh = new TorusMesh { InnerRadius = 0.5f, OuterRadius = 0.62f, Rings = 20, RingSegments = 4 },
+            InstanceCount = MaxBars,
+            VisibleInstanceCount = 0,
+        };
+        parent.AddChild(new MultiMeshInstance3D
+        {
+            Multimesh = _rings,
+            MaterialOverride = new StandardMaterial3D { VertexColorUseAsAlbedo = true, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded },
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             CustomAabb = new Aabb(new Vector3(-4096, -8, -4096), new Vector3(8192, 16, 8192)),
         });
@@ -156,7 +174,7 @@ public sealed class WorldPresenter
                 visual.SetPose((float)entity.X, _ground.At(entity.X, entity.Z), (float)entity.Z, (float)entity.Yaw);
                 entity.PoseDirty = false;
                 _replan = true; // distances to the player changed
-                if (entity.Hp.HasValue) _barsDirty = true;
+                if (entity.Hp.HasValue || entity.Mine) _barsDirty = true; // bars and rings follow
             }
             visual.SetMotion(entity.IsWalking, entity.AttackCount, entity.HitCount);
             if (entity.DeathFxPending)
@@ -250,6 +268,18 @@ public sealed class WorldPresenter
             count++;
         }
         _bars.VisibleInstanceCount = count;
+
+        var rings = 0;
+        for (var i = 0; i < entities.Count && rings < MaxBars; i++)
+        {
+            var entity = entities[i];
+            var own = entity.Id == ownId;
+            if (!own && !entity.Mine) continue;
+            _rings.SetInstanceTransform(rings, new Transform3D(Basis.Identity, new Vector3((float)entity.X, _ground.At(entity.X, entity.Z) + 0.03f, (float)entity.Z)));
+            _rings.SetInstanceColor(rings, own ? PlaceholderColors.Own : PlaceholderColors.ItemMine);
+            rings++;
+        }
+        _rings.VisibleInstanceCount = rings;
     }
 
     private void SyncMarkers()

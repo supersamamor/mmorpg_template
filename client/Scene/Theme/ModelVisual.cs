@@ -15,10 +15,7 @@ public sealed class ModelVisual : IEntityVisual
     private const string Lod1Name = "Body_LOD1";
 
     private static Mesh? s_markerMesh;
-    private static Mesh? s_ringMesh;
     private static StandardMaterial3D? s_markerMaterial;
-    private static StandardMaterial3D? s_ownMaterial;
-    private static StandardMaterial3D? s_mineMaterial;
 
     private readonly ModelStore _store;
     private readonly ThemeCatalog _catalog;
@@ -28,7 +25,6 @@ public sealed class ModelVisual : IEntityVisual
     private Node3D? _content;
     private MeshInstance3D? _lod0;
     private MeshInstance3D? _lod1;
-    private MeshInstance3D? _ring;
     private AnimationPlayer? _player;
     private AnimSet? _anims;
     private bool _ready;
@@ -83,7 +79,6 @@ public sealed class ModelVisual : IEntityVisual
         Root.Visible = false;
         SetFade(0);
         _player?.Stop();
-        if (_ring is not null) _ring.Visible = false;
         if (_using && _resolution.Path is not null) _store.Unuse(_resolution.Path);
         _using = false;
         _look = default;
@@ -246,23 +241,6 @@ public sealed class ModelVisual : IEntityVisual
         var shadow = _look.Own ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off; // §9: the player only
         if (_lod0 is not null) _lod0.CastShadow = shadow;
         if (_lod1 is not null) _lod1.CastShadow = shadow;
-
-        if (_look.Own || _look.Mine)
-        {
-            if (_ring is null)
-            {
-                s_ringMesh ??= new TorusMesh { InnerRadius = 0.5f, OuterRadius = 0.62f, Rings = 20, RingSegments = 4 };
-                s_ownMaterial ??= new StandardMaterial3D { AlbedoColor = PlaceholderColors.Own, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
-                s_mineMaterial ??= new StandardMaterial3D { AlbedoColor = PlaceholderColors.ItemMine, ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
-                _ring = new MeshInstance3D { Mesh = s_ringMesh, Position = new Vector3(0, 0.03f, 0), CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Name = "Ring" };
-                Root.AddChild(_ring);
-            }
-            _ring.MaterialOverride = _look.Own ? s_ownMaterial : s_mineMaterial;
-            _ring.Visible = true;
-        }
-        else if (_ring is not null)
-        {
-            _ring.Visible = false;
-        }
+        // The rings under the player and under items this client may take are drawn by WorldPresenter, all in one multimesh (T-220).
     }
 }

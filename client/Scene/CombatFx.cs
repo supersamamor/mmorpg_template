@@ -10,9 +10,11 @@ namespace Game.Client.Scene;
 /// <summary>
 /// Draws what a landed hit leaves behind (T-303, §7.6): floating damage numbers and small pooled effects at the hit, the death effect and the level-up effect.
 /// Presentation only. Everything is pooled and capped, and a frame with nothing playing costs a few comparisons (§9 battery): no node is touched, nothing moves.
-/// Numbers are HUD-layer labels anchored to the world through the camera, so their size is dp times the UI scale like the rest of the HUD.
+/// Numbers are anchored to the world through the camera on a canvas layer above the HUD, so their size is dp times the UI scale like the rest of the HUD.
+/// All numbers are drawn by one canvas item, outlines first and then fills, each grouped by font size, so the engine batches them into a few draw
+/// calls however many are up (T-220: a label each cost about two calls, up to 32 at the cap of 16, the largest part of a crowd fight's peak, §9).
 /// </summary>
-public sealed class CombatFx
+public sealed partial class CombatFx
 {
     // Sizes in dp at UI scale 1.
     private static readonly double[] FontDp = { 26, 38, 22, 26, 38, 22, 18, 26, 16 };
@@ -28,10 +30,10 @@ public sealed class CombatFx
     private readonly ThemeCatalog _catalog;
     private readonly Node3D _parent;
     private readonly CanvasLayer _layer = new() { Layer = 1, Name = "DamageNumbers" };
-    private readonly Label[] _labels;
-    private readonly NumberStyle[] _labelStyles;
-    private readonly string?[] _labelTexts;
-    private readonly LabelSettings[] _settings = new LabelSettings[NumberStyles.Count];
+    private readonly NumberCanvas _canvas;
+    private readonly Drawn[] _drawn;
+    private readonly int[] _fontSizes = new int[NumberStyles.Count];
+    private int _outline;
     private readonly Dictionary<string, PackedScene?> _scenes = new();
     private readonly Dictionary<string, Stack<Fx>> _free = new();
     private readonly List<Fx> _active = new();
@@ -48,22 +50,10 @@ public sealed class CombatFx
         _camera = camera;
         _hud = hud;
         _catalog = catalog;
-        _labels = new Label[session.Numbers.Capacity];
-        _labelStyles = new NumberStyle[_labels.Length];
-        _labelTexts = new string?[_labels.Length];
+        _drawn = new Drawn[session.Numbers.Capacity];
         parent.AddChild(_layer);
-        for (var i = 0; i < _labels.Length; i++)
-        {
-            _labels[i] = new Label
-            {
-                Visible = false,
-                MouseFilter = Control.MouseFilterEnum.Ignore,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                AutowrapMode = TextServer.AutowrapMode.Off,
-            };
-            _layer.AddChild(_labels[i]);
-        }
+        _canvas = new NumberCanvas(this) { Visible = false, MouseFilter = Control.MouseFilterEnum.Ignore, Name = "Numbers" };
+        _layer.AddChild(_canvas);
         _levelUpSerial = session.Ui.LevelUpSerial;
         session.World.Combat.Impact += OnImpact;
         // Resolve the scenes now, on the main thread (they are tiny, and headless loading must stay on it, §7.7).
@@ -78,10 +68,9 @@ public sealed class CombatFx
     {
         var size = _layer.GetViewport().GetVisibleRect().Size;
         var count = 0;
-        for (var i = 0; i < _labels.Length; i++)
+        for (var i = 0; i < _shown; i++)
         {
-            if (!_labels[i].Visible) continue;
-            var centre = _labels[i].Position + _labels[i].Size / 2;
+            var centre = _drawn[i].Centre;
             if (centre.X > size.X * inset && centre.X < size.X * (1 - inset) && centre.Y > size.Y * inset && centre.Y < size.Y * (1 - inset)) count++;
         }
         return count;
@@ -98,10 +87,9 @@ public sealed class CombatFx
     /// <summary>Where the first drawn number is and what it looks like (for the scripted run's log).</summary>
     public string Describe()
     {
-        for (var i = 0; i < _labels.Length; i++)
-            if (_labels[i].Visible)
-                return $"label {i} \"{_labels[i].Text}\" at {_labels[i].Position} size {_labels[i].Size} modulate {_labels[i].Modulate} font {_labels[i].LabelSettings?.FontSize} in tree {_labels[i].IsVisibleInTree()}; viewport {_hud.Metrics.CanvasWidth:0}x{_hud.Metrics.CanvasHeight:0}";
-        return "no label visible";
+        if (_shown == 0) return "no number drawn";
+        var d = _drawn[0];
+        return $"number \"{d.Text}\" centred at {d.Centre} font {_fontSizes[(int)d.Style]} alpha {d.Alpha:0.00} scale {d.Scale:0.00} in tree {_canvas.IsVisibleInTree()}; viewport {_hud.Metrics.CanvasWidth:0}x{_hud.Metrics.CanvasHeight:0}";
     }
 
     /// <summary>A hit landed: show its effect. (The number is started by the session, from the same event.)</summary>
@@ -149,76 +137,75 @@ public sealed class CombatFx
         _shown = 0;
         for (var i = 0; i < slots.Length; i++)
         {
-            var label = _labels[i];
             ref readonly var slot = ref slots[i];
-            if (!slot.Active)
-            {
-                if (label.Visible) label.Visible = false;
-                continue;
-            }
+            if (!slot.Active) continue;
             var world = new Vector3((float)slot.X, AnchorHeight, (float)slot.Z);
-            if (camera.IsPositionBehind(world))
-            {
-                if (label.Visible) label.Visible = false;
-                continue;
-            }
+            if (camera.IsPositionBehind(world)) continue;
             var t = (float)((now - slot.Start) / lifetime);
             var screen = camera.UnprojectPosition(world);
-            if (screen.X < -margin || screen.Y < -margin || screen.X > canvas.X + margin || screen.Y > canvas.Y + margin)
-            {
-                if (label.Visible) label.Visible = false; // over a target outside the view: nothing to draw
-                continue;
-            }
+            if (screen.X < -margin || screen.Y < -margin || screen.X > canvas.X + margin || screen.Y > canvas.Y + margin) continue; // over a target outside the view: nothing to draw
             var rise = (float)(RiseDp * units) * (1f - (1f - t) * (1f - t)); // eases out
-            var size = (float)(FontDp[(int)slot.Style] * units);
-            if (!ReferenceEquals(_labelTexts[i], slot.Text))
-            {
-                _labelTexts[i] = slot.Text; // the engine's Text getter allocates, so the last text is kept here
-                label.Text = slot.Text;
-            }
-            if (!label.Visible || _labelStyles[i] != slot.Style)
-            {
-                _labelStyles[i] = slot.Style;
-                label.LabelSettings = _settings[(int)slot.Style];
-            }
-            var width = size * 6f;
-            var height = size * 1.6f;
-            label.Size = new Vector2(width, height);
-            label.PivotOffset = new Vector2(width / 2, height / 2);
-            label.Position = new Vector2(screen.X - width / 2 + (float)(slot.Lane * LaneDp * units), screen.Y - rise - height / 2);
             var pop = NumberStyles.IsCrit(slot.Style) && t < 0.2f ? 1f + (0.2f - t) * 2.5f : 1f; // a crit lands with a small pop
-            label.Scale = new Vector2(pop, pop);
-            label.Modulate = new Color(1, 1, 1, t < 0.6f ? 1f : (1f - t) / 0.4f);
-            label.Visible = true;
-            _shown++;
+            _drawn[_shown++] = new Drawn(
+                slot.Text, slot.Style, new Vector2(screen.X + (float)(slot.Lane * LaneDp * units), screen.Y - rise), pop, t < 0.6f ? 1f : (1f - t) / 0.4f);
         }
+        _canvas.Visible = _shown > 0;
+        if (_shown > 0) _canvas.QueueRedraw();
+    }
+
+    /// <summary>One number to draw this frame: its text, style, centre on the canvas, crit pop scale and opacity.</summary>
+    private readonly record struct Drawn(string Text, NumberStyle Style, Vector2 Centre, float Scale, float Alpha);
+
+    /// <summary>Draws this frame's numbers: every outline, then every fill, each pass in font-size order, so equal glyph textures sit next to each other and batch.</summary>
+    private void Draw(Control canvas)
+    {
+        var font = canvas.GetThemeDefaultFont();
+        var outline = new Color(0, 0, 0, 0.9f);
+        for (var pass = 0; pass < 2; pass++)
+        {
+            for (var style = 0; style < NumberStyles.Count; style++)
+            {
+                var size = _fontSizes[style];
+                if (size <= 0) continue;
+                for (var i = 0; i < _shown; i++)
+                {
+                    ref readonly var d = ref _drawn[i];
+                    if ((int)d.Style != style) continue;
+                    var extent = font.GetStringSize(d.Text, HorizontalAlignment.Left, -1, size);
+                    var baseline = new Vector2(-extent.X / 2, font.GetAscent(size) - extent.Y / 2);
+                    canvas.DrawSetTransform(d.Centre, 0, new Vector2(d.Scale, d.Scale));
+                    if (pass == 0) canvas.DrawStringOutline(font, baseline, d.Text, HorizontalAlignment.Left, -1, size, _outline, new Color(outline, outline.A * d.Alpha));
+                    else canvas.DrawString(font, baseline, d.Text, HorizontalAlignment.Left, -1, size, new Color(ColorOf(d.Style), d.Alpha));
+                }
+            }
+        }
+        canvas.DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+    }
+
+    /// <summary>The one canvas item all numbers are drawn on.</summary>
+    private sealed partial class NumberCanvas : Control
+    {
+        private readonly CombatFx _owner;
+
+        public NumberCanvas(CombatFx owner) => _owner = owner;
+
+        public override void _Draw() => _owner.Draw(this);
     }
 
     private void HideNumbers()
     {
-        for (var i = 0; i < _labels.Length; i++) _labels[i].Visible = false;
+        _canvas.Visible = false;
         _shown = 0;
     }
 
-    /// <summary>The label styles follow the UI scale: rebuilt only when the player changes the size.</summary>
+    /// <summary>The font sizes follow the UI scale: worked out again only when the player changes the size.</summary>
     private void EnsureSettings()
     {
         var scale = _hud.UnitsPerDp * _hud.Scale;
         if (scale == _settingsScale) return;
         _settingsScale = scale;
-        for (var i = 0; i < NumberStyles.Count; i++)
-        {
-            var style = (NumberStyle)i;
-            _settings[i] = new LabelSettings
-            {
-                FontSize = (int)System.Math.Round(FontDp[i] * scale),
-                FontColor = ColorOf(style),
-                OutlineSize = (int)System.Math.Max(2, System.Math.Round(4 * scale)),
-                OutlineColor = new Color(0, 0, 0, 0.9f),
-            };
-        }
-        for (var i = 0; i < _labels.Length; i++)
-            if (_labels[i].Visible) _labels[i].LabelSettings = _settings[(int)_labelStyles[i]];
+        for (var i = 0; i < NumberStyles.Count; i++) _fontSizes[i] = (int)System.Math.Round(FontDp[i] * scale);
+        _outline = (int)System.Math.Max(2, System.Math.Round(4 * scale));
     }
 
     private static Color ColorOf(NumberStyle style)

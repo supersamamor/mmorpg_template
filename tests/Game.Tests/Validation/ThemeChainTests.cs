@@ -5,7 +5,7 @@ using Game.Content.Validation;
 namespace Game.Tests.Validation;
 
 /// <summary>
-/// The asset-key and <c>fallbacks</c> checks resolve keys the way the client does (T-219, ARCHITECTURE §7.7): the active theme, then <c>default</c>.
+/// The asset-key, <c>fallbacks</c> and audio-table checks resolve keys the way the client does (T-219, ARCHITECTURE §7.7): the active theme, then <c>default</c>.
 /// Each test builds a temp repo layout (<c>content/</c> beside <c>themes/</c>) with a partial theme that lacks one key the content uses.
 /// </summary>
 public class ThemeChainTests : IDisposable
@@ -105,6 +105,68 @@ public class ThemeChainTests : IDisposable
 
         issue.File.ShouldEndWith(".yaml");
         issue.Path.ShouldNotBeNullOrEmpty();
+    }
+
+    /// <summary>
+    /// Writes theme "sounds": a truly partial manifest with no entries of its own except one new sound, and audio tables that point at
+    /// <paramref name="dieKey"/> (category <c>monster.die</c>) and <paramref name="levelUpKey"/> (event <c>LevelUp</c>). Everything else comes from <c>default</c>.
+    /// </summary>
+    private void WriteSoundOnlyTheme(string dieKey, string levelUpKey)
+    {
+        var node = new JsonObject
+        {
+            ["sfx.monster.die.custom"] = new JsonObject { ["file"] = "audio/sfx/custom_die.ogg" },
+            ["audio"] = new JsonObject
+            {
+                ["defaults"] = new JsonObject { ["monster.die"] = dieKey, ["monster.hit"] = "sfx.monster.die.custom" },
+                ["events"] = new JsonObject { ["LevelUp"] = levelUpKey },
+            },
+        };
+        Directory.CreateDirectory(Path.Combine(_temp, "themes", "sounds"));
+        File.WriteAllText(ManifestPath(Path.Combine(_temp, "themes"), "sounds"), node.ToJsonString());
+    }
+
+    [Fact]
+    public void A_partial_theme_s_audio_tables_may_name_sounds_only_default_has()
+    {
+        // T-220, ADR-002 row 149: the audio rule resolves table targets through the same chain as LoadChainKeys.
+        WriteSoundOnlyTheme("sfx.monster.die.slime", "sfx.event.level_up");
+        AssetManifest.LoadKeys(ManifestPath(Path.Combine(_temp, "themes"), "sounds")).ShouldNotContain("sfx.monster.die.slime");
+
+        Errors("sounds").ShouldBeEmpty(); // content sound keys (gel slime's sounds.hit/die) also resolve through default
+    }
+
+    [Fact]
+    public void A_partial_theme_s_audio_default_in_neither_theme_fails_with_file_and_path()
+    {
+        WriteSoundOnlyTheme("sfx.monster.die.nowhere", "sfx.event.level_up");
+
+        var issue = Errors("sounds").Single();
+
+        issue.Code.ShouldBe(ValidationCodes.AssetMissing);
+        issue.Path.ShouldBe("audio.defaults.monster.die");
+        issue.File.ShouldBe("themes/sounds/asset-manifest.json");
+        issue.Line.ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public void A_partial_theme_s_audio_event_in_neither_theme_fails()
+    {
+        WriteSoundOnlyTheme("sfx.monster.die.slime", "sfx.event.nowhere");
+
+        Errors("sounds").Single().Path.ShouldBe("audio.events.LevelUp");
+    }
+
+    [Fact]
+    public void A_content_sound_key_in_neither_theme_fails()
+    {
+        WriteSoundOnlyTheme("sfx.monster.die.slime", "sfx.event.level_up");
+        var path = ManifestPath(Path.Combine(_temp, "themes"), "default");
+        var node = JsonNode.Parse(File.ReadAllText(path))!.AsObject();
+        node.Remove("sfx.monster.hit.slime").ShouldBeTrue("test setup: gel slime's hit sound must be in the default manifest");
+        File.WriteAllText(path, node.ToJsonString());
+
+        Errors("sounds").ShouldContain(i => i.Code == ValidationCodes.AssetMissing && i.Message.Contains("sfx.monster.hit.slime") && i.File.EndsWith(".yaml"));
     }
 
     [Fact]
