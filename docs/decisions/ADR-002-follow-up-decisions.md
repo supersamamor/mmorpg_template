@@ -294,3 +294,12 @@ When writing these prompts, copy in the decisions listed:
 | 161 | Godot 4.7.2 can't read the iOS silent switch or request Android audio focus from C#. `PlatformAudio` reads an optional `GameAudioPlatform` singleton; no plugin exists yet (T-305) | **→ Backlog:** small native plugins for iOS and Android, done together with the phone test (T-005). Until then the log says plainly that both are not handled. |
 | 162 | `BannedSymbolsTests` failed once after 7 minutes while other sessions were building (T-305) | **Decided:** load-related. It passed 6 of 6 runs at merge. Watch it; it needs its own fix if it fails on an idle machine. |
 | 163 | The headless release export hung at exit once at merge, with the file already written. `run-e2e.ps1` then ran that file even though Godot never exited, and a stale exe from an earlier run would also be accepted (T-305 merge) | **→ T-220:** time out the export at exit, check its exit code, and delete the old exe before exporting. |
+
+## Addendum — T-220 (2026-11-15)
+| # | Question (source) | Decision |
+|---|---|---|
+| 164 | Crowd draw calls: characters were already one call each. The excess came from about 18 loot-bag rings (one call each) and damage numbers (about 2 calls each). Rings are now one multimesh and numbers one canvas item. Peak 116–126 → 89–94 with 40 characters fighting, on an integrated desktop GPU (T-220) | **Decided: accepted**, closes row 155. Device numbers wait for the phone test (row 112). |
+| 165 | The HUD costs a steady 25–31 draw calls, a quarter of the budget (T-220) | **→ Backlog:** measure on a phone first, as for row 138. Batch the HUD only if a device shows a need. |
+| 166 | The export hang at exit was not reproduced (12 of 12 exited 0). `run-e2e.ps1` now deletes the old export, fails on a non-zero exit code, and fails with `EXPORT HUNG AT EXIT` after 60 s. Stopping Godot's console wrapper left `game-client.exe` running and locking the file; the script now stops it too (T-220) | **Decided: accepted**, closes row 163. |
+| 167 | Scripted hill tap: `-Run hill` taps a point on cell (23, 13) that a flat-ground pick reads as (23, 12), and asserts the server walks there (T-220) | **Decided: accepted**, in `-Run all`. Closes row 148's follow-up. |
+| 168 | The audio rule already resolved keys through the theme chain; four partial-theme tests now lock that in (T-220) | **Decided: no gap**, closes row 149. |

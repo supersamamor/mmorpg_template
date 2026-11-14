@@ -277,13 +277,15 @@ It waits for 40 entities on screen, samples 15 s and prints fps, draw calls, tri
 |--------|----------------|--------|
 | `play` (default) | login, walk, kill, drop, dropped socket, resume, background, logout | real content |
 | `warp` | walk to the warp and arrive on the second map | weak-monster copy: on real content, aggressive monsters between the start and the warp kill a new character, which is intended game danger |
+| `hill` | tap a point on cell (23, 13) on the sample hill, which the old flat-ground pick read as (23, 12): the server walks the character to exactly (23, 13) (T-220) | weak-monster copy |
+| `ui` | the HUD layout fits every screen, notch and UI scale; pinch and wheel zoom clamp; touches on UI never reach the world; long-press shows the info panel without a tap; the hotbar sends nothing; the UI-scale and sound settings are stored (T-211, T-305) | default |
 | `resume_failed` | the socket drops, the client's first retry comes after the server's grace period (2 s vs 5 s): the resume gets `bye resume_failed`, the client goes to the login screen and does not retry | `--net-grace-period-ms 2000` |
 | `replaced` | a second connection resumes the character with the client's token: the client gets `bye replaced`, stops, and does not reconnect | default |
 | `shutdown` | the server stops itself (`--duration 20`): `bye shutdown`, the retry notice, token dropped; the script starts a second server and the client logs in again by itself | default, twice |
 | `grace_expiry` | the script kills the server: the client resumes with backoff until its own deadline (last heard + 5 s + 1 s), then `SessionExpired` and the login screen | default, killed |
 | `bye` | the four runs above | |
-| `release` | exports a desktop **release** build (Windows, or Linux on CI), runs it with `ws://` and `--set allow_cleartext=true` (refused, refusal screen, exit 0), then with `wss://` (passes the address check) | none |
-| `all` | `play`, `warp`, the four bye runs and `release` | |
+| `release` | exports a desktop **release** build (Windows, or Linux on CI), runs it with `ws://` and `--set allow_cleartext=true` (refused, refusal screen, exit 0), then with `wss://` (passes the address check). The old export is deleted first; a non-zero export exit code, or Godot not exiting 60 s after writing every file (`EXPORT HUNG AT EXIT`), fails the run | none |
+| `all` | `play`, `warp`, `hill`, `ui`, the four bye runs and `release` | |
 | `death` | killed on real content, drops the socket while dead, death screen again, respawn (`-Monster monster.gel_slime`; up to 5 minutes, not in `all`) | real content |
 
 `-EasyMonsters` runs the whole `play` run, warp included, on the weak-monster copy, as T-206 did. The scripts find Godot with `-Godot`, then `$env:GODOT`, then the winget install, and run in Windows PowerShell 5.1 and PowerShell 7.
