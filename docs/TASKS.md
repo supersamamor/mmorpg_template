@@ -90,6 +90,12 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-305 | Client audio: theme resolution and fallback, music crossfade, voice pool and cooldowns, buses and volume settings, mobile background / silent switch / audio focus | Claude Code | Sonnet 5.5 | [T-305](../tasks/prompts/T-305.md) | T-207, T-304 | Review | Proven by a debug trace until T-306 sounds exist |
 | T-309 | Early-game balance: a new character beats a Gel Slime without spending points; pinned matchups + seeded duel sim | Claude Code | Sonnet 5.5 | [T-309](../tasks/prompts/T-309.md) | T-307, T-112 | Review | Found by the T-307 smoke test; ADR-002 #99 |
 
+## Phase 4 — Items
+
+| ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
+|----|------|-------|-------|--------|------------|--------|-------|
+| T-401 | Inventory, equip slots, weight: pick up, use, equip, unequip, drop; own-inventory messages; HUD inventory panel | Claude Code | Opus 5.5 | [T-401](../tasks/prompts/T-401.md) | T-302, T-307, T-211, T-305 | In Progress | Touches `Net/**` for the item messages only (approved by the user 2026-11-15); ADR-002 #160 |
+
 ## Phase 7 — Persistence & accounts
 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
@@ -101,7 +107,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Phase | Task | Agent | Model | Status |
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
-| T-401 | 4 | Inventory, equip slots, weight | Claude Code | Sonnet 5.5 | Backlog |
 | T-402 | 4 | Cards, refine | Claude Code | Sonnet 5.5 | Backlog |
 | T-403 | 4 | Modular 3D equipment visuals (skinned meshes + attach points) | Claude Code | Sonnet 5.5 | Backlog |
 | T-501 | 5 | Effect runner + statuses | Claude Code | Opus 5.5 | Backlog |
