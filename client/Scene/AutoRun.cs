@@ -167,19 +167,26 @@ public sealed class AutoRun
               $"own weapon {Own().Weapon}");
         Check(Own().Weapon == Game.Shared.Vocabulary.WeaponTypes.Unarmed, "the own record says unarmed");
         var hits = new List<int>();
+        var kinds = new List<(string Kind, int Amount)>();   // T-402: hits by monster kind, so the refine check compares like with like
         World.Combat.Impact += (in HitImpact impact) =>
         {
-            if (impact.Attacker == World.OwnId && impact.Kind == HitKind.Hit) hits.Add(impact.Amount);
+            if (impact.Attacker != World.OwnId || impact.Kind != HitKind.Hit) return;
+            hits.Add(impact.Amount);
+            kinds.Add((World.Find(impact.Target)?.DisplayKey ?? "?", impact.Amount));
         };
         var acquired = 0;
         var used = 0;
         var equipped = 0;
+        var socketed = 0;
         Session.InventoryChanged += change =>
         {
             if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.PickedUp) acquired++;
             if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.Used) used++;
             if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.Equipped) equipped++;
+            if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.CardInserted) socketed++;
         };
+        var refines = new List<RefineResultMessage>();
+        Session.RefineResultReceived += refines.Add;
 
         var open = NearestOpenCellOutsideSafeZones(CurrentMap(), Own().Cell);
         await TapCellAsync(open);
@@ -280,9 +287,119 @@ public sealed class AutoRun
         Check((Session.Inventory.Find(potion.Id)?.Quantity ?? 0) == quantity - 1, "one potion used up");
         Press(hud.BagButton);
         await FramesAsync(2);
+        await CardAndRefineAsync(hud, kinds, () => socketed, refines);
+
         var stats = _main.Audio!.Director.Stats;
         Print($"items: audio played {stats.Played}; rev {Session.Inventory.Rev}, stale {Session.Inventory.Stale}");
         Check(!Session.Inventory.Stale, "no change was missed");
+    }
+
+    /// <summary>
+    /// T-402's step of the items run (the content copy's kills also drop armour with a card slot, a card for it and the refine material): put the armour on,
+    /// socket the card into it through the bag (Set card, then the armour), see max HP go up; select the worn weapon by its slot, press Refine, read the offer
+    /// from the bundle, confirm, see the success and +1 in the bag, and see the hits on the same kind of monster get stronger. Every step goes through the HUD.
+    /// No content id is named here: the card is whatever card is carried, the armour whatever it is offered for, the material the bundle's first refine step.
+    /// </summary>
+    private async Task CardAndRefineAsync(Hud hud, List<(string Kind, int Amount)> kinds, Func<int> socketed, List<RefineResultMessage> refines)
+    {
+        var bundle = _main.Bundle!;
+        var dirk = Session.Inventory.InSlot(EquipSlots.Weapon)!;
+        Check(bundle.RefineStepTo(dirk.Refine + 1) is not null, "the bundle has a refine step for the weapon");
+        var shardId = bundle.RefineStepTo(dirk.Refine + 1)!.Material;
+        InventoryEntryRecord? Card() => Session.Inventory.Entries.FirstOrDefault(e => bundle.Item(e.Item)?.Kind == ItemKinds.Card);
+        InventoryEntryRecord? Armour() => Card() is { } c
+            ? Session.Inventory.CardTargets(bundle.Item(c.Item), bundle.Item).FirstOrDefault(e => e.Slot is null && bundle.Item(e.Item)?.WeaponType is null)
+            : null;
+        bool Ready() => Armour() is not null && Session.Inventory.Carried(shardId) >= bundle.RefineStepTo(dirk.Refine + 1)!.Quantity;
+        for (var attempt = 0; attempt < 6 && !Ready(); attempt++)
+        {
+            await HuntOneAsync(60);
+            await SecondsAsync(1);
+            for (var pick = 0; pick < 6 && FindDrop() is { } drop; pick++)
+            {
+                var rev = Session.Inventory.Rev;
+                if (!OnScreen(drop))
+                {
+                    await TapCellAsync(drop.Cell);
+                    await SecondsAsync(1);
+                }
+                await TapWorldAsync(new Vector3((float)drop.X, 0.15f, (float)drop.Z));
+                var clock = Stopwatch.StartNew();
+                while (clock.Elapsed.TotalSeconds < 8 && Session.Inventory.Rev == rev && World.Find(drop.Id) is not null) await FrameAsync();
+            }
+        }
+        Check(Ready(), "carrying armour, a card that fits it and the refine material");
+        var bag = hud.Bag!;
+        var card = Card()!;
+        var vest = Armour()!;
+        var vestId = vest.Item;
+        var cardId = card.Item;
+        Print($"items: card {cardId}, armour {vestId}, material {shardId} x{Session.Inventory.Carried(shardId)}");
+
+        // Wear the armour (its DEF is not on the wire; the card's max HP is).
+        Press(hud.BagButton);
+        await FramesAsync(3);
+        Press(bag.ItemButtons.First(b => b.Entry == vest.Id).Button);
+        await FramesAsync(2);
+        Press(bag.Actions.Equip);
+        await UntilAsync(() => Session.Inventory.Find(vest.Id)?.Slot is not null, 10, "the armour on");
+        var vestSlot = Session.Inventory.Find(vest.Id)!.Slot!;
+        await SecondsAsync(0.5);
+        var maxHp = World.Vitals!.MaxHp;
+
+        // Socket the card: select it, Set card, the worn armour is offered, tap it.
+        Press(bag.ItemButtons.First(b => b.Entry == card.Id).Button);
+        await FramesAsync(2);
+        Check(bag.CardAndRefine.InsertCard.Visible, "a selected card offers Set card");
+        Press(bag.CardAndRefine.InsertCard);
+        await FramesAsync(2);
+        var targets = bag.CardTargetButtons.Where(b => b.Button.Visible).ToList();
+        Print($"items: the card is offered for {string.Join(", ", targets.Select(t => "\"" + t.Button.Text + "\""))}; hint \"{bag.HintText}\"");
+        Check(targets.Any(t => t.Entry == vest.Id), "the worn armour is offered for the card");
+        Check(targets.All(t => t.Entry != dirk.Id), "the weapon is not (the card does not fit it)");
+        Press(targets.First(t => t.Entry == vest.Id).Button);
+        await UntilAsync(() => socketed() == 1, 10, "the card socketed");
+        Check(Session.Inventory.Find(vest.Id)!.Cards?.Contains(cardId) == true, "the armour holds the card");
+        Check(Session.Inventory.Find(card.Id) is null, "the card unit is used up");
+        await UntilAsync(() => World.Vitals!.MaxHp > maxHp, 10, "max HP up from the card");
+        Print($"items: socketed {cardId} into {vestId}: max HP {maxHp} -> {World.Vitals!.MaxHp}; flash \"{Session.Ui.Flash}\"; {vestSlot} slot \"{bag.SlotButtons[vestSlot].Text}\"");
+
+        // Refine the worn weapon: tap its slot, Refine shows the bundle's next step, confirm.
+        var before = kinds.ToList();
+        Press(bag.SlotButtons[EquipSlots.Weapon]);
+        await FramesAsync(2);
+        Check(Session.Inventory.Selected == dirk.Id, "a tap on the weapon slot selects the weapon");
+        Check(bag.Actions.Unequip.Visible && bag.CardAndRefine.Refine.Visible, "and offers Take off and Refine");
+        Press(bag.CardAndRefine.Refine);
+        await FramesAsync(2);
+        var step = bundle.RefineStepTo(dirk.Refine + 1)!;
+        Print($"items: refine offer \"{bag.HintText}\"");
+        Check(bag.HintText.Contains(step.SuccessPercent + "%") && bag.HintText.Contains(bundle.NameOf(step.Material)), "the offer shows the bundle's chance and material");
+        Check(bag.CardAndRefine.Confirm.Visible && !bag.Actions.Unequip.Visible, "the offer waits for a confirmation");
+        Press(bag.CardAndRefine.Confirm);
+        await UntilAsync(() => refines.Count == 1, 10, "the refine result");
+        var result = refines[0];
+        Print($"items: refine result {result.Result} +{result.Refine}; flash \"{Session.Ui.Flash}\"; weapon slot \"{bag.SlotButtons[EquipSlots.Weapon].Text}\"");
+        Check(step.SuccessPercent < 100 || result.Result == RefineResults.Success, "a 100% step succeeds");
+        Check(result.Result == RefineResults.Success && result.Refine == dirk.Refine + 1, "the refine succeeded (the run needs refine.yaml's first step at 100%)");
+        await UntilAsync(() => Session.Inventory.Find(dirk.Id)?.Refine == dirk.Refine + 1, 10, "the bag shows the new level");
+        await FramesAsync(3);
+        Check(bag.SlotButtons[EquipSlots.Weapon].Text.Contains("+" + (dirk.Refine + 1)), "the weapon slot shows the new level");
+        Check(bag.SlotButtons[vestSlot].Text.Contains(bundle.NameOf(cardId)), "the armour's slot shows the card");
+        await ShotAsync("-bag-refined");
+        Press(hud.BagButton);
+        await FramesAsync(2);
+
+        // The same kind of monster now takes more per hit (refine reaches physical_damage as refine * 2).
+        var seen = before.Select(h => h.Kind).ToHashSet();
+        kinds.Clear();
+        for (var attempt = 0; attempt < 6 && !kinds.Any(h => seen.Contains(h.Kind)); attempt++) await HuntOneAsync(60);
+        var kind = kinds.Select(h => h.Kind).FirstOrDefault(seen.Contains);
+        Check(kind is not null, "hits on a kind of monster hit before the refine");
+        var then = before.Where(h => h.Kind == kind).Average(h => h.Amount);
+        var now = kinds.Where(h => h.Kind == kind).Average(h => h.Amount);
+        Print($"items: average hit on {kind} with +{dirk.Refine} {then:0.0}, with +{dirk.Refine + 1} {now:0.0}");
+        Check(now > then, "the refined weapon hits harder");
     }
 
     private static void Press(Button button) => button.EmitSignal(BaseButton.SignalName.Pressed);

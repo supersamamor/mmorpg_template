@@ -18,7 +18,8 @@ namespace Game.Tests.Server;
 
 /// <summary>
 /// One open map running movement, the spawner, combat, the inventory and (optionally) the AOI, with every event recorded. Players are wanderers with
-/// the test sheet; new characters start with nothing unless <c>startItems</c> says otherwise.
+/// the test sheet; new characters start with nothing unless <c>startItems</c> says otherwise. Refining uses <see cref="CardRefineRulesTests.Table"/>
+/// unless <c>refine</c> says otherwise.
 /// </summary>
 public sealed class InventoryRig
 {
@@ -32,7 +33,7 @@ public sealed class InventoryRig
     public readonly MonsterCatalog Catalog;
 
     public InventoryRig(IEnumerable<MonsterDef>? monsters = null, StartItemDef[]? startItems = null, int maxEntries = 5, bool aoi = false,
-        IEnumerable<DropTableDef>? drops = null, int width = 20, int height = 12)
+        IEnumerable<DropTableDef>? drops = null, int width = 20, int height = 12, RefineDef? refine = null)
     {
         var balance = TestCombat.Balance() with
         {
@@ -42,7 +43,7 @@ public sealed class InventoryRig
         Catalog = TestMonsters.Catalog((monsters ?? []).ToArray());
         var combat = TestCombat.Content(Catalog, balance, drops);
         var jobs = TestGrids.SampleContent.Jobs.All.ToDictionary(j => j.Id, j => j.WeaponTypes, StringComparer.Ordinal);
-        Items = new InventoryContent(InventoryRulesTests.Items(), balance, jobs);
+        Items = new InventoryContent(InventoryRulesTests.Items(), balance, jobs, refine: refine ?? CardRefineRulesTests.Table());
         var pipeline = new SystemPipeline()
             .Add(() => new MovementSystem(TestGrids.Roomy))
             .Add(() => new MonsterSpawnerSystem(Catalog, 0))

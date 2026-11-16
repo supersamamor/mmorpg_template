@@ -6,7 +6,8 @@
 #   .\client\run-e2e.ps1 -Run bye                      the four live bye runs: resume_failed, replaced, shutdown, grace_expiry (each can be named alone)
 #   .\client\run-e2e.ps1 -Run release                     exports a desktop RELEASE build and checks that it refuses ws:// and does not refuse wss://
 #   .\client\run-e2e.ps1 -Run items                       kill, pick up the drop, equip it through the bag, see the hits get stronger, use a potion (content copy: weak monsters
-#                                                         that always drop a dagger and a potion, new characters start with nothing) (T-401)
+#                                                         that always drop a dagger, a potion, a vest, a card and a temper shard; new characters start with nothing) (T-401),
+#                                                         then wear the vest, socket the card (max HP up), refine the dagger once (hits up) (T-402)
 #   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, bye, release
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
@@ -59,8 +60,9 @@ function Get-EasyContent {
     return (Join-Path $script:temp "content")
 }
 
-# The items run's copy (T-401): the weak monsters, every kill drops a Bone Dirk and a Healing Draught, and a new character starts with nothing, so the
-# dagger it equips is the one it picked up. Drops and balance are server-only data: the bundle hash does not change.
+# The items run's copy (T-401): the weak monsters, every kill drops a Bone Dirk and a Healing Draught (and for T-402 a Padded Vest, a Gelcap Card and a
+# Temper Shard), and a new character starts with nothing, so the dagger it equips is the one it picked up. Drops and balance are server-only data: the
+# bundle hash does not change.
 function Get-ItemsContent {
     if ($script:itemsTemp) { return (Join-Path $script:itemsTemp "content") }
     $script:itemsTemp = Join-Path ([IO.Path]::GetTempPath()) ("t401-" + [guid]::NewGuid().ToString("N"))
@@ -68,7 +70,9 @@ function Get-ItemsContent {
     Copy-Item (Get-EasyContent) (Join-Path $script:itemsTemp "content") -Recurse
     Copy-Item (Join-Path $root "themes") (Join-Path $script:itemsTemp "themes") -Recurse
     foreach ($tier in @("tier1_supplies", "tier2_supplies", "tier3_supplies")) {
-        $text = "id: drop.$tier`nname: Items run drops`nentries:`n  - { item_id: item.bone_dirk, chance: 1 }`n  - { item_id: item.healing_draught, chance: 1 }`n"
+        # T-402 adds armour with a card slot, a card that fits it and the refine material, so the run can socket a card and refine.
+        $text = "id: drop.$tier`nname: Items run drops`nentries:`n  - { item_id: item.bone_dirk, chance: 1 }`n  - { item_id: item.healing_draught, chance: 1 }`n" +
+            "  - { item_id: item.padded_vest, chance: 1 }`n  - { item_id: item.gelcap_card, chance: 1 }`n  - { item_id: item.temper_shard, chance: 1 }`n"
         [IO.File]::WriteAllText((Join-Path $script:itemsTemp "content/drops/$tier.yaml"), $text)
     }
     $balance = Join-Path $script:itemsTemp "content/balance.yaml"
