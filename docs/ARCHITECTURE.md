@@ -490,7 +490,7 @@ ids (T-401); `EntityView.LookVersion` counts their changes.
   clip wins where the library has it, else the generic one. Hit timing is unchanged: T-303's `impact_delay`.
 - *Measured* (T-403, integrated desktop GPU, 1280x720, `tools/loadtest --bots 70 --fighters 0.7 --spare-slots 3` and `--measure 40`, about 40 players on screen; the
   client's debug-only `--measure-dress <item ids>` draws every player in those items): peak draw calls 75 with no gear, 77 with the real gear (every bot wears its
-  starting dagger), 79 with dagger, cap, vest and buckler on everyone, so worn pieces cost no draw call; triangles peak 11.8k, 15.4k, 29.5k. Drawn as separate
+  starting dagger), 79 with dagger, cap, vest and buckler on everyone (92 with `--fight`, where the player also hunts), so worn pieces cost no draw call; triangles peak 11.8k, 15.4k, 29.5k. Drawn as separate
   nodes (the first version), one weapon each took the crowd peak to 117. None of it has run on a phone (ADR-002 row 112).
 
 ### 7.5.1 Character appearance (creation)
