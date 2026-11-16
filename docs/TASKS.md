@@ -95,7 +95,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
 | T-401 | Inventory, equip slots, weight: pick up, use, equip, unequip, drop; own-inventory messages; HUD inventory panel | Claude Code | Opus 5.5 | [T-401](../tasks/prompts/T-401.md) | T-302, T-307, T-211, T-305 | Review | Touches `Net/**` for the item messages only (approved by the user 2026-11-15); ADR-002 #160 |
-| T-402 | Cards and refining: socket cards, refine with data-driven chances and failure outcomes, bag panel | Claude Code | Sonnet 5.5 | [T-402](../tasks/prompts/T-402.md) | T-401 | In Progress | Touches `Net/**` for the two item messages only (approved by the user 2026-11-16) |
+| T-402 | Cards and refining: socket cards, refine with data-driven chances and failure outcomes, bag panel | Claude Code | Sonnet 5.5 | [T-402](../tasks/prompts/T-402.md) | T-401 | Review | Touches `Net/**` for the two item messages only (approved by the user 2026-11-16) |
 | T-403 | Worn equipment on 3D characters: attach points, skinned meshes, weapon-type clips | Claude Code | Sonnet 5.5 | [T-403](../tasks/prompts/T-403.md) | T-401, T-207 | In Progress | ADR-002 #164, #170, #173 |
 
 ## Phase 7 — Persistence & accounts

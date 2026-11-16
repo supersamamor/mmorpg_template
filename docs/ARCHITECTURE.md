@@ -214,7 +214,7 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 - **Whitelist, not blacklist.** `Game.Shared/ClientContent` holds one plain record per definition type, and
   `Game.Content/ClientBundle/ClientBundleBuilder` copies each field by hand. A field added to a server definition reaches the client
   only when someone maps it there; a test fails if a client record gains a field without the table below changing.
-- **Format:** `format_version` (now `3`; 2 added the sound keys, 3 the appearance options) is the first field. The client refuses a bundle with a version it does not know. Bump it
+- **Format:** `format_version` (now `4`; 2 added the sound keys, 3 the appearance options, 4 item `card_slots` / `refinable` and the `refine` steps) is the first field. The client refuses a bundle with a version it does not know. Bump it
   on any change to the bundle's shape.
 - **Canonical output:** compact JSON, UTF-8 without BOM, one final `\n`, fixed property order, lists ordered by id (dialogue nodes by key),
   integers and booleans only, non-ASCII (and `<>&'"+`) escaped as `\uXXXX`, null values left out. Two exports of the same content are byte-identical on any OS.
@@ -226,7 +226,8 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 
 | Definition | In the bundle | Never in the bundle |
 |------------|---------------|---------------------|
-| Items | id, name, description, kind, icon, ground visual, equip slots (card slots for cards), weapon type, worn visual, use and equip sound keys | prices, weight, stack size, consumable effects and cooldown, weapon attack, element, level and job limits, modifiers, refine |
+| Items | id, name, description, kind, icon, ground visual, equip slots (card slots for cards), weapon type, worn visual, use and equip sound keys, card slot count and `refinable` (T-402) | prices, weight, stack size, consumable effects and cooldown, weapon attack, element, level and job limits, modifiers (card modifiers too) |
+| Refine (`refine.yaml`) | `max_level`, per level: `success_percent`, material item and quantity, failure outcome (all of it: it is what a player decides on) | — |
 | Skills | id, name, description, max level, passive, target range / ground / friendly, area shape (`square`) and radius, cast time **only if a plain number**, animation id, icon, vfx, sfx | SP cost, cooldown and every other formula, effects and their numbers, passive modifiers, weapon requirement |
 | Jobs | id, name, description, parent job, usable weapon types, model, icon, skill tree (skill, max level, required skills) | stat bonuses, change requirements, EXP table id |
 | Statuses | id, name, description, buff or debuff, icon, vfx | effects, tick interval, stacks, tags, `prevents_*` flags |
@@ -345,8 +346,8 @@ One system, `Game.Server/World/Inventory` (`inventory`), after combat and before
 derived stat `weight_limit` (`formulas.yaml`).
 
 - **Model.** Per character, an `InventoryState` in an `IInventoryStore` shared by every instance (in memory until T-702, like progression). An **entry** is a
-  stack of one item up to its `max_stack`, or one equipment item with its own instance id (T-402 adds cards and refine to it). Entry ids come from the store,
-  unique for the server run; an equipment item dropped and picked up again keeps its id. Worn entries stay in the inventory (their slot is set), so they count
+  stack of one item up to its `max_stack`, or one equipment item with its own instance id, its socketed cards (in socket order) and its refine level. Entry ids come from the store,
+  unique for the server run; an equipment item dropped and picked up again keeps its id, cards and refine level (they ride on the ground item, which clients never see them on). Worn entries stay in the inventory (their slot is set), so they count
   toward `inventory.max_entries` and the weight, and putting something on never needs room. **Weight** = Σ `weight × quantity`.
 - **Weight states** (`WeightStates`, from the weight as a share of `weight_limit`): `normal`; `burdened` from `inventory.burdened_percent` (50%): no natural
   HP and SP regeneration; `overweight` from `inventory.overweight_percent` (90%): no regeneration and no attacks (§6.7). A pick-up that would pass 100% is
@@ -354,7 +355,7 @@ derived stat `weight_limit` (`formulas.yaml`).
 - **Atomic operations.** Every change (pick up, use, equip, unequip, drop) checks everything first and returns an "Item reasons" term with nothing changed;
   only then does it change the state, in steps that cannot fail, inside one tick. So each one maps onto one database transaction for T-702 without changing
   the rules. A refusal is an `ItemRefused` event and a `rejected` message.
-- **Intents** (`PickUp`, `UseItem`, `Equip`, `Unequip`, `DropItem`; rate-limited like every client message).
+- **Intents** (`PickUp`, `UseItem`, `Equip`, `Unequip`, `DropItem`, `InsertCard`, `RefineItem`; rate-limited like every client message).
   - *Pick up:* the gateway checks the target is a ground item the client sees and stops the auto-attack; the inventory walks the player with `MoveTo`
     until it is within `inventory.pickup_range` (1, Chebyshev) of the item, then checks `LootRules.MayPickUp`, the weight and the free entries, and takes
     it (`ItemAcquired`; the entity is despawned). A new move order or a stop cancels the walk (`cancelled`), no path ends it (`unreachable`), and an item taken
@@ -366,10 +367,21 @@ derived stat `weight_limit` (`formulas.yaml`).
   - *Equip:* kind `equip`; `slot` (any one of the item's `slots`; without one, the first of them that is free, else the first); `min_base_level`;
     `job_ids`, and for a weapon its type in the job's `weapon_types`. A filled slot swaps in the same operation. **Two-handed rule (data):** a weapon whose
     `weapon_type` is in `inventory.two_handed_weapon_types` (`sword_2h`, `staff`, `bow`) placed in `weapon` also takes `shield`: putting it on takes a
-    shield off, and putting a shield on takes it off. Modifiers are evaluated once (refine 0 until T-402) and go onto the stat sheet with the source
-    `equip:<entry id>` (§6.1); taking the entry off removes exactly that source.
+    shield off, and putting a shield on takes it off. Modifiers are evaluated once, with `refine` = the entry's refine level, and go onto the stat sheet with the source
+    `equip:<entry id>`; each socketed card's modifiers go on with their own source `card:<entry id>:<socket>` (§6.1); taking the entry off removes exactly those sources.
   - *Unequip:* a worn slot (`not_equipped` otherwise). *Drop:* a carried entry (worn ones are `item_equipped`), 1..its quantity, onto the player's cell
     as a ground item with no owner (`ItemDiscarded`), gone after `inventory.dropped_lifetime_ms`.
+  - *Insert card* (T-402, `InsertCard`): a card entry into an equipment entry, carried or worn, when one of the card's `slots` is one of the item's
+    `slots` and it has a free one of its `card_slots`; refusals `item_gone`, `not_a_card`, `not_equipment`, `card_does_not_fit`, `no_free_socket`. For good
+    (removing cards is a later NPC service). One card unit is used up (its weight goes; the equipment's own weight stays). Worn, the card counts at once (`CardInserted`).
+  - *Refine* (T-402, `RefineItem`): a `refinable` equipment entry, carried or worn, one level up using `content/refine.yaml` (`RefineDef`, validated at load:
+    one step per level 1..`max_level`, `success_percent` 1–100, `material_item_id` a `material` item, `material_quantity` ≥ 1, `failure` a "Refine failures" term).
+    Refusals `item_gone`, `not_equipment`, `not_refinable`, `at_max_refine`, `missing_material` (carried units only). Then the material is used up, one
+    `Next(100)` of the instance's seeded random decides: below `success_percent` the level goes up, else the step's failure: `keep`, `down` (not below 0) or
+    `break` (the entry is gone with its cards). A worn entry's modifiers are re-evaluated (or removed when it broke) and the weapon's `refine` reaches combat
+    (`Entity.Weapon`). `ItemRefined` → the owner's `refine_result`. **Armour rule:** refine affects armour only through the item's own modifiers, which may use
+    the formula variable `refine` (Padded Vest `def: 4 + refine * 2`, Wooden Buckler `def: 2 + refine`); no formula change. Refining costs no currency until currency exists.
+    Sample data: max +7; +1 and +2 always succeed, then 90/75/60/45/30 %, Temper Shards ×1–3, failures keep up to +4, down at +5 and +6, break at +7.
 - **What other systems read** (hard rule 7, no calls): the sheet's modifiers; `Entity.Weapon` (type, `weapon_atk`, refine, range, element) for combat;
   `Entity.Look` (weapon type and the worn item ids that have a worn visual, in slot order) for the AOI; `Entity.Load` for combat.
 - **Starting items** are data: `new_character.start_items` (`item_id`, `quantity`, `equipped`), validated at load. A new character gets them when the
@@ -716,17 +728,20 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   | `equip` | C→S | `entry`, optional `slot` (an "Equipment slots" term; without it the server picks) |
   | `unequip` | C→S | `slot` |
   | `drop_item` | C→S | `entry`, `quantity` (onto the character's cell, for anyone) |
+  | `insert_card` | C→S | `entry` (the equipment entry, carried or worn), `card` (the card entry); for good (T-402) |
+  | `refine` | C→S | `entry` (an equipment entry, carried or worn); the outcome comes back as `inventory_changed` (`refined`) then `refine_result` (T-402) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `vitals` (when changed); empty ones left out |
-  | `rejected` | S→C | `intent` (`move`, `attack` or an item intent), `reason` (a `MoveRejected`, "Attack reasons" or "Item reasons" term), `cell` (move), `target` (attack, `pick_up`), `entry` (`use_item`, `equip`, `drop_item`), `slot` (`equip`, `unequip`) |
+  | `rejected` | S→C | `intent` (`move`, `attack` or an item intent), `reason` (a `MoveRejected`, "Attack reasons" or "Item reasons" term), `cell` (move), `target` (attack, `pick_up`), `entry` (`use_item`, `equip`, `drop_item`; the equipment entry for `insert_card`, `refine`), `slot` (`equip`, `unequip`) |
   | `attack_stopped` | S→C (owner) | `target`, `reason` (an "Attack reasons" term) |
   | `exp` | S→C (owner) | `base_level`, `base_exp`, `base_next`, `job_level`, `job_exp`, `job_next` (`*_next` = EXP the level needs, 0 at the cap) |
   | `level_up` | S→C (owner) | `base_level` or `job_level` (one message per level reached) |
   | `you_died` | S→C (owner) | `killer` (entity id, if any); send `respawn` to come back |
   | `respawned` | S→C (owner) | `map`, `cell`, `hp`; a snapshot of the respawn point follows |
-  | `inventory` | S→C (owner) | `rev`, `slots` (most entries), `weight`, `weight_limit`, `load` (a "Weight states" term), `entries` (`[{id, item, quantity, slot?}]`, by id). After every snapshot (join, resume, warp, resync); it replaces what the client had |
+  | `inventory` | S→C (owner) | `rev`, `slots` (most entries), `weight`, `weight_limit`, `load` (a "Weight states" term), `entries` (`[{id, item, quantity, slot?, cards?, refine?}]`, by id; `cards` and `refine` only when the equipment has any, and only ever to the owner). After every snapshot (join, resume, warp, resync); it replaces what the client had |
   | `inventory_changed` | S→C (owner) | `rev` (one more than the last), `cause` (an "Inventory changes" term), `item`, `weight`, `weight_limit`, `load`, `entries` (added or changed, as they are now), `removed` (ids); empty lists left out. A client that sees a gap in `rev` keeps what it has until the next `inventory` |
+  | `refine_result` | S→C (owner) | `entry`, `item`, `result` (a "Refine results" term: `success`, `keep`, `down`, `break`), `refine` (the level now; what it had when it broke) |
   | `pong` | S→C | `seq` |
   | `bye` | S→C (last) | `reason` (VOCABULARY "Bye reasons"), followed by the close frame |
 

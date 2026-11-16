@@ -250,6 +250,7 @@ public sealed class AutoRun
 
         // Fight again: the same monsters take more damage per hit now.
         hits.Clear();
+        kinds.Clear();   // from here on: hits with the weapon at +0, which the refine step compares against
         for (var attempt = 0; attempt < 4 && hits.Count < 3; attempt++) await HuntOneAsync(60);
         Check(unarmed.Count > 0 && hits.Count > 0, $"hits before ({unarmed.Count}) and after ({hits.Count}) equipping");
         var before2 = unarmed.Average();
