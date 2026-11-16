@@ -8,10 +8,10 @@ namespace Game.Client.Scene;
 /// <summary>
 /// One entity's model: a root node placed on the ground, holding an instance of the theme's scene (or a built-in marker when the theme has nothing). Pooled.
 /// The instance is made when <see cref="TryBuild"/> succeeds; until then the visual is hidden. Setting a pose, a look or a motion allocates nothing.
-/// <para>Worn equipment (T-403, §7.5): an attached piece is a model under a <see cref="BoneAttachment3D"/> on its bone of the character's skeleton; a skinned
-/// piece's meshes are moved under the character's skeleton and bound to it, so they play the same animation. Pieces change only when the look counter moves,
-/// and only the pieces that changed are added or freed. Their scenes come from the same <see cref="ModelStore"/> as characters (same threading rule, one
-/// loaded scene per file shared by every character wearing it).</para>
+/// <para>Worn equipment (T-403, §7.5): each worn item resolves to a piece (<see cref="EquipmentCatalog"/>). An attached piece rides its bone of the character's
+/// skeleton; a skinned piece is bound to the same skeleton, so it plays the same animation. Both are merged with the body into the body's own skinned mesh
+/// (<see cref="GearMesher"/>), so a dressed character still costs one draw call (§9). The look counter decides when to re-dress; a change loads only the pieces
+/// that changed, and the merged mesh comes from a cache shared by every character with the same body and pieces.</para>
 /// </summary>
 public sealed class ModelVisual : IEntityVisual
 {
@@ -21,12 +21,13 @@ public sealed class ModelVisual : IEntityVisual
     /// <summary>A piece standing in for a missing or wrong key is the theme's missing model, drawn this small so it marks the problem without hiding the character.</summary>
     private const float FallbackPieceScale = 0.3f;
 
-    private static Mesh? s_markerMesh;
+    private static BoxMesh? s_markerMesh;
     private static StandardMaterial3D? s_markerMaterial;
 
     private readonly ModelStore _store;
     private readonly ThemeCatalog _catalog;
     private readonly EquipmentCatalog _equipment;
+    private readonly GearMesher _mesher;
     private readonly Action<ModelVisual> _needsDressing;
     private readonly ModelResolution _resolution;
     private readonly AnimationDriver _driver = new();
@@ -34,11 +35,16 @@ public sealed class ModelVisual : IEntityVisual
     private readonly List<string> _added = new();
     private readonly List<string> _removed = new();
     private readonly List<Piece> _pieces = new();
+    private readonly List<Node3D> _looseNodes = new();
 
     private Node3D? _content;
     private Skeleton3D? _skeleton;
     private MeshInstance3D? _lod0;
     private MeshInstance3D? _lod1;
+    private Mesh? _bodyMesh0;
+    private Mesh? _bodyMesh1;
+    private Skin? _bodySkin0;
+    private Skin? _bodySkin1;
     private AnimationPlayer? _player;
     private AnimSet? _anims;
     private string?[]? _clipNames;
@@ -49,6 +55,7 @@ public sealed class ModelVisual : IEntityVisual
     private bool _baseline = true;
     private bool _firstClip = true;
     private bool _playing;
+    private bool _gearDirty;
     private EntityLook _look;
     private int _lod;
     private double _pending;
@@ -67,24 +74,25 @@ public sealed class ModelVisual : IEntityVisual
 
         public WornPiece Worn { get; }
 
-        public bool Built;
-        public bool Using;
-        public MeshInstance3D? Lod0;
-        public MeshInstance3D? Lod1;
-        public readonly List<Node3D> Owned = new();
+        /// <summary>The meshes are in (or will never come: <see cref="Meshes"/> stays null and the marker stands in).</summary>
+        public bool Loaded;
+
+        public PieceMeshes? Meshes;
     }
 
     /// <summary>Creates a visual for a resolved model. It is hidden and not ready until <see cref="TryBuild"/> succeeds.</summary>
     /// <param name="store">Loaded scenes.</param>
     /// <param name="catalog">The theme chain.</param>
     /// <param name="equipment">Worn items to pieces.</param>
-    /// <param name="needsDressing">Told when pieces wait for their scene, so the source keeps calling <see cref="TryDress"/>.</param>
+    /// <param name="mesher">Merges the body and its pieces; shared by every visual.</param>
+    /// <param name="needsDressing">Told when the gear changed, so the source calls <see cref="TryDress"/> until it is done.</param>
     /// <param name="resolution">The character's model.</param>
-    public ModelVisual(ModelStore store, ThemeCatalog catalog, EquipmentCatalog equipment, Action<ModelVisual> needsDressing, ModelResolution resolution)
+    public ModelVisual(ModelStore store, ThemeCatalog catalog, EquipmentCatalog equipment, GearMesher mesher, Action<ModelVisual> needsDressing, ModelResolution resolution)
     {
         _store = store;
         _catalog = catalog;
         _equipment = equipment;
+        _mesher = mesher;
         _needsDressing = needsDressing;
         _resolution = resolution;
         Root = new Node3D { Visible = false, Name = "Entity" };
@@ -102,19 +110,11 @@ public sealed class ModelVisual : IEntityVisual
     /// <inheritdoc />
     public bool Animated => _player is not null;
 
-    /// <summary>Worn pieces on the character now (built or waiting), for measuring.</summary>
+    /// <summary>Worn pieces on the character now, for measuring.</summary>
     public int PieceCount => _pieces.Count;
 
-    /// <summary>True while a worn piece waits for its scene or for its turn to be made.</summary>
-    public bool Dressing
-    {
-        get
-        {
-            for (var i = 0; i < _pieces.Count; i++)
-                if (!_pieces[i].Built) return true;
-            return false;
-        }
-    }
+    /// <summary>The clip names in use for the weapon type (for checking).</summary>
+    public string? ClipName(AnimClip clip) => _anims is null ? null : (_clipNames ?? _anims.NamesFor(_weapon))[(int)clip];
 
     /// <summary>Takes the visual out of the pool for a new entity.</summary>
     public void Attach()
@@ -131,7 +131,6 @@ public sealed class ModelVisual : IEntityVisual
         }
         // The pieces stay on: the new entity's look swaps only what differs (its look counter may be any number, so it is forgotten).
         _wardrobe.Rebase();
-        for (var i = 0; i < _pieces.Count; i++) UsePiece(_pieces[i]);
     }
 
     /// <summary>Puts the visual away: hidden, still, and no longer counted as using its model.</summary>
@@ -144,7 +143,6 @@ public sealed class ModelVisual : IEntityVisual
         if (_using && _resolution.Path is not null) _store.Unuse(_resolution.Path);
         _using = false;
         _look = default;
-        for (var i = 0; i < _pieces.Count; i++) UnusePiece(_pieces[i]);
     }
 
     /// <summary>Frees the nodes.</summary>
@@ -185,6 +183,10 @@ public sealed class ModelVisual : IEntityVisual
         _lod1 = node.FindChild(Lod1Name, true, false) as MeshInstance3D;
         _skeleton = node.FindChildren("*", "Skeleton3D", true, false).FirstOrDefault() as Skeleton3D;
         if (_lod0 is null && node is MeshInstance3D whole) _lod0 = whole;
+        _bodyMesh0 = _lod0?.Mesh;
+        _bodySkin0 = _lod0?.Skin;
+        _bodyMesh1 = _lod1?.Mesh;
+        _bodySkin1 = _lod1?.Skin;
         if (_anims is not null && _anims.Names[(int)AnimClip.Idle] is not null)
         {
             _player = new AnimationPlayer { CallbackModeProcess = AnimationMixer.AnimationCallbackModeProcess.Manual, Name = "Animations" };
@@ -200,11 +202,15 @@ public sealed class ModelVisual : IEntityVisual
 
     private void BuildBuiltIn()
     {
-        s_markerMesh ??= new BoxMesh { Size = new Vector3(0.8f, 0.8f, 0.8f) };
-        s_markerMaterial ??= new StandardMaterial3D { AlbedoColor = new Color(1, 0, 1), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
-        _lod0 = new MeshInstance3D { Mesh = s_markerMesh, MaterialOverride = s_markerMaterial, Position = new Vector3(0, 0.4f, 0), Name = "Missing" };
+        _lod0 = new MeshInstance3D { Mesh = MarkerMesh(), Position = new Vector3(0, 0.4f, 0), Name = "Missing" };
         Root.AddChild(_lod0);
         Ready_();
+    }
+
+    private static BoxMesh MarkerMesh()
+    {
+        s_markerMaterial ??= new StandardMaterial3D { AlbedoColor = new Color(1, 0, 1), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
+        return s_markerMesh ??= new BoxMesh { Size = new Vector3(0.8f, 0.8f, 0.8f), Material = s_markerMaterial };
     }
 
     private void Ready_()
@@ -213,7 +219,7 @@ public sealed class ModelVisual : IEntityVisual
         Root.Visible = _wantVisible;
         ApplyDetail();
         ApplyLook();
-        if (Dressing) _needsDressing(this);
+        if (_gearDirty) _needsDressing(this);
     }
 
     /// <inheritdoc />
@@ -240,163 +246,130 @@ public sealed class ModelVisual : IEntityVisual
             if (_playing && !_driver.OneShotActive) Play(_driver.Current); // idle or walk with the new weapon's clip
         }
         if (!_wardrobe.Update(version, worn, _added, _removed)) return;
+        if (_added.Count == 0 && _removed.Count == 0) return; // the same items (a pooled visual meeting a look it already wears)
         for (var i = 0; i < _removed.Count; i++)
         {
             for (var p = 0; p < _pieces.Count; p++)
             {
                 if (_pieces[p].ItemId != _removed[i]) continue;
-                RemovePiece(_pieces[p]);
                 _pieces.RemoveAt(p);
                 break;
             }
         }
-        var waiting = false;
         for (var i = 0; i < _added.Count; i++)
         {
             if (_equipment.Resolve(_added[i], _resolution.Asset?.Rig) is not { } wornPiece) continue;
             _pieces.Add(new Piece(_added[i], wornPiece));
             if (wornPiece.Model.Path is not null) _store.Request(wornPiece.Model.Path);
-            waiting = true;
         }
-        if (waiting) _needsDressing(this);
+        _gearDirty = true;
+        _needsDressing(this);
     }
 
     /// <summary>
-    /// Makes the worn pieces that are still waiting, at most until <paramref name="created"/> reaches <paramref name="limit"/>. True when none is left waiting;
-    /// false while the character itself or a piece's scene is still loading.
+    /// Puts the changed gear on once every piece's meshes are in. True when done (nothing left to do); false while the character or a piece is still loading, or when
+    /// <paramref name="created"/> has reached <paramref name="limit"/> this frame (a merge counts as one).
     /// </summary>
     public bool TryDress(ref int created, int limit)
     {
-        if (!_ready) return _pieces.Count == 0;
-        var done = true;
+        if (!_gearDirty) return true;
+        if (!_ready) return false;
+        var loaded = true;
         for (var i = 0; i < _pieces.Count; i++)
         {
             var piece = _pieces[i];
-            if (piece.Built) continue;
-            if (created >= limit || !BuildPiece(piece, ref created)) done = false;
+            if (piece.Loaded) continue;
+            if (piece.Worn.Model.Path is not { } path)
+            {
+                piece.Loaded = true;
+                continue;
+            }
+            if (_store.TryGetPiece(path, out piece.Meshes)) piece.Loaded = true;
+            else loaded = false;
         }
-        return done;
-    }
-
-    private bool BuildPiece(Piece piece, ref int created)
-    {
-        var path = piece.Worn.Model.Path;
-        Node3D node;
-        if (path is null)
-        {
-            node = Marker();
-        }
-        else if (_store.TryGetScene(path, out var scene, out var failed))
-        {
-            node = scene!.Instantiate<Node3D>();
-            created++;
-        }
-        else if (failed)
-        {
-            node = Marker();
-            path = null;
-        }
-        else
-        {
-            return false; // still loading
-        }
-
-        if (path is not null)
-        {
-            piece.Using = false;
-            UsePieceAt(piece, path);
-        }
-        if (piece.Worn.Mode == WornMode.Skinned && _skeleton is not null && path is not null) Skin(piece, node);
-        else AttachTo(piece, node);
-        piece.Built = true;
-        ApplyPiece(piece);
+        if (!loaded || created >= limit) return false;
+        Dress();
+        created++;
+        _gearDirty = false;
         return true;
     }
 
-    /// <summary>Moves a skinned piece's meshes under the character's skeleton and binds them to it; the rest of the piece's scene is freed.</summary>
-    private void Skin(Piece piece, Node3D node)
+    /// <summary>Puts the current pieces on: merged into the body's skinned mesh, or, for a model without a skin, as plain meshes on its root.</summary>
+    private void Dress()
     {
-        foreach (var child in node.FindChildren("*", "MeshInstance3D", true, false))
+        for (var i = 0; i < _looseNodes.Count; i++) _looseNodes[i].QueueFree();
+        _looseNodes.Clear();
+        if (_lod0 is null) return;
+        if (_skeleton is null || _bodyMesh0 is null || _bodySkin0 is null)
         {
-            if (child is not MeshInstance3D mesh) continue;
-            var transform = mesh.Transform;
-            mesh.GetParent().RemoveChild(mesh);
-            mesh.Owner = null;
-            _skeleton!.AddChild(mesh);
-            mesh.Transform = transform;
-            mesh.Skeleton = new NodePath("..");
-            Assign(piece, mesh);
-            piece.Owned.Add(mesh);
+            DressLoose();
+            return;
         }
-        node.Free();
+        if (_pieces.Count == 0)
+        {
+            _lod0.Mesh = _bodyMesh0;
+            _lod0.Skin = _bodySkin0;
+            if (_lod1 is not null)
+            {
+                _lod1.Mesh = _bodyMesh1;
+                _lod1.Skin = _bodySkin1;
+            }
+            return;
+        }
+        var worn = new List<WornPiece>(_pieces.Count);
+        foreach (var piece in _pieces) worn.Add(piece.Worn);
+        var (mesh0, skin0) = _mesher.Get(WornSet.Key(PoolKey, 0, worn), _bodyMesh0, _bodySkin0, _skeleton, Parts(0));
+        _lod0.Mesh = mesh0;
+        _lod0.Skin = skin0;
+        if (_lod1 is not null && _bodyMesh1 is not null && _bodySkin1 is not null)
+        {
+            var (mesh1, skin1) = _mesher.Get(WornSet.Key(PoolKey, 1, worn), _bodyMesh1, _bodySkin1, _skeleton, Parts(1));
+            _lod1.Mesh = mesh1;
+            _lod1.Skin = skin1;
+        }
     }
 
-    /// <summary>Puts a rigid piece on its bone (or the default point), or on the model's root when the character has no skeleton.</summary>
-    private void AttachTo(Piece piece, Node3D node)
+    private List<GearPart> Parts(int lod)
     {
-        var bone = AttachRules.BoneFor(piece.Worn.Mode == WornMode.Skinned ? null : piece.Worn.Bone, _skeleton?.GetBoneCount() ?? 0,
-            name => _skeleton!.FindBone(name), PoolKey, _catalog);
-        if (piece.Worn.Fallback) node.Scale = new Vector3(FallbackPieceScale, FallbackPieceScale, FallbackPieceScale);
-        Node3D holder;
-        if (bone >= 0 && _skeleton is not null)
+        var parts = new List<GearPart>(_pieces.Count);
+        foreach (var piece in _pieces)
         {
-            var attachment = new BoneAttachment3D { Name = "Worn" };
-            _skeleton.AddChild(attachment);
-            attachment.BoneName = _skeleton.GetBoneName(bone);
-            attachment.AddChild(node);
-            holder = attachment;
+            var meshes = piece.Meshes;
+            Mesh mesh = MarkerMesh();
+            Skin? skin = null;
+            var transform = Transform3D.Identity;
+            if (meshes is not null)
+            {
+                var low = lod == 1 && meshes.Lod1 is not null;
+                mesh = low ? meshes.Lod1! : meshes.Lod0;
+                skin = low ? meshes.Skin1 : meshes.Skin0;
+                transform = low ? meshes.Transform1 : meshes.Transform0;
+            }
+            if (piece.Worn.Mode == WornMode.Skinned && skin is not null)
+            {
+                parts.Add(new GearPart(mesh, skin, Transform3D.Identity, -1));
+                continue;
+            }
+            // Attached (or a skinned file with no skin, or the marker): rigid on its bone, or on the default point.
+            var bone = AttachRules.BoneFor(piece.Worn.Mode == WornMode.Attached ? piece.Worn.Bone : null, _skeleton!.GetBoneCount(), name => _skeleton.FindBone(name), PoolKey, _catalog);
+            if (piece.Worn.Fallback || meshes is null) transform = Transform3D.Identity.Scaled(Vector3.One * FallbackPieceScale) * transform;
+            parts.Add(new GearPart(mesh, null, transform, Math.Max(0, bone)));
         }
-        else
+        return parts;
+    }
+
+    /// <summary>A model without a skinned body: each piece is a plain mesh on its root (warned once by <see cref="AttachRules"/>).</summary>
+    private void DressLoose()
+    {
+        foreach (var piece in _pieces)
         {
+            AttachRules.BoneFor(piece.Worn.Bone ?? string.Empty, 0, _ => -1, PoolKey, _catalog);
+            var node = new MeshInstance3D { Mesh = piece.Meshes?.Lod0 ?? MarkerMesh(), Name = "Worn" };
+            node.Transform = piece.Meshes?.Transform0 ?? Transform3D.Identity.Scaled(Vector3.One * FallbackPieceScale);
+            node.CastShadow = Shadow;
             (_content ?? Root).AddChild(node);
-            holder = node;
+            _looseNodes.Add(node);
         }
-        piece.Lod0 = node.FindChild(Lod0Name, true, false) as MeshInstance3D ?? node as MeshInstance3D;
-        piece.Lod1 = node.FindChild(Lod1Name, true, false) as MeshInstance3D;
-        piece.Owned.Add(holder);
-    }
-
-    private static void Assign(Piece piece, MeshInstance3D mesh)
-    {
-        if (mesh.Name == Lod1Name) piece.Lod1 = mesh;
-        else piece.Lod0 ??= mesh;
-    }
-
-    private static Node3D Marker()
-    {
-        s_markerMesh ??= new BoxMesh { Size = new Vector3(0.8f, 0.8f, 0.8f) };
-        s_markerMaterial ??= new StandardMaterial3D { AlbedoColor = new Color(1, 0, 1), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
-        return new MeshInstance3D { Mesh = s_markerMesh, MaterialOverride = s_markerMaterial, Name = Lod0Name };
-    }
-
-    private void RemovePiece(Piece piece)
-    {
-        UnusePiece(piece);
-        for (var i = 0; i < piece.Owned.Count; i++)
-        {
-            piece.Owned[i].Visible = false;
-            piece.Owned[i].QueueFree();
-        }
-        piece.Owned.Clear();
-    }
-
-    private void UsePiece(Piece piece)
-    {
-        if (piece.Built && piece.Worn.Model.Path is { } path) UsePieceAt(piece, path);
-    }
-
-    private void UsePieceAt(Piece piece, string path)
-    {
-        if (piece.Using) return;
-        _store.Use(path);
-        piece.Using = true;
-    }
-
-    private void UnusePiece(Piece piece)
-    {
-        if (!piece.Using || piece.Worn.Model.Path is not { } path) return;
-        _store.Unuse(path);
-        piece.Using = false;
     }
 
     /// <inheritdoc />
@@ -414,11 +387,8 @@ public sealed class ModelVisual : IEntityVisual
         _fade = amount;
         if (_lod0 is not null) _lod0.Transparency = amount;
         if (_lod1 is not null) _lod1.Transparency = amount;
-        for (var i = 0; i < _pieces.Count; i++)
-        {
-            if (_pieces[i].Lod0 is { } a) a.Transparency = amount;
-            if (_pieces[i].Lod1 is { } b) b.Transparency = amount;
-        }
+        for (var i = 0; i < _looseNodes.Count; i++)
+            if (_looseNodes[i] is GeometryInstance3D g) g.Transparency = amount;
         if (_content is not null) _content.Position = new Vector3(0, -0.5f * amount, 0); // it sinks as it fades, so the fade reads even where transparency is not drawn
     }
 
@@ -476,43 +446,18 @@ public sealed class ModelVisual : IEntityVisual
         var low = _lod == 1 && _lod1 is not null;
         _lod0.Visible = !low;
         if (_lod1 is not null) _lod1.Visible = low;
-        for (var i = 0; i < _pieces.Count; i++) ApplyPieceDetail(_pieces[i]);
     }
 
-    private void ApplyPieceDetail(Piece piece)
-    {
-        // A piece with a LOD1 mesh swaps with the body; one without keeps its only mesh at both levels.
-        var low = _lod == 1 && piece.Lod1 is not null;
-        if (piece.Lod0 is not null) piece.Lod0.Visible = !low;
-        if (piece.Lod1 is not null) piece.Lod1.Visible = low;
-    }
+    private GeometryInstance3D.ShadowCastingSetting Shadow =>
+        _look.Own ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off; // §9: the player only
 
     private void ApplyLook()
     {
         var shadow = Shadow;
         if (_lod0 is not null) _lod0.CastShadow = shadow;
         if (_lod1 is not null) _lod1.CastShadow = shadow;
-        for (var i = 0; i < _pieces.Count; i++) ApplyPieceShadow(_pieces[i]);
+        for (var i = 0; i < _looseNodes.Count; i++)
+            if (_looseNodes[i] is GeometryInstance3D g) g.CastShadow = shadow;
         // The rings under the player and under items this client may take are drawn by WorldPresenter, all in one multimesh (T-220).
-    }
-
-    private GeometryInstance3D.ShadowCastingSetting Shadow =>
-        _look.Own ? GeometryInstance3D.ShadowCastingSetting.On : GeometryInstance3D.ShadowCastingSetting.Off; // §9: the player only
-
-    private void ApplyPieceShadow(Piece piece)
-    {
-        if (piece.Lod0 is not null) piece.Lod0.CastShadow = Shadow;
-        if (piece.Lod1 is not null) piece.Lod1.CastShadow = Shadow;
-    }
-
-    private void ApplyPiece(Piece piece)
-    {
-        ApplyPieceDetail(piece);
-        ApplyPieceShadow(piece);
-        if (_fade != 0)
-        {
-            if (piece.Lod0 is not null) piece.Lod0.Transparency = _fade;
-            if (piece.Lod1 is not null) piece.Lod1.Transparency = _fade;
-        }
     }
 }

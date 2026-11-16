@@ -178,6 +178,26 @@ public sealed class Wardrobe
 }
 
 /// <summary>
+/// The cache key of a dressed character's merged mesh (T-403, §9): the body's file, the level of detail and the worn pieces in any order. Characters with the same
+/// body and the same pieces get the same key, so they share one merged mesh; the order the server lists the items in does not matter.
+/// </summary>
+public static class WornSet
+{
+    /// <summary>The key. <paramref name="pieces"/> is not changed.</summary>
+    public static string Key(string body, int lod, IReadOnlyList<WornPiece> pieces)
+    {
+        var parts = new string[pieces.Count];
+        for (var i = 0; i < pieces.Count; i++)
+        {
+            var piece = pieces[i];
+            parts[i] = (piece.Model.Path ?? "builtin") + "@" + (piece.Mode == WornMode.Skinned ? "skinned" : piece.Bone ?? "default") + (piece.Fallback ? "!" : "");
+        }
+        Array.Sort(parts, StringComparer.Ordinal);
+        return body + "#" + lod + "|" + string.Join("|", parts);
+    }
+}
+
+/// <summary>
 /// Which clip a weapon type plays (T-403, ARCHITECTURE §7.6). A rig's animation library may map <c>&lt;animation id&gt;.&lt;weapon type&gt;</c> (for example
 /// <c>attack.staff</c>, <c>idle.staff</c>) as well as the plain id; the weapon-specific clip wins where the library has it, else the generic one.
 /// </summary>

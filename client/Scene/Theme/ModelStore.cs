@@ -56,6 +56,7 @@ public sealed class ModelStore
 
     private readonly Dictionary<string, Entry> _scenes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AnimSet?> _animations = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, PieceMeshes?> _pieces = new(StringComparer.Ordinal);
     private readonly HashSet<string> _requested = new(StringComparer.Ordinal);
     private readonly int _limit;
     private readonly bool _threaded;
@@ -75,6 +76,49 @@ public sealed class ModelStore
 
     /// <summary>Animation libraries currently held.</summary>
     public int LoadedLibraries => _animations.Count(e => e.Value is not null);
+
+    /// <summary>Worn pieces' meshes currently held (one per file, shared by every character wearing it).</summary>
+    public int LoadedPieces => _pieces.Count(e => e.Value is not null);
+
+    /// <summary>
+    /// A worn piece's meshes (T-403), taken once from its scene and shared by every character wearing it; the scene itself is let go. False while it loads; null in
+    /// <paramref name="piece"/> if it never will (failed, or no mesh).
+    /// </summary>
+    public bool TryGetPiece(string path, out PieceMeshes? piece)
+    {
+        if (_pieces.TryGetValue(path, out piece)) return true;
+        if (!TryGetScene(path, out var scene, out var failed))
+        {
+            if (failed) _pieces[path] = null;
+            return failed;
+        }
+        var instance = scene!.Instantiate<Node3D>();
+        var lod0 = instance.FindChild("Body_LOD0", true, false) as MeshInstance3D ?? instance.FindChildren("*", "MeshInstance3D", true, false).FirstOrDefault() as MeshInstance3D;
+        var lod1 = instance.FindChild("Body_LOD1", true, false) as MeshInstance3D;
+        if (lod0?.Mesh is null)
+        {
+            _log($"[theme] {path} has no mesh; drawing a fallback");
+            piece = null;
+        }
+        else
+        {
+            piece = new PieceMeshes(lod0.Mesh, lod0.Skin, LocalTo(instance, lod0), lod1?.Mesh, lod1?.Skin, lod1 is null ? Transform3D.Identity : LocalTo(instance, lod1));
+        }
+        instance.Free();
+        _scenes.Remove(path); // only the meshes are needed from now on
+        _requested.Remove(path);
+        _pieces[path] = piece;
+        return true;
+    }
+
+    /// <summary>A node's transform relative to an ancestor that is not in the tree.</summary>
+    private static Transform3D LocalTo(Node root, Node3D node)
+    {
+        var transform = Transform3D.Identity;
+        for (Node? n = node; n is not null && n != root; n = n.GetParent())
+            if (n is Node3D n3) transform = n3.Transform * transform;
+        return transform;
+    }
 
     /// <summary>Starts loading a project-relative path in the background if nothing has.</summary>
     public void Request(string path)
@@ -216,6 +260,7 @@ public sealed class ModelStore
         Drain();
         _scenes.Clear();
         _animations.Clear();
+        _pieces.Clear();
     }
 
     /// <summary>A visual started using a scene.</summary>

@@ -24,6 +24,7 @@ public sealed class ThemedEntities : IEntityVisualSource
     private readonly ThemeCatalog _catalog;
     private readonly ModelStore _store;
     private readonly EquipmentCatalog _equipment;
+    private readonly GearMesher _mesher;
     private readonly Action<ModelVisual> _needsDressing;
     private readonly Dictionary<string, Stack<ModelVisual>> _pools = new(StringComparer.Ordinal);
     private readonly List<ModelVisual> _waiting = new();
@@ -40,6 +41,7 @@ public sealed class ThemedEntities : IEntityVisualSource
         var threaded = ModelLoading.Threaded(DisplayServer.GetName(), config.ThreadedLoadWithoutRenderer);
         _store = new ModelStore(config.ModelCacheLimit, threaded, message => GD.PushWarning(message));
         _equipment = new EquipmentCatalog(catalog, id => bundle.Item(id)?.Visual);
+        _mesher = new GearMesher(config.ModelCacheLimit);
         _needsDressing = visual =>
         {
             if (!_dressing.Contains(visual)) _dressing.Add(visual);
@@ -47,8 +49,11 @@ public sealed class ThemedEntities : IEntityVisualSource
         if (config.PreloadModels) Preload();
     }
 
-    /// <summary>Visuals with worn pieces still waiting for their scene (for measuring).</summary>
+    /// <summary>Visuals whose gear changed and is not on yet (for measuring).</summary>
     public int Dressing => _dressing.Count;
+
+    /// <summary>Merged character meshes: cached now, and built so far (for measuring).</summary>
+    public (int Cached, int Built) Merged => (_mesher.Cached, _mesher.Built);
 
     /// <summary>Worn pieces resolved so far, one per visual key and rig, shared by every character wearing them (for measuring).</summary>
     public int PieceKinds => _equipment.Count;
@@ -96,7 +101,7 @@ public sealed class ThemedEntities : IEntityVisualSource
         }
         else
         {
-            visual = new ModelVisual(_store, _catalog, _equipment, _needsDressing, resolution);
+            visual = new ModelVisual(_store, _catalog, _equipment, _mesher, _needsDressing, resolution);
             _parent.AddChild(visual.Root);
         }
         visual.SetVisible(true);
@@ -162,6 +167,7 @@ public sealed class ThemedEntities : IEntityVisualSource
         _pools.Clear();
         _waiting.Clear();
         _dressing.Clear();
+        _mesher.Clear();
         _store.Clear();
     }
 
