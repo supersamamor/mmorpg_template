@@ -89,6 +89,57 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.Ping;
     }
 
+    /// <summary>
+    /// <c>pick_up</c>: walk to the ground item <see cref="Target"/> (an entity the client sees) and put it in the inventory. A request: it may come back
+    /// <see cref="RejectedMessage"/> with an "Item reasons" term. <c>{"type":"pick_up","target":9}</c>.
+    /// </summary>
+    /// <param name="Target">Entity id of the ground item.</param>
+    public sealed record PickUpMessage(long Target) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.PickUp;
+    }
+
+    /// <summary><c>use_item</c>: use the consumable in inventory entry <see cref="Entry"/>. <c>{"type":"use_item","entry":12}</c>.</summary>
+    /// <param name="Entry">The inventory entry id (from <see cref="InventoryMessage"/>).</param>
+    public sealed record UseItemMessage(long Entry) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.UseItem;
+    }
+
+    /// <summary>
+    /// <c>equip</c>: put on the equipment in entry <see cref="Entry"/>, in <see cref="Slot"/> or, without one, the first of its slots that is free.
+    /// Whatever it displaces comes off. <c>{"type":"equip","entry":12,"slot":"accessory_2"}</c>.
+    /// </summary>
+    /// <param name="Entry">The inventory entry id.</param>
+    /// <param name="Slot">An "Equipment slots" term, or null to let the server choose.</param>
+    public sealed record EquipMessage(long Entry, string? Slot = null) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Equip;
+    }
+
+    /// <summary><c>unequip</c>: take off what is worn in <see cref="Slot"/>. <c>{"type":"unequip","slot":"weapon"}</c>.</summary>
+    /// <param name="Slot">An "Equipment slots" term.</param>
+    public sealed record UnequipMessage(string Slot) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Unequip;
+    }
+
+    /// <summary>
+    /// <c>drop_item</c>: put <see cref="Quantity"/> units of entry <see cref="Entry"/> on the ground at the character's cell, for anyone to take.
+    /// <c>{"type":"drop_item","entry":12,"quantity":1}</c>.
+    /// </summary>
+    /// <param name="Entry">The inventory entry id (not a worn one).</param>
+    /// <param name="Quantity">How many, 1..the entry's quantity.</param>
+    public sealed record DropItemMessage(long Entry, int Quantity) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.DropItem;
+    }
+
     /// <summary>A message the server sends. <see cref="Type"/> is its <see cref="MessageTypes"/> name.</summary>
     public abstract record ServerMessage
     {
@@ -132,8 +183,11 @@ namespace Game.Shared.Protocol
     /// <param name="Quantity">A ground item's quantity; 0 for everything else.</param>
     /// <param name="Mine">A ground item: true when this client may pick it up now (no loot priority, its own, or the priority is over); null for
     /// everything else. Who holds the priority, and until when, is never sent.</param>
+    /// <param name="Weapon">A player: the "Weapon types" term of what it holds (<c>unarmed</c> for nothing); null for every other kind.</param>
+    /// <param name="Worn">A player: the item ids it wears that have a worn visual, in "Equipment slots" order (the client finds each visual in its
+    /// bundle); null or empty when none. Never stats.</param>
     public sealed record EntityRecord(long Id, string Kind, string? DisplayKey, GridCell Cell, string Facing, GridCell? Next, double Speed,
-        double? Hp = null, bool Dead = false, int Quantity = 0, bool? Mine = null);
+        double? Hp = null, bool Dead = false, int Quantity = 0, bool? Mine = null, string? Weapon = null, IReadOnlyList<string>? Worn = null);
 
     /// <summary>The fields of a <see cref="ChangeRecord"/> that are present (VOCABULARY.md "View fields").</summary>
     [Flags]
@@ -165,6 +219,9 @@ namespace Game.Shared.Protocol
 
         /// <summary><c>mine</c> (a ground item's loot priority ended).</summary>
         Mine = 128,
+
+        /// <summary><c>weapon</c> and <c>worn</c> (a player put something on or took it off).</summary>
+        Look = 256,
     }
 
     /// <summary>
@@ -181,8 +238,10 @@ namespace Game.Shared.Protocol
     /// <param name="Hp">New HP fraction, when <see cref="ChangedFields.Hp"/>.</param>
     /// <param name="Dead">New dead flag, when <see cref="ChangedFields.Dead"/>.</param>
     /// <param name="Mine">New pick-up flag, when <see cref="ChangedFields.Mine"/>.</param>
+    /// <param name="Weapon">New weapon type, when <see cref="ChangedFields.Look"/>.</param>
+    /// <param name="Worn">New worn item ids, when <see cref="ChangedFields.Look"/> (empty: nothing visible).</param>
     public sealed record ChangeRecord(long Id, ChangedFields Fields, GridCell Cell, string? Facing, GridCell? Next, double Speed, string? DisplayKey,
-        double Hp = 0, bool Dead = false, bool Mine = false);
+        double Hp = 0, bool Dead = false, bool Mine = false, string? Weapon = null, IReadOnlyList<string>? Worn = null);
 
     /// <summary>
     /// One attack seen in a tick, in a delta's <c>hits</c> as a compact array <c>[attacker, target, amount, result]</c>, e.g. <c>[42,7,13,"crit"]</c>.
@@ -237,11 +296,15 @@ namespace Game.Shared.Protocol
     /// <c>rejected</c>: an intent was refused and nothing changed. <c>{"type":"rejected","intent":"move","reason":"no_path","cell":[30,2]}</c> or
     /// <c>{"type":"rejected","intent":"attack","reason":"target_gone","target":99}</c>.
     /// </summary>
-    /// <param name="Intent">The message type that was refused (<c>move</c>, <c>attack</c>).</param>
-    /// <param name="Reason">For <c>move</c> a VOCABULARY.md "Movement reasons" (<c>MoveRejected</c>) term, for <c>attack</c> an "Attack reasons" term.</param>
+    /// <param name="Intent">The message type that was refused (<c>move</c>, <c>attack</c>, or an item intent: <c>pick_up</c>, <c>use_item</c>, <c>equip</c>,
+    /// <c>unequip</c>, <c>drop_item</c>).</param>
+    /// <param name="Reason">For <c>move</c> a VOCABULARY.md "Movement reasons" (<c>MoveRejected</c>) term, for <c>attack</c> an "Attack reasons" term,
+    /// for an item intent an "Item reasons" term.</param>
     /// <param name="Cell">The target cell of the refused move, if any.</param>
     /// <param name="Target">The target of the refused attack, if any.</param>
-    public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null) : ServerMessage
+    /// <param name="Entry">The inventory entry of a refused <c>use_item</c>, <c>equip</c> or <c>drop_item</c>, if any.</param>
+    /// <param name="Slot">The slot of a refused <c>equip</c> or <c>unequip</c>, if any.</param>
+    public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null, long? Entry = null, string? Slot = null) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Rejected;
@@ -305,6 +368,49 @@ namespace Game.Shared.Protocol
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Respawned;
+    }
+
+    /// <summary>One inventory entry on the wire: <c>{"id":12,"item":"item.x","quantity":3}</c>, with <c>"slot":"weapon"</c> while worn.</summary>
+    /// <param name="Id">Entry id (equipment: its instance id); what <c>use_item</c>, <c>equip</c> and <c>drop_item</c> name.</param>
+    /// <param name="Item">The item id (name and icon come from the bundle).</param>
+    /// <param name="Quantity">How many.</param>
+    /// <param name="Slot">The "Equipment slots" term it is worn in, or null.</param>
+    public sealed record InventoryEntryRecord(long Id, string Item, int Quantity, string? Slot = null);
+
+    /// <summary>
+    /// <c>inventory</c> (owner only): the whole inventory and equipment, after every snapshot (join, resume, warp, resync). It replaces what the
+    /// client had. <c>{"type":"inventory","rev":4,"slots":100,"weight":85,"weight_limit":2040,"load":"normal","entries":[...]}</c>.
+    /// </summary>
+    /// <param name="Rev">The change counter: each <see cref="InventoryChangedMessage"/> after this carries the next value.</param>
+    /// <param name="Slots">Most entries the inventory holds.</param>
+    /// <param name="Weight">Carried weight (worn items included).</param>
+    /// <param name="WeightLimit">The character's <c>weight_limit</c>.</param>
+    /// <param name="Load">A "Weight states" term.</param>
+    /// <param name="Entries">Every entry, by id.</param>
+    public sealed record InventoryMessage(long Rev, int Slots, int Weight, int WeightLimit, string Load, IReadOnlyList<InventoryEntryRecord> Entries) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Inventory;
+    }
+
+    /// <summary>
+    /// <c>inventory_changed</c> (owner only): one change, relative to the last <c>inventory</c> or <c>inventory_changed</c>; <see cref="Rev"/> is one
+    /// more than the last one. A client that sees a gap keeps what it has and waits for the next <c>inventory</c>.
+    /// <c>{"type":"inventory_changed","rev":5,"cause":"used","item":"item.x","weight":80,"weight_limit":2040,"load":"normal","entries":[...],"removed":[12]}</c>.
+    /// </summary>
+    /// <param name="Rev">The change counter.</param>
+    /// <param name="Cause">An "Inventory changes" term.</param>
+    /// <param name="Item">The item the change is about (picked up, used, equipped, taken off, dropped), or null for <c>weight</c>.</param>
+    /// <param name="Weight">Carried weight now.</param>
+    /// <param name="WeightLimit">The weight limit now.</param>
+    /// <param name="Load">A "Weight states" term.</param>
+    /// <param name="Entries">Entries added or changed, as they are now; empty when none.</param>
+    /// <param name="Removed">Ids of entries that are gone; empty when none.</param>
+    public sealed record InventoryChangedMessage(long Rev, string Cause, string? Item, int Weight, int WeightLimit, string Load,
+        IReadOnlyList<InventoryEntryRecord> Entries, IReadOnlyList<long> Removed) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.InventoryChanged;
     }
 
     /// <summary><c>pong</c>: answer to <see cref="PingMessage"/>. <c>{"type":"pong","seq":7}</c>.</summary>

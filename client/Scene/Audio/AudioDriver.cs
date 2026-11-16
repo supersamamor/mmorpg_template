@@ -62,7 +62,7 @@ public sealed class AudioDriver
     /// <summary>The player's stored choices; the HUD saves them.</summary>
     public UserPreferences Preferences { get; }
 
-    /// <summary>Weapon type of an entity's attacks, or null for none. T-401 (equipment) replaces the default, which says unarmed for every character: the wire does not carry weapons yet.</summary>
+    /// <summary>Weapon type of an entity's attacks, or null for none. The default is what the server says a player holds (its view record's <c>weapon</c>, T-401).</summary>
     public Func<EntityView, string?> WeaponTypeOf { get; set; }
 
     /// <summary>Plugs in another timing source (the default is <see cref="CombatImpactSource"/> over <c>World.Combat</c>).</summary>
@@ -180,7 +180,21 @@ public sealed class AudioDriver
         return dx * dx + dz * dz;
     }
 
-    private static string? DefaultWeaponType(EntityView entity) => entity.Kind == EntityKinds.Player ? WeaponTypes.Unarmed : null;
+    private static string? DefaultWeaponType(EntityView entity) => entity.Kind == EntityKinds.Player ? entity.Weapon ?? WeaponTypes.Unarmed : null;
+
+    /// <summary>
+    /// An own inventory change (T-401): a pick-up plays the item acquired event, a use the item's use sound, a put-on its equip sound. Taking off and
+    /// dropping are silent.
+    /// </summary>
+    public void OnInventoryChanged(InventoryChangedMessage change)
+    {
+        switch (change.Cause)
+        {
+            case InventoryChanges.PickedUp: OnItemAcquired(); break;
+            case InventoryChanges.Used: OnItemUsed(change.Item); break;
+            case InventoryChanges.Equipped: OnItemEquipped(change.Item); break;
+        }
+    }
 
     private static void Print(string line) => GD.Print(line);
 }

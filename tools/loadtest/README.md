@@ -12,6 +12,8 @@ dotnet run -c Release --project tools/loadtest -- --bots 50
 Options: `--bots N` (50), `--grace G` (0: first log in G characters and drop them, so they wait in their grace period), `--compression`
 (the server and the bots negotiate permessage-deflate), `--warmup S` (30), `--measure S` (60, at least 60 so the server's one-minute tick
 window is all after warm-up), `--fighters 0.5` (share of bots that fight), `--server path/Game.Server.dll`.
+Fighters also pick up the ground items they may take within 6 cells, once per item (T-401: `pick_up`, counted as sent, picked up and refused);
+`--no-pickups` turns that off, which a server from before T-401 needs (it does not know the message).
 `--spare-slots N` (0) adds N sessions to `max-sessions` (bots + grace + N), so a real client can join the bot-filled server, and `--port P` (0 = a free port) fixes the port so you can point the
 client at it: `dotnet run -c Release --project tools/loadtest -- --bots 50 --spare-slots 2 --port 7791`, then `godot --path client -- --measure 40 --server ws://127.0.0.1:7791/ws`
 (the server runs for warm-up + measure + 60 s; the client logs in as the dev name `dev` unless `--name` says otherwise). With spare slots the end-of-run "full server" check is skipped.

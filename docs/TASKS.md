@@ -94,7 +94,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
-| T-401 | Inventory, equip slots, weight: pick up, use, equip, unequip, drop; own-inventory messages; HUD inventory panel | Claude Code | Opus 5.5 | [T-401](../tasks/prompts/T-401.md) | T-302, T-307, T-211, T-305 | In Progress | Touches `Net/**` for the item messages only (approved by the user 2026-11-15); ADR-002 #160 |
+| T-401 | Inventory, equip slots, weight: pick up, use, equip, unequip, drop; own-inventory messages; HUD inventory panel | Claude Code | Opus 5.5 | [T-401](../tasks/prompts/T-401.md) | T-302, T-307, T-211, T-305 | Review | Touches `Net/**` for the item messages only (approved by the user 2026-11-15); ADR-002 #160 |
 
 ## Phase 7 — Persistence & accounts
 

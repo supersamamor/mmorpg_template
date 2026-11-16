@@ -8,6 +8,7 @@ using Game.Server.Hosting;
 using Game.Server.Net;
 using Game.Server.World;
 using Game.Server.World.Combat;
+using Game.Server.World.Inventory;
 using Game.Shared.Protocol;
 using Game.Shared.World;
 using Game.Tests.Server;
@@ -41,11 +42,15 @@ public sealed class GatewayRig : IAsyncDisposable
         var clock = new SystemClock();
         ContentHash = ClientBundleExporter.Hash(Content);
         var progressions = new InMemoryProgressionStore();
-        World = new GameWorld(Content.Grids.Values, ServerPipeline.Create(Content, progressions), 1, clock, Log);
+        World = new GameWorld(Content.Grids.Values, ServerPipeline.Create(Content, progressions, Inventories, clock), 1, clock, Log);
         Start = new NewCharacters(Content);
-        Gateway = new Gateway(World, Start, options, Clock, Log, ContentHash, progress: new OwnProgress(Content, progressions));
+        Gateway = new Gateway(World, Start, options, Clock, Log, ContentHash, progress: new OwnProgress(Content, progressions),
+            inventory: new OwnInventory(Content.Balance.Inventory, Inventories));
         _runners = World.Instances.Select(i => new InstanceRunner(i, clock, Log)).ToList();
     }
+
+    /// <summary>The players' inventories (the inventory systems write them; the gateway's own inventory messages read them).</summary>
+    public InMemoryInventoryStore Inventories { get; } = new();
 
     public GatewayHost Host => _host ?? throw new InvalidOperationException("Not started.");
 

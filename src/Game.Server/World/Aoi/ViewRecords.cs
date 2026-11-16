@@ -19,8 +19,9 @@ namespace Game.Server.World.Aoi;
 /// <param name="Quantity">A ground item's quantity; 0 for every other kind.</param>
 /// <param name="LootOwner">A ground item's loot-priority holder while the priority lasts, else null. Server side only: the writer turns it
 /// into a per-observer "may I pick it up" flag and never sends the id.</param>
+/// <param name="Look">A player's weapon type and worn item ids (<see cref="Entity.Look"/>), or null for every other kind. Display data only.</param>
 public readonly record struct EntityView(EntityId Id, EntityKind Kind, string? DisplayKey, GridCell Cell, string Facing, GridCell? Next, double Speed,
-    int HpPercent = -1, bool Dead = false, int Quantity = 0, EntityId? LootOwner = null);
+    int HpPercent = -1, bool Dead = false, int Quantity = 0, EntityId? LootOwner = null, Inventory.WornLook? Look = null);
 
 /// <summary>The HP bar others see: a whole percentage, so exact HP never leaks, that reads 0 only at 0 HP and 100 only at full HP.</summary>
 public static class HpBar
@@ -74,6 +75,9 @@ public enum ViewFields
 
     /// <summary><c>mine</c>: <see cref="EntityView.LootOwner"/> (the loot priority ended, so who may pick the item up changed).</summary>
     Mine = 128,
+
+    /// <summary><c>weapon</c> and <c>worn</c>: <see cref="EntityView.Look"/> (a player put something on or took it off).</summary>
+    Look = 256,
 }
 
 /// <summary>

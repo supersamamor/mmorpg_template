@@ -1,5 +1,7 @@
 using Game.Server.World.Combat;
+using Game.Server.World.Inventory;
 using Game.Shared.Stats;
+using Game.Shared.Vocabulary;
 using Game.Shared.World;
 
 namespace Game.Server.World;
@@ -98,6 +100,21 @@ public sealed class Entity
 
     /// <summary>Quantity, loot priority and expiry of an <see cref="EntityKind.Item"/> entity; null for every other kind. Set by combat.</summary>
     public GroundItem? GroundItem { get; set; }
+
+    /// <summary>A player's equipped weapon as combat needs it (attack, refine, range, element), or null when unarmed. Set by the inventory.</summary>
+    public EquippedWeapon? Weapon { get; set; }
+
+    /// <summary>
+    /// What others see a player wear (weapon type and worn item ids), or null for every other kind and for a player the inventory has not seen yet.
+    /// Set by the inventory, read by the AOI; a new object means a change.
+    /// </summary>
+    public WornLook? Look { get; set; }
+
+    /// <summary>
+    /// A player's <see cref="WeightStates"/> term: <c>burdened</c> stops natural regeneration, <c>overweight</c> also stops attacks (ARCHITECTURE §6.8).
+    /// Set by the inventory, read by combat. <c>normal</c> for everything else.
+    /// </summary>
+    public string Load { get; set; } = WeightStates.Normal;
 }
 
 /// <summary>Thread-safe, monotonically increasing id source shared by every instance of one <see cref="GameWorld"/>.</summary>

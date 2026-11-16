@@ -305,6 +305,8 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
 
 - **Vitals.** Players and monsters with a stat sheet get `Entity.Vitals` (current HP/SP) when they enter a map, full at `max_hp`; they travel
   with the entity across warps. Every tick they are clamped to a changed sheet's maxima (a higher max does not refill). HP never goes below 0.
+- **Weight.** A player at `burdened` (§6.8) does not regenerate; one at `overweight` cannot attack: `AttackTarget` is refused and a running auto-attack
+  ends, both with `overweight`.
 - **Regeneration.** Each tick every living player and monster regenerates `hp_regen` / `sp_regen` points per second of simulated time (the derived
   stats; fractions of a point are carried, so the total follows the rate whatever the tick length), never above max. Dealing or taking an
   attack (a miss included) pauses it for `regen.out_of_combat_delay_ms`. The dead never regenerate. A monster healed back to full by it
@@ -321,7 +323,8 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
   walking but can still be attacked and killed (disconnecting is no escape), stays dead, and a resumed session sees it dead and sends
   `Respawn`. Combat has no special case for it.
 - **Hits.** Every attack goes through `CombatResolver` with one reused `AttackContext` (monster element, race and size from `MonsterDef`;
-  weapon inputs 0 until equipment). HP changes by the damage, clamped to 0..max; `DamageDealt` carries amount, `hit`/`crit`/`miss` and HP left.
+  a player's `weapon_atk`, `refine` and attack element from its equipped weapon, `Entity.Weapon`, set by the inventory, §6.8; 0 and neutral unarmed).
+  A weapon's `attack_range` replaces `combat.player_attack_range`. HP changes by the damage, clamped to 0..max; `DamageDealt` carries amount, `hit`/`crit`/`miss` and HP left.
 - **Death** at 0 HP, in the same step: `Dead = true` (movement stops it, the router drops its intents, combat ignores it), `EntityDied`. A monster
   stays as a corpse for `death.corpse_ms`, is then despawned, and is respawned by the spawner. A player stays dead on its cell until `Respawn`, then comes back with
   `death.respawn_hp_percent` of max HP at the respawn point of the map it died on (the map's `respawn` cell, else the first warp arriving on it, else the `new_character` start); on death it loses
@@ -334,6 +337,43 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
   Each drop is an `EntityKind.Item` entity on a random walkable cell within `loot.spread_radius` of the death cell (`ItemDropped`); for
   `loot.priority_ms` only the top damager may take it (`LootRules.MayPickUp`), and after `loot.lifetime_ms` it is despawned
   (`ItemExpired`). Clients see ground items as kind `item` (§10) with their quantity and whether they may take them now, never the owner or the timers.
+  Picking them up is the inventory's (§6.8).
+
+### 6.8 Inventory
+One system, `Game.Server/World/Inventory` (`inventory`), after combat and before the AOI; the rules are pure functions in `Game.Shared/Items`
+(`InventoryRules`, `InventoryState`), shared with the tests. Numbers from `balance.yaml` `inventory` and `new_character.start_items`; the weight limit is the
+derived stat `weight_limit` (`formulas.yaml`).
+
+- **Model.** Per character, an `InventoryState` in an `IInventoryStore` shared by every instance (in memory until T-702, like progression). An **entry** is a
+  stack of one item up to its `max_stack`, or one equipment item with its own instance id (T-402 adds cards and refine to it). Entry ids come from the store,
+  unique for the server run; an equipment item dropped and picked up again keeps its id. Worn entries stay in the inventory (their slot is set), so they count
+  toward `inventory.max_entries` and the weight, and putting something on never needs room. **Weight** = Σ `weight × quantity`.
+- **Weight states** (`WeightStates`, from the weight as a share of `weight_limit`): `normal`; `burdened` from `inventory.burdened_percent` (50%): no natural
+  HP and SP regeneration; `overweight` from `inventory.overweight_percent` (90%): no regeneration and no attacks (§6.7). A pick-up that would pass 100% is
+  refused (`too_heavy`). The state is on `Entity.Load`; the limit is re-read whenever the stat sheet changes (a level, STR from equipment), and the owner is told.
+- **Atomic operations.** Every change (pick up, use, equip, unequip, drop) checks everything first and returns an "Item reasons" term with nothing changed;
+  only then does it change the state, in steps that cannot fail, inside one tick. So each one maps onto one database transaction for T-702 without changing
+  the rules. A refusal is an `ItemRefused` event and a `rejected` message.
+- **Intents** (`PickUp`, `UseItem`, `Equip`, `Unequip`, `DropItem`; rate-limited like every client message).
+  - *Pick up:* the gateway checks the target is a ground item the client sees and stops the auto-attack; the inventory walks the player with `MoveTo`
+    until it is within `inventory.pickup_range` (1, Chebyshev) of the item, then checks `LootRules.MayPickUp`, the weight and the free entries, and takes
+    it (`ItemAcquired`; the entity is despawned). A new move order or a stop cancels the walk (`cancelled`), no path ends it (`unreachable`), and an item taken
+    or expired meanwhile is `item_gone`. Two players on one item in the same tick: the intent that arrived first wins.
+  - *Use:* a consumable that is not worn, off its cooldown (`cooldown_ms` per item id, on the server clock so it holds across maps). Its effects go through
+    one seam, `IItemEffects`, that T-501's effect runner will own; T-401's `BasicItemEffects` runs only `heal` and `restore_sp`, each amount a formula with
+    the user's stats as the caster variables, never above max. A consumable with any other effect type is refused (`unsupported_effect`) and nothing is
+    used up: today `item.antidote` (`remove_status`) and `item.swift_elixir` (`apply_status`). `consumed: false` items stay.
+  - *Equip:* kind `equip`; `slot` (any one of the item's `slots`; without one, the first of them that is free, else the first); `min_base_level`;
+    `job_ids`, and for a weapon its type in the job's `weapon_types`. A filled slot swaps in the same operation. **Two-handed rule (data):** a weapon whose
+    `weapon_type` is in `inventory.two_handed_weapon_types` (`sword_2h`, `staff`, `bow`) placed in `weapon` also takes `shield`: putting it on takes a
+    shield off, and putting a shield on takes it off. Modifiers are evaluated once (refine 0 until T-402) and go onto the stat sheet with the source
+    `equip:<entry id>` (§6.1); taking the entry off removes exactly that source.
+  - *Unequip:* a worn slot (`not_equipped` otherwise). *Drop:* a carried entry (worn ones are `item_equipped`), 1..its quantity, onto the player's cell
+    as a ground item with no owner (`ItemDiscarded`), gone after `inventory.dropped_lifetime_ms`.
+- **What other systems read** (hard rule 7, no calls): the sheet's modifiers; `Entity.Weapon` (type, `weapon_atk`, refine, range, element) for combat;
+  `Entity.Look` (weapon type and the worn item ids that have a worn visual, in slot order) for the AOI; `Entity.Load` for combat.
+- **Starting items** are data: `new_character.start_items` (`item_id`, `quantity`, `equipped`), validated at load. A new character gets them when the
+  inventory first sees it; today the Bone Dirk (worn) and three Healing Draughts.
 
 ## 7. Client
 
@@ -378,8 +418,8 @@ One path for touch and mouse (`InputRouter`; a mouse arrives as touch index 0, s
 - **Tap** (a press that lifts within the drag threshold, 12 dp, before the long-press time, 0.5 s). Ground → raycast to the plane → cell → `move`. A tap marker shows
   at once; the character moves when the server confirms (≤ 1 tick). `rejected` removes the marker quietly.
 - **Tap a monster** → `attack`, with a target ring. It is picked on screen, at least half the platform's minimum touch target (48 dp Android, 44 pt iOS) on each side
-  of its centre, or as wide as the shape looks if that is more. The client checks no range, path or walkability. Talking and picking up come with their systems
-  (the other kinds count as ground for now).
+  of its centre, or as wide as the shape looks if that is more. The client checks no range, path or walkability. A tap that is not on a monster but on a ground
+  item (the same pick radius, at the bag's height) sends `pick_up`; the loot ring shows what this client may take, the server decides. Talking comes with NPCs.
 - **Long-press** (still for 0.5 s) on any entity shows a small info panel with what the display bundle says (name, stack count, kind) and nothing else; on the ground it
   does nothing. It fires once, while the finger is down, and the lift that ends it is never a tap. Any later touch hides the panel.
 - **Drag** (past the threshold) is neither tap nor long-press. **Pinch** (two fingers, past an 8 dp dead zone) and the scroll wheel zoom the camera inside its clamp;
@@ -407,6 +447,12 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
 - **Layout.** Top left: level and EXP, HP and SP with bars. Top centre: connection notice and the target frame (the target's name and an HP bar: only the fraction the server sends, redrawn when the entity's `HpVersion` counter moves; never a number). A level-up pulses the top-left block for `level_up_flash_seconds`. Top right: connection state, the UI size
   button, log out. Bottom: the one-line flash, then the hotbar (slot count, rows and size are client config; a narrow screen shrinks slots to the minimum and then adds rows).
   The login, death, stop and refusal screens are one full-screen panel whose content stays inside the safe area.
+- **Bag** (T-401, `client/Scene/InventoryPanel.cs`, view model `client/Core/Items/InventoryView.cs`). The Bag button (top right, while online) opens a panel
+  over the safe area: the entry count, the weight line and bar (coloured when `burdened` or `overweight`), the ten equipment slots, and the carried entries as
+  buttons with icon (theme `icon.*` key from the bundle), name and count, in a scroll container (a phone at 1.5x scrolls), then the selected entry's
+  actions: Use, Equip, Take off, Drop (from the bundle's item kind and whether it is worn). A tap on a worn slot takes it off. It only sends intents; the
+  server's `inventory_changed` redraws it. It redraws only when the view's `Version` moves and costs nothing while closed. The layout check covers it open
+  and filled with the longest words at every screen shape and scale (controls inside a scroll container may be scrolled out of sight; only their sizes count).
 - **Where the client's own words live (ADR-002 row 120).** In `client/Core/UiText.cs`: one static class of constants and small formatting functions in English, and nowhere
   else (a test fails on a literal assigned to a text property in `client/Scene`). Why: the refusal and update screens must read even when the bundle, theme or any data
   file is missing or broken, which rules out loading them; the pure core and its tests can use them; a typo or a missing word is a compile error; and the number of
@@ -517,8 +563,8 @@ Every sound is an **asset key** resolved by the theme (§8), so replacing a soun
   - *What plays when:* map music and ambience on load; a monster's aggro sound the first time it hits anyone (the wire has no aggro message); hit and die sounds from the bundle's
     `sounds` or the defaults; a weapon's swing and impact from `weapon.<type>.swing|impact`, on the same moments as the combat visuals (`IImpactSource`: swing = the attack clip
     starts, impact = the hit lands, from T-303's `CombatTimeline.Impact` through `CombatImpactSource`); level up from `audio.events`; the interface tap on HUD
-    buttons. The wire does not say which weapon a character holds, so every character swings as `unarmed` until T-401. Item use and equip, and item acquired, have hooks
-    (`AudioDriver.OnItemUsed|OnItemEquipped|OnItemAcquired`) that T-401 calls.
+    buttons. A player swings with the weapon type its view record says (`weapon`, T-401). Own `inventory_changed` messages call the hooks: `picked_up` ->
+    `OnItemAcquired` (the `ItemAcquired` event sound), `used` -> `OnItemUsed`, `equipped` -> `OnItemEquipped` (the item's sound key, else the category default).
   - *Debug trace:* client setting `audio_trace` (`--set audio_trace=1`, or `run-e2e.ps1 -AudioTrace`) logs one `[audio]` line per play, skip (with the reason), steal, crossfade, bus change and pause.
   - *Phone:* the pause in the background is the engine's pause notification and is pure state (`AppAudioState`, which also freezes the audio clock). **Godot 4.7.2 cannot do from C#:**
     the iOS silent switch (it has no API for reading it; making effects follow it while music does not needs native code that sets the audio session category and reads the switch)
@@ -614,8 +660,9 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 - **Disconnects are normal.** When a socket drops or the app is backgrounded, the server keeps
   the character in the world for a grace period (`grace-period-ms`, server config, default 60 s), then saves (T-702) and logs it out.
 - **Resume** (T-210): the client reconnects with a resume token and receives a full snapshot, then deltas (lifecycle step 6 below).
-- **Snapshot / delta shape** (T-204, T-307): a view record is `id, kind, display_key, cell, facing, next, speed, hp, dead` (`next` and
-  `speed` only while walking, `hp` only for entities that fight, `dead` only when true; a ground item adds `quantity` and `mine`); a delta is
+- **Snapshot / delta shape** (T-204, T-307, T-401): a view record is `id, kind, display_key, cell, facing, next, speed, hp, dead` (`next` and
+  `speed` only while walking, `hp` only for entities that fight, `dead` only when true; a ground item adds `quantity` and `mine`; a player adds `weapon`, its
+  weapon type, and `worn`, the item ids it wears that have a worn visual, left out when empty: the client finds the visuals in its bundle for T-403, and never gets stats); a delta is
   `appeared` (records), `changed` (id + changed fields only), `disappeared` (ids), each ordered by entity id, plus `hits` and `vitals`.
   A walker produces one change per cell reached, not per tick; the client interpolates from `cell` to `next`.
 - **Combat on the wire** (T-307). Others' HP is a fraction rounded to 0.01 (`hp`), sent only when that rounded value changes, so exact HP
@@ -664,20 +711,28 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   | `respawn` | C→S | — (ignored while alive) |
   | `ping` | C→S | `seq` |
   | `logout` | C→S | — (leave now: `bye logout`, the character is removed on the next tick, no grace period) |
+  | `pick_up` | C→S | `target` (a ground item the client sees; it walks there first; may come back `rejected` with an "Item reasons" term) |
+  | `use_item` | C→S | `entry` (an inventory entry id) |
+  | `equip` | C→S | `entry`, optional `slot` (an "Equipment slots" term; without it the server picks) |
+  | `unequip` | C→S | `slot` |
+  | `drop_item` | C→S | `entry`, `quantity` (onto the character's cell, for anyone) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `vitals` (when changed); empty ones left out |
-  | `rejected` | S→C | `intent` (`move` or `attack`), `reason` (a `MoveRejected` or "Attack reasons" term), `cell` (move) or `target` (attack) |
+  | `rejected` | S→C | `intent` (`move`, `attack` or an item intent), `reason` (a `MoveRejected`, "Attack reasons" or "Item reasons" term), `cell` (move), `target` (attack, `pick_up`), `entry` (`use_item`, `equip`, `drop_item`), `slot` (`equip`, `unequip`) |
   | `attack_stopped` | S→C (owner) | `target`, `reason` (an "Attack reasons" term) |
   | `exp` | S→C (owner) | `base_level`, `base_exp`, `base_next`, `job_level`, `job_exp`, `job_next` (`*_next` = EXP the level needs, 0 at the cap) |
   | `level_up` | S→C (owner) | `base_level` or `job_level` (one message per level reached) |
   | `you_died` | S→C (owner) | `killer` (entity id, if any); send `respawn` to come back |
   | `respawned` | S→C (owner) | `map`, `cell`, `hp`; a snapshot of the respawn point follows |
+  | `inventory` | S→C (owner) | `rev`, `slots` (most entries), `weight`, `weight_limit`, `load` (a "Weight states" term), `entries` (`[{id, item, quantity, slot?}]`, by id). After every snapshot (join, resume, warp, resync); it replaces what the client had |
+  | `inventory_changed` | S→C (owner) | `rev` (one more than the last), `cause` (an "Inventory changes" term), `item`, `weight`, `weight_limit`, `load`, `entries` (added or changed, as they are now), `removed` (ids); empty lists left out. A client that sees a gap in `rev` keeps what it has until the next `inventory` |
   | `pong` | S→C | `seq` |
   | `bye` | S→C (last) | `reason` (VOCABULARY "Bye reasons"), followed by the close frame |
 
   A view record is `{"id":7,"kind":"monster","display_key":"monster.x","cell":[3,4],"facing":"e","next":[4,4],"speed":3.51,"hp":0.37}`;
-  a ground item is `{"id":9,"kind":"item","display_key":"item.x","cell":[4,5],"facing":"s","quantity":2,"mine":true}`.
+  a ground item is `{"id":9,"kind":"item","display_key":"item.x","cell":[4,5],"facing":"s","quantity":2,"mine":true}`; a player is
+  `{"id":42,"kind":"player","display_key":"job.wanderer","cell":[12,12],"facing":"n","hp":1,"weapon":"dagger","worn":["item.bone_dirk"]}`.
 - **Session lifecycle:**
   1. The client connects and must send `hello` within `hello-timeout-ms`.
   2. The server checks the protocol version, then the content hash (T-209): a `content` that differs from the server's ends in `bye update_required`; a missing one is accepted in development (logged as a warning) and refused elsewhere. Then it checks the dev login. The dev login is development only; any other environment refuses it. A `hello` with `resume`
@@ -685,7 +740,7 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   3. The server queues the character with `GameWorld.Spawn(..., initialize)` at `balance.yaml` `new_character`. On the start
      instance's tick, the initializer sets its stats (from the stats pipeline), its display key (the job id) and its view sink, and
      queues `welcome`. The AOI then sends the first `snapshot` in phase 5 of that tick, and deltas follow.
-  4. `move`/`stop`/`attack`/`stop_attack`/`respawn` are parsed and checked on the socket thread (shape; a cell inside the current map; an
+  4. `move`/`stop`/`attack`/`stop_attack`/`respawn` and the item intents are parsed and checked on the socket thread (shape; a cell inside the current map; an
      attack target the client currently sees, not itself, a monster) and queued as `MoveTo`/`StopMove`+`StopAttack`/`AttackTarget`/
      `StopAttack`/`Respawn` wherever the character is now. When the connection drops, the grace period stops both walking and attacking. Warps are followed through the world's entity directory. Each session has a token-bucket rate
      limit: messages over it are dropped and counted, and sustained flooding ends in `bye rate_limit`.

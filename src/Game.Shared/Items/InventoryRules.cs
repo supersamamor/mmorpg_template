@@ -1,0 +1,318 @@
+using System;
+using System.Collections.Generic;
+using Game.Shared.Definitions;
+using Game.Shared.Vocabulary;
+
+namespace Game.Shared.Items
+{
+    /// <summary>Finds item definitions by id (the content registry on the server, a dictionary in tests).</summary>
+    public interface IItemLookup
+    {
+        /// <summary>The item, or false when there is none with that id.</summary>
+        bool TryGet(string itemId, out ItemDef item);
+    }
+
+    /// <summary>An <see cref="IItemLookup"/> over a dictionary.</summary>
+    public sealed class ItemLookup : IItemLookup
+    {
+        private readonly IReadOnlyDictionary<string, ItemDef> _items;
+
+        /// <summary>Looks items up in <paramref name="items"/> (keyed by id, ordinal).</summary>
+        public ItemLookup(IReadOnlyDictionary<string, ItemDef> items) => _items = items ?? throw new ArgumentNullException(nameof(items));
+
+        /// <inheritdoc />
+        public bool TryGet(string itemId, out ItemDef item) => _items.TryGetValue(itemId, out item!);
+    }
+
+    /// <summary>Who wants to put something on: the facts the equip rules check, copied from the character.</summary>
+    /// <param name="BaseLevel">Base level.</param>
+    /// <param name="JobId">Job id (<c>job.*</c>).</param>
+    /// <param name="JobWeaponTypes">Weapon types the job may use, or null to skip that check.</param>
+    public sealed record Wearer(int BaseLevel, string JobId, IReadOnlyList<string>? JobWeaponTypes);
+
+    /// <summary>An equip that passed every check: what goes where, and what comes off to make room.</summary>
+    /// <param name="Entry">The entry to put on.</param>
+    /// <param name="Item">Its item.</param>
+    /// <param name="Slot">The slot it goes in.</param>
+    /// <param name="Displaced">Entries that come off (the slot's occupant, and a shield or two-handed weapon it cannot be worn with).</param>
+    public sealed record EquipPlan(InventoryEntry Entry, ItemDef Item, string Slot, IReadOnlyList<InventoryEntry> Displaced);
+
+    /// <summary>
+    /// The inventory rules as plain functions on an <see cref="InventoryState"/> (ARCHITECTURE §6.8), shared by the server and the tests. Every
+    /// operation checks everything first and returns an <see cref="ItemReasons"/> term without touching the state when it refuses; only then does
+    /// it change the state, in steps that cannot fail. So an operation applies fully or not at all, and T-702 can wrap each one in one database
+    /// transaction without changing the rules. No I/O, no clock, no randomness: time and new ids come in as arguments.
+    /// </summary>
+    public sealed class InventoryRules
+    {
+        private readonly IItemLookup _items;
+        private readonly InventoryBalanceDef _balance;
+        private readonly HashSet<string> _twoHanded;
+
+        /// <summary>Rules over <paramref name="items"/> with the numbers of <paramref name="balance"/>.</summary>
+        public InventoryRules(IItemLookup items, InventoryBalanceDef balance)
+        {
+            _items = items ?? throw new ArgumentNullException(nameof(items));
+            _balance = balance ?? throw new ArgumentNullException(nameof(balance));
+            _twoHanded = new HashSet<string>(balance.TwoHandedWeaponTypes, StringComparer.Ordinal);
+        }
+
+        /// <summary>The balance numbers.</summary>
+        public InventoryBalanceDef Balance => _balance;
+
+        /// <summary>The item lookup.</summary>
+        public IItemLookup Items => _items;
+
+        /// <summary>Most units one entry of <paramref name="item"/> holds: 1 for equipment, else <c>max_stack</c> (at least 1).</summary>
+        public static int StackLimit(ItemDef item) => item.Kind == ItemKind.Equip ? 1 : Math.Max(1, item.MaxStack);
+
+        /// <summary>True when <paramref name="item"/> is a weapon held in both hands (its type is in <c>inventory.two_handed_weapon_types</c>).</summary>
+        public bool IsTwoHanded(ItemDef item) => item.Equip?.WeaponType is { } type && _twoHanded.Contains(type);
+
+        /// <summary>The sum of <c>weight × quantity</c> of every entry (an unknown item weighs nothing).</summary>
+        public int WeightOf(InventoryState state)
+        {
+            long total = 0;
+            var entries = state.Entries;
+            for (var i = 0; i < entries.Count; i++)
+                if (_items.TryGet(entries[i].ItemId, out var item)) total += (long)item.Weight * entries[i].Quantity;
+            return (int)Math.Min(int.MaxValue, total);
+        }
+
+        /// <summary>Recomputes <see cref="InventoryState.Weight"/> (after loading a state, or when item weights may have changed).</summary>
+        public void Refresh(InventoryState state) => state.Weight = WeightOf(state);
+
+        /// <summary>
+        /// The <see cref="WeightStates"/> term for <paramref name="weight"/> of <paramref name="limit"/>: <c>overweight</c> from
+        /// <c>overweight_percent</c>, <c>burdened</c> from <c>burdened_percent</c>, else <c>normal</c>. A limit of 0 or less with any weight is overweight.
+        /// </summary>
+        public string LoadOf(int weight, int limit)
+        {
+            if (weight <= 0) return WeightStates.Normal;
+            if (limit <= 0) return WeightStates.Overweight;
+            var hundredths = (long)weight * 100;
+            if (hundredths >= (long)limit * _balance.OverweightPercent) return WeightStates.Overweight;
+            if (hundredths >= (long)limit * _balance.BurdenedPercent) return WeightStates.Burdened;
+            return WeightStates.Normal;
+        }
+
+        // ---- add -------------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Puts <paramref name="quantity"/> × <paramref name="itemId"/> in: first into the item's carried stacks that have room (lowest id
+        /// first), then into new entries. Refused, with nothing changed, when the weight would pass <paramref name="weightLimit"/>
+        /// (<c>too_heavy</c>) or the new entries do not fit <c>inventory.max_entries</c> (<c>inventory_full</c>); also <c>item_gone</c> for an unknown
+        /// item and <c>invalid_quantity</c> below 1. New entries take ids from <paramref name="newId"/>, except that a single equipment item
+        /// keeps <paramref name="instanceId"/> when it is above 0 (an item dropped and picked up again).
+        /// </summary>
+        public string? TryAdd(InventoryState state, string itemId, int quantity, int weightLimit, Func<long> newId, InventoryDelta delta, long instanceId = 0)
+        {
+            if (newId == null) throw new ArgumentNullException(nameof(newId));
+            if (!_items.TryGet(itemId, out var item)) return ItemReasons.ItemGone;
+            if (quantity < 1) return ItemReasons.InvalidQuantity;
+            var added = (long)item.Weight * quantity;
+            if (added > 0 && state.Weight + added > weightLimit) return ItemReasons.TooHeavy;
+
+            var limit = StackLimit(item);
+            var room = 0L;
+            if (item.Kind != ItemKind.Equip)
+            {
+                var entries = state.Entries;
+                for (var i = 0; i < entries.Count; i++)
+                    if (entries[i].Slot == null && string.Equals(entries[i].ItemId, itemId, StringComparison.Ordinal)) room += limit - entries[i].Quantity;
+            }
+            var rest = Math.Max(0, quantity - room);
+            var newEntries = (rest + limit - 1) / limit;
+            if (state.Entries.Count + newEntries > _balance.MaxEntries) return ItemReasons.InventoryFull;
+
+            // Checked: from here nothing can fail.
+            var left = quantity;
+            if (item.Kind != ItemKind.Equip)
+            {
+                for (var i = 0; i < state.Entries.Count && left > 0; i++)
+                {
+                    var entry = state.Entries[i];
+                    if (entry.Slot != null || !string.Equals(entry.ItemId, itemId, StringComparison.Ordinal) || entry.Quantity >= limit) continue;
+                    var put = Math.Min(left, limit - entry.Quantity);
+                    var grown = entry with { Quantity = entry.Quantity + put };
+                    state.Put(grown);
+                    delta.Upsert(grown);
+                    left -= put;
+                }
+            }
+            var first = true;
+            while (left > 0)
+            {
+                var put = Math.Min(left, limit);
+                var id = first && instanceId > 0 && quantity == 1 && state.Find(instanceId) == null ? instanceId : newId();
+                first = false;
+                var entry = new InventoryEntry(id, itemId, put);
+                state.Put(entry);
+                delta.Upsert(entry);
+                left -= put;
+            }
+            state.Weight = WeightOf(state);
+            return null;
+        }
+
+        // ---- remove ----------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Takes <paramref name="quantity"/> units out of entry <paramref name="entryId"/> (the whole entry when that is all of it). Refused:
+        /// <c>item_gone</c> (no such entry), <c>item_equipped</c> (worn), <c>invalid_quantity</c> (below 1 or more than it holds).
+        /// </summary>
+        public string? TryRemove(InventoryState state, long entryId, int quantity, InventoryDelta delta)
+        {
+            var reason = CanRemove(state, entryId, quantity, out var entry);
+            if (reason != null) return reason;
+            Take(state, entry!, quantity, delta);
+            return null;
+        }
+
+        /// <summary>The checks of <see cref="TryRemove"/> without changing anything.</summary>
+        public string? CanRemove(InventoryState state, long entryId, int quantity, out InventoryEntry? entry)
+        {
+            entry = state.Find(entryId);
+            if (entry == null) return ItemReasons.ItemGone;
+            if (entry.Slot != null) return ItemReasons.ItemEquipped;
+            if (quantity < 1 || quantity > entry.Quantity) return ItemReasons.InvalidQuantity;
+            return null;
+        }
+
+        private void Take(InventoryState state, InventoryEntry entry, int quantity, InventoryDelta delta)
+        {
+            if (quantity >= entry.Quantity)
+            {
+                state.Remove(entry.Id);
+                delta.Gone(entry.Id);
+            }
+            else
+            {
+                var shrunk = entry with { Quantity = entry.Quantity - quantity };
+                state.Put(shrunk);
+                delta.Upsert(shrunk);
+            }
+            state.Weight = WeightOf(state);
+        }
+
+        // ---- use -------------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// The inventory's checks for using entry <paramref name="entryId"/> at <paramref name="nowMs"/>: it exists (<c>item_gone</c>), is a
+        /// consumable (<c>not_usable</c>) and is off cooldown (<c>cooldown</c>). Whether its effects can run is the effect runner's check.
+        /// </summary>
+        public string? CanUse(InventoryState state, long entryId, long nowMs, out InventoryEntry? entry, out ItemDef? item)
+        {
+            item = null;
+            entry = state.Find(entryId);
+            if (entry == null || !_items.TryGet(entry.ItemId, out var def)) return ItemReasons.ItemGone;
+            item = def;
+            if (def.Kind != ItemKind.Consumable || def.Consumable == null) return ItemReasons.NotUsable;
+            if (state.CooldownUntilMs.TryGetValue(def.Id, out var until) && nowMs < until) return ItemReasons.Cooldown;
+            return null;
+        }
+
+        /// <summary>
+        /// Records a use that passed <see cref="CanUse"/>: the item id goes on cooldown for <c>cooldown_ms</c> from <paramref name="nowMs"/>, and
+        /// one unit is used up when the item is <c>consumed</c>.
+        /// </summary>
+        public void ApplyUse(InventoryState state, InventoryEntry entry, ItemDef item, long nowMs, InventoryDelta delta)
+        {
+            var consumable = item.Consumable!;
+            if (consumable.CooldownMs > 0) state.CooldownUntilMs[item.Id] = nowMs + consumable.CooldownMs;
+            if (consumable.Consumed) Take(state, entry, 1, delta);
+        }
+
+        // ---- equip -----------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Checks putting entry <paramref name="entryId"/> on, into <paramref name="slot"/> or, when null, the first of the item's slots that is
+        /// free (else its first slot). Refused: <c>item_gone</c>, <c>not_equipment</c> (not an <c>equip</c> item), <c>wrong_slot</c>,
+        /// <c>level_too_low</c>, <c>wrong_job</c> (<c>job_ids</c>, or a weapon type the job cannot use). The plan lists what comes off: the slot's
+        /// occupant, a shield when a two-handed weapon goes on, a two-handed weapon when a shield goes on.
+        /// </summary>
+        public string? PlanEquip(InventoryState state, long entryId, string? slot, Wearer wearer, out EquipPlan? plan)
+        {
+            plan = null;
+            var entry = state.Find(entryId);
+            if (entry == null || !_items.TryGet(entry.ItemId, out var item)) return ItemReasons.ItemGone;
+            if (item.Kind != ItemKind.Equip || item.Equip is not { } equip || equip.Slots.Count == 0) return ItemReasons.NotEquipment;
+
+            string target;
+            if (slot != null)
+            {
+                if (!Contains(equip.Slots, slot)) return ItemReasons.WrongSlot;
+                target = slot;
+            }
+            else
+            {
+                target = equip.Slots[0];
+                for (var i = 0; i < equip.Slots.Count; i++)
+                {
+                    var occupant = state.InSlot(equip.Slots[i]);
+                    if (occupant == null || occupant.Id == entry.Id)
+                    {
+                        target = equip.Slots[i];
+                        break;
+                    }
+                }
+            }
+            if (wearer.BaseLevel < equip.MinBaseLevel) return ItemReasons.LevelTooLow;
+            if (equip.JobIds.Count > 0 && !Contains(equip.JobIds, wearer.JobId)) return ItemReasons.WrongJob;
+            if (equip.WeaponType != null && wearer.JobWeaponTypes != null && !Contains(wearer.JobWeaponTypes, equip.WeaponType)) return ItemReasons.WrongJob;
+
+            var displaced = new List<InventoryEntry>();
+            AddDisplaced(displaced, state.InSlot(target), entry);
+            if (string.Equals(target, EquipSlots.Weapon, StringComparison.Ordinal) && IsTwoHanded(item))
+                AddDisplaced(displaced, state.InSlot(EquipSlots.Shield), entry);
+            if (string.Equals(target, EquipSlots.Shield, StringComparison.Ordinal) && state.InSlot(EquipSlots.Weapon) is { } weapon
+                && _items.TryGet(weapon.ItemId, out var weaponItem) && IsTwoHanded(weaponItem))
+                AddDisplaced(displaced, weapon, entry);
+            plan = new EquipPlan(entry, item, target, displaced);
+            return null;
+        }
+
+        /// <summary>Applies a plan from <see cref="PlanEquip"/> on the same state: the displaced entries come off, then the entry goes on.</summary>
+        public void ApplyEquip(InventoryState state, EquipPlan plan, InventoryDelta delta)
+        {
+            for (var i = 0; i < plan.Displaced.Count; i++)
+            {
+                var off = plan.Displaced[i] with { Slot = null };
+                state.Put(off);
+                delta.Upsert(off);
+                delta.TakenOff.Add(off);
+            }
+            var on = plan.Entry with { Slot = plan.Slot };
+            state.Put(on);
+            delta.Upsert(on);
+        }
+
+        /// <summary>Takes off what is worn in <paramref name="slot"/>. Refused with <c>not_equipped</c> when the slot is empty or unknown.</summary>
+        public string? TryUnequip(InventoryState state, string slot, InventoryDelta delta)
+        {
+            if (slot == null || !EquipSlots.All.Contains(slot)) return ItemReasons.NotEquipped;
+            var entry = state.InSlot(slot);
+            if (entry == null) return ItemReasons.NotEquipped;
+            var off = entry with { Slot = null };
+            state.Put(off);
+            delta.Upsert(off);
+            delta.TakenOff.Add(off);
+            return null;
+        }
+
+        private static void AddDisplaced(List<InventoryEntry> list, InventoryEntry? occupant, InventoryEntry incoming)
+        {
+            if (occupant == null || occupant.Id == incoming.Id) return;
+            for (var i = 0; i < list.Count; i++)
+                if (list[i].Id == occupant.Id) return;
+            list.Add(occupant);
+        }
+
+        private static bool Contains(IReadOnlyList<string> list, string value)
+        {
+            for (var i = 0; i < list.Count; i++)
+                if (string.Equals(list[i], value, StringComparison.Ordinal)) return true;
+            return false;
+        }
+    }
+}

@@ -6,8 +6,8 @@ namespace Game.Server.World.Combat;
 /// <summary>
 /// Current HP and SP of one combat-capable entity, kept on <see cref="Entity.Vitals"/> next to its <see cref="StatSheet"/>. Starts full when
 /// combat first sees the entity, never goes below 0, and is clamped to the new <c>max_hp</c> / <c>max_sp</c> whenever the sheet changes
-/// (a lower maximum lowers the current value; a higher one leaves it). SP is tracked but nothing spends it yet. Changed only by combat on
-/// the instance's tick.
+/// (a lower maximum lowers the current value; a higher one leaves it). SP is tracked but nothing spends it yet. Changed by combat and by the
+/// inventory's item effects (<c>heal</c>, <c>restore_sp</c>), on the instance's tick.
 /// </summary>
 public sealed class Vitals
 {
@@ -52,16 +52,18 @@ public sealed class Vitals
 
 /// <summary>
 /// What an <see cref="EntityKind.Item"/> entity holds: the item, how many, who has loot priority until when, and when it disappears. Times
-/// are the instance's simulated milliseconds. Immutable; picking up (T-401) despawns the entity.
+/// are the instance's simulated milliseconds. Immutable; picking it up despawns the entity (the inventory clears <see cref="Entity.GroundItem"/> first).
 /// </summary>
 /// <param name="ItemId">The item (<c>item.*</c>); also the entity's <see cref="Entity.DefinitionId"/>.</param>
 /// <param name="Quantity">How many, at least 1.</param>
-/// <param name="Monster">The monster that dropped it.</param>
+/// <param name="Monster">The monster that dropped it (or the player, for an item a player put down).</param>
 /// <param name="Owner">The player with loot priority (the top damager), or null when anyone may take it at once.</param>
 /// <param name="DroppedAtMs">When it was dropped.</param>
 /// <param name="OwnerUntilMs">Until when only <paramref name="Owner"/> may take it (<c>loot.priority_ms</c> after the drop).</param>
-/// <param name="ExpiresAtMs">When it disappears (<c>loot.lifetime_ms</c> after the drop).</param>
-public sealed record GroundItem(string ItemId, int Quantity, EntityId Monster, EntityId? Owner, long DroppedAtMs, long OwnerUntilMs, long ExpiresAtMs);
+/// <param name="ExpiresAtMs">When it disappears (<c>loot.lifetime_ms</c> after the drop, or <c>inventory.dropped_lifetime_ms</c> for a player's).</param>
+/// <param name="InstanceId">An equipment item a player dropped: its entry id, which it keeps when picked up again; 0 for a new item.</param>
+public sealed record GroundItem(string ItemId, int Quantity, EntityId Monster, EntityId? Owner, long DroppedAtMs, long OwnerUntilMs, long ExpiresAtMs,
+    long InstanceId = 0);
 
 /// <summary>The loot rules as pure functions, so the pickup system (T-401) and the tests use the same answer.</summary>
 public static class LootRules

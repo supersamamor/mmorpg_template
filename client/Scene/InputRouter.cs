@@ -96,12 +96,16 @@ public sealed class InputRouter
             OnLongPress(new Vector2((float)_gestures.LongPressX, (float)_gestures.LongPressY));
     }
 
-    /// <summary>A tap: the monster under it, generously, else the ground. It only asks; range, path and walkability are the server's.</summary>
+    /// <summary>
+    /// A tap: the living monster or ground item nearest the finger within its reach (a monster wins a tie): attack it or pick it up; else the ground. It only
+    /// asks; range, path, walkability and who may take an item are the server's.
+    /// </summary>
     private void OnTap(Vector2 position, double now)
     {
-        if (PickEntity(position, monstersOnly: true) is { } id)
+        if (PickEntity(position, EntityKinds.Monster, EntityKinds.Item) is { } id && _session.World.Find(id) is { } picked)
         {
-            _session.TapEntity(id);
+            if (picked.Kind == EntityKinds.Item) _session.TapItem(id);
+            else _session.TapEntity(id);
             return;
         }
         if (!_camera.TryTerrain(position, _ground, out var ground)) return;
@@ -114,11 +118,12 @@ public sealed class InputRouter
     /// <summary>A long-press on something shows what the bundle says about it. On the ground it does nothing.</summary>
     private void OnLongPress(Vector2 position)
     {
-        if (PickEntity(position, monstersOnly: false) is not { } id || _session.World.Find(id) is not { } entity) return;
+        if (PickEntity(position, null, null) is not { } id || _session.World.Find(id) is not { } entity) return;
         _hud.ShowInfo(EntityInfo.Title(entity, _bundle), EntityInfo.Subtitle(entity), position);
     }
 
-    private long? PickEntity(Vector2 position, bool monstersOnly)
+    /// <summary>The living entity of <paramref name="kind"/> or <paramref name="other"/> (any kind, dead included, when both are null) nearest the touch within its reach.</summary>
+    private long? PickEntity(Vector2 position, string? kind, string? other)
     {
         var camera = _camera.Camera;
         var metrics = _hud.Metrics;
@@ -129,15 +134,17 @@ public sealed class InputRouter
         for (var i = 0; i < entities.Count; i++)
         {
             var entity = entities[i];
-            if (monstersOnly && (entity.Kind != EntityKinds.Monster || entity.Dead)) continue;
-            var world = new Vector3((float)entity.X, _ground.At(entity.X, entity.Z) + 0.45f, (float)entity.Z); // as high as the monster is drawn
+            if (kind is not null && ((entity.Kind != kind && entity.Kind != other) || entity.Dead)) continue;
+            var lift = entity.Kind == EntityKinds.Item ? 0.15f : 0.45f;   // a loot bag lies low; a monster's middle is about half a cell up
+            var world = new Vector3((float)entity.X, _ground.At(entity.X, entity.Z) + lift, (float)entity.Z);
             if (camera.IsPositionBehind(world)) continue;
             var center = camera.UnprojectPosition(world);
             // The shape's size on screen counts too, so a close-up monster is as easy to hit as it looks.
             var top = camera.UnprojectPosition(world + Vector3.Up * 0.6f);
             var reach = Mathf.Max((float)radius, center.DistanceTo(top));
             var distance = center.DistanceTo(position);
-            if (distance <= reach && distance < bestDistance)
+            // Strictly nearer wins; at the same distance a monster (the list's first kind) keeps the tap.
+            if (distance <= reach && (distance < bestDistance || (distance == bestDistance && entity.Kind == kind)))
             {
                 bestDistance = distance;
                 best = entity.Id;

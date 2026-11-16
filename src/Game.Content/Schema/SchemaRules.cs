@@ -19,6 +19,7 @@ internal static class SchemaRules
         ["Slots"] = EquipSlots.All,
         ["WeaponType"] = WeaponTypes.All,
         ["WeaponTypes"] = WeaponTypes.All,
+        ["TwoHandedWeaponTypes"] = WeaponTypes.All,
         ["AnimationId"] = AnimationIds.All,
         ["Stat"] = Stats.All,
         ["Facing"] = Directions.All,

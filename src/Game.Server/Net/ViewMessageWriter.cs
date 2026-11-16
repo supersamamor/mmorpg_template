@@ -78,7 +78,7 @@ public sealed class ViewMessageWriter
                 var c = changed[i];
                 var v = c.View;
                 ProtocolJson.WriteChange(w, v.Id.Value, FieldsOf(c.Fields), v.Cell, v.Facing, v.Next, v.Speed, v.DisplayKey, HpFraction(v) ?? 0, v.Dead,
-                    Mine(v, observer) ?? false);
+                    Mine(v, observer) ?? false, v.Look?.WeaponType, v.Look?.Worn);
             }
             w.WriteEndArray();
         }
@@ -117,7 +117,7 @@ public sealed class ViewMessageWriter
 
     private void Record(in EntityView v, EntityId observer) =>
         ProtocolJson.WriteRecord(_writer, v.Id.Value, KindTerm(v.Kind), v.DisplayKey, v.Cell, v.Facing, v.Next, v.Speed, HpFraction(v), v.Dead, v.Quantity,
-            Mine(v, observer));
+            Mine(v, observer), v.Look?.WeaponType, v.Look?.Worn);
 
     private void Begin()
     {

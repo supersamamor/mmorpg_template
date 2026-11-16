@@ -124,12 +124,18 @@ Sizes: `small`, `medium`, `large`
 | `summon`         | Spawn a monster                             |
 | `area`           | Wrap child effects over an AoE shape        |
 
+## Inventory
+**Entry**: one stack of an item, or one equipment item with its own instance id; worn entries stay in the inventory and count toward `inventory.max_entries`
+and the weight. **Weight**: the sum of `weight × quantity` over every entry; the limit is the derived stat `weight_limit`. **Source** of an equipped entry's
+stat modifiers: `equip:<entry id>`. **Rev**: the change counter of the own inventory messages.
+
 ## Equipment slots
 `head_top`, `head_mid`, `head_low`, `body`, `weapon`, `shield`, `garment`, `footgear`, `accessory_1`, `accessory_2`
 An item's `equip.slots` lists the slots it fits: it fits **any one** of them (an accessory listing `accessory_1` and `accessory_2` goes in either).
 
 ## Weapon types
 `unarmed`, `dagger`, `sword_1h`, `sword_2h`, `spear`, `axe`, `mace`, `staff`, `bow`, `knuckle`
+Two-handed (`balance.yaml` `inventory.two_handed_weapon_types`): `sword_2h`, `staff`, `bow`. Such a weapon in `weapon` also takes the `shield` slot (ARCHITECTURE §6.8).
 
 ## Item kinds
 `consumable`, `equip`, `card`, `material`, `quest`, `ammo`
@@ -147,7 +153,7 @@ An item's `equip.slots` lists the slots it fits: it fits **any one** of them (an
 `QuestStepCompleted`, `QuestCompleted`, `StatusApplied`, `StatusExpired`,
 `EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`, `MovementStarted`, `CellReached`,
 `MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `MonsterReturned`, `AttackRequested`, `AttackRefused`, `AttackStarted`, `AttackStopped`,
-`ExpGained`, `ExpLost`, `PlayerRespawned`, `ItemDropped`, `ItemExpired`
+`ExpGained`, `ExpLost`, `PlayerRespawned`, `ItemDropped`, `ItemExpired`, `ItemUnequipped`, `ItemDiscarded`, `ItemRefused`, `InventoryChanged`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -155,9 +161,10 @@ An item's `equip.slots` lists the slots it fits: it fits **any one** of them (an
 **Snapshot**: an observer's full view. **Delta**: one tick's `appeared` / `changed` / `disappeared`.
 
 ## View fields
-In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`, `speed`, `display_key`, `hp`, `dead`, `mine`.
+In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`, `speed`, `display_key`, `hp`, `dead`, `mine`, `weapon`, `worn`.
 `hp`: HP as a fraction 0–1 in steps of 0.01 (never 0 while alive, never 1 while hurt), only for entities that fight. `dead`: true while dead.
-`mine`: a ground item only, true when this client may pick it up now. A ground item's record also has `quantity` (it never changes).
+`mine`: a ground item only, true when this client may pick it up now. `weapon` (a "Weapon types" term) and `worn` (item ids with a worn visual, in
+"Equipment slots" order): players only, what they hold and wear; a change sends both. A ground item's record also has `quantity` (it never changes).
 A delta may also carry `hits` (this tick's attacks the client can see: `[attacker, target, amount, result]` with a "Hit results" term) and
 `vitals` (the client's own `hp`, `max_hp`, `sp`, `max_sp`, when they changed; also in every snapshot).
 
@@ -174,9 +181,23 @@ In `AggroLost`: `target_gone`, `leash`, `unreachable`
 
 ## Attack reasons
 In `AttackRefused` and `AttackStopped`: `attacker_dead`, `target_dead`, `target_gone`, `out_of_range`, `no_line_of_sight`, `safe_zone`, `invalid_target`,
-`unreachable`, `cancelled` (ARCHITECTURE §6.7)
+`unreachable`, `cancelled`, `overweight` (ARCHITECTURE §6.7; `overweight`: the player carries at least `inventory.overweight_percent` of its weight limit)
 On the wire in `rejected` (`intent` `attack`) and `attack_stopped`. The gateway also refuses an `attack` itself: `target_gone` for an id the client
 does not see, `invalid_target` for itself or anything but a monster.
+
+## Item reasons
+In `ItemRefused` and on the wire in `rejected` (`intent` `pick_up`, `use_item`, `equip`, `unequip` or `drop_item`); nothing changed (ARCHITECTURE §6.8):
+`item_gone`, `not_yours`, `unreachable`, `cancelled`, `too_heavy`, `inventory_full`, `not_usable`, `cooldown`, `unsupported_effect`, `not_equipment`,
+`wrong_slot`, `level_too_low`, `wrong_job`, `not_equipped`, `item_equipped`, `invalid_quantity`.
+`not_yours`: another player still has loot priority. `unsupported_effect`: a consumable with an effect type other than `heal` / `restore_sp` (until T-501).
+`wrong_job`: the item's `job_ids` leave the job out, or the job's `weapon_types` leave the weapon's type out. `item_equipped`: worn items are not used or dropped.
+
+## Weight states
+`normal`, `burdened` (at `inventory.burdened_percent` of `weight_limit`: no natural regeneration), `overweight` (at `inventory.overweight_percent`: no attacks either).
+In `inventory` and `inventory_changed` (`load`).
+
+## Inventory changes
+In `inventory_changed` `cause`: `picked_up`, `used`, `equipped`, `unequipped`, `dropped`, `weight` (only the weight limit or state changed).
 
 ## Hit results
 In `DamageDealt`: `hit`, `crit`, `miss`
@@ -200,9 +221,9 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `pong`, `bye`
-Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`.
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `pong`, `bye`
+Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
@@ -212,7 +233,8 @@ In `bye` (the server's last message before it closes the connection): `timeout`,
 `logout`: the client sent `logout`; its character left the world at once. `replaced`: another connection resumed this character with its token.
 The client reconnects after neither. `resume_failed`: the token in `hello` `resume` is unknown, already used, or its grace period is over
 (the client goes to the login screen). `rate_limit` also ends a resume from an address that failed too many resumes (ARCHITECTURE §10).
-A `rejected` message carries a "Movement reasons" (`MoveRejected`) term for `move`, or an "Attack reasons" term for `attack`, instead; the session goes on.
+A `rejected` message carries a "Movement reasons" (`MoveRejected`) term for `move`, an "Attack reasons" term for `attack`, or an "Item reasons" term for an
+item intent, instead; the session goes on.
 
 ## Entity kinds
 In a view record's `kind`: `player`, `monster`, `npc`, `item` (a ground item a monster dropped, `EntityKind.Item`; its `display_key` is the item id).

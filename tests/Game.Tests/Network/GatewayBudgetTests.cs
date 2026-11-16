@@ -186,6 +186,7 @@ public class GatewayBudgetTests(ITestOutputHelper output)
     /// <summary>
     /// The sample content with 40 HP slimes. The real slime (T-309) has 9 HP and dies in a few seconds, so 20 fighters would clear the field,
     /// wander out of the walkers' view and stop the sustained fighting this measurement needs. Only the HP differs; the wire traffic per fight is the same.
+    /// New characters also start without items (T-401's starting dagger would kill the slimes four times as fast and empty the field the same way).
     /// </summary>
     private static ContentDatabase SturdySlimes(ContentDatabase db)
     {
@@ -193,7 +194,8 @@ public class GatewayBudgetTests(ITestOutputHelper output)
         var sturdy = slime with { Stats = new Dictionary<string, double>(slime.Stats) { ["max_hp"] = 40 } };
         var monsters = new Registry<MonsterDef>(db.Monsters.All.Select(m => m.Id == slime.Id ? sturdy : m));
         return new ContentDatabase(db.Jobs, db.Skills, db.Items, monsters, db.Statuses, db.Quests, db.Npcs, db.Dialogue, db.Drops, db.Maps,
-            db.ExpTables, db.Formulas, db.Elements, db.Balance, db.Appearance, grids: db.Grids);
+            db.ExpTables, db.Formulas, db.Elements, db.Balance with { NewCharacter = db.Balance.NewCharacter with { StartItems = [] } }, db.Appearance,
+            grids: db.Grids);
     }
 
     /// <summary>A scripted fighter: out of the safe zone, attack the nearest living gel slime, again when the attack ends, respawn when dead.</summary>

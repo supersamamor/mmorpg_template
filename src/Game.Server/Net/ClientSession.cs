@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using Game.Server.World;
 using Game.Server.World.Aoi;
 using Game.Server.World.Combat;
+using Game.Server.World.Inventory;
 using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
 
@@ -135,6 +136,7 @@ public sealed class ClientSession : IViewSink
         }
         if (!Queue.PostSnapshot(_views.Write(snapshot))) Bye(ByeReasons.TooSlow);
         _gateway.PostExp(snapshot.Observer); // a fresh view (join, resume, warp, resync) comes with the own levels and EXP
+        _gateway.PostInventory(snapshot.Observer); // and the whole own inventory
         _gateway.Stats.AddSinkTime(Stopwatch.GetTimestamp() - started);
     }
 
@@ -376,6 +378,21 @@ public sealed class ClientSession : IViewSink
             case LogoutMessage:
                 _gateway.Logout(this);
                 break;
+            case PickUpMessage pick:
+                RequestPickUp(pick);
+                break;
+            case UseItemMessage use:
+                if (Entity is { } user) _gateway.Enqueue(new UseItem(user, use.Entry));
+                break;
+            case EquipMessage equip:
+                if (Entity is { } wearer) _gateway.Enqueue(new Equip(wearer, equip.Entry, equip.Slot));
+                break;
+            case UnequipMessage unequip:
+                if (Entity is { } owner) _gateway.Enqueue(new Unequip(owner, unequip.Slot));
+                break;
+            case DropItemMessage drop:
+                if (Entity is { } dropper) _gateway.Enqueue(new DropItem(dropper, drop.Entry, drop.Quantity));
+                break;
         }
     }
 
@@ -452,6 +469,25 @@ public sealed class ClientSession : IViewSink
             return;
         }
         _gateway.Enqueue(new AttackTarget(id, new EntityId(attack.Target)));
+    }
+
+    /// <summary>
+    /// The target must be a ground item in the client's view (else <c>item_gone</c>). The auto-attack stops first, so combat's walk does not
+    /// cancel the walk to the item; the inventory checks the rest on the tick.
+    /// </summary>
+    private void RequestPickUp(PickUpMessage pick)
+    {
+        if (Entity is not { } id) return;
+        EntityKind kind;
+        bool seen;
+        lock (_visible) seen = _visible.TryGetValue(pick.Target, out kind);
+        if (!seen || kind != EntityKind.Item)
+        {
+            Post(new RejectedMessage(MessageTypes.PickUp, ItemReasons.ItemGone, null, pick.Target));
+            return;
+        }
+        _gateway.Enqueue(new StopAttack(id));
+        _gateway.Enqueue(new PickUp(id, new EntityId(pick.Target)));
     }
 
     private async Task SendLoopAsync()

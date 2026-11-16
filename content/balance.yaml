@@ -79,6 +79,10 @@ new_character:
   start_facing: n
   # Everyone starts as a Wanderer and picks a job later (the job is also what other players see them as until gear exists).
   start_job_id: job.wanderer
+  # The Bone Dirk's description promises every wanderer one; it is worn from the start. Three draughts get a new player through the first fights.
+  start_items:
+    - { item_id: item.bone_dirk, equipped: true }
+    - { item_id: item.healing_draught, quantity: 3 }
 ai:
   # An awake aggressive monster looks around for a player three times a second: quick enough that walking into its range feels
   # immediate, and a fraction of the per-tick work of scanning every tick.
@@ -112,3 +116,16 @@ regen:
   # Natural regeneration (hp_regen / sp_regen from formulas.yaml) pauses for 5 seconds after an entity deals or takes damage,
   # so it helps between fights without making a fight itself easier.
   out_of_combat_delay_ms: 5000
+inventory:
+  # Most entries a character holds: a stack counts once, each piece of equipment once, worn ones included. A hundred is room for a day of loot.
+  max_entries: 100
+  # From half the weight limit natural HP and SP regeneration stops: carrying a full load has a cost before it stops a fight.
+  burdened_percent: 50
+  # From 90% the character can no longer attack, so a hauler has to drop or store something before the next fight. Pick-ups past 100% are refused.
+  overweight_percent: 90
+  # A ground item is picked up from the cell next to it (diagonals included), like a melee swing; the player walks there first.
+  pickup_range: 1
+  # An item a player drops stays two minutes for anyone to take: time to come back for something dropped by mistake.
+  dropped_lifetime_ms: 120000
+  # Held in both hands: a two-handed sword, a staff and a bow leave no hand for a shield (equipping one takes the other off).
+  two_handed_weapon_types: [sword_2h, staff, bow]
