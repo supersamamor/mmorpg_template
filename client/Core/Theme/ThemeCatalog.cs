@@ -186,6 +186,28 @@ public sealed class ThemeCatalog
         return _impactDelays[cacheKey] = value;
     }
 
+    /// <summary>
+    /// The theme's "missing asset" model (<c>fallbacks.missing</c>), or the built-in marker when no theme has a usable one. Worn equipment whose visual key is missing
+    /// or wrong falls back to it (T-403). Cached.
+    /// </summary>
+    public ModelResolution ResolveMissing()
+    {
+        const string cacheKey = "\u0000" + MissingName; // never an entity kind
+        if (_byKind.TryGetValue(cacheKey, out var cached)) return cached;
+        if (TryFallback(MissingName, out var missing, ResolutionLevel.MissingFallback)) return _byKind[cacheKey] = missing;
+        Warn("fallbacks." + MissingName, "no usable 'fallbacks.missing' model in any theme; drawing the built-in marker");
+        return _byKind[cacheKey] = new ModelResolution(null, null, null, ResolutionLevel.BuiltIn);
+    }
+
+    /// <summary>Logs <paramref name="message"/> the first time <paramref name="key"/> has a problem, and never again for that key (T-403: equipment and bones).</summary>
+    public void WarnOnce(string key, string message)
+    {
+        if (_warned.Add(key)) _warn(message);
+    }
+
+    /// <summary>Why a key could not be found, for a warning: no theme lists it, its entry names no file, or the file is missing.</summary>
+    public string WhyMissing(string key) => Why(key);
+
     private ModelResolution FallbackFor(string kind)
     {
         if (TryFallback(kind, out var byKind, ResolutionLevel.KindFallback)) return byKind;
