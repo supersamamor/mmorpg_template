@@ -258,6 +258,22 @@ public class EquipmentTests
         rig.Equipment.Resolve("item.unknown", "humanoid")!.Model.ShouldBeSameAs(rig.Equipment.Resolve("item.gone", "humanoid")!.Model, "every fallback shares the missing model");
     }
 
+    [Fact]
+    public void Characters_with_the_same_body_and_pieces_in_any_order_share_one_merged_mesh_key()
+    {
+        var rig = new Rig();
+        WornPiece P(string item) => rig.Equipment.Resolve(item, "humanoid")!;
+
+        var a = WornSet.Key("themes/default/models/hero.glb", 1, new[] { P("item.blade"), P("item.vest"), P("item.buckler") });
+        var b = WornSet.Key("themes/default/models/hero.glb", 1, new[] { P("item.buckler"), P("item.blade_copy"), P("item.vest") });
+
+        b.ShouldBe(a, "the server's order and which item carries the visual do not matter");
+        WornSet.Key("themes/default/models/hero.glb", 0, new[] { P("item.blade"), P("item.vest"), P("item.buckler") }).ShouldNotBe(a, "each level of detail has its own mesh");
+        WornSet.Key("themes/default/models/other.glb", 1, new[] { P("item.blade"), P("item.vest"), P("item.buckler") }).ShouldNotBe(a, "another body");
+        WornSet.Key("themes/default/models/hero.glb", 1, new[] { P("item.staff"), P("item.vest") }).ShouldNotBe(a, "other gear");
+        WornSet.Key("themes/default/models/hero.glb", 1, new[] { P("item.unknown") }).ShouldContain("!", Case.Sensitive, "a fallback piece is marked");
+    }
+
     // ---- the real pack ----
 
     [Fact]
