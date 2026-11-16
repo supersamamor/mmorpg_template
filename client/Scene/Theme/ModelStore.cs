@@ -4,13 +4,19 @@ using Godot;
 
 namespace Game.Client.Scene;
 
-/// <summary>An animation library plus the clip name each <see cref="AnimClip"/> has in it.</summary>
+/// <summary>An animation library plus the clip name each <see cref="AnimClip"/> has in it, generic and per weapon type (T-403).</summary>
 public sealed class AnimSet
 {
-    internal AnimSet(AnimationLibrary library, string?[] names)
+    private readonly IReadOnlyDictionary<string, string> _clips;
+    private readonly Dictionary<string, string?[]> _byWeapon = new(StringComparer.Ordinal);
+    private readonly Func<string, bool> _has;
+
+    internal AnimSet(AnimationLibrary library, string?[] names, IReadOnlyDictionary<string, string> clips)
     {
         Library = library;
         Names = names;
+        _clips = clips;
+        _has = name => library.HasAnimation(name);
     }
 
     /// <summary>The shared library; many players hold it, none changes it.</summary>
@@ -18,6 +24,19 @@ public sealed class AnimSet
 
     /// <summary>Clip name by <see cref="AnimClip"/>; null where the library has no such clip.</summary>
     public string?[] Names { get; }
+
+    /// <summary>
+    /// Clip names by <see cref="AnimClip"/> for a weapon type (§7.6): the library's <c>attack.&lt;weapon type&gt;</c>-style clip where it has one, else the
+    /// generic clip (<see cref="WeaponClips"/>). Built once per weapon type and shared by every character holding it.
+    /// </summary>
+    public string?[] NamesFor(string? weaponType)
+    {
+        if (weaponType is null) return Names;
+        if (_byWeapon.TryGetValue(weaponType, out var names)) return names;
+        names = new string?[AnimClips.Count];
+        for (var i = 0; i < names.Length; i++) names[i] = WeaponClips.NameFor(_clips, AnimClips.IdOf((AnimClip)i), weaponType, _has);
+        return _byWeapon[weaponType] = names;
+    }
 }
 
 /// <summary>
@@ -163,10 +182,20 @@ public sealed class ModelStore
                 _log($"[theme] {path}: no clip for '{AnimClips.IdOf(clip)}'");
             }
         }
+        // Weapon-type variants (attack.staff, idle.staff, ...) loop like the clip they stand in for (T-403).
+        foreach (var (id, name) in library.Clips)
+        {
+            var dot = id.IndexOf('.');
+            if (dot <= 0 || !shared.HasAnimation(name)) continue;
+            var baseId = id.Substring(0, dot);
+            for (var i = 0; i < AnimClips.Count; i++)
+                if (AnimClips.IdOf((AnimClip)i) == baseId)
+                    shared.GetAnimation(name).LoopMode = AnimClips.Loops((AnimClip)i) ? Animation.LoopModeEnum.Linear : Animation.LoopModeEnum.None;
+        }
         instance.Free();
         _scenes.Remove(path); // only the library is needed from now on
         _requested.Remove(path);
-        _animations[path] = set = new AnimSet(shared, names);
+        _animations[path] = set = new AnimSet(shared, names, library.Clips);
         return true;
     }
 

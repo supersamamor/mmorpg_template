@@ -436,6 +436,23 @@ public sealed class AutoRun
         if (_main.Map?.Scene is { } scene) await Without("map scene", on => scene.Visible = on);
     }
 
+    /// <summary>What the players on screen wear (T-403): pieces per player, weapon types, and how many kinds of piece are loaded and shared.</summary>
+    private void ReportGear()
+    {
+        int players = 0, pieces = 0;
+        var weapons = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        foreach (var e in World.Entities)
+        {
+            if (e.Kind != EntityKinds.Player || e.Visual is not ModelVisual v) continue;
+            players++;
+            pieces += v.PieceCount;
+            var w = e.Weapon ?? "none";
+            weapons[w] = weapons.GetValueOrDefault(w) + 1;
+        }
+        Print($"measure: gear: {players} players in view wear {pieces} pieces ({(players > 0 ? (double)pieces / players : 0):0.0} each); weapon types {string.Join(", ", weapons.Select(p => p.Key + " x" + p.Value))}; " +
+              $"{_main.Entities!.PieceKinds} piece kinds resolved; scenes loaded {_main.Entities.Store.LoadedScenes}");
+    }
+
     /// <summary>This frame's draw calls by pass (3D, shadow, canvas), with the entity counts that explain them.</summary>
     private (long Opaque, long Shadow, long Canvas, int OnScreen, int Lod0, int Lod1) PassDraws()
     {
@@ -494,6 +511,13 @@ public sealed class AutoRun
         ReportCamera();
         Print($"measure: waiting for {wanted} entities on screen");
         await UntilAsync(() => CountOnScreen() >= wanted, 120, $"{wanted} entities on screen");
+        if (Value("--measure-dress") is { } dress)
+        {
+            // T-403: every player drawn wearing these item ids (from the command line, never from code), so a crowd is measured fully equipped.
+            _main.Presenter!.DressOverride = dress.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            await UntilAsync(() => _main.Entities!.Dressing == 0, 30, "the worn pieces");
+        }
+        ReportGear();
         OS.LowProcessorUsageMode = false; // measure every frame, not only frames that drew
         await SecondsAsync(5); // shaders settle
 

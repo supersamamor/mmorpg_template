@@ -11,7 +11,10 @@
       "die": "Die",
       "cast": "Cast",
       "sit": "Sit",
-      "pick_up": "PickUp"
+      "pick_up": "PickUp",
+      "attack.dagger": "AttackStab",
+      "idle.staff": "IdleTwoHand",
+      "attack.staff": "AttackTwoHand"
     }
   },
   "anim.blob": {
