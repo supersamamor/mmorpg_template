@@ -303,3 +303,16 @@ When writing these prompts, copy in the decisions listed:
 | 166 | The export hang at exit was not reproduced (12 of 12 exited 0). `run-e2e.ps1` now deletes the old export, fails on a non-zero exit code, and fails with `EXPORT HUNG AT EXIT` after 60 s. Stopping Godot's console wrapper left `game-client.exe` running and locking the file; the script now stops it too (T-220) | **Decided: accepted**, closes row 163. |
 | 167 | Scripted hill tap: `-Run hill` taps a point on cell (23, 13) that a flat-ground pick reads as (23, 12), and asserts the server walks there (T-220) | **Decided: accepted**, in `-Run all`. Closes row 148's follow-up. |
 | 168 | The audio rule already resolved keys through the theme chain; four partial-theme tests now lock that in (T-220) | **Decided: no gap**, closes row 149. |
+
+## Addendum — T-401 (2026-11-16)
+| # | Question (source) | Decision |
+|---|---|---|
+| 169 | Weight: at 50% of `weight_limit` natural regeneration stops (`burdened`); at 90% the character can't attack (`overweight`); a pick-up past 100% is refused (`too_heavy`). Worn items count (T-401) | **Decided: accepted.** The numbers are in `balance.yaml` `inventory`. |
+| 170 | Two-handed weapons: `inventory.two_handed_weapon_types` in `balance.yaml` (`sword_2h`, `staff`, `bow`); such a weapon also takes the shield slot, and either one takes the other off in the same step (T-401) | **Decided: accepted.** Data, not code. |
+| 171 | `item.antidote` (`remove_status`) and `item.swift_elixir` (`apply_status`) are refused with `unsupported_effect`, nothing used up; only `heal` and `restore_sp` run, behind the effect seam (T-401) | **→ T-501** owns the seam and the other effect types. |
+| 172 | `Net/**` changes: the five intents and two inventory messages in `ProtocolJson`, routing in `ClientSession` (a pick-up must target a ground item the client sees), and delivery in `Gateway` and `ViewMessageWriter` (`weapon`, `worn`) (T-401) | **Decided: accepted** as within the user's approval (2026-11-15): delivery is part of adding the messages. |
+| 173 | Equipped items stay in the inventory, so equipping never needs a free entry. New characters start with the Bone Dirk worn and 3 Healing Draughts (`new_character.start_items`). Player drops vanish after 2 minutes. Other players see the weapon type and worn item ids only (T-401) | **Decided: accepted.** Closes row 160. |
+| 174 | A tap goes to the monster or ground item nearest the finger; a monster wins a tie. The Bag button sits beside the hotbar (T-401) | **Decided: accepted.** |
+| 175 | Row 117: retune the Rock Beetle and Thornback Boar now that weapons exist (T-401 left it out of scope) | **→ T-404:** an early-balance pass with weapons, measured like T-309. |
+| 176 | Godot's headless `--import` hangs intermittently (3 in about 9 imports, not a stale cache), and the release export hung at exit twice; each passed on retry (T-401) | **→ T-221:** a bounded, retried import in `godot-path.ps1`, and a minimal reproduction if it's an engine bug. |
+| 177 | Drop drops the whole stack (T-401) | **→ Backlog:** a quantity picker, with the trade and storage UI. |
