@@ -5,12 +5,14 @@
 #   .\client\run-e2e.ps1 -Run ui                        the UI shell: layouts for every screen shape and UI scale, gestures, hotbar, cost (more: -Windowed -Screenshot x.png -Resolution 1560x720 -ClientArgs "--set","debug_notch=1")
 #   .\client\run-e2e.ps1 -Run bye                      the four live bye runs: resume_failed, replaced, shutdown, grace_expiry (each can be named alone)
 #   .\client\run-e2e.ps1 -Run release                     exports a desktop RELEASE build and checks that it refuses ws:// and does not refuse wss://
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, bye, release
+#   .\client\run-e2e.ps1 -Run items                       kill, pick up the drop, equip it through the bag, see the hits get stronger, use a potion (content copy: weak monsters
+#                                                         that always drop a dagger and a potion, new characters start with nothing) (T-401)
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, bye, release
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -40,6 +42,7 @@ if ($LASTEXITCODE -ne 0) { throw "The client does not build." }
 Import-GodotProject $godot $client -Force
 
 $script:temp = $null
+$script:itemsTemp = $null
 
 # A temporary content copy where a new character wins every fight (monster stats do not change the bundle hash).
 function Get-EasyContent {
@@ -56,10 +59,29 @@ function Get-EasyContent {
     return (Join-Path $script:temp "content")
 }
 
-function Start-GameServer([switch] $Easy, [string[]] $Extra = @()) {
+# The items run's copy (T-401): the weak monsters, every kill drops a Bone Dirk and a Healing Draught, and a new character starts with nothing, so the
+# dagger it equips is the one it picked up. Drops and balance are server-only data: the bundle hash does not change.
+function Get-ItemsContent {
+    if ($script:itemsTemp) { return (Join-Path $script:itemsTemp "content") }
+    $script:itemsTemp = Join-Path ([IO.Path]::GetTempPath()) ("t401-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $script:itemsTemp | Out-Null
+    Copy-Item (Get-EasyContent) (Join-Path $script:itemsTemp "content") -Recurse
+    Copy-Item (Join-Path $root "themes") (Join-Path $script:itemsTemp "themes") -Recurse
+    foreach ($tier in @("tier1_supplies", "tier2_supplies", "tier3_supplies")) {
+        $text = "id: drop.$tier`nname: Items run drops`nentries:`n  - { item_id: item.bone_dirk, chance: 1 }`n  - { item_id: item.healing_draught, chance: 1 }`n"
+        [IO.File]::WriteAllText((Join-Path $script:itemsTemp "content/drops/$tier.yaml"), $text)
+    }
+    $balance = Join-Path $script:itemsTemp "content/balance.yaml"
+    $text = [IO.File]::ReadAllText($balance) -replace '(?ms)^  start_items:\r?\n(    - .*?\r?\n)+', "  start_items: []`n"
+    [IO.File]::WriteAllText($balance, $text)
+    return (Join-Path $script:itemsTemp "content")
+}
+
+function Start-GameServer([switch] $Easy, [switch] $Items, [string[]] $Extra = @()) {
     $log = [IO.Path]::GetTempFileName()
     $arguments = @("run", "--no-build", "--project", "src/Game.Server", "--")
-    if ($Easy) { $arguments += (Get-EasyContent) }
+    if ($Items) { $arguments += (Get-ItemsContent) }
+    elseif ($Easy) { $arguments += (Get-EasyContent) }
     $arguments += @("--seed", "$Seed", "--net-port", "$Port") + $Extra
     $process = Start-Process dotnet -PassThru -NoNewWindow -WorkingDirectory $root -RedirectStandardOutput $log -RedirectStandardError "$log.err" -ArgumentList $arguments
     $null = $process.Handle
@@ -177,6 +199,11 @@ function Invoke-Scenario([string] $Name) {
                 $server = Start-GameServer -Easy
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-ui" @()) -EngineArgs $engineArgs
                 return (Wait-GodotClient $run 300).Code
+            }
+            "items" {
+                $server = Start-GameServer -Items
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-items" @()) -EngineArgs $engineArgs
+                return (Wait-GodotClient $run 600).Code
             }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
@@ -314,7 +341,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 $failed = @()
@@ -332,6 +359,7 @@ try {
 }
 finally {
     if ($script:temp) { Remove-Item $script:temp -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($script:itemsTemp) { Remove-Item $script:itemsTemp -Recurse -Force -ErrorAction SilentlyContinue }
 }
 if ($failed.Count -gt 0) { Write-Host "[run-e2e] FAILED: $($failed -join ', ')"; exit 1 }
 Write-Host "[run-e2e] all passed: $($runs -join ', ')"

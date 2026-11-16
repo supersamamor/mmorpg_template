@@ -114,6 +114,18 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>ItemExpired</c>: a ground item disappeared after its lifetime.</summary>
         public const string ItemExpired = "ItemExpired";
 
+        /// <summary><c>ItemUnequipped</c>: a player took an equipped item off (or another item displaced it).</summary>
+        public const string ItemUnequipped = "ItemUnequipped";
+
+        /// <summary><c>ItemDiscarded</c>: a player put an item from its inventory on the ground.</summary>
+        public const string ItemDiscarded = "ItemDiscarded";
+
+        /// <summary><c>ItemRefused</c>: the inventory refused an item intent; nothing changed.</summary>
+        public const string ItemRefused = "ItemRefused";
+
+        /// <summary><c>InventoryChanged</c>: a player's inventory, equipment or weight limit changed (what the owner is sent).</summary>
+        public const string InventoryChanged = "InventoryChanged";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -152,6 +164,10 @@ namespace Game.Shared.Vocabulary
             ExpLost,
             PlayerRespawned,
             ItemDropped,
-            ItemExpired);
+            ItemExpired,
+            ItemUnequipped,
+            ItemDiscarded,
+            ItemRefused,
+            InventoryChanged);
     }
 }

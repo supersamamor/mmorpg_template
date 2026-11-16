@@ -75,6 +75,46 @@ public sealed class BalanceRule : IValidationRule
             Range(context, "regen.out_of_combat_delay_ms", "must not be negative.");
         Loot(context, balance.Loot);
         NewCharacter(context, balance.NewCharacter);
+        Inventory(context, balance.Inventory);
+        StartItems(context, balance.NewCharacter);
+    }
+
+    /// <summary>The inventory numbers are usable, and the two-handed list names weapon types.</summary>
+    private static void Inventory(ValidationContext context, InventoryBalanceDef i)
+    {
+        if (i.MaxEntries < 1)
+            Range(context, "inventory.max_entries", "must be at least 1.");
+        if (i.BurdenedPercent < 1 || i.BurdenedPercent > 100)
+            Range(context, "inventory.burdened_percent", "must be from 1 to 100.");
+        else if (i.OverweightPercent < i.BurdenedPercent || i.OverweightPercent > 100)
+            Range(context, "inventory.overweight_percent", $"must be from burdened_percent ({i.BurdenedPercent}) to 100.");
+        if (i.PickupRange < 0)
+            Range(context, "inventory.pickup_range", "must not be negative.");
+        if (i.DroppedLifetimeMs <= 0)
+            Range(context, "inventory.dropped_lifetime_ms", "must be above 0.");
+        foreach (var type in i.TwoHandedWeaponTypes)
+            if (!WeaponTypes.All.Contains(type))
+                context.ErrorInFile(File, "inventory.two_handed_weapon_types", ValidationCodes.VocabUnknown,
+                    $"balance.yaml inventory.two_handed_weapon_types '{type}' is not a weapon type ({string.Join(", ", WeaponTypes.All.Ordered)}).");
+    }
+
+    /// <summary>Every start item exists, has a quantity of at least 1, and only equipment is worn.</summary>
+    private static void StartItems(ValidationContext context, NewCharacterBalanceDef n)
+    {
+        var db = context.Database;
+        foreach (var start in n.StartItems)
+        {
+            if (!db.Items.TryGet(start.ItemId, out var item))
+            {
+                context.ErrorInFile(File, "new_character.start_items", ValidationCodes.RefMissing,
+                    $"balance.yaml new_character.start_items refers to unknown item '{start.ItemId}'.");
+                continue;
+            }
+            if (start.Quantity < 1)
+                Range(context, "new_character.start_items", $"quantity of '{start.ItemId}' must be at least 1.");
+            if (start.Equipped && item.Kind != ItemKind.Equip)
+                Range(context, "new_character.start_items", $"'{start.ItemId}' is not equipment, so it cannot start equipped.");
+        }
     }
 
     /// <summary>The crowd cap's shares (only with a valid cap): none negative, and they fit the cap with room for the observer itself.</summary>

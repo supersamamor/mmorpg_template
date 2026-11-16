@@ -1,0 +1,19 @@
+namespace Game.Server.World.Inventory;
+
+/// <summary>
+/// A player asks to pick up the ground item <c>Target</c>: the inventory walks it into <c>inventory.pickup_range</c> with <see cref="MoveTo"/>,
+/// then checks <see cref="Combat.LootRules.MayPickUp"/>, the weight and the free entries. A new order (a move, a stop) cancels the walk.
+/// </summary>
+public sealed record PickUp(EntityId Entity, EntityId Target) : IIntent;
+
+/// <summary>A player asks to use the consumable in inventory entry <c>EntryId</c>.</summary>
+public sealed record UseItem(EntityId Entity, long EntryId) : IIntent;
+
+/// <summary>A player asks to put on the equipment in entry <c>EntryId</c>, in <c>Slot</c> or (null) the first of its slots that is free.</summary>
+public sealed record Equip(EntityId Entity, long EntryId, string? Slot) : IIntent;
+
+/// <summary>A player asks to take off what it wears in <c>Slot</c>.</summary>
+public sealed record Unequip(EntityId Entity, string Slot) : IIntent;
+
+/// <summary>A player asks to put <c>Quantity</c> units of entry <c>EntryId</c> on the ground at its cell, for anyone to take.</summary>
+public sealed record DropItem(EntityId Entity, long EntryId, int Quantity) : IIntent;

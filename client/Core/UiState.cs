@@ -58,9 +58,28 @@ public sealed class UiState
         Version++;
     }
 
-    /// <summary><c>rejected</c>: quietly take back what the tap showed.</summary>
-    public void OnRejected(RejectedMessage rejected)
+    /// <summary>A ground item tap went out as <c>pick_up</c>: a new walk ends the highlight, as it ends the attack on the server.</summary>
+    public void OnPickUpSent()
     {
+        Marker = null;
+        Target = null;
+        Version++;
+    }
+
+    /// <summary>An own inventory change that the player should hear of: a pick-up becomes the flash line.</summary>
+    public void OnInventoryChanged(InventoryChangedMessage change, double now)
+    {
+        if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.PickedUp && change.Item is { } item) SetFlash(UiText.PickedUp(_bundle.NameOf(item)), now);
+    }
+
+    /// <summary><c>rejected</c>: quietly take back what the tap showed; a refused item intent says why on the flash line.</summary>
+    public void OnRejected(RejectedMessage rejected, double now = 0)
+    {
+        if (IsItemIntent(rejected.Intent))
+        {
+            if (UiText.ItemRefused(rejected.Reason) is { Length: > 0 } why) SetFlash(why, now);
+            return;
+        }
         if (rejected.Intent == MessageTypes.Move && Marker is { } marker && rejected.Cell is { } cell && marker.X == cell.X && marker.Y == cell.Y)
         {
             Marker = null;
@@ -158,6 +177,9 @@ public sealed class UiState
         Flash = string.Empty;
         Version++;
     }
+
+    private static bool IsItemIntent(string intent) =>
+        intent == MessageTypes.PickUp || intent == MessageTypes.UseItem || intent == MessageTypes.Equip || intent == MessageTypes.Unequip || intent == MessageTypes.DropItem;
 
     private static bool Arrived(EntityView? own, GridCell marker) =>
         own is not null && !own.Next.HasValue && !own.IsWalking && own.Cell.X == marker.X && own.Cell.Y == marker.Y;

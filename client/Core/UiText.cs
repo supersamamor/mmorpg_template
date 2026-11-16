@@ -95,6 +95,92 @@ public static class UiText
     public static string Dropped(string item, int quantity) =>
         quantity > 1 ? "Dropped: " + item + " x" + quantity.ToString(CultureInfo.InvariantCulture) : "Dropped: " + item;
 
+    /// <summary>The flash when something went into the bag.</summary>
+    public static string PickedUp(string item) => "Picked up: " + item;
+
+    /// <summary>The flash for a refused item intent (an "Item reasons" term); empty for one that needs no word.</summary>
+    public static string ItemRefused(string reason) => reason switch
+    {
+        ItemReasons.ItemGone => "That item is gone.",
+        ItemReasons.NotYours => "Someone else may take that first.",
+        ItemReasons.Unreachable => "You cannot get there.",
+        ItemReasons.TooHeavy => "Too heavy to carry.",
+        ItemReasons.InventoryFull => "Your bag is full.",
+        ItemReasons.NotUsable => "That cannot be used.",
+        ItemReasons.Cooldown => "Not yet.",
+        ItemReasons.UnsupportedEffect => "That cannot be used yet.",
+        ItemReasons.NotEquipment => "That cannot be worn.",
+        ItemReasons.WrongSlot => "That does not go there.",
+        ItemReasons.LevelTooLow => "Your level is too low for that.",
+        ItemReasons.WrongJob => "Your job cannot use that.",
+        ItemReasons.NotEquipped => "Nothing is worn there.",
+        ItemReasons.ItemEquipped => "Take it off first.",
+        ItemReasons.InvalidQuantity => "You do not have that many.",
+        _ => string.Empty,   // cancelled: the player moved on, nothing to say
+    };
+
+    /// <summary>The button that opens the inventory panel.</summary>
+    public const string Bag = "Bag";
+
+    /// <summary>The inventory panel's title.</summary>
+    public const string BagTitle = "Bag and equipment";
+
+    /// <summary>Uses a consumable.</summary>
+    public const string Use = "Use";
+
+    /// <summary>Puts an item on.</summary>
+    public const string Equip = "Equip";
+
+    /// <summary>Takes an item off.</summary>
+    public const string Unequip = "Take off";
+
+    /// <summary>Puts an item on the ground.</summary>
+    public const string Drop = "Drop";
+
+    /// <summary>The panel's hint while nothing is selected.</summary>
+    public const string PickAnItem = "Tap an item to use, wear or drop it.";
+
+    /// <summary>An empty equipment slot.</summary>
+    public const string EmptySlot = "(empty)";
+
+    /// <summary>An inventory button: the item's name and, for a stack, the count.</summary>
+    public static string ItemCount(string name, int quantity) =>
+        quantity > 1 ? name + " x" + quantity.ToString(CultureInfo.InvariantCulture) : name;
+
+    /// <summary>The weight line, with the weight state when it limits anything.</summary>
+    public static string Weight(int weight, int limit, string load)
+    {
+        var line = "Weight " + weight.ToString(CultureInfo.InvariantCulture) + " / " + limit.ToString(CultureInfo.InvariantCulture);
+        return load switch
+        {
+            WeightStates.Burdened => line + " (heavy: no regeneration)",
+            WeightStates.Overweight => line + " (too heavy to fight)",
+            _ => line,
+        };
+    }
+
+    /// <summary>The entry count, e.g. <c>12 / 100 items</c>.</summary>
+    public static string EntryCount(int count, int slots) => count.ToString(CultureInfo.InvariantCulture) + " / " + slots.ToString(CultureInfo.InvariantCulture) + " items";
+
+    /// <summary>An equipment slot's label (an "Equipment slots" term).</summary>
+    public static string SlotName(string slot) => slot switch
+    {
+        EquipSlots.HeadTop => "Head",
+        EquipSlots.HeadMid => "Face",
+        EquipSlots.HeadLow => "Mouth",
+        EquipSlots.Body => "Body",
+        EquipSlots.Weapon => "Weapon",
+        EquipSlots.Shield => "Shield",
+        EquipSlots.Garment => "Cloak",
+        EquipSlots.Footgear => "Feet",
+        EquipSlots.Accessory1 => "Ring 1",
+        EquipSlots.Accessory2 => "Ring 2",
+        _ => slot,
+    };
+
+    /// <summary>An equipment slot button: its label and what is worn there.</summary>
+    public static string SlotButton(string slot, string? item) => SlotName(slot) + ": " + (item ?? EmptySlot);
+
     /// <summary>The flash for a level reached.</summary>
     public static string LevelUp(int level) => "Level " + level.ToString(CultureInfo.InvariantCulture) + "!";
 

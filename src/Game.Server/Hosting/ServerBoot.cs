@@ -2,6 +2,7 @@ using Game.Content.Registry;
 using Game.Server.World;
 using Game.Server.World.Aoi;
 using Game.Server.World.Combat;
+using Game.Server.World.Inventory;
 using Game.Server.World.Monsters;
 
 namespace Game.Server.Hosting;
@@ -104,12 +105,15 @@ public static class ServerPipeline
     /// slots; new monsters appear in phase 3) and the monster AI, which decides from this tick's positions: its move intents apply in the
     /// next tick's movement, and its attack requests are events. Combat comes after the AI: it resolves the attack requests raised in the
     /// previous tick (events are dispatched in phase 4, so this tick's arrive for the next one) and this tick's player attacks against the
-    /// positions movement just produced, and a death it causes is seen by the spawner and the AI in phase 4 of the same tick. The AOI does
+    /// positions movement just produced, and a death it causes is seen by the spawner and the AI in phase 4 of the same tick. The inventory comes
+    /// after combat: a drop combat makes this tick is added in phase 3 and can be picked up from the next, and a weapon put on counts from the next
+    /// swing. The AOI does
     /// its work in phase 5 (outbound), after every system, so its place in the list only orders its intents; it is last.
     /// </summary>
-    /// <remarks>Player progression lives in one in-memory store shared by every instance (persistence is T-702); pass it in to read it from
-    /// elsewhere too (the gateway's own <c>exp</c> messages).</remarks>
-    public static SystemPipeline Create(ContentDatabase content, IPlayerProgressionStore? progressions = null)
+    /// <remarks>Player progression and inventories live in in-memory stores shared by every instance (persistence is T-702); pass them in to read
+    /// them from elsewhere too (the gateway's own <c>exp</c> and <c>inventory</c> messages). <paramref name="clock"/> times item cooldowns.</remarks>
+    public static SystemPipeline Create(ContentDatabase content, IPlayerProgressionStore? progressions = null, IInventoryStore? inventories = null,
+        Game.Shared.Time.IClock? clock = null)
     {
         var balance = content.Balance;
         var monsters = MonsterCatalog.From(content);
@@ -117,12 +121,16 @@ public static class ServerPipeline
         MonsterAiSystem.Create(monsters, balance); // likewise for the AI timings
         AoiSystem.Create(balance);                 // and the AOI numbers
         var combat = CombatContent.From(content, monsters);   // and the combat, death and loot numbers
+        var items = InventoryContent.From(content);            // and the inventory numbers and item modifiers
         progressions ??= new InMemoryProgressionStore();
+        inventories ??= new InMemoryInventoryStore();
+        clock ??= new SystemClock();
         return new SystemPipeline()
             .Add(() => MovementSystem.Create(balance))
             .Add(() => new MonsterSpawnerSystem(monsters, balance.Death.CorpseMs))
             .Add(() => MonsterAiSystem.Create(monsters, balance))
             .Add(() => new CombatSystem(combat, progressions))
+            .Add(() => new InventorySystem(items, inventories, clock))
             .Add(() => AoiSystem.Create(balance));
     }
 }

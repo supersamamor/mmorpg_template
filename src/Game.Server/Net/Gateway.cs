@@ -5,6 +5,7 @@ using Game.Server.Hosting;
 using Game.Server.World;
 using Game.Server.World.Aoi;
 using Game.Server.World.Combat;
+using Game.Server.World.Inventory;
 using Game.Shared.Progression;
 using Game.Shared.Protocol;
 using Game.Shared.Time;
@@ -113,7 +114,7 @@ public sealed class Gateway
 
     /// <summary>Creates the gateway for <paramref name="world"/> and subscribes to its instances' events.</summary>
     public Gateway(GameWorld world, NewCharacters start, GatewayOptions options, IClock clock, IServerLog log, string contentHash, ILoginService? login = null,
-        ResumeTokens? tokens = null, OwnProgress? progress = null)
+        ResumeTokens? tokens = null, OwnProgress? progress = null, OwnInventory? inventory = null)
     {
         _world = world;
         _start = start;
@@ -124,6 +125,7 @@ public sealed class Gateway
         Tokens = tokens ?? new ResumeTokens();
         Login = login ?? new DevLogin(options.Development, options.MaxNameLength, Tokens);
         Progress = progress;
+        Inventory = inventory;
         _resumeGuard = new ResumeGuard(options);
         if (!world.TryGetInstance(start.MapId, out _)) throw new ArgumentException($"No instance for the start map '{start.MapId}'.", nameof(start));
         foreach (var instance in world.Instances)
@@ -143,11 +145,17 @@ public sealed class Gateway
             events.Subscribe<ExpGained>(e => PostExp(e.Player));
             events.Subscribe<ExpLost>(e => PostExp(e.Player));
             events.Subscribe<PlayerProgressed>(OnProgressed);
+            // Inventory, owner only: each change, and each refused item intent as rejected.
+            events.Subscribe<InventoryChanged>(e => Owner(e.Player)?.Post(OwnInventory.Message(e)));
+            events.Subscribe<ItemRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(e.Intent, e.Reason, null, e.Target, e.EntryId, e.Slot)));
         }
     }
 
     /// <summary>Where players' <c>exp</c> messages come from, or null when the gateway sends none (tests without combat).</summary>
     public OwnProgress? Progress { get; }
+
+    /// <summary>Where players' own <c>inventory</c> messages come from, or null when the gateway sends none (tests without an inventory).</summary>
+    public OwnInventory? Inventory { get; }
 
     /// <summary>The options it runs with.</summary>
     public GatewayOptions Options { get; }
@@ -453,6 +461,12 @@ public sealed class Gateway
     internal void PostExp(EntityId player)
     {
         if (Progress?.For(player) is { } exp) Owner(player)?.Post(exp);
+    }
+
+    /// <summary>Tick thread of the player's instance (the only thread that touches its inventory).</summary>
+    internal void PostInventory(EntityId player)
+    {
+        if (Inventory?.For(player) is { } inventory) Owner(player)?.Post(inventory);
     }
 
     private void OnProgressed(PlayerProgressed e)

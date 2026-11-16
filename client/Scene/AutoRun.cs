@@ -42,7 +42,7 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--measure") >= 0;
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
     public static async void QuitAfterShot(Main main, string[] args, string what = "the bundle")
@@ -70,6 +70,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-death") >= 0) await DeathRunAsync();
             else if (Array.IndexOf(_args, "--e2e-warp") >= 0) await WarpRunAsync();
             else if (Array.IndexOf(_args, "--e2e-hill") >= 0) await HillRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-items") >= 0) await ItemsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
@@ -153,6 +154,138 @@ public sealed class AutoRun
         Check(!Session.Connection.HasToken, "the token is gone");
         Print($"logout: bye logout, login screen shows \"{_main.Hud!.PanelText}\"");
     }
+
+    /// <summary>
+    /// T-401's run (on a content copy where every kill drops a weapon and a potion, and new characters start with nothing): kill, tap the drop to pick it up,
+    /// open the bag and equip the weapon through its buttons, see the hits get stronger, and use a potion. Every step goes through the HUD and the input path.
+    /// </summary>
+    private async Task ItemsRunAsync()
+    {
+        await LoginAsync();
+        await UntilAsync(() => Session.Inventory.Known, 10, "the own inventory after the snapshot");
+        Print($"items: inventory rev {Session.Inventory.Rev}, {Session.Inventory.Entries.Count} entries, weight {Session.Inventory.Weight}/{Session.Inventory.WeightLimit}, " +
+              $"own weapon {Own().Weapon}");
+        Check(Own().Weapon == Game.Shared.Vocabulary.WeaponTypes.Unarmed, "the own record says unarmed");
+        var hits = new List<int>();
+        World.Combat.Impact += (in HitImpact impact) =>
+        {
+            if (impact.Attacker == World.OwnId && impact.Kind == HitKind.Hit) hits.Add(impact.Amount);
+        };
+        var acquired = 0;
+        var used = 0;
+        var equipped = 0;
+        Session.InventoryChanged += change =>
+        {
+            if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.PickedUp) acquired++;
+            if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.Used) used++;
+            if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.Equipped) equipped++;
+        };
+
+        var open = NearestOpenCellOutsideSafeZones(CurrentMap(), Own().Cell);
+        await TapCellAsync(open);
+        await UntilAsync(() => !Own().IsWalking && Own().Cell.X == open.X && Own().Cell.Y == open.Y, 30, "leaving the safe zone");
+
+        // Kill until a weapon lies on the ground, then pick up everything this client may take (a tap on each loot bag).
+        string? weapon = null;
+        for (var attempt = 0; attempt < 10 && weapon is null; attempt++)
+        {
+            await HuntOneAsync(90);
+            await SecondsAsync(1);
+            for (var pick = 0; pick < 6; pick++)
+            {
+                var drop = FindDrop();
+                if (drop is null) break;
+                var name = _main.Bundle!.NameOf(drop.DisplayKey);
+                var before = Session.Inventory.Rev;
+                Print($"items: tap {name} x{drop.Quantity} at {drop.Cell} (own {Own().Cell})");
+                if (!OnScreen(drop))
+                {
+                    await TapCellAsync(drop.Cell);
+                    await SecondsAsync(1);
+                }
+                var taken = false;
+                for (var tap = 0; tap < 3 && !taken; tap++)
+                {
+                    await TapWorldAsync(new Vector3((float)drop.X, 0.15f, (float)drop.Z));
+                    await FramesAsync(2);
+                    Print($"items: after the tap: target {Session.Ui.Target?.ToString() ?? "none"}, marker {Session.Ui.Marker?.ToString() ?? "none"}, flash \"{Session.Ui.Flash}\"");
+                    var clock = Stopwatch.StartNew();
+                    while (clock.Elapsed.TotalSeconds < 8 && Session.Inventory.Rev == before && World.Find(drop.Id) is not null) await FrameAsync();
+                    taken = Session.Inventory.Rev > before || World.Find(drop.Id) is null;
+                }
+                Check(taken, $"picking up {name}");
+                await FramesAsync(2);
+            }
+            weapon = Session.Inventory.Entries.FirstOrDefault(e => e.Slot is null && _main.Bundle!.Item(e.Item)?.WeaponType is not null)?.Item;
+        }
+        Check(weapon is not null, "picked up a weapon");
+        Check(acquired > 0, "the pick-up came back as inventory_changed picked_up");
+        Print($"items: carrying {string.Join(", ", Session.Inventory.Entries.Select(e => e.Item + " x" + e.Quantity))}; flash \"{Session.Ui.Flash}\"");
+        var unarmed = hits.ToList();
+
+        // Open the bag with its button, select the weapon, press Equip.
+        var hud = _main.Hud!;
+        Press(hud.BagButton);
+        await FramesAsync(3);
+        Check(hud.Bag!.Open, "the bag opens");
+        var weaponButton = hud.Bag.ItemButtons.First(b => Session.Inventory.Find(b.Entry)?.Item == weapon);
+        Press(weaponButton.Button);
+        await FramesAsync(2);
+        Check(hud.Bag.Actions.Equip.Visible, "a selected weapon offers Equip");
+        await ShotAsync("-bag");
+        Press(hud.Bag.Actions.Equip);
+        await UntilAsync(() => Session.Inventory.InSlot(Game.Shared.Vocabulary.EquipSlots.Weapon) is not null, 10, "the weapon in its slot");
+        await UntilAsync(() => Own().Weapon != Game.Shared.Vocabulary.WeaponTypes.Unarmed, 10, "the own record shows the weapon");
+        Check(equipped == 1, "one equipped change");
+        Print($"items: wearing {weapon} ({Own().Weapon}); slot button \"{hud.Bag.SlotButtons[Game.Shared.Vocabulary.EquipSlots.Weapon].Text}\"");
+        Press(hud.BagButton);
+        await FramesAsync(2);
+
+        // Fight again: the same monsters take more damage per hit now.
+        hits.Clear();
+        for (var attempt = 0; attempt < 4 && hits.Count < 3; attempt++) await HuntOneAsync(60);
+        Check(unarmed.Count > 0 && hits.Count > 0, $"hits before ({unarmed.Count}) and after ({hits.Count}) equipping");
+        var before2 = unarmed.Average();
+        var after = hits.Average();
+        Print($"items: average hit unarmed {before2:0.0} ({unarmed.Count} hits), with {weapon} {after:0.0} ({hits.Count} hits)");
+        Check(after > before2, "the weapon makes the hits stronger");
+
+        // Use a potion through the bag.
+        var potion = Session.Inventory.Entries.FirstOrDefault(e => _main.Bundle!.Item(e.Item)?.Kind == Game.Shared.Vocabulary.ItemKinds.Consumable);
+        if (potion is null)
+        {
+            for (var attempt = 0; attempt < 6 && potion is null; attempt++)
+            {
+                await HuntOneAsync(60);
+                await SecondsAsync(1);
+                if (FindDrop() is { } drop)
+                {
+                    await TapWorldAsync(new Vector3((float)drop.X, 0.15f, (float)drop.Z));
+                    await SecondsAsync(3);
+                }
+                potion = Session.Inventory.Entries.FirstOrDefault(e => _main.Bundle!.Item(e.Item)?.Kind == Game.Shared.Vocabulary.ItemKinds.Consumable);
+            }
+        }
+        Check(potion is not null, "carrying a potion");
+        var quantity = potion!.Quantity;
+        var hp = World.Vitals?.Hp;
+        Press(hud.BagButton);
+        await FramesAsync(3);
+        Press(hud.Bag.ItemButtons.First(b => b.Entry == potion.Id).Button);
+        await FramesAsync(2);
+        Check(hud.Bag.Actions.Use.Visible, "a selected potion offers Use");
+        Press(hud.Bag.Actions.Use);
+        await UntilAsync(() => used > 0, 10, "the potion used");
+        Print($"items: used {potion.Item}: {quantity} -> {Session.Inventory.Find(potion.Id)?.Quantity ?? 0}, HP {hp} -> {World.Vitals?.Hp}/{World.Vitals?.MaxHp}");
+        Check((Session.Inventory.Find(potion.Id)?.Quantity ?? 0) == quantity - 1, "one potion used up");
+        Press(hud.BagButton);
+        await FramesAsync(2);
+        var stats = _main.Audio!.Director.Stats;
+        Print($"items: audio played {stats.Played}; rev {Session.Inventory.Rev}, stale {Session.Inventory.Stale}");
+        Check(!Session.Inventory.Stale, "no change was missed");
+    }
+
+    private static void Press(Button button) => button.EmitSignal(BaseButton.SignalName.Pressed);
 
     private async Task WarpRunAsync()
     {
@@ -729,6 +862,18 @@ public sealed class AutoRun
         Print($"camera: {rect.X:0}x{rect.Y:0} aspect {rect.X / rect.Y:0.00}, distance {camera.Distance:0.0}, looks at ({center.X - own.X:0.00}, {center.Z - own.Y:0.00}) from the player");
         Print($"camera: rays: top edge {own.X - topLeft.X:0.0} cells either side and {own.Y - top.Z:0.0} ahead; through the player {own.X - midLeft.X:0.0}; bottom edge {own.X - bottomLeft.X:0.0} either side and {bottom.Z - own.Y:0.0} behind");
         Print($"camera: math: top {math.FarHalfWidth:0.0}, middle {math.MiddleHalfWidth:0.0}, bottom {math.NearHalfWidth:0.0}, ahead {math.Far:0.0}, behind {math.Near:0.0}; reach {math.Reach:0.0} cells");
+    }
+
+    private async Task ShotAsync(string suffix)
+    {
+        if (_screenshot is null || DisplayServer.GetName() == "headless") return;
+        OS.LowProcessorUsageMode = false;
+        await FramesAsync(3);
+        await _main.ToSignal(RenderingServer.Singleton, RenderingServerInstance.SignalName.FramePostDraw);
+        var path = System.IO.Path.ChangeExtension(_screenshot, null) + suffix + System.IO.Path.GetExtension(_screenshot);
+        var error = _main.GetViewport().GetTexture().GetImage().SavePng(path);
+        Print($"screenshot: {path} ({error}), {_main.GetWindow().Size.X}x{_main.GetWindow().Size.Y}");
+        OS.LowProcessorUsageMode = true;
     }
 
     private async Task ShotAsync()

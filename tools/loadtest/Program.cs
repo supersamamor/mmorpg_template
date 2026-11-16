@@ -66,7 +66,7 @@ try
     var bots = new List<Bot>();
     for (var i = 0; i < options.Bots; i += 20)
         bots.AddRange(await Task.WhenAll(Enumerable.Range(i, Math.Min(20, options.Bots - i))
-            .Select(n => Bot.LoginAsync(endpoint, hash, "bot" + n, n < options.Bots * options.FighterShare, options.Compression))));
+            .Select(n => Bot.LoginAsync(endpoint, hash, "bot" + n, n < options.Bots * options.FighterShare, options.Compression, pickups: options.Pickups))));
     Console.WriteLine($"{bots.Count} bots in (memory {server.WorkingSetMb():0} MB)");
 
     using var stop = new CancellationTokenSource();
@@ -108,6 +108,8 @@ try
     Console.WriteLine($"server memory: working set {workingSet:0} MB (peak {peak:0} MB)");
     Console.WriteLine("server " + ticks[(ticks.IndexOf("ticks", StringComparison.Ordinal))..]);
     Console.WriteLine($"server fell behind {log.Count("fell behind")} time(s); warnings {log.Count(" WARN ")}, errors {log.Count(" ERROR")}");
+    Console.WriteLine($"items: {(options.Pickups ? "fighters pick up their drops" : "no pick-ups")}; {bots.Sum(b => b.PickUps)} pick_up sent, {bots.Sum(b => b.PickedUp)} picked up, " +
+                      $"{bots.Sum(b => b.PickUpsRefused)} refused");
     Console.WriteLine($"bots: {bots.Sum(b => b.Attacks)} attacks, {bots.Sum(b => b.Kills)} hits seen as kills, {bots.Sum(b => b.Deaths)} deaths, " +
                       $"{bots.Count(b => b.Bye is not null)} got bye ({string.Join(",", bots.Select(b => b.Bye).OfType<string>().Distinct())})");
 
@@ -148,11 +150,15 @@ static int FreePort()
 
 namespace Game.LoadTest
 {
-    /// <summary>Command line: <c>--bots N --grace G --compression --warmup S --measure S --fighters 0.5 --server path</c>.</summary>
-    internal sealed record LoadTestOptions(int Bots, int Grace, bool Compression, int WarmupSeconds, int MeasureSeconds, double FighterShare, string? Server, int SpareSlots = 0, int Port = 0)
+    /// <summary>
+    /// Command line: <c>--bots N --grace G --compression --warmup S --measure S --fighters 0.5 --server path</c>. Fighters pick up the ground items they may take
+    /// (T-401); <c>--no-pickups</c> turns that off, to measure a server without an inventory.
+    /// </summary>
+    internal sealed record LoadTestOptions(int Bots, int Grace, bool Compression, int WarmupSeconds, int MeasureSeconds, double FighterShare, string? Server, int SpareSlots = 0, int Port = 0,
+        bool Pickups = true)
     {
         public const string Usage =
-            "usage: loadtest [--bots 50] [--grace 0] [--compression] [--warmup 30] [--measure 60] [--fighters 0.5] [--spare-slots 0] [--port 0] [--server path/Game.Server.dll]";
+            "usage: loadtest [--bots 50] [--grace 0] [--compression] [--warmup 30] [--measure 60] [--fighters 0.5] [--spare-slots 0] [--port 0] [--no-pickups] [--server path/Game.Server.dll]";
 
         public static LoadTestOptions? Parse(string[] args)
         {
@@ -173,6 +179,7 @@ namespace Game.LoadTest
                         "--server" => o with { Server = Next() },
                         "--spare-slots" => o with { SpareSlots = int.Parse(Next(), CultureInfo.InvariantCulture) },
                         "--port" => o with { Port = int.Parse(Next(), CultureInfo.InvariantCulture) },
+                        "--no-pickups" => o with { Pickups = false },
                         _ => throw new FormatException("unknown option " + args[i]),
                     };
                 }
@@ -227,16 +234,20 @@ namespace Game.LoadTest
     }
 
     /// <summary>A visible entity, as much as a bot needs of it.</summary>
-    internal sealed record Seen(string Kind, GridCell Cell, bool Dead);
+    internal sealed record Seen(string Kind, GridCell Cell, bool Dead, bool Mine = false);
 
     /// <summary>
     /// One scripted client: a single receive loop (one pending receive per socket), a view model of kinds, cells and deaths, and a behaviour.
-    /// Fighters attack the nearest living monster and walk towards it when refused; walkers wander near where they joined.
+    /// Fighters attack the nearest living monster and walk towards it when refused, and first pick up any ground item within 6 cells they may take (once
+    /// per item); walkers wander near where they joined.
     /// </summary>
     internal sealed class Bot
     {
         private readonly ClientWebSocket _socket;
         private readonly bool _fighter;
+        private readonly bool _pickups;
+        private readonly HashSet<long> _tried = new();
+        private long? _picking;
         private readonly Dictionary<long, Seen> _view = new();
         private readonly TaskCompletionSource _first = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private long _bytes;
@@ -250,10 +261,11 @@ namespace Game.LoadTest
         private long _nextActMs;
         private long _ping;
 
-        private Bot(ClientWebSocket socket, bool fighter)
+        private Bot(ClientWebSocket socket, bool fighter, bool pickups)
         {
             _socket = socket;
             _fighter = fighter;
+            _pickups = pickups;
             _ = Task.Run(ReceiveLoopAsync);
         }
 
@@ -271,9 +283,15 @@ namespace Game.LoadTest
 
         public int Deaths { get; private set; }
 
-        public static async Task<Bot> LoginAsync(Uri endpoint, string hash, string name, bool fighter, bool compression, bool expectWelcome = true)
+        public int PickUps { get; private set; }
+
+        public int PickedUp { get; private set; }
+
+        public int PickUpsRefused { get; private set; }
+
+        public static async Task<Bot> LoginAsync(Uri endpoint, string hash, string name, bool fighter, bool compression, bool expectWelcome = true, bool pickups = false)
         {
-            var bot = await ConnectAsync(endpoint, fighter, compression);
+            var bot = await ConnectAsync(endpoint, fighter, compression, pickups);
             await bot.SendAsync(new HelloMessage(ProtocolVersion.Current, name, hash));
             await bot.WaitFirstAsync();
             if (expectWelcome && !bot.Welcomed) throw new InvalidOperationException($"{name}: no welcome (bye {bot.Bye}).");
@@ -282,18 +300,18 @@ namespace Game.LoadTest
 
         public static async Task<Bot> ResumeAsync(Uri endpoint, string hash, string token, bool compression)
         {
-            var bot = await ConnectAsync(endpoint, false, compression);
+            var bot = await ConnectAsync(endpoint, false, compression, false);
             await bot.SendAsync(new HelloMessage(ProtocolVersion.Current, null, hash, token));
             await bot.WaitFirstAsync();
             return bot;
         }
 
-        private static async Task<Bot> ConnectAsync(Uri endpoint, bool fighter, bool compression)
+        private static async Task<Bot> ConnectAsync(Uri endpoint, bool fighter, bool compression, bool pickups)
         {
             var socket = new ClientWebSocket();
             if (compression) socket.Options.DangerousDeflateOptions = new WebSocketDeflateOptions();
             await socket.ConnectAsync(endpoint, CancellationToken.None);
-            return new Bot(socket, fighter);
+            return new Bot(socket, fighter, pickups);
         }
 
         /// <summary>Drops the connection without a close frame.</summary>
@@ -316,6 +334,21 @@ namespace Game.LoadTest
             if (!_view.TryGetValue(_id, out var me)) return null;
             if (!_fighter)
                 return new MoveMessage(new GridCell(_anchor.X + random.Next(-6, 7), _anchor.Y + random.Next(-6, 7)));
+            if (_picking is { } walking && _view.ContainsKey(walking)) return null;   // still walking to an item
+            _picking = null;
+            if (_pickups && (_attackEnded || _target is not { } swinging || !_view.TryGetValue(swinging, out var foe) || foe.Dead))
+            {
+                var loot = _view.Where(e => e.Value is { Kind: EntityKinds.Item, Mine: true } && !_tried.Contains(e.Key)
+                                            && Math.Max(Math.Abs(e.Value.Cell.X - me.Cell.X), Math.Abs(e.Value.Cell.Y - me.Cell.Y)) <= 6)
+                    .Select(e => (long?)e.Key).FirstOrDefault();
+                if (loot is { } item)
+                {
+                    _tried.Add(item);
+                    _picking = item;
+                    PickUps++;
+                    return new PickUpMessage(item);
+                }
+            }
             if (_target is { } t && !_attackEnded && _view.TryGetValue(t, out var current) && !current.Dead) return null; // still swinging
             var monster = _view.Where(e => e.Value is { Kind: EntityKinds.Monster, Dead: false })
                 .OrderBy(e => Math.Max(Math.Abs(e.Value.Cell.X - me.Cell.X), Math.Abs(e.Value.Cell.Y - me.Cell.Y))).Select(e => (long?)e.Key).FirstOrDefault();
@@ -389,7 +422,7 @@ namespace Game.LoadTest
                         break;
                     case SnapshotMessage snapshot:
                         _view.Clear();
-                        foreach (var e in snapshot.Entities) _view[e.Id] = new Seen(e.Kind, e.Cell, e.Dead);
+                        foreach (var e in snapshot.Entities) _view[e.Id] = new Seen(e.Kind, e.Cell, e.Dead, e.Mine == true);
                         if (_view.TryGetValue(_id, out var me))
                         {
                             if (!_anchored) { _anchor = me.Cell; _anchored = true; }
@@ -398,11 +431,12 @@ namespace Game.LoadTest
                         _first.TrySetResult();
                         break;
                     case DeltaMessage delta:
-                        foreach (var e in delta.Appeared) _view[e.Id] = new Seen(e.Kind, e.Cell, e.Dead);
+                        foreach (var e in delta.Appeared) _view[e.Id] = new Seen(e.Kind, e.Cell, e.Dead, e.Mine == true);
                         foreach (var c in delta.Changed)
                         {
                             if (!_view.TryGetValue(c.Id, out var seen)) continue;
                             if ((c.Fields & ChangedFields.Cell) != 0) seen = seen with { Cell = c.Cell };
+                            if ((c.Fields & ChangedFields.Mine) != 0) seen = seen with { Mine = c.Mine };
                             if ((c.Fields & ChangedFields.Dead) != 0)
                             {
                                 if (c.Dead && !seen.Dead && c.Id == _target) Kills++;
@@ -414,6 +448,14 @@ namespace Game.LoadTest
                         break;
                     case AttackStoppedMessage:
                         _attackEnded = true;
+                        break;
+                    case InventoryChangedMessage { Cause: "picked_up" }:
+                        PickedUp++;
+                        _picking = null;
+                        break;
+                    case RejectedMessage { Intent: MessageTypes.PickUp }:
+                        PickUpsRefused++;
+                        _picking = null;
                         break;
                     case RejectedMessage { Intent: MessageTypes.Attack }:
                         _attackEnded = true;

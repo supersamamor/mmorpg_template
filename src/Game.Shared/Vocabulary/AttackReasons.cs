@@ -36,6 +36,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>cancelled</c>: the player stopped (<c>StopAttack</c>) or gave a new move order (<c>MoveTo</c> / <c>StopMove</c>).</summary>
         public const string Cancelled = "cancelled";
 
+        /// <summary><c>overweight</c>: the attacking player carries at least <c>inventory.overweight_percent</c> of its weight limit.</summary>
+        public const string Overweight = "overweight";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             AttackerDead,
@@ -46,6 +49,7 @@ namespace Game.Shared.Vocabulary
             SafeZone,
             InvalidTarget,
             Unreachable,
-            Cancelled);
+            Cancelled,
+            Overweight);
     }
 }

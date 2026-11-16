@@ -111,6 +111,7 @@ public sealed class DisplayBundle
     private readonly SortedSet<string> _soundKeys = new SortedSet<string>(StringComparer.Ordinal);
     private readonly SortedSet<string> _modelKeys = new SortedSet<string>(StringComparer.Ordinal);
     private readonly Dictionary<string, MapData> _maps = new Dictionary<string, MapData>(StringComparer.Ordinal);
+    private readonly Dictionary<string, ItemDisplay> _items = new Dictionary<string, ItemDisplay>(StringComparer.Ordinal);
 
     private DisplayBundle(int formatVersion, string contentHash)
     {
@@ -155,6 +156,9 @@ public sealed class DisplayBundle
     /// <summary>A map's display data.</summary>
     public bool TryGetMap(string id, out MapData? map) => _maps.TryGetValue(id, out map);
 
+    /// <summary>What the bundle says about an item (kind, icon, slots, weapon type, worn visual), or null for an id it does not know.</summary>
+    public ItemDisplay? Item(string? itemId) => itemId is not null && _items.TryGetValue(itemId, out var item) ? item : null;
+
     /// <summary>Reads a bundle file. The format version is checked first, so a newer shape is refused rather than misread.</summary>
     public static BundleStatus TryRead(ReadOnlySpan<byte> utf8, out DisplayBundle? bundle, out int formatVersion)
     {
@@ -179,6 +183,7 @@ public sealed class DisplayBundle
                     var id = Text(entry, "id");
                     result._names[id] = Text(entry, "name");
                     ReadSounds(result, list, id, entry);
+                    if (list == "items") result._items[id] = ReadItem(id, result._names[id], entry);
                     if (entry.TryGetProperty(modelField, out var model) && model.ValueKind == JsonValueKind.String && model.GetString() is { Length: > 0 } key)
                     {
                         result._models[id] = key;
@@ -224,6 +229,16 @@ public sealed class DisplayBundle
         (list == "monsters" ? bundle._monsterSounds : list == "items" ? bundle._itemSounds : bundle._skillSounds)[id] = keys;
     }
 
+    private static ItemDisplay ReadItem(string id, string name, JsonElement entry)
+    {
+        var slots = new List<string>();
+        if (entry.TryGetProperty("slots", out var list) && list.ValueKind == JsonValueKind.Array)
+            foreach (var slot in list.EnumerateArray())
+                if (slot.GetString() is { Length: > 0 } text) slots.Add(text);
+        return new ItemDisplay(id, name, OptionalText(entry, "kind") ?? string.Empty, OptionalText(entry, "icon"), slots, OptionalText(entry, "weapon_type"),
+            OptionalText(entry, "visual"));
+    }
+
     private static MapData ReadMap(JsonElement map)
     {
         var width = map.GetProperty("width").GetInt32();
@@ -250,3 +265,13 @@ public sealed class DisplayBundle
 
     private static string Text(JsonElement element, string name) => element.GetProperty(name).GetString() ?? throw new FormatException(name);
 }
+
+/// <summary>An item as the display bundle describes it (ARCHITECTURE §5.4): never weight, stats, effects or prices.</summary>
+/// <param name="Id">Item id.</param>
+/// <param name="Name">Display name.</param>
+/// <param name="Kind">An "Item kinds" term.</param>
+/// <param name="Icon">The icon's asset key, or null.</param>
+/// <param name="Slots">Equipment slots it fits (card slots for a card).</param>
+/// <param name="WeaponType">A weapon's "Weapon types" term, or null.</param>
+/// <param name="Visual">The worn visual's asset key (T-403 draws it), or null.</param>
+public sealed record ItemDisplay(string Id, string Name, string Kind, string? Icon, IReadOnlyList<string> Slots, string? WeaponType, string? Visual);

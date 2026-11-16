@@ -53,6 +53,7 @@ public sealed class UiRuns
         await HotbarAsync();
         await ScaleButtonAsync(originalScale);
         await SoundPanelAsync();
+        await BagPanelAsync();
         await TapAsync();
         await MeasureAsync();
         await ShotAsync();
@@ -102,6 +103,66 @@ public sealed class UiRuns
         Print($"sound: panel fits every screen; effects volume {before} -> {mixer.Volume(AudioBuses.Sfx)} reached the engine bus and the preferences; mute and unmute worked");
         Hud.SetSoundPanel(false);
         await FramesAsync(2);
+    }
+
+    /// <summary>
+    /// The bag (T-401): it fits every screen shape and scale filled with the longest words, it opens with its button, it lists the real inventory, a tap selects
+    /// an item and shows its actions, and what it costs to draw while open.
+    /// </summary>
+    private async Task BagPanelAsync()
+    {
+        var bag = Hud.Bag!;
+        var scaleBefore = Hud.Scale;
+        bag.ShowSamples(LongName);
+        await FramesAsync(3);
+        await LayoutMatrixAsync("bag open");
+        bag.ClearSamples();
+        Hud.SetScale(scaleBefore, false);
+        Hud.ForceRefresh();
+        await FramesAsync(3);
+
+        await UntilAsync(() => Session.Inventory.Known, 10, "the own inventory");
+        Hud.BagButton.EmitSignal(BaseButton.SignalName.Pressed);
+        await FramesAsync(3);
+        Check(bag.Open, "the bag button opens the bag");
+        var carried = Session.Inventory.Entries.Count(e => e.Slot is null);
+        Check(bag.ItemButtons.Count(b => b.Button.Visible) == carried, $"one button per carried entry ({carried})");
+        foreach (var (slot, button) in bag.SlotButtons)
+            if (Session.Inventory.InSlot(slot) is { } worn) Check(button.Text.Contains(_main.Bundle!.NameOf(worn.Item)), $"the {slot} slot names what is worn");
+        if (bag.ItemButtons.FirstOrDefault() is { Button: { } first, Entry: var entry })
+        {
+            first.EmitSignal(BaseButton.SignalName.Pressed);
+            await FramesAsync(2);
+            Check(Session.Inventory.Selected == entry, "a tap selects the item");
+            Check(bag.Actions.Drop.Visible, "and offers its actions");
+            first.EmitSignal(BaseButton.SignalName.Pressed);
+            await FramesAsync(2);
+            Check(Session.Inventory.Selected is null, "a second tap clears the selection");
+        }
+        Check(Hud.FindProblems().Count == 0, "the open bag fits this screen");
+        Check(Hud.Blocks(bag.ItemButtons.Count > 0 ? bag.ItemButtons[0].Button.GetGlobalRect().GetCenter() : Hud.BagButton.GetGlobalRect().GetCenter()), "a touch on the bag never reaches the world");
+
+        OS.LowProcessorUsageMode = false;
+        await FramesAsync(5);
+        double sum = 0, max = 0;
+        var frames = 0;
+        var clock = Stopwatch.StartNew();
+        while (clock.Elapsed.TotalSeconds < 2)
+        {
+            await FramesAsync(1);
+            var draws = Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
+            sum += draws;
+            max = Math.Max(max, draws);
+            frames++;
+        }
+        var nodes = Hud.NodeCount;
+        if (_screenshot is not null && DisplayServer.GetName() != "headless")
+            await SaveAsync(System.IO.Path.ChangeExtension(_screenshot, null) + "-bag" + System.IO.Path.GetExtension(_screenshot), "bag open");
+        OS.LowProcessorUsageMode = true;
+        Hud.BagButton.EmitSignal(BaseButton.SignalName.Pressed);
+        await FramesAsync(2);
+        Check(!bag.Open, "the bag button closes it again");
+        Print($"bag: fits every screen; {carried} carried entries shown; with the bag open draw calls avg {(frames > 0 ? sum / frames : 0):0.0}, max {max:0}; {nodes} UI nodes");
     }
 
     // ---- layout ----

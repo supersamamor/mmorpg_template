@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Game.Shared.Formulas;
 
 namespace Game.Shared.Definitions
@@ -41,6 +42,9 @@ namespace Game.Shared.Definitions
 
         /// <summary>Natural HP and SP regeneration.</summary>
         public RegenBalanceDef Regen { get; init; } = new RegenBalanceDef();
+
+        /// <summary>A character's inventory: entry count, weight thresholds, pick-up range, dropped items and two-handed weapons (ARCHITECTURE §6.8).</summary>
+        public InventoryBalanceDef Inventory { get; init; } = new InventoryBalanceDef();
     }
 
     /// <summary>Player death and respawn. Percentages are whole-number percents (50 means half).</summary>
@@ -141,6 +145,50 @@ namespace Game.Shared.Definitions
 
         /// <summary>Job (<c>job.*</c>) a new character starts in.</summary>
         public string StartJobId { get; init; } = string.Empty;
+
+        /// <summary>What a new character carries (and wears) when it first joins. Ids are validated at load. Empty means nothing.</summary>
+        public IReadOnlyList<StartItemDef> StartItems { get; init; } = Empty.List<StartItemDef>();
+    }
+
+    /// <summary>One item a new character starts with.</summary>
+    public sealed record StartItemDef
+    {
+        /// <summary>The item (<c>item.*</c>).</summary>
+        public string ItemId { get; init; } = string.Empty;
+
+        /// <summary>How many, at least 1. An equipment item becomes that many entries.</summary>
+        public int Quantity { get; init; } = 1;
+
+        /// <summary>True to wear it from the start (equipment only; the usual equip rules for the start job apply).</summary>
+        public bool Equipped { get; init; }
+    }
+
+    /// <summary>
+    /// The inventory (ARCHITECTURE §6.8). Weight is the sum of <c>weight × quantity</c> of every entry, worn ones included; the limit is the derived
+    /// stat <c>weight_limit</c>. Percentages are whole-number percents of that limit.
+    /// </summary>
+    public sealed record InventoryBalanceDef
+    {
+        /// <summary>Most entries a character can hold (a stack counts once, each equipment item once, worn ones included).</summary>
+        public int MaxEntries { get; init; }
+
+        /// <summary>At or above this share of the weight limit natural HP and SP regeneration stops (<c>burdened</c>). 1–100.</summary>
+        public int BurdenedPercent { get; init; }
+
+        /// <summary>At or above this share the character also cannot attack (<c>overweight</c>). From <c>burdened_percent</c> to 100.</summary>
+        public int OverweightPercent { get; init; }
+
+        /// <summary>A player picks up a ground item within this many cells (Chebyshev) of it, walking there first. 0 or more.</summary>
+        public int PickupRange { get; init; }
+
+        /// <summary>How long an item a player dropped stays on the ground, in simulated milliseconds. Above 0.</summary>
+        public int DroppedLifetimeMs { get; init; }
+
+        /// <summary>
+        /// Weapon types held in both hands (<c>WeaponTypes</c> terms): such a weapon in <c>weapon</c> also takes the <c>shield</c> slot, so equipping
+        /// it takes a shield off, and equipping a shield takes it off.
+        /// </summary>
+        public IReadOnlyList<string> TwoHandedWeaponTypes { get; init; } = Empty.List<string>();
     }
 
     /// <summary>Progression numbers. The max base level is not stored here: it is the length of the base EXP table plus one.</summary>
@@ -261,7 +309,7 @@ namespace Game.Shared.Definitions
         [Formula]
         public string CritMultiplier { get; init; } = string.Empty;
 
-        /// <summary>A player's auto-attack range in cells (Chebyshev) while unarmed. Weapons bring their own range later (T-401).</summary>
+        /// <summary>A player's auto-attack range in cells (Chebyshev) while unarmed. An equipped weapon uses its own <c>attack_range</c> instead.</summary>
         public int PlayerAttackRange { get; init; }
 
         /// <summary>Shortest time between two path searches of a player walking into attack range of its target.</summary>

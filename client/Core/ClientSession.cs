@@ -1,5 +1,6 @@
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Combat;
+using Game.Client.Core.Items;
 using Game.Client.Core.Net;
 using Game.Client.Core.Ui;
 using Game.Client.Core.World;
@@ -35,6 +36,12 @@ public sealed class ClientSession
         World.Combat.Impact += Numbers.OnImpact;
     }
 
+    /// <summary>The own inventory and equipment, as the server last said, and the panel's selection.</summary>
+    public InventoryView Inventory { get; } = new InventoryView();
+
+    /// <summary>Raised for each inventory change applied (after <see cref="Inventory"/> took it): the audio hooks listen here.</summary>
+    public event Action<InventoryChangedMessage>? InventoryChanged;
+
     /// <summary>The floating damage numbers, started at each hit's impact moment.</summary>
     public DamageNumberPool Numbers { get; }
 
@@ -58,6 +65,7 @@ public sealed class ClientSession
     {
         World.Reset();
         Ui.Reset();
+        Inventory.Reset();
         Numbers.Clear();
         Connection.Login(name, wallNow);
         RunCommands();
@@ -94,6 +102,32 @@ public sealed class ClientSession
         if (Connection.Phase != ConnectionPhase.Online || Ui.Dead) return;
         Send(new AttackMessage(id));
         Ui.OnAttackSent(id);
+    }
+
+    /// <summary>A ground item tap: ask to walk there and pick it up. The server checks range, loot priority, weight and room.</summary>
+    public void TapItem(long id)
+    {
+        if (Connection.Phase != ConnectionPhase.Online || Ui.Dead) return;
+        Send(new PickUpMessage(id));
+        Ui.OnPickUpSent();
+    }
+
+    /// <summary>The panel's Use button.</summary>
+    public void UseItem(long entry) => SendItem(new UseItemMessage(entry));
+
+    /// <summary>The panel's Equip button (the server picks the slot).</summary>
+    public void EquipItem(long entry) => SendItem(new EquipMessage(entry));
+
+    /// <summary>The panel's Unequip button, or a tap on a worn slot.</summary>
+    public void UnequipSlot(string slot) => SendItem(new UnequipMessage(slot));
+
+    /// <summary>The panel's Drop button.</summary>
+    public void DropItem(long entry, int quantity) => SendItem(new DropItemMessage(entry, quantity));
+
+    private void SendItem(ClientMessage message)
+    {
+        if (Connection.Phase != ConnectionPhase.Online || Ui.Dead) return;
+        Send(message);
     }
 
     /// <summary>The death screen's button.</summary>
@@ -164,8 +198,18 @@ public sealed class ClientSession
             case ExpMessage exp:
                 World.ApplyExp(exp);
                 break;
+            case InventoryMessage inventory:
+                Inventory.Apply(inventory);
+                break;
+            case InventoryChangedMessage change:
+                if (Inventory.Apply(change))
+                {
+                    Ui.OnInventoryChanged(change, viewNow);
+                    InventoryChanged?.Invoke(change);
+                }
+                break;
             case RejectedMessage rejected:
-                Ui.OnRejected(rejected);
+                Ui.OnRejected(rejected, viewNow);
                 break;
             case AttackStoppedMessage stopped:
                 Ui.OnAttackStopped(stopped);

@@ -125,6 +125,7 @@ internal sealed class AoiEntry
     public bool Dead;
     public int Quantity;
     public EntityId? LootOwner;
+    public Inventory.WornLook? Look;
 
     // Fields that changed in ChangedTick.
     public long ChangedTick = -1;
@@ -142,7 +143,7 @@ internal sealed class AoiEntry
 
     public ObserverState? Observer;
 
-    public EntityView ToView() => new(Entity.Id, Entity.Kind, DisplayKey, Cell, Facing, Next, Speed, HpPercent, Dead, Quantity, LootOwner);
+    public EntityView ToView() => new(Entity.Id, Entity.Kind, DisplayKey, Cell, Facing, Next, Speed, HpPercent, Dead, Quantity, LootOwner, Look);
 }
 
 /// <summary>What one observer currently knows: the entities of its last snapshot or delta, by entity id.</summary>

@@ -36,6 +36,21 @@ namespace Game.Shared.Protocol
         /// <summary><c>logout</c> (client → server): leave on purpose; the character is removed at once, without a grace period.</summary>
         public const string Logout = "logout";
 
+        /// <summary><c>pick_up</c> (client to server): walk to a ground item and take it.</summary>
+        public const string PickUp = "pick_up";
+
+        /// <summary><c>use_item</c> (client to server): use a consumable from the inventory.</summary>
+        public const string UseItem = "use_item";
+
+        /// <summary><c>equip</c> (client to server): put on an equipment item from the inventory.</summary>
+        public const string Equip = "equip";
+
+        /// <summary><c>unequip</c> (client to server): take off what is worn in a slot.</summary>
+        public const string Unequip = "unequip";
+
+        /// <summary><c>drop_item</c> (client to server): put some of an inventory entry on the ground.</summary>
+        public const string DropItem = "drop_item";
+
         /// <summary><c>welcome</c> (server → client): the client's entity, map, the server tick rate and a new resume token.</summary>
         public const string Welcome = "welcome";
 
@@ -63,6 +78,12 @@ namespace Game.Shared.Protocol
         /// <summary><c>respawned</c> (server → client, owner only): the character came back after <c>respawn</c>.</summary>
         public const string Respawned = "respawned";
 
+        /// <summary><c>inventory</c> (server to client, owner only): the whole inventory, after every snapshot.</summary>
+        public const string Inventory = "inventory";
+
+        /// <summary><c>inventory_changed</c> (server to client, owner only): one change to the inventory, with the next change counter.</summary>
+        public const string InventoryChanged = "inventory_changed";
+
         /// <summary><c>pong</c> (server → client): answer to <c>ping</c>.</summary>
         public const string Pong = "pong";
 
@@ -70,10 +91,10 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);

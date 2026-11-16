@@ -30,6 +30,12 @@ public class ProtocolJsonTests
         { "respawn", new RespawnMessage(), """{"type":"respawn"}""" },
         { "ping", new PingMessage(7), """{"type":"ping","seq":7}""" },
         { "logout", new LogoutMessage(), """{"type":"logout"}""" },
+        { "pick_up", new PickUpMessage(9), """{"type":"pick_up","target":9}""" },
+        { "use_item", new UseItemMessage(12), """{"type":"use_item","entry":12}""" },
+        { "equip", new EquipMessage(12), """{"type":"equip","entry":12}""" },
+        { "equip into a slot", new EquipMessage(12, "accessory_2"), """{"type":"equip","entry":12,"slot":"accessory_2"}""" },
+        { "unequip", new UnequipMessage("weapon"), """{"type":"unequip","slot":"weapon"}""" },
+        { "drop_item", new DropItemMessage(12, 2), """{"type":"drop_item","entry":12,"quantity":2}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -93,6 +99,35 @@ public class ProtocolJsonTests
         { "you_died", new YouDiedMessage(7), """{"type":"you_died","killer":7}""" },
         { "you_died, no killer", new YouDiedMessage(null), """{"type":"you_died"}""" },
         { "respawned", new RespawnedMessage("map.starter_meadow", new GridCell(12, 12), 26), """{"type":"respawned","map":"map.starter_meadow","cell":[12,12],"hp":26}""" },
+        {
+            "rejected item intent", new RejectedMessage("equip", "level_too_low", null, null, 12, "weapon"),
+            """{"type":"rejected","intent":"equip","reason":"level_too_low","entry":12,"slot":"weapon"}"""
+        },
+        {
+            "players with a weapon and worn items",
+            new SnapshotMessage(140, "map.starter_meadow", 42, [Standing with { Weapon = "dagger", Worn = ["item.bone_dirk", "item.leather_cap"] }]),
+            """{"type":"snapshot","tick":140,"map":"map.starter_meadow","id":42,"entities":[""" +
+            """{"id":42,"kind":"player","cell":[12,12],"facing":"n","weapon":"dagger","worn":["item.bone_dirk","item.leather_cap"]}]}"""
+        },
+        {
+            "delta: a player took its weapon off",
+            new DeltaMessage(141, [], [new ChangeRecord(42, ChangedFields.Look, default, null, null, 0, null, Weapon: "unarmed", Worn: [])], []),
+            """{"type":"delta","tick":141,"changed":[{"id":42,"weapon":"unarmed","worn":[]}]}"""
+        },
+        {
+            "inventory", new InventoryMessage(4, 100, 45, 2040, "normal", [new InventoryEntryRecord(1, "item.bone_dirk", 1, "weapon"), new InventoryEntryRecord(2, "item.healing_draught", 3)]),
+            """{"type":"inventory","rev":4,"slots":100,"weight":45,"weight_limit":2040,"load":"normal","entries":[""" +
+            """{"id":1,"item":"item.bone_dirk","quantity":1,"slot":"weapon"},{"id":2,"item":"item.healing_draught","quantity":3}]}"""
+        },
+        {
+            "inventory_changed", new InventoryChangedMessage(5, "used", "item.healing_draught", 40, 2040, "normal", [new InventoryEntryRecord(2, "item.healing_draught", 2)], [7]),
+            """{"type":"inventory_changed","rev":5,"cause":"used","item":"item.healing_draught","weight":40,"weight_limit":2040,"load":"normal",""" +
+            "\"entries\":[{\"id\":2,\"item\":\"item.healing_draught\",\"quantity\":2}],\"removed\":[7]}"
+        },
+        {
+            "inventory_changed, weight only", new InventoryChangedMessage(6, "weight", null, 40, 2070, "normal", [], []),
+            """{"type":"inventory_changed","rev":6,"cause":"weight","weight":40,"weight_limit":2070,"load":"normal"}"""
+        },
         { "pong", new PongMessage(7), """{"type":"pong","seq":7}""" },
         { "bye", new ByeMessage("timeout"), """{"type":"bye","reason":"timeout"}""" },
     };

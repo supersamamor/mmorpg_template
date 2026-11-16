@@ -120,7 +120,8 @@ public sealed class CombatSystem : ITickSystem
             if (entity.Stats is { } stats && entity.Vitals is { } vitals)
             {
                 vitals.Sync(stats);
-                if (!entity.Dead) Regenerate(_ordered[i], vitals, stats, context.DeltaMs);
+                // A player carrying at least inventory.burdened_percent of its weight limit does not regenerate (ARCHITECTURE §6.8).
+                if (!entity.Dead && entity.Load == WeightStates.Normal) Regenerate(_ordered[i], vitals, stats, context.DeltaMs);
             }
         }
         ResolveRequests(context);
@@ -292,6 +293,7 @@ public sealed class CombatSystem : ITickSystem
         if (target.Kind != EntityKind.Monster || !_combatants.ContainsKey(targetId.Value)) return AttackReasons.InvalidTarget;   // no PvP in v1
         if (target.Dead) return AttackReasons.TargetDead;
         if (InSafeZone(player.Cell)) return AttackReasons.SafeZone;
+        if (player.Load == WeightStates.Overweight) return AttackReasons.Overweight;
         return null;
     }
 
@@ -361,8 +363,10 @@ public sealed class CombatSystem : ITickSystem
         if (!_combatants.TryGetValue(chase.Target.Value, out var target)) return End(context, chase, AttackReasons.TargetGone);
         if (target.Entity.Dead) return End(context, chase, AttackReasons.TargetDead);
         if (!_combatants.TryGetValue(player.Id.Value, out var self)) return End(context, chase, AttackReasons.AttackerDead);
+        if (player.Load == WeightStates.Overweight) return End(context, chase, AttackReasons.Overweight);
 
-        var range = _content.Balance.Combat.PlayerAttackRange;
+        // An equipped weapon brings its own range; unarmed is combat.player_attack_range.
+        var range = player.Weapon?.AttackRange ?? _content.Balance.Combat.PlayerAttackRange;
         // Out of range or, for a ranged attack, out of sight: walk closer (toward the target's cell) the same way.
         if (GridDistance.Chebyshev(player.Cell, target.Entity.Cell) <= range && InSight(player.Cell, target.Entity.Cell, range))
         {
@@ -456,11 +460,12 @@ public sealed class CombatSystem : ITickSystem
         var a = _attack;
         a.Attacker = attacker.Entity.Stats!;
         a.Defender = target.Entity.Stats!;
-        a.WeaponAtk = 0;   // weapons arrive with T-401
-        a.Refine = 0;
+        var weapon = attacker.Entity.Weapon;   // players: set by the inventory; monsters have none
+        a.WeaponAtk = weapon?.WeaponAtk ?? 0;
+        a.Refine = weapon?.Refine ?? 0;
         a.Effect = null;
         a.SkillLevel = 0;
-        a.AttackerElement = ElementOf(attacker.Def);
+        a.AttackerElement = weapon is not null ? weapon.Element : ElementOf(attacker.Def);
         a.DefenderElement = ElementOf(target.Def);
         a.DefenderRace = target.Def is { Race.Length: > 0 } race ? race.Race : null;
         a.DefenderSize = target.Def is { Size.Length: > 0 } size ? size.Size : null;

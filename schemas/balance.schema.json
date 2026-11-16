@@ -83,7 +83,7 @@
         },
         "player_attack_range": {
           "type": "integer",
-          "description": "A player's auto-attack range in cells (Chebyshev) while unarmed. Weapons bring their own range later (T-401)."
+          "description": "A player's auto-attack range in cells (Chebyshev) while unarmed. An equipped weapon uses its own attack_range instead."
         },
         "player_repath_interval_ms": {
           "type": "integer",
@@ -175,6 +175,33 @@
           "type": "string",
           "pattern": "^job\\.[a-z0-9_]+$",
           "description": "Job (job.*) a new character starts in."
+        },
+        "start_items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "item_id": {
+                "type": "string",
+                "pattern": "^item\\.[a-z0-9_]+$",
+                "description": "The item (item.*)."
+              },
+              "quantity": {
+                "type": "integer",
+                "description": "How many, at least 1. An equipment item becomes that many entries."
+              },
+              "equipped": {
+                "type": "boolean",
+                "description": "True to wear it from the start (equipment only; the usual equip rules for the start job apply)."
+              }
+            },
+            "additionalProperties": false,
+            "description": "One item a new character starts with.",
+            "required": [
+              "item_id"
+            ]
+          },
+          "description": "What a new character carries (and wears) when it first joins. Ids are validated at load. Empty means nothing."
         }
       },
       "additionalProperties": false,
@@ -263,6 +290,52 @@
       },
       "additionalProperties": false,
       "description": "Natural HP and SP regeneration."
+    },
+    "inventory": {
+      "type": "object",
+      "properties": {
+        "max_entries": {
+          "type": "integer",
+          "description": "Most entries a character can hold (a stack counts once, each equipment item once, worn ones included)."
+        },
+        "burdened_percent": {
+          "type": "integer",
+          "description": "At or above this share of the weight limit natural HP and SP regeneration stops (burdened). 1–100."
+        },
+        "overweight_percent": {
+          "type": "integer",
+          "description": "At or above this share the character also cannot attack (overweight). From burdened_percent to 100."
+        },
+        "pickup_range": {
+          "type": "integer",
+          "description": "A player picks up a ground item within this many cells (Chebyshev) of it, walking there first. 0 or more."
+        },
+        "dropped_lifetime_ms": {
+          "type": "integer",
+          "description": "How long an item a player dropped stays on the ground, in simulated milliseconds. Above 0."
+        },
+        "two_handed_weapon_types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "unarmed",
+              "dagger",
+              "sword_1h",
+              "sword_2h",
+              "spear",
+              "axe",
+              "mace",
+              "staff",
+              "bow",
+              "knuckle"
+            ]
+          },
+          "description": "Weapon types held in both hands (WeaponTypes terms): such a weapon in weapon also takes the shield slot, so equipping it takes a shield off, and equipping a shield takes it off."
+        }
+      },
+      "additionalProperties": false,
+      "description": "A character's inventory: entry count, weight thresholds, pick-up range, dropped items and two-handed weapons (ARCHITECTURE §6.8)."
     }
   },
   "additionalProperties": false,

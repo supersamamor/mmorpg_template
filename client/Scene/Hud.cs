@@ -60,6 +60,10 @@ public sealed class Hud
     private readonly Button _uiSize = new();
     private readonly Button _logout = new() { Text = UiText.Logout };
     private readonly Button _soundButton = new() { Text = UiText.Sound };
+    private readonly Button _bagButton = new() { Text = UiText.Bag, Visible = false, SizeFlagsVertical = Control.SizeFlags.ShrinkEnd };
+    private readonly HBoxContainer _hotbarRow = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+    private readonly Control _hotbarSpacer = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+    private InventoryPanel? _bag;
     private readonly CenterContainer _soundCenter = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
     private readonly PanelContainer _soundPanel = new() { MouseFilter = Control.MouseFilterEnum.Stop };
     private readonly GridContainer _soundGrid = new() { Columns = 2, MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -145,6 +149,7 @@ public sealed class Hud
         _right.AddChild(_soundButton);
         _soundButton.SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd;
         _soundButton.Pressed += () => { Tap(); SetSoundPanel(!_soundCenter.Visible); };
+        _bagButton.Pressed += () => { Tap(); _bag?.SetOpen(!_bag.Open); };
         _right.AddChild(_logout);
         _logout.SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd;
         _uiSize.SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd;
@@ -166,8 +171,13 @@ public sealed class Hud
         _bottom.AnchorBottom = 1;
         _bottom.GrowVertical = Control.GrowDirection.Begin;
         _bottom.AddChild(_flash);
-        _hotbar.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
-        _bottom.AddChild(_hotbar);
+        // The hotbar row: a spacer as wide as the bag, the hotbar centred, the bag in the bottom-right corner (the top-right column is full on a 360 dp
+        // phone at 1.5x). The flash line above keeps the whole width.
+        _hotbar.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter | Control.SizeFlags.Expand;
+        _hotbarRow.AddChild(_hotbarSpacer);
+        _hotbarRow.AddChild(_hotbar);
+        _hotbarRow.AddChild(_bagButton);
+        _bottom.AddChild(_hotbarRow);
         _safe.AddChild(_bottom);
         for (var i = 0; _hotbarModel is not null && i < _hotbarModel.SlotCount; i++)
         {
@@ -178,6 +188,8 @@ public sealed class Hud
             _hotbar.AddChild(slot);
             _interactive.Add(slot);
         }
+
+        if (session is not null && bundle is not null) _bag = new InventoryPanel(_safe, session, bundle, _interactive, Tap);
 
         _infoTitle.HorizontalAlignment = HorizontalAlignment.Left;
         var infoBox = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -198,6 +210,7 @@ public sealed class Hud
         _interactive.Add(_logout);
         _interactive.Add(_uiSize);
         _interactive.Add(_soundButton);
+        _interactive.Add(_bagButton);
         _interactive.Add(_nameEdit);
         _interactive.Add(_panelButton);
 
@@ -264,6 +277,7 @@ public sealed class Hud
         _spText.Text = UiText.Sp(99999, 99999);
         SetText(_connection, UiText.Connection(ConnectionPhase.Connecting));
         _logout.Visible = true;
+        _bagButton.Visible = true;
         ShowInfo(longName, UiText.EntityKind(EntityKinds.Item, true), new Vector2((float)_metrics.CanvasWidth, (float)_metrics.CanvasHeight));
     }
 
@@ -349,6 +363,22 @@ public sealed class Hud
         if (!_info.Visible) return;
         _infoToken++;
         _info.Visible = false;
+    }
+
+    /// <summary>The inventory panel, or null without a session.</summary>
+    public InventoryPanel? Bag => _bag;
+
+    /// <summary>The button that opens the inventory panel.</summary>
+    public Button BagButton => _bagButton;
+
+    /// <summary>Finds an item icon texture by asset key (set once the theme is loaded).</summary>
+    public Func<string, Texture2D?>? IconLoader
+    {
+        get => _bag?.IconLoader;
+        set
+        {
+            if (_bag is not null) _bag.IconLoader = value;
+        }
     }
 
     /// <summary>The audio system, whose volumes the sound panel sets. Null until the world exists.</summary>
@@ -480,6 +510,11 @@ public sealed class Hud
         _logout.CustomMinimumSize = new Vector2(Dp(RightColumnDp), buttonHeight);
         _uiSize.CustomMinimumSize = new Vector2(Dp(RightColumnDp), buttonHeight);
         _soundButton.CustomMinimumSize = new Vector2(Dp(RightColumnDp), buttonHeight);
+        var bagSize = new Vector2(Dp(RightColumnDp), buttonHeight);
+        _bagButton.CustomMinimumSize = bagSize;
+        _hotbarSpacer.CustomMinimumSize = new Vector2(bagSize.X * 1.25f, 0);   // a quarter wider than the bag: its text may need that at the smallest scale
+        _hotbarRow.AddThemeConstantOverride("separation", Mathf.RoundToInt(margin));
+        _bag?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _soundGrid.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(Dp(8)));
         _soundGrid.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(Dp(8)));
         _soundCenter.Position = Vector2.Zero; // inside _safe, which is already at the safe area
@@ -491,7 +526,7 @@ public sealed class Hud
         if (_hotbarModel is not null)
         {
             var grid = HotbarLayout.Compute(_hotbarModel.SlotCount, _config.HotbarRows, _config.HotbarSlotDp * scale, TouchTargetRules.MinTarget(metrics.Platform),
-                _config.HotbarGapDp * scale, metrics.SafeWidthDp - 2 * EdgeMarginDp * scale);
+                _config.HotbarGapDp * scale, metrics.SafeWidthDp - 2 * EdgeMarginDp * scale - 2 * (RightColumnDp * 1.25 + EdgeMarginDp) * scale);   // centred, clear of the bag
             _hotbar.Columns = Mathf.Max(1, grid.Columns);
             _hotbar.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(Dp(_config.HotbarGapDp)));
             _hotbar.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(Dp(_config.HotbarGapDp)));
@@ -545,6 +580,8 @@ public sealed class Hud
             SetText(_connection, UiText.Connection(connection.Phase));
             _connection.AddThemeColorOverride("font_color", connection.Phase == ConnectionPhase.Online ? new Color(0.55f, 0.9f, 0.55f) : new Color(1f, 0.8f, 0.4f));
             _logout.Visible = connection.Phase == ConnectionPhase.Online;
+            _bagButton.Visible = connection.Phase == ConnectionPhase.Online;
+            if (connection.Phase != ConnectionPhase.Online) _bag?.SetOpen(false);
         }
         if (_uiVersion != ui.Version)
         {
@@ -577,6 +614,7 @@ public sealed class Hud
         }
 
         if (_hotbarModel is not null && _hotbarVersion != _hotbarModel.Version) RefreshHotbar();
+        _bag?.Refresh();
     }
 
     /// <summary>
@@ -638,13 +676,21 @@ public sealed class Hud
             if (node is not Control control || !control.IsVisibleInTree() || control == _root || control == _safe || control == _panel || control == _panelCenter) continue;
             var rect = control.GetGlobalRect();
             var name = $"{control.GetType().Name}\"{(control as Label)?.Text ?? (control as Button)?.Text ?? string.Empty}\"";
-            if (!area.Encloses(rect)) problems.Add($"{name} {Describe(rect)} is outside the safe area {Describe(area)}");
+            // Inside a scroll container a control may be scrolled out of sight: the container clips it (and is checked itself), so only its sizes count.
+            if (!area.Encloses(rect) && !InScroll(control)) problems.Add($"{name} {Describe(rect)} is outside the safe area {Describe(area)}");
             var wanted = control.GetCombinedMinimumSize();
             if (rect.Size.X + 0.6f < wanted.X || rect.Size.Y + 0.6f < wanted.Y) problems.Add($"{name} {Describe(rect)} is smaller than the {wanted} it needs");
             if (control is Button or LineEdit && (rect.Size.X < minimum || rect.Size.Y < minimum))
                 problems.Add($"{name} is {rect.Size.X / _metrics.UnitsPerDp:0}x{rect.Size.Y / _metrics.UnitsPerDp:0} dp, under the {TouchTargetRules.MinTarget(_metrics.Platform):0} minimum");
         }
         return problems;
+    }
+
+    private static bool InScroll(Node node)
+    {
+        for (var parent = node.GetParent(); parent is not null; parent = parent.GetParent())
+            if (parent is ScrollContainer) return true;
+        return false;
     }
 
     private static string Describe(Rect2 rect) => $"({rect.Position.X:0},{rect.Position.Y:0} {rect.Size.X:0}x{rect.Size.Y:0})";

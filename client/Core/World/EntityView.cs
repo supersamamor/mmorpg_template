@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Game.Shared.Protocol;
 using Game.Shared.World;
 
@@ -56,6 +57,15 @@ public sealed class EntityView
     /// <summary>A ground item: this client may pick it up now.</summary>
     public bool Mine { get; private set; }
 
+    /// <summary>A player: the weapon type it holds (<c>unarmed</c> for none), as the server says; null for every other kind.</summary>
+    public string? Weapon { get; private set; }
+
+    /// <summary>A player: the item ids it wears that have a worn visual (look each one up in the bundle); empty for none and for other kinds.</summary>
+    public IReadOnlyList<string> Worn { get; private set; } = Array.Empty<string>();
+
+    /// <summary>Counts changes to <see cref="Weapon"/> and <see cref="Worn"/>, so a visual re-dresses only when they changed (T-403).</summary>
+    public int LookVersion { get; private set; }
+
     /// <summary>Drawn position on the X axis, in world units (cell <c>x</c> is centred at <c>x + 0.5</c>).</summary>
     public double X { get; private set; }
 
@@ -100,6 +110,9 @@ public sealed class EntityView
         Dead = DeadShown = record.Dead;
         Quantity = record.Quantity;
         Mine = record.Mine ?? false;
+        Weapon = record.Weapon;
+        Worn = record.Worn ?? Array.Empty<string>();
+        LookVersion++;
         X = Center(record.Cell.X);
         Z = Center(record.Cell.Y);
         Yaw = _targetYaw = YawOf(record.Facing, 0);
@@ -134,6 +147,13 @@ public sealed class EntityView
             }
         }
         if ((fields & ChangedFields.Mine) != 0) { Mine = change.Mine; LookDirty = true; }
+        if ((fields & ChangedFields.Look) != 0)
+        {
+            Weapon = change.Weapon;
+            Worn = change.Worn ?? Array.Empty<string>();
+            LookVersion++;
+            LookDirty = true;
+        }
         if ((fields & ChangedFields.Speed) != 0) Speed = change.Speed;
 
         var moved = (fields & (ChangedFields.Cell | ChangedFields.Next)) != 0;

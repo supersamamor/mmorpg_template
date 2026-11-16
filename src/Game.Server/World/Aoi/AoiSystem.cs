@@ -307,7 +307,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
             quantity = item.Quantity;
             if (nowMs < item.OwnerUntilMs) owner = item.Owner;
         }
-        return new EntityView(entity.Id, entity.Kind, entity.DefinitionId, cell, facing, next, speed, hp, entity.Dead, quantity, owner);
+        return new EntityView(entity.Id, entity.Kind, entity.DefinitionId, cell, facing, next, speed, hp, entity.Dead, quantity, owner, entity.Look);
     }
 
     private static void Store(AoiEntry entry, in EntityView v)
@@ -321,6 +321,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         entry.Dead = v.Dead;
         entry.Quantity = v.Quantity;
         entry.LootOwner = v.LootOwner;
+        entry.Look = v.Look;
     }
 
     private static void Update(AoiGrid grid, AoiEntry entry, long tick, long nowMs)
@@ -335,6 +336,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         if (v.HpPercent != entry.HpPercent) changed |= ViewFields.Hp;
         if (v.Dead != entry.Dead) changed |= ViewFields.Dead;
         if (v.LootOwner != entry.LootOwner) changed |= ViewFields.Mine;
+        if (!ReferenceEquals(v.Look, entry.Look)) changed |= ViewFields.Look;   // the inventory keeps the object while the look is the same
         if (changed == ViewFields.None) return;
 
         Store(entry, v);   // the quantity of a ground item never changes, so it has no field of its own

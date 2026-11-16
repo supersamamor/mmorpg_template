@@ -131,8 +131,10 @@ public partial class Main : Node3D
         var sounds = SoundLoader.Load(_config);
         _audio = new AudioDriver(this, _config, sounds, _bundle!, _session.World, new Pcg32Random((ulong)System.Random.Shared.NextInt64()), UserPrefsStore.Load());
         _session.LevelUpReceived += _audio.OnLevelUp;
+        _session.InventoryChanged += _audio.OnInventoryChanged;
         _hud = new Hud(this, _config, _session, _bundle);
         _hud.Audio = _audio;
+        _hud.IconLoader = key => catalog.TryFind(key, out var path, out _) && ResourceLoader.Exists("res://" + path) ? ResourceLoader.Load<Texture2D>("res://" + path) : null;
         _session.World.Combat.ImpactDelay = _entities.ImpactDelayOf;
         _fx = new CombatFx(this, _config, _session, _camera, _hud, catalog);
         _presenter.DeathShown += _fx.OnDeath;
