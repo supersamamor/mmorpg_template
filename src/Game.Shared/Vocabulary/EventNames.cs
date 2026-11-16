@@ -126,6 +126,12 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>InventoryChanged</c>: a player's inventory, equipment or weight limit changed (what the owner is sent).</summary>
         public const string InventoryChanged = "InventoryChanged";
 
+        /// <summary><c>CardInserted</c>: a player socketed a card into an equipment entry.</summary>
+        public const string CardInserted = "CardInserted";
+
+        /// <summary><c>ItemRefined</c>: a player tried to refine an equipment entry (success, or a failure that kept, lowered or broke it).</summary>
+        public const string ItemRefined = "ItemRefined";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -168,6 +174,8 @@ namespace Game.Shared.Vocabulary
             ItemUnequipped,
             ItemDiscarded,
             ItemRefused,
-            InventoryChanged);
+            InventoryChanged,
+            CardInserted,
+            ItemRefined);
     }
 }

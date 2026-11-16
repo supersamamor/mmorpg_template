@@ -145,8 +145,9 @@ public sealed class Gateway
             events.Subscribe<ExpGained>(e => PostExp(e.Player));
             events.Subscribe<ExpLost>(e => PostExp(e.Player));
             events.Subscribe<PlayerProgressed>(OnProgressed);
-            // Inventory, owner only: each change, and each refused item intent as rejected.
+            // Inventory, owner only: each change, each refine's outcome (after its change), and each refused item intent as rejected.
             events.Subscribe<InventoryChanged>(e => Owner(e.Player)?.Post(OwnInventory.Message(e)));
+            events.Subscribe<ItemRefined>(e => Owner(e.Player)?.Post(OwnInventory.Message(e)));
             events.Subscribe<ItemRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(e.Intent, e.Reason, null, e.Target, e.EntryId, e.Slot)));
         }
     }

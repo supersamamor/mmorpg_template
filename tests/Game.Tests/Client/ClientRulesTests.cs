@@ -83,9 +83,9 @@ public class ClientRulesTests
     [InlineData("not json")]
     [InlineData("[]")]
     [InlineData("{}")]
-    [InlineData("{\"format_version\":\"3\"}")]
-    [InlineData("{\"format_version\":3}")]
-    [InlineData("{\"format_version\":3,\"content_hash\":\"a\",\"items\":[],\"skills\":[],\"jobs\":[],\"statuses\":[],\"monsters\":[],\"npcs\":[],\"quests\":[],\"maps\":[{\"id\":\"map.a\",\"name\":\"A\",\"width\":2,\"height\":2,\"cells\":\"AA==\",\"warps\":[],\"zones\":[]}]}")]
+    [InlineData("{\"format_version\":\"4\"}")]
+    [InlineData("{\"format_version\":4}")]
+    [InlineData("{\"format_version\":4,\"content_hash\":\"a\",\"items\":[],\"skills\":[],\"jobs\":[],\"statuses\":[],\"monsters\":[],\"npcs\":[],\"quests\":[],\"maps\":[{\"id\":\"map.a\",\"name\":\"A\",\"width\":2,\"height\":2,\"cells\":\"AA==\",\"warps\":[],\"zones\":[]}]}")]
     public void A_broken_bundle_is_refused(string text)
     {
         DisplayBundle.TryRead(Encoding.UTF8.GetBytes(text), out var bundle, out _).ShouldBe(BundleStatus.Corrupt);

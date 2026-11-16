@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using Game.Client.Core.Net;
 using Game.Shared.Protocol;
@@ -116,8 +117,84 @@ public static class UiText
         ItemReasons.NotEquipped => "Nothing is worn there.",
         ItemReasons.ItemEquipped => "Take it off first.",
         ItemReasons.InvalidQuantity => "You do not have that many.",
+        ItemReasons.NotACard => "That is not a card.",
+        ItemReasons.CardDoesNotFit => "That card does not fit there.",
+        ItemReasons.NoFreeSocket => "No free card slot.",
+        ItemReasons.NotRefinable => "That cannot be refined.",
+        ItemReasons.AtMaxRefine => "It cannot be refined any further.",
+        ItemReasons.MissingMaterial => "You do not have enough material.",
         _ => string.Empty,   // cancelled: the player moved on, nothing to say
     };
+
+    /// <summary>The flash for a card socketed into <paramref name="item"/>.</summary>
+    public static string CardInserted(string item) => "Card set in " + item + ".";
+
+    /// <summary>The flash for a refine's outcome (a "Refine results" term), with the name the item has now (+level).</summary>
+    public static string RefineResult(string item, string result, int level) => result switch
+    {
+        RefineResults.Success => "Refined: " + Refined(item, level) + "!",
+        RefineResults.Keep => "The refine failed. " + Refined(item, level) + " is unchanged.",
+        RefineResults.Down => "The refine failed. " + Refined(item, level) + " lost a level.",
+        RefineResults.Break => "The refine failed and " + Refined(item, level) + " broke.",
+        _ => string.Empty,
+    };
+
+    /// <summary>An item's name with its refine level, e.g. <c>+3 Bone Dirk</c> (just the name at 0).</summary>
+    public static string Refined(string item, int level) => level > 0 ? "+" + level.ToString(CultureInfo.InvariantCulture) + " " + item : item;
+
+    /// <summary>An equipment entry's line: name with refine level, then its cards (filled and free sockets), e.g. <c>+2 Padded Vest [Gelcap Card]</c>.</summary>
+    public static string EquipmentLine(string item, int level, IReadOnlyList<string> cards, int cardSlots)
+    {
+        var line = Refined(item, level);
+        if (cardSlots <= 0 && cards.Count == 0) return line;
+        var sockets = new List<string>(cards);
+        for (var i = cards.Count; i < cardSlots; i++) sockets.Add(EmptySocket);
+        return line + " [" + string.Join(", ", sockets) + "]";
+    }
+
+    /// <summary>An empty card socket.</summary>
+    public const string EmptySocket = "free slot";
+
+    /// <summary>Socket a card: the action button that lists the equipment it fits.</summary>
+    public const string InsertCard = "Set card";
+
+    /// <summary>Refine: the action button that shows the next step.</summary>
+    public const string Refine = "Refine";
+
+    /// <summary>The refine confirmation button.</summary>
+    public const string ConfirmRefine = "Refine now";
+
+    /// <summary>Cancels a pending choice (card target or refine).</summary>
+    public const string Cancel = "Cancel";
+
+    /// <summary>The hint above the equipment a selected card fits.</summary>
+    public const string PickEquipmentForCard = "Set the card in (it stays there for good):";
+
+    /// <summary>A selected card that fits nothing the player has.</summary>
+    public const string NothingFitsCard = "Nothing you have can hold this card.";
+
+    /// <summary>A card target button: the equipment's line and, while worn, its slot.</summary>
+    public static string CardTarget(string equipmentLine, string? slot) => slot is null ? equipmentLine : equipmentLine + " (" + SlotName(slot) + ")";
+
+    /// <summary>
+    /// What refining offers, from the bundle's refine step for the next level: the chance, the material (with how many are carried) and what a failure does.
+    /// Every number comes from the bundle; nothing here is a client constant.
+    /// </summary>
+    public static string RefineOffer(string item, int nextLevel, int successPercent, string material, int quantity, int carried, string failure)
+    {
+        var outcome = failure switch
+        {
+            RefineFailures.Down => "it loses a level",
+            RefineFailures.Break => "it breaks and is gone, with its cards",
+            _ => "it stays as it is",
+        };
+        return "Refine " + item + " to +" + nextLevel.ToString(CultureInfo.InvariantCulture) + ": " + successPercent.ToString(CultureInfo.InvariantCulture)
+            + "% chance. Uses " + material + " x" + quantity.ToString(CultureInfo.InvariantCulture) + " (you have " + carried.ToString(CultureInfo.InvariantCulture)
+            + "), success or not. If it fails, " + outcome + ".";
+    }
+
+    /// <summary>Refining is over for this item.</summary>
+    public static string RefineMaxed(string item) => item + " cannot be refined any further.";
 
     /// <summary>The button that opens the inventory panel.</summary>
     public const string Bag = "Bag";
@@ -138,7 +215,7 @@ public static class UiText
     public const string Drop = "Drop";
 
     /// <summary>The panel's hint while nothing is selected.</summary>
-    public const string PickAnItem = "Tap an item to use, wear or drop it.";
+    public const string PickAnItem = "Tap an item to use, wear, refine or drop it.";
 
     /// <summary>An empty equipment slot.</summary>
     public const string EmptySlot = "(empty)";

@@ -140,6 +140,29 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.DropItem;
     }
 
+    /// <summary>
+    /// <c>insert_card</c>: socket the card in entry <see cref="Card"/> into a free card slot of the equipment entry <see cref="Entry"/>, for good (one card
+    /// unit is used up). <c>{"type":"insert_card","entry":7,"card":12}</c>.
+    /// </summary>
+    /// <param name="Entry">The equipment entry (carried or worn).</param>
+    /// <param name="Card">The card entry.</param>
+    public sealed record InsertCardMessage(long Entry, long Card) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.InsertCard;
+    }
+
+    /// <summary>
+    /// <c>refine</c>: try to raise the refine level of equipment entry <see cref="Entry"/> by one, using the next level's material; the outcome comes
+    /// back as <see cref="RefineResultMessage"/>. <c>{"type":"refine","entry":7}</c>.
+    /// </summary>
+    /// <param name="Entry">The equipment entry (carried or worn).</param>
+    public sealed record RefineMessage(long Entry) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Refine;
+    }
+
     /// <summary>A message the server sends. <see cref="Type"/> is its <see cref="MessageTypes"/> name.</summary>
     public abstract record ServerMessage
     {
@@ -297,12 +320,13 @@ namespace Game.Shared.Protocol
     /// <c>{"type":"rejected","intent":"attack","reason":"target_gone","target":99}</c>.
     /// </summary>
     /// <param name="Intent">The message type that was refused (<c>move</c>, <c>attack</c>, or an item intent: <c>pick_up</c>, <c>use_item</c>, <c>equip</c>,
-    /// <c>unequip</c>, <c>drop_item</c>).</param>
+    /// <c>unequip</c>, <c>drop_item</c>, <c>insert_card</c>, <c>refine</c>).</param>
     /// <param name="Reason">For <c>move</c> a VOCABULARY.md "Movement reasons" (<c>MoveRejected</c>) term, for <c>attack</c> an "Attack reasons" term,
     /// for an item intent an "Item reasons" term.</param>
     /// <param name="Cell">The target cell of the refused move, if any.</param>
     /// <param name="Target">The target of the refused attack, if any.</param>
-    /// <param name="Entry">The inventory entry of a refused <c>use_item</c>, <c>equip</c> or <c>drop_item</c>, if any.</param>
+    /// <param name="Entry">The inventory entry of a refused <c>use_item</c>, <c>equip</c> or <c>drop_item</c>, or the equipment entry of a refused
+    /// <c>insert_card</c> or <c>refine</c>, if any.</param>
     /// <param name="Slot">The slot of a refused <c>equip</c> or <c>unequip</c>, if any.</param>
     public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null, long? Entry = null, string? Slot = null) : ServerMessage
     {
@@ -370,12 +394,21 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.Respawned;
     }
 
-    /// <summary>One inventory entry on the wire: <c>{"id":12,"item":"item.x","quantity":3}</c>, with <c>"slot":"weapon"</c> while worn.</summary>
+    /// <summary>
+    /// One inventory entry on the wire: <c>{"id":12,"item":"item.x","quantity":3}</c>, with <c>"slot":"weapon"</c> while worn, and for equipment
+    /// <c>"cards":["item.c"]</c> and <c>"refine":2</c> when it has any (owner only: other players never see them).
+    /// </summary>
     /// <param name="Id">Entry id (equipment: its instance id); what <c>use_item</c>, <c>equip</c> and <c>drop_item</c> name.</param>
     /// <param name="Item">The item id (name and icon come from the bundle).</param>
     /// <param name="Quantity">How many.</param>
     /// <param name="Slot">The "Equipment slots" term it is worn in, or null.</param>
-    public sealed record InventoryEntryRecord(long Id, string Item, int Quantity, string? Slot = null);
+    /// <param name="Cards">The card item ids socketed in it, in socket order; null or empty when none.</param>
+    /// <param name="Refine">Its refine level (0 when not refined).</param>
+    public sealed record InventoryEntryRecord(long Id, string Item, int Quantity, string? Slot = null, IReadOnlyList<string>? Cards = null, int Refine = 0)
+    {
+        /// <summary>How many cards it holds.</summary>
+        public int CardCount => Cards?.Count ?? 0;
+    }
 
     /// <summary>
     /// <c>inventory</c> (owner only): the whole inventory and equipment, after every snapshot (join, resume, warp, resync). It replaces what the
@@ -411,6 +444,20 @@ namespace Game.Shared.Protocol
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.InventoryChanged;
+    }
+
+    /// <summary>
+    /// <c>refine_result</c> (owner only): how a <c>refine</c> came out, sent with the <c>inventory_changed</c> (<c>refined</c>) that applies it.
+    /// <c>{"type":"refine_result","entry":7,"item":"item.x","result":"success","refine":3}</c>.
+    /// </summary>
+    /// <param name="Entry">The equipment entry (gone after a <c>break</c>).</param>
+    /// <param name="Item">Its item id.</param>
+    /// <param name="Result">A "Refine results" term: <c>success</c>, <c>keep</c>, <c>down</c> or <c>break</c>.</param>
+    /// <param name="Refine">The refine level now (what it was when it broke).</param>
+    public sealed record RefineResultMessage(long Entry, string Item, string Result, int Refine) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.RefineResult;
     }
 
     /// <summary><c>pong</c>: answer to <see cref="PingMessage"/>. <c>{"type":"pong","seq":7}</c>.</summary>

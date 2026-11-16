@@ -19,9 +19,27 @@ namespace Game.Shared.ClientContent
     /// <param name="VisualAssetKey">Worn visual key (equip), or null.</param>
     /// <param name="UseSfx">Use sound key, or null.</param>
     /// <param name="EquipSfx">Equip sound key, or null.</param>
+    /// <param name="CardSlots">How many cards the equipment holds (0 for anything else), so the bag can show its free sockets.</param>
+    /// <param name="Refinable">True when the equipment can be refined, so the bag can offer it.</param>
     public sealed record ClientItem(
         string Id, string Name, string? Description, string Kind, string? IconAssetKey, string? GroundAssetKey,
-        IReadOnlyList<string> Slots, string? WeaponType, string? VisualAssetKey, string? UseSfx, string? EquipSfx);
+        IReadOnlyList<string> Slots, string? WeaponType, string? VisualAssetKey, string? UseSfx, string? EquipSfx, int CardSlots = 0, bool Refinable = false);
+
+    /// <summary>
+    /// The refine steps as far as the player needs them to decide (ARCHITECTURE §5.4, §6.8): the chance, the material and what a failure does. The whole
+    /// <c>refine.yaml</c> is decision data, so nothing in it is held back.
+    /// </summary>
+    /// <param name="MaxLevel">Highest refine level (0: nothing refines).</param>
+    /// <param name="Levels">One step per level, 1 to <paramref name="MaxLevel"/>.</param>
+    public sealed record ClientRefine(int MaxLevel, IReadOnlyList<ClientRefineLevel> Levels);
+
+    /// <summary>One refine step: the attempt that reaches <see cref="Level"/>.</summary>
+    /// <param name="Level">The level it reaches.</param>
+    /// <param name="SuccessPercent">Chance of success in whole percent.</param>
+    /// <param name="MaterialItemId">The material item it uses up.</param>
+    /// <param name="MaterialQuantity">How many units of it.</param>
+    /// <param name="Failure">A "Refine failures" term: <c>keep</c>, <c>down</c> or <c>break</c>.</param>
+    public sealed record ClientRefineLevel(int Level, int SuccessPercent, string MaterialItemId, int MaterialQuantity, string Failure);
 
     /// <summary>A skill's display and targeting info.</summary>
     /// <param name="Id">Skill id.</param>
@@ -216,13 +234,14 @@ namespace Game.Shared.ClientContent
     /// <param name="Quests">Quests, by id.</param>
     /// <param name="Maps">Maps, by id.</param>
     /// <param name="Appearance">Character-creation options.</param>
+    /// <param name="Refine">The refine steps (chance, material, failure outcome); null is written as no levels.</param>
     public sealed record ClientBundle(
         int FormatVersion, IReadOnlyList<string> Elements, IReadOnlyList<string> Stats, IReadOnlyList<ClientItem> Items,
         IReadOnlyList<ClientSkill> Skills, IReadOnlyList<ClientJob> Jobs, IReadOnlyList<ClientStatus> Statuses,
         IReadOnlyList<ClientMonster> Monsters, IReadOnlyList<ClientNpc> Npcs, IReadOnlyList<ClientDialogue> Dialogues,
-        IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps, ClientAppearance Appearance)
+        IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps, ClientAppearance Appearance, ClientRefine? Refine = null)
     {
-        /// <summary>The format this build writes and reads.</summary>
-        public const int CurrentFormatVersion = 3;
+        /// <summary>The format this build writes and reads (4: item card slots and refinable, and the refine steps, T-402).</summary>
+        public const int CurrentFormatVersion = 4;
     }
 }

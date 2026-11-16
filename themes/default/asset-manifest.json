@@ -104,6 +104,9 @@
   "icon.item.swift_elixir": {
     "file": "icons/item/swift_elixir.png"
   },
+  "icon.item.temper_shard": {
+    "file": "icons/item/temper_shard.png"
+  },
   "icon.item.warden_token": {
     "file": "icons/item/warden_token.png"
   },

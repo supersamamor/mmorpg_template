@@ -40,6 +40,23 @@ public sealed record ItemDiscarded(EntityId Player, EntityId Item, string ItemId
     public string Name => EventNames.ItemDiscarded;
 }
 
+/// <summary><c>CardInserted</c>: <c>Player</c> socketed <c>CardId</c> into socket <c>Socket</c> (0-based) of entry <c>EntryId</c> (<c>ItemId</c>), for good.</summary>
+public sealed record CardInserted(EntityId Player, long EntryId, string ItemId, string CardId, int Socket) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.CardInserted;
+}
+
+/// <summary>
+/// <c>ItemRefined</c>: <c>Player</c> tried to refine entry <c>EntryId</c> (<c>ItemId</c>); <c>Result</c> is a <see cref="RefineResults"/> term and
+/// <c>Level</c> its refine level now (the level it had when it broke). The material was used up whatever the result.
+/// </summary>
+public sealed record ItemRefined(EntityId Player, long EntryId, string ItemId, string Result, int Level) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.ItemRefined;
+}
+
 /// <summary>
 /// <c>ItemRefused</c>: the inventory refused <c>Intent</c> (a <c>MessageTypes</c> item intent: <c>pick_up</c>, <c>use_item</c>, ...) for an
 /// <see cref="ItemReasons"/> term; nothing changed. <c>Target</c> (pick-up), <c>EntryId</c> and <c>Slot</c> say what it was about.

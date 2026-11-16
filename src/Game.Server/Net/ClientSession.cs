@@ -393,6 +393,12 @@ public sealed class ClientSession : IViewSink
             case DropItemMessage drop:
                 if (Entity is { } dropper) _gateway.Enqueue(new DropItem(dropper, drop.Entry, drop.Quantity));
                 break;
+            case InsertCardMessage insert:
+                if (Entity is { } socketer) _gateway.Enqueue(new InsertCard(socketer, insert.Entry, insert.Card));
+                break;
+            case RefineMessage refine:
+                if (Entity is { } refiner) _gateway.Enqueue(new RefineItem(refiner, refine.Entry));
+                break;
         }
     }
 

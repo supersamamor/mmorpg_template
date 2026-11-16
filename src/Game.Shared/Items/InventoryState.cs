@@ -5,14 +5,39 @@ using Game.Shared.Vocabulary;
 namespace Game.Shared.Items
 {
     /// <summary>
-    /// One inventory entry: a stack of one item, or one equipment item with its own instance id (T-402 adds cards and refine to it). Immutable:
-    /// a change replaces the entry in <see cref="InventoryState"/>, so a copy handed to another thread (an event, a message) never changes.
+    /// One inventory entry: a stack of one item, or one equipment item with its own instance id, its cards and its refine level. Immutable:
+    /// a change replaces the entry in <see cref="InventoryState"/>, so a copy handed to another thread (an event, a message) never changes. A
+    /// <c>with</c> copy (equip, unequip) keeps the cards and the refine level. Equal when every field is, the cards compared in order.
     /// </summary>
     /// <param name="Id">Unique for the server run (equipment: its instance id, for dupe auditing, ARCHITECTURE §11).</param>
     /// <param name="ItemId">The item (<c>item.*</c>).</param>
     /// <param name="Quantity">How many, 1..<c>max_stack</c> (always 1 for equipment).</param>
     /// <param name="Slot">The equipment slot it is worn in (<see cref="EquipSlots"/>), or null when carried.</param>
-    public sealed record InventoryEntry(long Id, string ItemId, int Quantity, string? Slot = null);
+    public sealed record InventoryEntry(long Id, string ItemId, int Quantity, string? Slot = null)
+    {
+        private static readonly string[] NoCards = new string[0];
+
+        /// <summary>Card item ids socketed in this equipment, in socket order (at most its <c>card_slots</c>); empty for anything else.</summary>
+        public IReadOnlyList<string> Cards { get; init; } = NoCards;
+
+        /// <summary>The refine level, 0 to <c>refine.yaml</c> <c>max_level</c> (the formula variable <c>refine</c>); 0 for anything else.</summary>
+        public int Refine { get; init; }
+
+        /// <inheritdoc />
+        public bool Equals(InventoryEntry? other)
+        {
+            if (other is null) return false;
+            if (ReferenceEquals(this, other)) return true;
+            if (Id != other.Id || Quantity != other.Quantity || Refine != other.Refine || !string.Equals(ItemId, other.ItemId, StringComparison.Ordinal)
+                || !string.Equals(Slot, other.Slot, StringComparison.Ordinal) || Cards.Count != other.Cards.Count) return false;
+            for (var i = 0; i < Cards.Count; i++)
+                if (!string.Equals(Cards[i], other.Cards[i], StringComparison.Ordinal)) return false;
+            return true;
+        }
+
+        /// <inheritdoc />
+        public override int GetHashCode() => (Id.GetHashCode() * 397) ^ Quantity ^ (Refine << 16) ^ Cards.Count;
+    }
 
     /// <summary>
     /// One character's inventory and equipment. Equipped entries stay in the inventory (their <see cref="InventoryEntry.Slot"/> is set), so they

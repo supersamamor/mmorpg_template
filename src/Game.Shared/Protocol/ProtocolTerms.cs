@@ -51,6 +51,12 @@ namespace Game.Shared.Protocol
         /// <summary><c>drop_item</c> (client to server): put some of an inventory entry on the ground.</summary>
         public const string DropItem = "drop_item";
 
+        /// <summary><c>insert_card</c> (client to server): socket a card from the inventory into an equipment entry, for good.</summary>
+        public const string InsertCard = "insert_card";
+
+        /// <summary><c>refine</c> (client to server): try to raise an equipment entry's refine level by one, using its material.</summary>
+        public const string Refine = "refine";
+
         /// <summary><c>welcome</c> (server → client): the client's entity, map, the server tick rate and a new resume token.</summary>
         public const string Welcome = "welcome";
 
@@ -84,6 +90,9 @@ namespace Game.Shared.Protocol
         /// <summary><c>inventory_changed</c> (server to client, owner only): one change to the inventory, with the next change counter.</summary>
         public const string InventoryChanged = "inventory_changed";
 
+        /// <summary><c>refine_result</c> (server to client, owner only): how a <c>refine</c> came out.</summary>
+        public const string RefineResult = "refine_result";
+
         /// <summary><c>pong</c> (server → client): answer to <c>ping</c>.</summary>
         public const string Pong = "pong";
 
@@ -91,10 +100,10 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);

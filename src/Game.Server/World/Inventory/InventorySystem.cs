@@ -12,24 +12,26 @@ using Game.Shared.World;
 namespace Game.Server.World.Inventory;
 
 /// <summary>
-/// The server's inventory (ARCHITECTURE §6.8): picking up ground items, using consumables, equipping and unequipping, dropping items, and the
-/// weight limit. Owns <see cref="PickUp"/>, <see cref="UseItem"/>, <see cref="Equip"/>, <see cref="Unequip"/> and <see cref="DropItem"/>. Runs after
-/// combat, before the AOI.
+/// The server's inventory (ARCHITECTURE §6.8): picking up ground items, using consumables, equipping and unequipping, dropping items, socketing
+/// cards, refining, and the weight limit. Owns <see cref="PickUp"/>, <see cref="UseItem"/>, <see cref="Equip"/>, <see cref="Unequip"/>,
+/// <see cref="DropItem"/>, <see cref="InsertCard"/> and <see cref="RefineItem"/>. Runs after combat, before the AOI.
 /// </summary>
 /// <remarks>
 /// <para><b>Per tick</b>, in this order: the intents (in arrival order); pending pick-ups (in player id order); weight limits re-read from changed stat
 /// sheets; dropped items whose lifetime is over. Every change goes through <see cref="InventoryRules"/>, which checks everything first, so an
 /// operation applies fully or not at all within the tick; a refusal is an <see cref="ItemRefused"/> event and changes nothing.</para>
 /// <para><b>What it sets on the player entity</b> for other systems to read (hard rule 7, no calls): the equipment modifiers on the stat sheet, each
-/// with its source <c>equip:&lt;entry id&gt;</c> (ARCHITECTURE §6.1); <see cref="Entity.Weapon"/> (combat's weapon inputs and range);
+/// with its source <c>equip:&lt;entry id&gt;</c>, evaluated with the entry's refine level, and each socketed card's with <c>card:&lt;entry id&gt;:&lt;socket&gt;</c>
+/// (ARCHITECTURE §6.1); <see cref="Entity.Weapon"/> (combat's weapon inputs and range);
 /// <see cref="Entity.Look"/> (what others see, the AOI); <see cref="Entity.Load"/> (combat stops regeneration and attacks). Walks players to ground
 /// items with <see cref="MoveTo"/> / <see cref="StopMove"/> and follows the movement events.</para>
 /// <para><b>Time:</b> ground items use the instance's simulated time, like combat's drops; cooldowns use the injected server clock, so they hold
-/// across maps.</para>
+/// across maps. <b>Randomness:</b> a refine draws one value from the instance's seeded random source.</para>
 /// </remarks>
 public sealed class InventorySystem : ITickSystem
 {
-    private static readonly IReadOnlyCollection<Type> Owned = [typeof(PickUp), typeof(UseItem), typeof(Equip), typeof(Unequip), typeof(DropItem)];
+    private static readonly IReadOnlyCollection<Type> Owned =
+        [typeof(PickUp), typeof(UseItem), typeof(Equip), typeof(Unequip), typeof(DropItem), typeof(InsertCard), typeof(RefineItem)];
     private static readonly int WeightLimitStat = StatIndex.IndexOf(DerivedStats.WeightLimit);
     private const int PickupGraceTicks = 3;   // a pick-up whose walk never started within this many ticks has no way there
 
@@ -72,6 +74,10 @@ public sealed class InventorySystem : ITickSystem
     /// <summary>The source id of an equipped entry's stat modifiers.</summary>
     public static string SourceOf(long entryId) => "equip:" + entryId.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
+    /// <summary>The source id of the modifiers of the card in socket <paramref name="socket"/> (0-based) of an equipped entry: <c>card:&lt;entry id&gt;:&lt;socket&gt;</c>.</summary>
+    public static string CardSourceOf(long entryId, int socket) =>
+        "card:" + entryId.ToString(System.Globalization.CultureInfo.InvariantCulture) + ":" + socket.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
     /// <inheritdoc />
     public void Tick(TickContext context)
     {
@@ -90,6 +96,8 @@ public sealed class InventorySystem : ITickSystem
                 case Equip equip: PutOn(context, holder, equip.EntryId, equip.Slot); break;
                 case Unequip off: TakeOff(context, holder, off.Slot); break;
                 case DropItem drop: Drop(context, holder, drop.EntryId, drop.Quantity); break;
+                case InsertCard card: Socket(context, holder, card.EntryId, card.CardEntryId); break;
+                case RefineItem refine: TryRefine(context, holder, refine.EntryId); break;
             }
         }
         RunPickups(context);
@@ -102,7 +110,7 @@ public sealed class InventorySystem : ITickSystem
     private void Setup(TickContext context)
     {
         _instance = context.Instance;
-        _equipContext[FormulaVariables.Refine] = 0;   // refine arrives with T-402
+        _equipContext[FormulaVariables.Refine] = 0;   // set to each entry's refine level before its modifiers are evaluated
         var events = _instance.Events;
         events.Subscribe<EntityEnteredMap>(e =>
         {
@@ -156,7 +164,7 @@ public sealed class InventorySystem : ITickSystem
                     _instance!.Log.Warn($"[{_instance.MapId}] start item {start.ItemId} not equipped on {holder.Entity.Id}: {why}.");
                     continue;
                 }
-                foreach (var off in plan!.Displaced) holder.Entity.Stats!.Modifiers.RemoveBySource(SourceOf(off.Id));
+                foreach (var off in plan!.Displaced) Remove(holder.Entity.Stats!, off);
                 _rules.ApplyEquip(holder.State, plan, _delta);
             }
         }
@@ -208,7 +216,7 @@ public sealed class InventorySystem : ITickSystem
         _rules.ApplyEquip(holder.State, plan, _delta);
         foreach (var off in _delta.TakenOff)
         {
-            sheet.Modifiers.RemoveBySource(SourceOf(off.Id));
+            Remove(sheet, off);
             context.Publish(new ItemUnequipped(holder.Entity.Id, off.ItemId, off.Id, plan.Displaced.First(d => d.Id == off.Id).Slot!));
         }
         if (was is null || !sheet.Modifiers.HasSource(SourceOf(plan.Entry.Id))) Apply(sheet, plan.Entry);
@@ -227,16 +235,79 @@ public sealed class InventorySystem : ITickSystem
             return;
         }
         var off = _delta.TakenOff[0];
-        holder.Entity.Stats!.Modifiers.RemoveBySource(SourceOf(off.Id));
+        Remove(holder.Entity.Stats!, off);
         context.Publish(new ItemUnequipped(holder.Entity.Id, off.ItemId, off.Id, slot));
         Refresh(holder);
         Changed(context, holder, InventoryChanges.Unequipped, off.ItemId);
     }
 
-    /// <summary>The entry's equipment modifiers onto the sheet, with its source; values evaluated once (refine 0 until T-402).</summary>
+    /// <summary>
+    /// The worn entry's equipment modifiers onto the sheet with its source, and each socketed card's with its own (<see cref="CardSourceOf"/>).
+    /// Values are evaluated once, with <c>refine</c> = the entry's refine level (an item's modifiers may use it, e.g. armour DEF).
+    /// </summary>
     private void Apply(StatSheet sheet, InventoryEntry entry)
     {
-        if (_content.TryGetItem(entry.ItemId, out var item)) sheet.Modifiers.AddRange(SourceOf(entry.Id), _content.Modifiers(item), _equipContext);
+        if (!_content.TryGetItem(entry.ItemId, out var item)) return;
+        _equipContext[FormulaVariables.Refine] = entry.Refine;
+        sheet.Modifiers.AddRange(SourceOf(entry.Id), _content.Modifiers(item), _equipContext);
+        for (var i = 0; i < entry.Cards.Count; i++)
+            if (_content.TryGetItem(entry.Cards[i], out var card)) sheet.Modifiers.AddRange(CardSourceOf(entry.Id, i), _content.Modifiers(card), _equipContext);
+        _equipContext[FormulaVariables.Refine] = 0;
+    }
+
+    /// <summary>Takes exactly what <see cref="Apply"/> put on for <paramref name="entry"/> off the sheet: its equipment source and every card source.</summary>
+    private static void Remove(StatSheet sheet, InventoryEntry entry)
+    {
+        sheet.Modifiers.RemoveBySource(SourceOf(entry.Id));
+        for (var i = 0; i < entry.Cards.Count; i++) sheet.Modifiers.RemoveBySource(CardSourceOf(entry.Id, i));
+    }
+
+    // ---- cards and refining --------------------------------------------------------------------------------------------------------------
+
+    private void Socket(TickContext context, Holder holder, long entryId, long cardEntryId)
+    {
+        var reason = _rules.PlanInsertCard(holder.State, cardEntryId, entryId, out var plan);
+        if (reason is not null)
+        {
+            Refuse(context, holder, MessageTypes.InsertCard, reason, entryId: entryId);
+            return;
+        }
+        _delta.Clear();
+        _rules.ApplyInsertCard(holder.State, plan!, _delta);
+        if (plan!.Target.Slot is not null && holder.Entity.Stats is { } sheet && _content.TryGetItem(plan.CardItem.Id, out var card))
+        {
+            // Worn: the new card counts at once, with its own source; the equipment's own modifiers do not change.
+            _equipContext[FormulaVariables.Refine] = plan.Target.Refine;
+            sheet.Modifiers.AddRange(CardSourceOf(plan.Target.Id, plan.Socket), _content.Modifiers(card), _equipContext);
+            _equipContext[FormulaVariables.Refine] = 0;
+        }
+        context.Publish(new CardInserted(holder.Entity.Id, plan.Target.Id, plan.TargetItem.Id, plan.CardItem.Id, plan.Socket));
+        Changed(context, holder, InventoryChanges.CardInserted, plan.TargetItem.Id);
+    }
+
+    private void TryRefine(TickContext context, Holder holder, long entryId)
+    {
+        var state = holder.State;
+        var reason = _rules.PlanRefine(state, entryId, out var plan);
+        if (reason is not null)
+        {
+            Refuse(context, holder, MessageTypes.Refine, reason, entryId: entryId);
+            return;
+        }
+        var worn = plan!.Entry.Slot is not null;
+        var sheet = holder.Entity.Stats!;
+        _delta.Clear();
+        var result = _rules.ApplyRefine(state, plan, context.Random, _delta);
+        var now = state.Find(plan.Entry.Id);
+        if (worn)
+        {
+            // Re-evaluated with the new level (or gone with the item when it broke).
+            Remove(sheet, plan.Entry);
+            if (now is not null) Apply(sheet, now);
+            Refresh(holder);
+        }
+        Changed(context, holder, InventoryChanges.Refined, plan.Item.Id);
+        context.Publish(new ItemRefined(holder.Entity.Id, plan.Entry.Id, plan.Item.Id, result, now?.Refine ?? plan.Entry.Refine));
     }
 
     private Wearer WearerOf(Entity player) =>
@@ -253,7 +324,7 @@ public sealed class InventorySystem : ITickSystem
         {
             if (state.InSlot(slot) is not { } entry || !_content.TryGetItem(entry.ItemId, out var item) || item.Equip is not { } equip) continue;
             if (string.Equals(slot, EquipSlots.Weapon, StringComparison.Ordinal) && equip.WeaponType is { } type)
-                weapon = new EquippedWeapon(item.Id, type, equip.WeaponAtk, 0, Math.Max(1, equip.AttackRange), equip.Element);
+                weapon = new EquippedWeapon(item.Id, type, equip.WeaponAtk, entry.Refine, Math.Max(1, equip.AttackRange), equip.Element);
             if (equip.VisualAssetKey is not null) worn.Add(item.Id);
         }
         entity.Weapon = weapon;
@@ -277,7 +348,7 @@ public sealed class InventorySystem : ITickSystem
         _delta.Clear();
         _rules.TryRemove(state, entryId, quantity, _delta);
         var ground = new GroundItem(entry.ItemId, quantity, player.Id, null, _nowMs, _nowMs, _nowMs + _content.Balance.Inventory.DroppedLifetimeMs,
-            equipment ? entry.Id : 0);
+            equipment ? entry.Id : 0, equipment && entry.Cards.Count > 0 ? entry.Cards : null, equipment ? entry.Refine : 0);
         var id = context.Spawn(EntityKind.Item, player.Cell, Directions.S, e =>
         {
             e.DefinitionId = ground.ItemId;
@@ -373,7 +444,7 @@ public sealed class InventorySystem : ITickSystem
             return;
         }
         _delta.Clear();
-        var reason = _rules.TryAdd(holder.State, item.ItemId, item.Quantity, holder.State.WeightLimit, _newId, _delta, item.InstanceId);
+        var reason = _rules.TryAdd(holder.State, item.ItemId, item.Quantity, holder.State.WeightLimit, _newId, _delta, item.InstanceId, item.Cards, item.Refine);
         if (reason is not null)
         {
             Refuse(context, holder, MessageTypes.PickUp, reason, target: target.Id.Value);

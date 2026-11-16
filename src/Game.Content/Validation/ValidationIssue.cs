@@ -61,6 +61,8 @@ public static class ValidationCodes
     public const string DialogueDangling = "dialogue.dangling";
     /// <summary>A number in <c>balance.yaml</c> is out of range or inconsistent with another.</summary>
     public const string BalanceRange = "balance.range";
+    /// <summary>A number in <c>refine.yaml</c> is out of range, a level is missing or out of order, or a material is not a material item.</summary>
+    public const string RefineRange = "refine.range";
     /// <summary>A warp, warp target or NPC is on a cell that is out of bounds or not walkable.</summary>
     public const string GridCellBlocked = "grid.cell_blocked";
     /// <summary>A spawn or zone rectangle is out of bounds, empty, or (spawns) has no walkable cell.</summary>

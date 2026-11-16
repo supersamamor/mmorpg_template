@@ -153,7 +153,8 @@ Two-handed (`balance.yaml` `inventory.two_handed_weapon_types`): `sword_2h`, `st
 `QuestStepCompleted`, `QuestCompleted`, `StatusApplied`, `StatusExpired`,
 `EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`, `MovementStarted`, `CellReached`,
 `MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `MonsterReturned`, `AttackRequested`, `AttackRefused`, `AttackStarted`, `AttackStopped`,
-`ExpGained`, `ExpLost`, `PlayerRespawned`, `ItemDropped`, `ItemExpired`, `ItemUnequipped`, `ItemDiscarded`, `ItemRefused`, `InventoryChanged`
+`ExpGained`, `ExpLost`, `PlayerRespawned`, `ItemDropped`, `ItemExpired`, `ItemUnequipped`, `ItemDiscarded`, `ItemRefused`, `InventoryChanged`,
+`CardInserted`, `ItemRefined`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -186,9 +187,12 @@ On the wire in `rejected` (`intent` `attack`) and `attack_stopped`. The gateway 
 does not see, `invalid_target` for itself or anything but a monster.
 
 ## Item reasons
-In `ItemRefused` and on the wire in `rejected` (`intent` `pick_up`, `use_item`, `equip`, `unequip` or `drop_item`); nothing changed (ARCHITECTURE §6.8):
+In `ItemRefused` and on the wire in `rejected` (`intent` `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card` or `refine`); nothing changed (ARCHITECTURE §6.8):
 `item_gone`, `not_yours`, `unreachable`, `cancelled`, `too_heavy`, `inventory_full`, `not_usable`, `cooldown`, `unsupported_effect`, `not_equipment`,
-`wrong_slot`, `level_too_low`, `wrong_job`, `not_equipped`, `item_equipped`, `invalid_quantity`.
+`wrong_slot`, `level_too_low`, `wrong_job`, `not_equipped`, `item_equipped`, `invalid_quantity`, `not_a_card`, `card_does_not_fit`, `no_free_socket`,
+`not_refinable`, `at_max_refine`, `missing_material`.
+`card_does_not_fit`: none of the card's `slots` is one of the equipment's. `no_free_socket`: its `card_slots` are full (or it has none).
+`at_max_refine`: at `refine.yaml` `max_level`. `missing_material`: fewer carried units of the next step's material than its quantity.
 `not_yours`: another player still has loot priority. `unsupported_effect`: a consumable with an effect type other than `heal` / `restore_sp` (until T-501).
 `wrong_job`: the item's `job_ids` leave the job out, or the job's `weapon_types` leave the weapon's type out. `item_equipped`: worn items are not used or dropped.
 
@@ -197,7 +201,14 @@ In `ItemRefused` and on the wire in `rejected` (`intent` `pick_up`, `use_item`, 
 In `inventory` and `inventory_changed` (`load`).
 
 ## Inventory changes
-In `inventory_changed` `cause`: `picked_up`, `used`, `equipped`, `unequipped`, `dropped`, `weight` (only the weight limit or state changed).
+In `inventory_changed` `cause`: `picked_up`, `used`, `equipped`, `unequipped`, `dropped`, `weight` (only the weight limit or state changed),
+`card_inserted`, `refined` (any refine attempt: the material is used up whatever the result).
+
+## Refine failures
+What a failed refine does, per step of `refine.yaml` (`failure`): `keep` (the level stays), `down` (one level down, not below 0), `break` (the item is gone, with its cards).
+
+## Refine results
+In `ItemRefined` and the owner's `refine_result` (`result`): `success` (one level up), then the failure terms `keep`, `down`, `break`.
 
 ## Hit results
 In `DamageDealt`: `hit`, `crit`, `miss`
@@ -221,9 +232,9 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `pong`, `bye`
-Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`.
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `pong`, `bye`
+Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,

@@ -39,7 +39,7 @@ public static class ProtocolJson
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ClientMessage>(ByeReasons.Malformed);
             string? type = null, name = null, content = null, resume = null, slot = null;
             int? version = null, quantity = null;
-            long? seq = null, target = null, entry = null;
+            long? seq = null, target = null, entry = null, card = null;
             GridCell? cell = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
@@ -48,6 +48,7 @@ public static class ProtocolJson
                 switch (key)
                 {
                     case "type": type = String(ref reader); break;
+                    case "card": card = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var cd) ? cd : throw Bad(); break;
                     case "version": version = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var v) ? v : throw Bad(); break;
                     case "name": name = String(ref reader); break;
                     case "content": content = String(ref reader); break;
@@ -79,6 +80,8 @@ public static class ProtocolJson
                 MessageTypes.Equip => entry is { } worn ? new EquipMessage(worn, slot) : null,
                 MessageTypes.Unequip => slot is { } off ? new UnequipMessage(off) : null,
                 MessageTypes.DropItem => entry is { } dropped && quantity is { } count ? new DropItemMessage(dropped, count) : null,
+                MessageTypes.InsertCard => entry is { } socketed && card is { } inserted ? new InsertCardMessage(socketed, inserted) : null,
+                MessageTypes.Refine => entry is { } refined ? new RefineMessage(refined) : null,
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -137,6 +140,13 @@ public static class ProtocolJson
             case DropItemMessage drop:
                 w.WriteNumber("entry", drop.Entry);
                 w.WriteNumber("quantity", drop.Quantity);
+                break;
+            case InsertCardMessage insert:
+                w.WriteNumber("entry", insert.Entry);
+                w.WriteNumber("card", insert.Card);
+                break;
+            case RefineMessage refine:
+                w.WriteNumber("entry", refine.Entry);
                 break;
         }
         w.WriteEndObject();
@@ -259,6 +269,12 @@ public static class ProtocolJson
                     w.WriteEndArray();
                 }
                 break;
+            case RefineResultMessage refined:
+                w.WriteNumber("entry", refined.Entry);
+                w.WriteString("item", refined.Item);
+                w.WriteString("result", refined.Result);
+                w.WriteNumber("refine", refined.Refine);
+                break;
             case PongMessage pong:
                 w.WriteNumber("seq", pong.Seq);
                 break;
@@ -292,10 +308,10 @@ public static class ProtocolJson
         {
             var reader = new Utf8JsonReader(utf8);
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ServerMessage>(ByeReasons.Malformed);
-            string? type = null, map = null, intent = null, reason = null, content = null, token = null, slot = null, cause = null, item = null, load = null;
+            string? type = null, map = null, intent = null, reason = null, content = null, token = null, slot = null, cause = null, item = null, load = null, result = null;
             long tick = 0, id = 0, seq = 0, baseExp = 0, baseNext = 0, jobExp = 0, jobNext = 0, rev = 0;
             long? target = null, killer = null, entry = null;
-            int version = 0, tickRate = 0, hp = 0, slots = 0, weight = 0, weightLimit = 0;
+            int version = 0, tickRate = 0, hp = 0, slots = 0, weight = 0, weightLimit = 0, refine = 0;
             List<InventoryEntryRecord>? inventoryEntries = null;
             List<long>? removed = null;
             int? baseLevel = null, jobLevel = null;
@@ -353,6 +369,8 @@ public static class ProtocolJson
                     case "cause": cause = String(ref reader); break;
                     case "item": item = String(ref reader); break;
                     case "entries": inventoryEntries = ReadEntries(ref reader); break;
+                    case "result": result = String(ref reader); break;
+                    case "refine": refine = reader.GetInt32(); break;
                     case "removed":
                         if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
                         removed = new List<long>();
@@ -377,6 +395,7 @@ public static class ProtocolJson
                 MessageTypes.InventoryChanged => load is null || cause is null ? null
                     : new InventoryChangedMessage(rev, cause, item, weight, weightLimit, load,
                         (IReadOnlyList<InventoryEntryRecord>?)inventoryEntries ?? Array.Empty<InventoryEntryRecord>(), (IReadOnlyList<long>?)removed ?? Array.Empty<long>()),
+                MessageTypes.RefineResult => entry is null || item is null || result is null ? null : new RefineResultMessage(entry.Value, item, result, refine),
                 MessageTypes.Pong => new PongMessage(seq),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason),
                 null => null,
@@ -433,6 +452,8 @@ public static class ProtocolJson
         w.WriteString("item", e.Item);
         w.WriteNumber("quantity", e.Quantity);
         if (e.Slot is not null) w.WriteString("slot", e.Slot);
+        if (e.Cards is { Count: > 0 } cards) WriteStrings(w, "cards", cards);
+        if (e.Refine != 0) w.WriteNumber("refine", e.Refine);
         w.WriteEndObject();
     }
 
@@ -445,6 +466,8 @@ public static class ProtocolJson
             long id = 0;
             string? item = null, slot = null;
             var quantity = 0;
+            var refine = 0;
+            List<string>? cards = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var name = reader.GetString();
@@ -455,10 +478,12 @@ public static class ProtocolJson
                     case "item": item = String(ref reader); break;
                     case "quantity": quantity = reader.GetInt32(); break;
                     case "slot": slot = String(ref reader); break;
+                    case "cards": cards = ReadStrings(ref reader); break;
+                    case "refine": refine = reader.GetInt32(); break;
                     default: reader.Skip(); break;
                 }
             }
-            list.Add(new InventoryEntryRecord(id, item ?? throw Bad(), quantity, slot));
+            list.Add(new InventoryEntryRecord(id, item ?? throw Bad(), quantity, slot, cards, refine));
         }
         return list;
     }

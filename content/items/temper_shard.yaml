@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.temper_shard
+name: Temper Shard
+description: A splinter of hard, glassy stone. Worked into a blade or a buckler, it makes the gear a little better, if the work takes.
+kind: material
+weight: 2
+sell_price: 15
+max_stack: 999
+icon_asset_key: icon.item.temper_shard
+ground_asset_key: model.prop.loot_bag

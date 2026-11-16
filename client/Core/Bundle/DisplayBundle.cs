@@ -112,6 +112,7 @@ public sealed class DisplayBundle
     private readonly SortedSet<string> _modelKeys = new SortedSet<string>(StringComparer.Ordinal);
     private readonly Dictionary<string, MapData> _maps = new Dictionary<string, MapData>(StringComparer.Ordinal);
     private readonly Dictionary<string, ItemDisplay> _items = new Dictionary<string, ItemDisplay>(StringComparer.Ordinal);
+    private readonly List<RefineStep> _refineSteps = new List<RefineStep>();
 
     private DisplayBundle(int formatVersion, string contentHash)
     {
@@ -159,6 +160,12 @@ public sealed class DisplayBundle
     /// <summary>What the bundle says about an item (kind, icon, slots, weapon type, worn visual), or null for an id it does not know.</summary>
     public ItemDisplay? Item(string? itemId) => itemId is not null && _items.TryGetValue(itemId, out var item) ? item : null;
 
+    /// <summary>The highest refine level (<c>refine.yaml</c>); 0 when nothing refines.</summary>
+    public int RefineMaxLevel { get; private set; }
+
+    /// <summary>The refine step that reaches <paramref name="level"/> (chance, material, failure outcome), or null when there is none.</summary>
+    public RefineStep? RefineStepTo(int level) => level >= 1 && level <= _refineSteps.Count && level <= RefineMaxLevel ? _refineSteps[level - 1] : null;
+
     /// <summary>Reads a bundle file. The format version is checked first, so a newer shape is refused rather than misread.</summary>
     public static BundleStatus TryRead(ReadOnlySpan<byte> utf8, out DisplayBundle? bundle, out int formatVersion)
     {
@@ -199,6 +206,7 @@ public sealed class DisplayBundle
                 result._maps[data.Id] = data;
                 result._names[data.Id] = data.Name;
             }
+            ReadRefine(result, root);
             bundle = result;
             return BundleStatus.Ok;
         }
@@ -236,7 +244,20 @@ public sealed class DisplayBundle
             foreach (var slot in list.EnumerateArray())
                 if (slot.GetString() is { Length: > 0 } text) slots.Add(text);
         return new ItemDisplay(id, name, OptionalText(entry, "kind") ?? string.Empty, OptionalText(entry, "icon"), slots, OptionalText(entry, "weapon_type"),
-            OptionalText(entry, "visual"));
+            OptionalText(entry, "visual"))
+        {
+            CardSlots = entry.TryGetProperty("card_slots", out var sockets) && sockets.ValueKind == JsonValueKind.Number ? Math.Max(0, sockets.GetInt32()) : 0,
+            Refinable = entry.TryGetProperty("refinable", out var refinable) && refinable.ValueKind == JsonValueKind.True,
+        };
+    }
+
+    private static void ReadRefine(DisplayBundle bundle, JsonElement root)
+    {
+        if (!root.TryGetProperty("refine", out var refine)) return;   // no refine steps: nothing is offered for refining
+        bundle.RefineMaxLevel = refine.GetProperty("max_level").GetInt32();
+        foreach (var level in refine.GetProperty("levels").EnumerateArray())
+            bundle._refineSteps.Add(new RefineStep(level.GetProperty("level").GetInt32(), level.GetProperty("success_percent").GetInt32(), Text(level, "material"),
+                level.GetProperty("material_quantity").GetInt32(), Text(level, "failure")));
     }
 
     private static MapData ReadMap(JsonElement map)
@@ -274,4 +295,19 @@ public sealed class DisplayBundle
 /// <param name="Slots">Equipment slots it fits (card slots for a card).</param>
 /// <param name="WeaponType">A weapon's "Weapon types" term, or null.</param>
 /// <param name="Visual">The worn visual's asset key (T-403 draws it), or null.</param>
-public sealed record ItemDisplay(string Id, string Name, string Kind, string? Icon, IReadOnlyList<string> Slots, string? WeaponType, string? Visual);
+public sealed record ItemDisplay(string Id, string Name, string Kind, string? Icon, IReadOnlyList<string> Slots, string? WeaponType, string? Visual)
+{
+    /// <summary>How many cards the equipment holds (0 for anything else).</summary>
+    public int CardSlots { get; init; }
+
+    /// <summary>True when the equipment can be refined.</summary>
+    public bool Refinable { get; init; }
+}
+
+/// <summary>One refine step as the bundle shows it (ARCHITECTURE §5.4): what a player needs to decide, never more.</summary>
+/// <param name="Level">The level it reaches.</param>
+/// <param name="SuccessPercent">Chance of success in whole percent.</param>
+/// <param name="Material">The material item id it uses up.</param>
+/// <param name="Quantity">How many units of it.</param>
+/// <param name="Failure">A "Refine failures" term: <c>keep</c>, <c>down</c> or <c>break</c>.</param>
+public sealed record RefineStep(int Level, int SuccessPercent, string Material, int Quantity, string Failure);

@@ -15,6 +15,7 @@
     "schemas/element_table.schema.json": "content/elements.yaml",
     "schemas/formula_set.schema.json": "content/formulas.yaml",
     "schemas/balance.schema.json": "content/balance.yaml",
-    "schemas/appearance.schema.json": "content/appearance.yaml"
+    "schemas/appearance.schema.json": "content/appearance.yaml",
+    "schemas/refine.schema.json": "content/refine.yaml"
   }
 }

@@ -9,7 +9,7 @@ namespace Game.Server.World.Inventory;
 /// <param name="ItemId">The weapon item.</param>
 /// <param name="WeaponType">Its <see cref="WeaponTypes"/> term.</param>
 /// <param name="WeaponAtk">The formula variable <c>weapon_atk</c>.</param>
-/// <param name="Refine">The formula variable <c>refine</c> (0 until T-402).</param>
+/// <param name="Refine">The formula variable <c>refine</c>: the worn weapon entry's refine level.</param>
 /// <param name="AttackRange">Auto-attack range in cells (Chebyshev), at least 1.</param>
 /// <param name="Element">Its attack element (<see cref="Elements"/>), or null for neutral.</param>
 public sealed record EquippedWeapon(string ItemId, string WeaponType, int WeaponAtk, int Refine, int AttackRange, string? Element);

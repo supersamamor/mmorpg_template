@@ -51,7 +51,7 @@ public class ContentLoaderTests
         var db = result.Database!;
         db.Jobs.Count.ShouldBe(3);
         db.Skills.Count.ShouldBe(11);
-        db.Items.Count.ShouldBe(17);
+        db.Items.Count.ShouldBe(18);
         db.Monsters.Count.ShouldBe(5);
         db.Statuses.Count.ShouldBe(4);
         db.Quests.Count.ShouldBe(4);
@@ -60,6 +60,8 @@ public class ContentLoaderTests
         db.Drops.Count.ShouldBe(8);
         db.Maps.Count.ShouldBe(2);
         db.ExpTables.Count.ShouldBe(3);
+        db.Refine.MaxLevel.ShouldBe(db.Refine.Levels.Count);
+        db.Refine.Levels.ShouldNotBeEmpty();
     }
 
     [Fact]

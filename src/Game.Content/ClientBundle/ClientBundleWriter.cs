@@ -64,6 +64,7 @@ public static class ClientBundleWriter
             Array(w, "quests", bundle.Quests, Quest);
             Array(w, "maps", bundle.Maps, Map);
             Appearance(w, bundle.Appearance);
+            Refine(w, bundle.Refine);
             w.WriteEndObject();
         }
         return output.WrittenSpan.ToArray();
@@ -114,6 +115,23 @@ public static class ClientBundleWriter
         Opt(w, "visual", i.VisualAssetKey);
         Opt(w, "use_sfx", i.UseSfx);
         Opt(w, "equip_sfx", i.EquipSfx);
+        if (i.CardSlots > 0) w.WriteNumber("card_slots", i.CardSlots);
+        if (i.Refinable) w.WriteBoolean("refinable", true);
+    }
+
+    private static void Refine(Utf8JsonWriter w, ClientRefine? refine)
+    {
+        w.WriteStartObject("refine");
+        w.WriteNumber("max_level", refine?.MaxLevel ?? 0);
+        Array(w, "levels", refine?.Levels ?? [], (lw, l) =>
+        {
+            lw.WriteNumber("level", l.Level);
+            lw.WriteNumber("success_percent", l.SuccessPercent);
+            lw.WriteString("material", l.MaterialItemId);
+            lw.WriteNumber("material_quantity", l.MaterialQuantity);
+            lw.WriteString("failure", l.Failure);
+        });
+        w.WriteEndObject();
     }
 
     private static void Skill(Utf8JsonWriter w, ClientSkill s)

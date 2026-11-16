@@ -24,6 +24,7 @@ Read [`docs/VOCABULARY.md`](../docs/VOCABULARY.md) for ids, enums and formula va
 | `formulas.yaml` | `formula_set.schema.json` | derived stats, damage, hit and crit formulas |
 | `balance.yaml` | `balance.schema.json` | stat point awards and cost, stat range, damage and chance clamps |
 | `appearance.yaml` | `appearance.schema.json` | character-creation options: per gender (`male`, `female`) the body, faces and hairstyles; shared skin-tone and hair-colour palettes; defaults. Cosmetic only |
+| `refine.yaml` | `refine.schema.json` | refining: `max_level` and one step per level (`success_percent`, `material_item_id`, `material_quantity`, `failure`: `keep`, `down` or `break`). Shown to players before they refine |
 | `elements.yaml` | `element_table.schema.json` | attacker element × defender element multipliers |
 | `exp_tables.yaml` | `exp_table.schema.json` | `exp.*` — base and job level curves |
 
