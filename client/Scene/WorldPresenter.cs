@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Game.Client.Core;
 using Game.Client.Core.World;
+using Game.Shared.Protocol;
 using Godot;
 
 namespace Game.Client.Scene;
@@ -37,6 +38,25 @@ public sealed class WorldPresenter
 
     /// <summary>A death became visible (after its killing blow landed): world x, ground height, world z. The combat effects play there.</summary>
     public event Action<float, float, float>? DeathShown;
+
+    private IReadOnlyList<string>? _dressOverride;
+    private int _dressEpoch;
+
+    /// <summary>
+    /// Measuring only (<c>--measure-dress</c>): every player is drawn wearing these item ids instead of what the server says, so a crowd's cost can be measured
+    /// fully equipped without server changes. Null (the default) draws what the server says. Never set while playing.
+    /// </summary>
+    public IReadOnlyList<string>? DressOverride
+    {
+        get => _dressOverride;
+        set
+        {
+            _dressOverride = value;
+            _dressEpoch++;
+            var entities = _world.Entities;
+            for (var i = 0; i < entities.Count; i++) entities[i].LookDirty = true;
+        }
+    }
 
     /// <summary>Corpses fading out after leaving view (for measuring).</summary>
     public int FadingCorpses => _corpses.Count;
@@ -166,6 +186,9 @@ public sealed class WorldPresenter
             if (entity.LookDirty)
             {
                 visual.SetLook(new EntityLook(entity.Id == ownId, entity.DeadShown, entity.Mine));
+                // Worn equipment (T-403): the visual re-dresses only when the look counter moved, and swaps only the changed pieces.
+                var worn = _dressOverride is not null && entity.Kind == EntityKinds.Player ? _dressOverride : entity.Worn;
+                visual.SetGear(entity.Weapon, worn, unchecked(entity.LookVersion + _dressEpoch * 1_000_003));
                 entity.LookDirty = false;
                 _barsDirty = true;
             }

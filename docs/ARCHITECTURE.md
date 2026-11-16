@@ -469,6 +469,30 @@ Modular 3D characters. Each body type has one shared rig. Equipment is either:
 The item's visual asset key points to a manifest entry that says which (§8), so changing
 equipment visuals is data only.
 
+**Client** (T-403; pure rules in `client/Core/Theme/Equipment.cs`, tested; drawing in `client/Scene/Theme`). A player's view record carries its weapon type and worn item
+ids (T-401); `EntityView.LookVersion` counts their changes.
+- *Resolution:* item id → the bundle's `visual` key → the theme chain (§7.7) → an entry with exactly one of `attach` (a bone name) or `skinned` (a rig). A key no
+  theme has, an entry with neither or both, or one skinned to another rig than the character's falls back to the theme's missing model (`fallbacks.missing`, else
+  the built-in marker), drawn at 0.3 scale on the default point, with one warning per key; an item the bundle gives no visual draws nothing (one warning). Never a crash.
+- *Default attach point:* the skeleton's first bone (the rig's root: `hips` on the humanoid). An attached piece whose bone the rig lacks goes there, with one warning
+  per model and bone; a character model without a skin takes its pieces as plain meshes on its root.
+- *Re-dressing:* the presenter hands the look to the visual when the entity's look changed; the visual's `Wardrobe` does nothing unless the counter moved, and then
+  reports only the added and removed items (a multiset: the same accessory twice is two pieces). Only added pieces are loaded. A pooled visual keeps its pieces for
+  the next entity and swaps only what differs. A two-handed weapon arrives with the shield already gone in the same change (ADR-002 row 170), so the off hand is empty.
+- *One draw call per character (§9):* the body and its pieces are merged into the body's own skinned mesh, per level of detail (`GearMesher`). An attached piece becomes
+  part of the skin, weighted fully to its bone, so it follows the bone exactly; a skinned piece keeps its weights, its skin's binds mapped onto the body's. Surfaces whose
+  materials differ only in colour (untextured, opaque `StandardMaterial3D`, the same shading) join one surface with the colour baked into the vertex colours; a textured
+  material keeps its own surface, so real art merges into one call only with a shared atlas (§9's one material per character). A merged mesh is cached by body file,
+  level of detail and the set of pieces in any order (`WornSet`), so a crowd in the same gear shares one mesh and one skin. A piece without a LOD1 mesh uses its LOD0 at both levels.
+- *Loading:* a piece's file loads through the same `ModelStore` as characters (threaded with a renderer, on the main thread headless: ADR-002 row 141); its meshes are
+  taken from the scene once and shared by every character wearing it, and the scene is let go. Making merges shares the per-frame instance budget (`instantiate_per_frame`).
+- *Clips by weapon type (§7.6):* an animation library may map `<animation id>.<weapon type>` (e.g. `attack.staff`, `idle.staff`) besides the plain id; the weapon's
+  clip wins where the library has it, else the generic one. Hit timing is unchanged: T-303's `impact_delay`.
+- *Measured* (T-403, integrated desktop GPU, 1280x720, `tools/loadtest --bots 70 --fighters 0.7 --spare-slots 3` and `--measure 40`, about 40 players on screen; the
+  client's debug-only `--measure-dress <item ids>` draws every player in those items): peak draw calls 75 with no gear, 77 with the real gear (every bot wears its
+  starting dagger), 79 with dagger, cap, vest and buckler on everyone (92 with `--fight`, where the player also hunts), so worn pieces cost no draw call; triangles peak 11.8k, 15.4k, 29.5k. Drawn as separate
+  nodes (the first version), one weapon each took the crowd peak to 117. None of it has run on a phone (ADR-002 row 112).
+
 ### 7.5.1 Character appearance (creation)
 Chosen once at character creation; **cosmetic only** (never changes stats or rules).
 
@@ -620,6 +644,12 @@ Models are low-poly rigs (five shared rigs) with LOD0 and LOD1 and one material 
 
 Rig names are theme-internal; the validator checks that a model, its animation library and its
 skinned equipment use the same rig. Active theme is a config setting.
+
+**Equipment entries** (T-403, §7.5): `"attach": "<bone>"` for a rigid piece, modelled in its bone's space (origin at the bone, facing -Z), or `"skinned": "<rig>"` for a
+mesh skinned to that rig in the body's own mesh space; exactly one of the two. An animation library's `clips` may add `<animation id>.<weapon type>` entries (VOCABULARY
+"Weapon types"), which a character holding that weapon type plays instead of the generic clip. Equipment should use an untextured or atlas-shared material so it merges
+into the character's single draw call. The placeholder pack shows both kinds: weapons, the buckler and the cap are attached, the vest is skinned; the humanoid library
+has `attack.dagger`, `idle.staff` and `attack.staff`.
 
 | Asset | Format |
 |-------|--------|

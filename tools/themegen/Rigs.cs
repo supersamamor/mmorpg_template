@@ -165,6 +165,12 @@ internal static class Rigs
                 .Rot("leg_l", t => Motion.Rx(90 * Motion.E(MathF.Min(1, t / 0.3f)))).Rot("leg_r", t => Motion.Rx(90 * Motion.E(MathF.Min(1, t / 0.3f)))).Done("Sit"),
             new ClipBuilder(rig, 0.8f).Rot("spine", t => Motion.Rx(-55 * Motion.P(t))).Move("hips", t => new Vector3(0, -0.15f * Motion.P(t), 0))
                 .Rot("arm_l", t => Motion.Rx(40 * Motion.P(t))).Rot("arm_r", t => Motion.Rx(40 * Motion.P(t))).Done("PickUp"),
+            // Weapon-type variants (T-403, §7.6): the manifest maps them as attack.<weapon type> / idle.<weapon type>.
+            new ClipBuilder(rig, 0.4f).Rot("arm_r", t => Motion.Rx(80 * Motion.P(t))).Move("hips", t => new Vector3(0, 0, -0.08f * Motion.P(t))).Done("AttackStab"),
+            new ClipBuilder(rig, 1.6f).Rot("spine", t => Motion.Rx(1.5f * Motion.S(t))).Rot("arm_l", t => Motion.Rx(35 + 2f * Motion.S(t)))
+                .Rot("arm_r", t => Motion.Rx(35 - 2f * Motion.S(t))).Done("IdleTwoHand"),
+            new ClipBuilder(rig, 0.6f).Rot("arm_l", t => Motion.Rx(35 + 110 * Motion.P(t))).Rot("arm_r", t => Motion.Rx(35 + 110 * Motion.P(t)))
+                .Rot("spine", t => Motion.Rx(-20 * Motion.P(t))).Done("AttackTwoHand"),
         },
     };
 

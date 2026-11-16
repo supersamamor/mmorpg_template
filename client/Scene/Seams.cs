@@ -31,6 +31,12 @@ public interface IEntityVisual
     /// <summary>Shows or hides it (the pool hides it).</summary>
     void SetVisible(bool visible);
 
+    /// <summary>
+    /// What a player holds and wears (T-403): the weapon type (picks its clips) and the worn item ids. <paramref name="version"/> is the entity's look counter;
+    /// nothing is re-dressed while it stays the same, and a change swaps only the pieces that differ.
+    /// </summary>
+    void SetGear(string? weaponType, IReadOnlyList<string> worn, int version);
+
     /// <summary>The level of detail: 0 for the nearest characters, 1 for the rest. A model with one level ignores it.</summary>
     void SetDetail(int lod);
 

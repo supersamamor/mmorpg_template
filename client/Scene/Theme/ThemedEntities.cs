@@ -23,8 +23,12 @@ public sealed class ThemedEntities : IEntityVisualSource
     private readonly DisplayBundle _bundle;
     private readonly ThemeCatalog _catalog;
     private readonly ModelStore _store;
+    private readonly EquipmentCatalog _equipment;
+    private readonly GearMesher _mesher;
+    private readonly Action<ModelVisual> _needsDressing;
     private readonly Dictionary<string, Stack<ModelVisual>> _pools = new(StringComparer.Ordinal);
     private readonly List<ModelVisual> _waiting = new();
+    private readonly List<ModelVisual> _dressing = new();
     private int _version;
 
     /// <summary>Creates the source; its nodes go under <paramref name="parent"/>.</summary>
@@ -36,8 +40,23 @@ public sealed class ThemedEntities : IEntityVisualSource
         _catalog = catalog;
         var threaded = ModelLoading.Threaded(DisplayServer.GetName(), config.ThreadedLoadWithoutRenderer);
         _store = new ModelStore(config.ModelCacheLimit, threaded, message => GD.PushWarning(message));
+        _equipment = new EquipmentCatalog(catalog, id => bundle.Item(id)?.Visual);
+        _mesher = new GearMesher(config.ModelCacheLimit);
+        _needsDressing = visual =>
+        {
+            if (!_dressing.Contains(visual)) _dressing.Add(visual);
+        };
         if (config.PreloadModels) Preload();
     }
+
+    /// <summary>Visuals whose gear changed and is not on yet (for measuring).</summary>
+    public int Dressing => _dressing.Count;
+
+    /// <summary>Merged character meshes: cached now, and built so far (for measuring).</summary>
+    public (int Cached, int Built) Merged => (_mesher.Cached, _mesher.Built);
+
+    /// <summary>Worn pieces resolved so far, one per visual key and rig, shared by every character wearing them (for measuring).</summary>
+    public int PieceKinds => _equipment.Count;
 
     /// <summary>The store (for measuring).</summary>
     public ModelStore Store => _store;
@@ -82,7 +101,7 @@ public sealed class ThemedEntities : IEntityVisualSource
         }
         else
         {
-            visual = new ModelVisual(_store, _catalog, resolution);
+            visual = new ModelVisual(_store, _catalog, _equipment, _mesher, _needsDressing, resolution);
             _parent.AddChild(visual.Root);
         }
         visual.SetVisible(true);
@@ -95,6 +114,7 @@ public sealed class ThemedEntities : IEntityVisualSource
     {
         if (visual is not ModelVisual model) return;
         _waiting.Remove(model);
+        _dressing.Remove(model);
         model.Detach();
         var key = model.PoolKey;
         if (!_pools.TryGetValue(key, out var pool)) _pools[key] = pool = new Stack<ModelVisual>();
@@ -109,7 +129,7 @@ public sealed class ThemedEntities : IEntityVisualSource
     /// <inheritdoc />
     public void Update()
     {
-        if (_waiting.Count == 0) return;
+        if (_waiting.Count == 0 && _dressing.Count == 0) return;
         var created = 0;
         for (var i = 0; i < _waiting.Count;)
         {
@@ -118,6 +138,16 @@ public sealed class ThemedEntities : IEntityVisualSource
             {
                 _waiting.RemoveAt(i);
                 _version++;
+                continue;
+            }
+            i++;
+        }
+        // Worn pieces share the per-frame instance budget with characters, so a crowd putting on gear also spreads over a few frames.
+        for (var i = 0; i < _dressing.Count;)
+        {
+            if (_dressing[i].TryDress(ref created, _config.InstantiatePerFrame))
+            {
+                _dressing.RemoveAt(i);
                 continue;
             }
             i++;
@@ -136,6 +166,8 @@ public sealed class ThemedEntities : IEntityVisualSource
             while (pool.Count > 0) pool.Pop().Free();
         _pools.Clear();
         _waiting.Clear();
+        _dressing.Clear();
+        _mesher.Clear();
         _store.Clear();
     }
 

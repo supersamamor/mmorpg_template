@@ -166,6 +166,8 @@ public sealed class AutoRun
         Print($"items: inventory rev {Session.Inventory.Rev}, {Session.Inventory.Entries.Count} entries, weight {Session.Inventory.Weight}/{Session.Inventory.WeightLimit}, " +
               $"own weapon {Own().Weapon}");
         Check(Own().Weapon == Game.Shared.Vocabulary.WeaponTypes.Unarmed, "the own record says unarmed");
+        await FramesAsync(2);
+        Check(Own().Visual is ModelVisual { PieceCount: 0 }, "nothing worn on the own character yet");
         var hits = new List<int>();
         World.Combat.Impact += (in HitImpact impact) =>
         {
@@ -240,6 +242,12 @@ public sealed class AutoRun
         Print($"items: wearing {weapon} ({Own().Weapon}); slot button \"{hud.Bag.SlotButtons[Game.Shared.Vocabulary.EquipSlots.Weapon].Text}\"");
         Press(hud.BagButton);
         await FramesAsync(2);
+        // T-403: the look change re-dresses the own character: the weapon is on it, and its type picks the attack clip.
+        await UntilAsync(() => Own().Visual is ModelVisual { PieceCount: > 0 } && _main.Entities!.Dressing == 0, 15, "the weapon on the own character");
+        var dressed = (ModelVisual)Own().Visual!;
+        Print($"items: own character wears {dressed.PieceCount} piece(s) after look {Own().LookVersion}; attack clip {dressed.ClipName(Game.Client.Core.Animation.AnimClip.Attack)}, " +
+              $"idle clip {dressed.ClipName(Game.Client.Core.Animation.AnimClip.Idle)}; merged meshes built {_main.Entities!.Merged.Built}");
+        await ShotAsync("-equipped");
 
         // Fight again: the same monsters take more damage per hit now.
         hits.Clear();
@@ -436,6 +444,23 @@ public sealed class AutoRun
         if (_main.Map?.Scene is { } scene) await Without("map scene", on => scene.Visible = on);
     }
 
+    /// <summary>What the players on screen wear (T-403): pieces per player, weapon types, and how many kinds of piece are loaded and shared.</summary>
+    private void ReportGear()
+    {
+        int players = 0, pieces = 0;
+        var weapons = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        foreach (var e in World.Entities)
+        {
+            if (e.Kind != EntityKinds.Player || e.Visual is not ModelVisual v) continue;
+            players++;
+            pieces += v.PieceCount;
+            var w = e.Weapon ?? "none";
+            weapons[w] = weapons.GetValueOrDefault(w) + 1;
+        }
+        Print($"measure: gear: {players} players in view wear {pieces} pieces ({(players > 0 ? (double)pieces / players : 0):0.0} each); weapon types {string.Join(", ", weapons.Select(p => p.Key + " x" + p.Value))}; " +
+              $"{_main.Entities!.PieceKinds} piece kinds resolved, {_main.Entities.Store.LoadedPieces} piece files held; merged meshes cached {_main.Entities.Merged.Cached}, built {_main.Entities.Merged.Built}");
+    }
+
     /// <summary>This frame's draw calls by pass (3D, shadow, canvas), with the entity counts that explain them.</summary>
     private (long Opaque, long Shadow, long Canvas, int OnScreen, int Lod0, int Lod1) PassDraws()
     {
@@ -494,6 +519,14 @@ public sealed class AutoRun
         ReportCamera();
         Print($"measure: waiting for {wanted} entities on screen");
         await UntilAsync(() => CountOnScreen() >= wanted, 120, $"{wanted} entities on screen");
+        if (Value("--measure-dress") is { } dress)
+        {
+            // T-403: every player drawn wearing these item ids (from the command line, never from code), so a crowd is measured fully equipped.
+            _main.Presenter!.DressOverride = dress.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            await FramesAsync(2); // the presenter hands the new look to the visuals on its next pass
+            await UntilAsync(() => _main.Entities!.Dressing == 0, 30, "the worn pieces");
+        }
+        ReportGear();
         OS.LowProcessorUsageMode = false; // measure every frame, not only frames that drew
         await SecondsAsync(5); // shaders settle
 
