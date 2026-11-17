@@ -121,7 +121,7 @@ function Start-GodotClient([string[]] $UserArgs, [string] $Binary = $godot, [str
     $arguments += $UserArgs
     $process = Start-Process $Binary -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError "$log.err" -ArgumentList $arguments
     $null = $process.Handle
-    return [pscustomobject]@{ Process = $process; Log = $log; Position = 0L }
+    return [pscustomobject]@{ Process = $process; Engine = (Get-GodotEngineProcess $Binary $process); Log = $log; Position = 0L }
 }
 
 # Prints the client's new [e2e]/[client] lines until it exits (or $TimeoutSeconds passes, which stops it and fails with 124). $OnTick runs about every 0.3 s with
@@ -131,7 +131,9 @@ function Wait-GodotClient($run, [int] $TimeoutSeconds, [scriptblock] $OnMarker =
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $text = New-Object Text.StringBuilder
     $verdictAt = $null
+    $engineExitAt = $null
     $stuck = $null
+    $held = $null
     while ($true) {
         $exited = $run.Process.HasExited
         $stream = [IO.File]::Open($run.Log, "Open", "Read", "ReadWrite")
@@ -152,6 +154,19 @@ function Wait-GodotClient($run, [int] $TimeoutSeconds, [scriptblock] $OnMarker =
         }
         if ($OnTick) { & $OnTick }
         if ($exited) { break }
+        # The game exe has exited but Godot's console wrapper has not: it waits for every process in its job (docs/MOBILE_BUILD.md §8.5). The game's
+        # own exit code is the result; the wrapper is stopped.
+        if ($run.Engine -and $run.Engine.HasExited) {
+            if (-not $engineExitAt) { $engineExitAt = $clock.Elapsed.TotalSeconds }
+            elseif ($clock.Elapsed.TotalSeconds - $engineExitAt -ge 2) {
+                Write-Host "[run-e2e] the client exited (exit code $($run.Engine.ExitCode)) but its console wrapper was held by a leftover process; stopped it"
+                if ($env:GODOT_STUCK_HOOK) { & $env:GODOT_STUCK_HOOK $run.Process.Id | Out-Null }
+                Stop-ProcessTree $run.Process.Id
+                $null = $run.Process.WaitForExit(10000)
+                $held = $run.Engine.ExitCode
+                break
+            }
+        }
         $stuck = $null
         if ($verdictAt -and ($clock.Elapsed.TotalSeconds - $verdictAt) -gt $ClientExitSeconds) {
             $stuck = 125
@@ -169,6 +184,7 @@ function Wait-GodotClient($run, [int] $TimeoutSeconds, [scriptblock] $OnMarker =
         Start-Sleep -Milliseconds 300
     }
     if ($stuck) { $code = $stuck }
+    elseif ($null -ne $held) { $code = $held }
     else {
         $null = $run.Process.WaitForExit(10000)   # it has exited; bounded anyway
         $code = $run.Process.ExitCode
@@ -279,6 +295,33 @@ function Invoke-Scenario([string] $Name) {
     }
 }
 
+# The desktop release export through Invoke-GodotStep. Before each attempt every file of the last export goes (a stale build must never pass for this
+# one, ADR-002 row 163); the output is complete when every expected file exists, was written by this attempt and has stopped growing. An attempt that
+# times out, or hangs for $ExportExitSeconds after writing every file, is stopped and retried (the build it wrote is not trusted).
+function Invoke-ReleaseExport([string] $Preset, [string] $Exe, [string[]] $Expected) {
+    $release = @{ Folder = (Split-Path -Parent $Exe); Stem = [IO.Path]::GetFileNameWithoutExtension($Exe); Name = [IO.Path]::GetFileName($Exe); Since = [datetime]::UtcNow }
+    $before = {
+        $old = { @(Get-ChildItem $release.Folder -File | Where-Object { $_.Name -eq $release.Name -or $_.Name -like "$($release.Stem).*" }) }
+        # A client stopped a moment ago may still hold the exe for a second or two, so the delete is retried for up to 10 s.
+        for ($try = 0; $try -lt 20 -and (& $old).Count -gt 0; $try++) {
+            & $old | Remove-Item -Force -ErrorAction SilentlyContinue
+            if ((& $old).Count -gt 0) { Start-Sleep -Milliseconds 500 }
+        }
+        if ((& $old).Count -gt 0) { throw "could not delete the old export: $((& $old | ForEach-Object Name) -join ', ')" }
+        $release.Since = [datetime]::UtcNow.AddSeconds(-1)
+    }
+    $written = {
+        $sizes = foreach ($file in $Expected) {
+            $item = Get-Item $file -ErrorAction SilentlyContinue
+            if (-not $item -or $item.LastWriteTimeUtc -lt $release.Since) { return $null }
+            $item.Length
+        }
+        return ($sizes -join ",")
+    }
+    return Invoke-GodotStep -Godot $godot -Step "release export" -Arguments @("--headless", "--path", "`"$client`"", "--export-release", "`"$Preset`"", "`"$Exe`"") `
+        -TimeoutSeconds $ExportTimeoutSeconds -ExitSeconds $ExportExitSeconds -Attempts $ExportAttempts -BeforeAttempt $before -Output $written -KeepLogs $KeepLogs
+}
+
 # A desktop release export must refuse ws:// (a release template: OS.IsDebugBuild() is false) and must not refuse wss://.
 function Invoke-Release {
     Write-Host "== release =="
@@ -289,9 +332,10 @@ function Invoke-Release {
     $console = if ($linux) { $exe } else { [IO.Path]::ChangeExtension($exe, ".console.exe") }
     $folder = Split-Path -Parent $exe
     New-Item -ItemType Directory -Force -Path $folder | Out-Null
-    # A stale build from an earlier run must never pass for this one (ADR-002 row 163): every file of the last export goes first.
+    # A stale build from an earlier run must never pass for this one (ADR-002 row 163): Invoke-ReleaseExport deletes every file of the last export first.
     $expected = @($exe, $console) + $(if ($linux) { @() } else { @([IO.Path]::ChangeExtension($exe, ".pck")) }) | Select-Object -Unique
-    $export = Invoke-ReleaseExport -Preset $preset -Exe $exe -Expected $expected
+    try { $export = Invoke-ReleaseExport -Preset $preset -Exe $exe -Expected $expected }
+    catch { Write-Host "[run-e2e] the release export did not run: $($_.Exception.Message)"; return 1 }
     if (-not $export.Ok) {
         $export.Output | Where-Object { $_ -match "ERROR|error" } | Select-Object -Last 20 | ForEach-Object { Write-Host $_ }
         Write-Host "[run-e2e] the release export failed: $($export.Outcome)"

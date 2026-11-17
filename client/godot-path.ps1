@@ -38,10 +38,10 @@ function Stop-ProcessTree([int] $Id) {
     foreach ($node in $order) { Stop-Process -Id $node -Force -ErrorAction SilentlyContinue }
 }
 
-# On Windows the binary the scripts start is Godot's console wrapper (*_console.exe), which starts the real Godot exe as its child, puts it in a job
+# On Windows the binary the scripts start is Godot's console wrapper (*_console.exe for the editor, *.console.exe for an export), which starts the real Godot exe as its child, puts it in a job
 # and exits only when every process in that job has exited. This returns that child (with its exit code kept readable), or $null for any other binary.
 function Get-GodotEngineProcess([string] $Godot, [Diagnostics.Process] $Wrapper) {
-    if ($Godot -notmatch '_console\.exe$' -or -not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) { return $null }
+    if ($Godot -notmatch '[._]console\.exe$' -or -not (Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) { return $null }
     for ($i = 0; $i -lt 50 -and -not $Wrapper.HasExited; $i++) {
         $child = Get-CimInstance Win32_Process -Filter "ParentProcessId = $($Wrapper.Id)" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '^conhost' } | Select-Object -First 1
         if ($child) {
