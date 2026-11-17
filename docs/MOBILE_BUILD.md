@@ -118,7 +118,7 @@ Gotchas found while exporting (Godot 4.7.2):
 - **The command-line export does not exit.** It writes the `.apk` within ~2 minutes (the first run
   also downloads the .NET Android runtime pack), logs `EditorSettings not instantiated yet …
   shutdown_adb_on_exit`, and then hangs. Wait until the `.apk` and `.apk.idsig` exist, then close it.
-  (Only the command-line export was tried.)
+  (Only the command-line export was tried.) T-221 found why: the console wrapper waits for the adb server Godot started (§8.5).
 
 Logs: `& $adb logcat -s godot:V` (the spike prefixes its lines with `[spike]`).
 
@@ -284,7 +284,7 @@ It waits for 40 entities on screen, samples 15 s and prints fps, draw calls, tri
 | `shutdown` | the server stops itself (`--duration 20`): `bye shutdown`, the retry notice, token dropped; the script starts a second server and the client logs in again by itself | default, twice |
 | `grace_expiry` | the script kills the server: the client resumes with backoff until its own deadline (last heard + 5 s + 1 s), then `SessionExpired` and the login screen | default, killed |
 | `bye` | the four runs above | |
-| `release` | exports a desktop **release** build (Windows, or Linux on CI), runs it with `ws://` and `--set allow_cleartext=true` (refused, refusal screen, exit 0), then with `wss://` (passes the address check). The old export is deleted first; a non-zero export exit code, or Godot not exiting 60 s after writing every file (`EXPORT HUNG AT EXIT`), fails the run | none |
+| `release` | exports a desktop **release** build (Windows, or Linux on CI), runs it with `ws://` and `--set allow_cleartext=true` (refused, refusal screen, exit 0), then with `wss://` (passes the address check). The export runs through `Invoke-GodotStep` (§8.5): the old export is deleted before each attempt, a non-zero exit code fails the run, and an attempt that times out or does not exit 60 s after writing every file is stopped and retried (3 attempts) | none |
 | `all` | `play`, `warp`, `hill`, `ui`, the four bye runs and `release` | |
 | `death` | killed on real content, drops the socket while dead, death screen again, respawn (`-Monster monster.gel_slime`; up to 5 minutes, not in `all`) | real content |
 
@@ -310,7 +310,7 @@ Stale-hash and refusal screens: `--bundle <file>` (debug builds only) reads anot
 & $godot --headless --path client --export-debug "Android arm64 (debug)" exports/android/game-client.apk
 ```
 
-The path is relative to `client`, and `client/exports/` is gitignored. §4's gotchas apply. The export does not exit by itself, so use the script, which waits for `.apk` and `.apk.idsig`, stops Godot and fails after `-TimeoutSeconds`:
+The path is relative to `client`, and `client/exports/` is gitignored. §4's gotchas apply. On Windows the export does not exit by itself (§8.5), so use the script, which waits for `.apk` and `.apk.idsig`, stops Godot 30 s later if it is still running, and retries once after `-TimeoutSeconds`:
 
 ```powershell
 .\client\export-android.ps1            # debug preset -> client/exports/android/game-client.apk
@@ -346,9 +346,53 @@ open a socket; `ClientSession` checks again before opening, as a second lock. `-
 `network_security_config` needs the Gradle export path (`gradle_build/use_gradle_build`, a custom build template with its own manifest), which this project does not use; it would add Gradle and a template to every build for no effect on the WebSocket.
 So none is shipped. The iOS preset sets `NSAppTransportSecurity` explicitly (`NSAllowsArbitraryLoads` and `NSAllowsLocalNetworking` false) through `application/additional_plist_content`; that is unverified until a Mac exports it.
 
+### 8.5 Godot steps are bounded and retried (T-221)
+
+Every headless Godot step the scripts run (the import, the map export, the Android export, the desktop release export) goes through one function,
+`Invoke-GodotStep` in `client/godot-path.ps1`. No step waits without a limit:
+
+| Step | Limit per attempt | Output check, then wait for exit | Attempts | Retried on |
+|------|-------------------|-----------------------------------|----------|------------|
+| import (`Import-GodotProject`, `-ImportTimeoutSeconds`) | 180 s (a clean one takes 6 to 9 s here) | `.godot/editor/filesystem_cache10` and `.godot/uid_cache.bin` rewritten by this attempt, then 30 s | 3 | a hang or any failure |
+| map export (`export-maps.ps1 -TimeoutSeconds`) | 300 s (about 2 s here) | none (the exit code is the result) | 3 | a hang only: a bad map exits 1 every time |
+| Android export (`export-android.ps1 -TimeoutSeconds`, `-ExitSeconds`) | 900 s (600 s on CI) | `.apk` and `.apk.idsig` written by this attempt, then 30 s, then Godot is stopped and the APK kept | 2 | a timeout |
+| release export (`run-e2e.ps1 -ExportTimeoutSeconds`, `-ExportExitSeconds`, `-ExportAttempts`) | 600 s (about 21 s here) | the exe, console exe and `.pck` written by this attempt, then 60 s | 3 (2 on CI) | a hang, before or after writing |
+
+Each attempt prints one line, for example `[godot] import attempt 1/3: ok, exit 0 after 7.3 s`. A stuck attempt's whole process tree is stopped by
+process id (`Stop-ProcessTree`, never by name: other worktrees run Godot too). When the attempts run out, the script exits non-zero.
+`run-e2e.ps1` also bounds its client waits: each run keeps its own limit (exit code 124 when it is reached), a client that printed `[e2e] PASS` or `FAIL`
+gets `-ClientExitSeconds` (30 s) to exit (125 and `CLIENT HUNG AT EXIT` otherwise), and every wait for a process that has already exited is bounded too.
+For evidence, set `$env:GODOT_STUCK_HOOK` to a program that takes a process id; it runs before a stuck or held process is stopped.
+
+**Why the import and the export hung (Godot 4.7.2 on Windows).** On Windows the scripts start Godot's console wrapper (`*_console.exe`), which
+starts the real Godot exe in a Windows job object and exits only when *every* process in that job has exited. In the editor (the import and the
+exports run the editor), Godot's Android export plugin polls `adb devices` about once a second whenever an Android preset is runnable; this
+project's `Android arm64 (debug)` preset is. If no adb server is running yet, `adb` starts one (`adb -L tcp:5037 fork-server server`), which joins the
+job and runs until someone stops it. At exit the plugin should run `adb kill-server` (`export/android/shutdown_adb_on_exit`), but in a headless
+`--import` or `--export-*` it reads that setting after the editor settings are gone: that is the `EditorSettings not instantiated yet … shutdown_adb_on_exit`
+error every run prints. So Godot exits with code 0, after writing everything, and its wrapper waits at near-zero CPU for as long as the adb server lives.
+Whether a run hangs depends on whether the poll ran before Godot quit and whether an adb server was already running outside the job.
+Evidence (T-221):
+- Stuck wrappers, read with a thread dump and a job-member listing: one thread in `GetQueuedCompletionStatus` (the job's completion port), the real Godot
+  exe already gone, and the only process in the job `adb … fork-server server`. 3 of 64 plain `--import` runs hung (each stopped after 40 or 90 s); the two
+  probed with the job listing held only adb, and so did every held run through the new helper.
+- A minimal reproduction with no game code: an empty project whose only export preset is a runnable Android one, with the Android SDK set in the editor
+  settings and no adb server running, run as `--headless --editor --quit-after 1500` (long enough for one poll): 4 of 4 hung; Godot exited 0 each time.
+  The same project with `runnable=false`: 0 of 4.
+- It is not the theme junction, the .NET build step or parallel Godot processes: the hung job held only adb, and the minimal project has neither.
+  Parallel runs and builds only change the timing. It is not related to row 141 (a dummy-renderer crash in game runs, not a wait at exit).
+- On Linux (CI) there is no console wrapper, so Godot's own exit ends the step; the adb server outlives it, as adb servers do.
+
+**The workaround.** `Invoke-GodotStep` and `run-e2e.ps1`'s client wait follow the real Godot exe behind the wrapper. When Godot has exited and the wrapper
+has not 2 s later, they take Godot's own exit code as the result and stop the wrapper's tree, which closes the job and ends that adb server. The line says
+`(Godot exited; its console wrapper was held by a leftover process and was stopped)`. No retry is needed for this case; the retries and limits remain for
+anything else. **Remaining risk:** a step whose Godot exits non-zero is judged by that code as before; any other process left in the job is also
+stopped with the wrapper (only adb has been seen); and the engine bug stays. Turning off `runnable` on the Android debug preset would stop the polling
+at the source, but it changes the one-click deploy preset (`export_presets.cfg`, owned by T-216), so it is a follow-up for the owner.
+
 ## 9. CI export job (T-216)
 
-`.github/workflows/ci.yml` has a second job, `client-export`, separate from the server checks (`build-test`) so that a slow export does not hold them up. On `ubuntu-latest`, with a 60 minute job limit and shorter limits per step, it:
+`.github/workflows/ci.yml` has a second job, `client-export`, separate from the server checks (`build-test`) so that a slow export does not hold them up. On `ubuntu-latest`, with a 200 minute job limit and per-step limits set from the scripts' own worst cases (§8.5; a clean run is far shorter), it:
 installs the pinned JDK 17, Android SDK packages (platform android-35, build-tools 35.0.1) and Godot 4.7.2 .NET with the Android and Linux export templates (downloaded from the Godot release, checked against the release's `SHA512-SUMS.txt`, cached by version);
 builds the client; exports the Android debug APK with `export-android.ps1`; fails if the APK is over 60 MB, lacks the bundle or settings, contains static archives or another architecture; keeps the APK as an artifact for 3 days; and runs `run-e2e.ps1 -Run all`.
 The versions are in the job's `env`, next to a reminder to change them here and there together. **It has never run on GitHub** (the owner has not pushed), so the first run may need fixes; it was checked locally for YAML syntax only (`actionlint` is not installed).

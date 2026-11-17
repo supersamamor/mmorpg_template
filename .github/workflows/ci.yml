@@ -63,7 +63,9 @@ jobs:
   client-export:
     name: client export and scripted runs (Android debug APK, headless)
     runs-on: ubuntu-latest
-    timeout-minutes: 60 # hard stop for the whole job; every long step below has its own, shorter one
+    # Hard stop for the whole job: a little over the sum of the step limits below (195 minutes). Each Godot step's limit is the worst case of its script's own bounds (T-221, docs/MOBILE_BUILD.md §8.5),
+    # so a hang is stopped, retried and reported by the script long before GitHub would cancel the step. A clean run takes far less.
+    timeout-minutes: 200
     env:
       # The pins of docs/MOBILE_BUILD.md. Change them there and here together.
       GODOT_VERSION: 4.7.2
@@ -152,11 +154,12 @@ jobs:
         timeout-minutes: 10
         run: dotnet build client/GameClient.csproj --configuration Debug
 
-      # export-android.ps1 waits for the APK and its .idsig, then stops Godot, which does not exit after exporting (Godot 4.7.2, ADR-001).
+      # export-android.ps1 (through Invoke-GodotStep): import 3 x 180 s, export 2 x 600 s, plus the C# build. It waits for the APK and its .idsig, then
+      # stops Godot if it has not exited 30 s later (on Windows its console wrapper waits for the adb server; T-221).
       - name: Export the Android debug APK
-        timeout-minutes: 20
+        timeout-minutes: 35
         shell: pwsh
-        run: ./client/export-android.ps1 -Godot $env:GODOT -TimeoutSeconds 1100
+        run: ./client/export-android.ps1 -Godot $env:GODOT -TimeoutSeconds 600
 
       - name: Check the APK
         run: |
@@ -180,14 +183,16 @@ jobs:
           retention-days: 3
 
       # Real server processes on loopback, the real Godot socket, headless: play, warp, the four bye runs, and a Linux release export that must refuse ws://.
+      # Worst case of run-e2e.ps1's bounds: import 3 x 180 s, the runs' own limits (2490 s in all), 11 server starts x 60 s, the release export 2 x 600 s.
       - name: Scripted runs
-        timeout-minutes: 25
+        timeout-minutes: 95
         shell: pwsh
-        run: ./client/run-e2e.ps1 -Run all -Godot $env:GODOT
+        run: ./client/run-e2e.ps1 -Run all -Godot $env:GODOT -ExportTimeoutSeconds 600 -ExportAttempts 2
 
       # The committed grids must equal a fresh headless export of their scenes (T-208, ARCHITECTURE §5.3). `validate` only compares hashes; this compares every byte.
       # Like the rest of this job, it has never run on GitHub (T-219 added it without access to it).
+      # Worst case: import 3 x 180 s, map export 3 x 300 s, plus the C# build.
       - name: Check the exported map grids
-        timeout-minutes: 10
+        timeout-minutes: 30
         shell: pwsh
         run: ./client/export-maps.ps1 -Check -Godot $env:GODOT
