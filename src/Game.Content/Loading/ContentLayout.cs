@@ -35,6 +35,8 @@ public static class ContentLayout
     public const string BalanceFile = "balance.yaml";
     /// <summary>Root file holding the <see cref="AppearanceDef"/>.</summary>
     public const string AppearanceFile = "appearance.yaml";
+    /// <summary>Root file holding the <see cref="RefineDef"/>.</summary>
+    public const string RefineFile = "refine.yaml";
     /// <summary>Root file holding the <see cref="ElementTableDef"/>.</summary>
     public const string ElementsFile = "elements.yaml";
     /// <summary>Root file holding the <see cref="ExpTableDef"/> documents (one per <c>---</c> document).</summary>

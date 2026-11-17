@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../schemas/refine.schema.json
+# Refining (ARCHITECTURE §6.8): one step per level, 1 to max_level; step n is the attempt that takes an item from n - 1 to n.
+# Every attempt uses up its material, success or not, and rolls success_percent with the instance's random source.
+# failure: keep (the level stays), down (one level down, not below 0) or break (the item is gone, with its cards).
+# The refine level is the formula variable `refine`: an item's own modifiers use it (armour DEF), and a worn weapon's reaches physical_damage.
+# The player sees every number here before trying (the display bundle). Refining costs no currency until currency exists.
+name: Default refining
+max_level: 7
+levels:
+  - { level: 1, success_percent: 100, material_item_id: item.temper_shard, material_quantity: 1, failure: keep }
+  - { level: 2, success_percent: 100, material_item_id: item.temper_shard, material_quantity: 1, failure: keep }
+  - { level: 3, success_percent: 90, material_item_id: item.temper_shard, material_quantity: 1, failure: keep }
+  - { level: 4, success_percent: 75, material_item_id: item.temper_shard, material_quantity: 2, failure: keep }
+  - { level: 5, success_percent: 60, material_item_id: item.temper_shard, material_quantity: 2, failure: down }
+  - { level: 6, success_percent: 45, material_item_id: item.temper_shard, material_quantity: 3, failure: down }
+  - { level: 7, success_percent: 30, material_item_id: item.temper_shard, material_quantity: 3, failure: break }

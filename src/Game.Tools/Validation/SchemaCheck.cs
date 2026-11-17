@@ -24,6 +24,7 @@ public static class SchemaCheck
         (ContentLayout.ElementsFile, "element_table"),
         (ContentLayout.BalanceFile, "balance"),
         (ContentLayout.AppearanceFile, "appearance"),
+        (ContentLayout.RefineFile, "refine"),
         (ContentLayout.ExpTablesFile, "exp_table"),
     };
 

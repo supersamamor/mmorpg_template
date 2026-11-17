@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "RefineDef",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Optional editor-facing name."
+    },
+    "max_level": {
+      "type": "integer",
+      "description": "Highest refine level. 0 turns refining off (then Levels is empty)."
+    },
+    "levels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "type": "integer",
+            "description": "The level this step reaches (1 to max_level; the list is in order)."
+          },
+          "success_percent": {
+            "type": "integer",
+            "description": "Chance of success in whole percent, 1 to 100 (100 always succeeds). Rolled with the instance's random source."
+          },
+          "material_item_id": {
+            "type": "string",
+            "pattern": "^item\\.[a-z0-9_]+$",
+            "description": "The material item (item.*) the attempt uses up, success or not."
+          },
+          "material_quantity": {
+            "type": "integer",
+            "description": "How many units of the material the attempt uses up. At least 1."
+          },
+          "failure": {
+            "type": "string",
+            "enum": [
+              "keep",
+              "down",
+              "break"
+            ],
+            "description": "What a failure does (RefineFailures): keep the level, go down one, or break the item."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One refine step of RefineDef: the attempt that reaches Level.",
+        "required": [
+          "material_item_id"
+        ]
+      },
+      "description": "One step per level, 1 to MaxLevel, in order."
+    }
+  },
+  "additionalProperties": false,
+  "description": "The root of content/refine.yaml: how refining equipment works (ARCHITECTURE §6.8). One table for every refinable item, so it has no id. Levels has one step per level from 1 to MaxLevel, in order; step n is the attempt that takes an item from n - 1 to n. A refined item's level is the formula variable refine: its own modifiers use it, and a worn weapon's reaches combat. The player sees each step's chance, material and failure outcome before trying (the display bundle); nothing here is a drop rate."
+}

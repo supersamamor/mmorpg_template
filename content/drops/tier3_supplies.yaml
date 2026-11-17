@@ -5,3 +5,4 @@ entries:
   - { item_id: item.healing_draught, chance: 0.12, min: 1, max: 2 }
   - { item_id: item.focus_tonic, chance: 0.06 }
   - { item_id: item.swift_elixir, chance: 0.02 }
+  - { item_id: item.temper_shard, chance: 0.08 }

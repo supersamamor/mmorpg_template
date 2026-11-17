@@ -70,7 +70,12 @@ public sealed class UiState
     public void OnInventoryChanged(InventoryChangedMessage change, double now)
     {
         if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.PickedUp && change.Item is { } item) SetFlash(UiText.PickedUp(_bundle.NameOf(item)), now);
+        else if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.CardInserted && change.Item is { } socketed) SetFlash(UiText.CardInserted(_bundle.NameOf(socketed)), now);
     }
+
+    /// <summary><c>refine_result</c>: the outcome goes on the flash line (success, kept, down a level, broke), with the item's name and level from the server.</summary>
+    public void OnRefineResult(RefineResultMessage result, double now) =>
+        SetFlash(UiText.RefineResult(_bundle.NameOf(result.Item), result.Result, result.Refine), now);
 
     /// <summary><c>rejected</c>: quietly take back what the tap showed; a refused item intent says why on the flash line.</summary>
     public void OnRejected(RejectedMessage rejected, double now = 0)
@@ -179,7 +184,8 @@ public sealed class UiState
     }
 
     private static bool IsItemIntent(string intent) =>
-        intent == MessageTypes.PickUp || intent == MessageTypes.UseItem || intent == MessageTypes.Equip || intent == MessageTypes.Unequip || intent == MessageTypes.DropItem;
+        intent == MessageTypes.PickUp || intent == MessageTypes.UseItem || intent == MessageTypes.Equip || intent == MessageTypes.Unequip || intent == MessageTypes.DropItem
+        || intent == MessageTypes.InsertCard || intent == MessageTypes.Refine;
 
     private static bool Arrived(EntityView? own, GridCell marker) =>
         own is not null && !own.Next.HasValue && !own.IsWalking && own.Cell.X == marker.X && own.Cell.Y == marker.Y;

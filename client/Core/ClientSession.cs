@@ -124,6 +124,15 @@ public sealed class ClientSession
     /// <summary>The panel's Drop button.</summary>
     public void DropItem(long entry, int quantity) => SendItem(new DropItemMessage(entry, quantity));
 
+    /// <summary>The panel's socket choice: put the card in entry <paramref name="card"/> into equipment entry <paramref name="equipment"/>.</summary>
+    public void InsertCard(long equipment, long card) => SendItem(new InsertCardMessage(equipment, card));
+
+    /// <summary>The refine confirmation: try to refine equipment entry <paramref name="entry"/> by one level (the server rolls).</summary>
+    public void Refine(long entry) => SendItem(new RefineMessage(entry));
+
+    /// <summary>Raised for each <c>refine_result</c> (after the flash line took it).</summary>
+    public event Action<RefineResultMessage>? RefineResultReceived;
+
     private void SendItem(ClientMessage message)
     {
         if (Connection.Phase != ConnectionPhase.Online || Ui.Dead) return;
@@ -207,6 +216,10 @@ public sealed class ClientSession
                     Ui.OnInventoryChanged(change, viewNow);
                     InventoryChanged?.Invoke(change);
                 }
+                break;
+            case RefineResultMessage refined:
+                Ui.OnRefineResult(refined, viewNow);
+                RefineResultReceived?.Invoke(refined);
                 break;
             case RejectedMessage rejected:
                 Ui.OnRejected(rejected, viewNow);

@@ -24,8 +24,8 @@ public class ClientBundleTests
     // ---- shape ----
 
     private static readonly Shared.ClientContent.ClientBundle Fixture = new(
-        3, ["fire"], ["str"],
-        [new ClientItem("item.a", "A \"quoted\" é", null, "equip", "icon.a", null, ["weapon"], "dagger", "model.a", "sfx.use", null)],
+        4, ["fire"], ["str"],
+        [new ClientItem("item.a", "A \"quoted\" é", null, "equip", "icon.a", null, ["weapon"], "dagger", "model.a", "sfx.use", null, 2, true)],
         [new ClientSkill("skill.a", "Bolt", "Hits.", 3, false, 6, true, false, ClientAreaShapes.Square, 2, 500, "cast", "icon.s", null, null)],
         [new ClientJob("job.a", "Jobber", null, null, [], null, null, [new ClientJobSkill("skill.a", null, [new ClientSkillRequirement("skill.b", 2)])])],
         [new ClientStatus("status.a", "Stun", null, true, null, null)],
@@ -38,14 +38,15 @@ public class ClientBundleTests
             [new ClientNpcPlacement("npc.a", new GridCell(0, 0), "s")], [new ClientZone("safe", new GridRect(0, 0, 2, 1))])],
         new ClientAppearance(
             [new ClientGender("male", "Male", "model.b", [new ClientAppearanceOption("face.a", "Calm", "model.f")], [new ClientAppearanceOption("hair.a", "Crop", "model.h")], "face.a", "hair.a")],
-            [new ClientColorOption("skin.a", "Fair", "#F6D9C4")], "skin.a", [new ClientColorOption("haircolor.a", "Raven", "#1E1B1D")], "haircolor.a"));
+            [new ClientColorOption("skin.a", "Fair", "#F6D9C4")], "skin.a", [new ClientColorOption("haircolor.a", "Raven", "#1E1B1D")], "haircolor.a"),
+        new ClientRefine(1, [new ClientRefineLevel(1, 90, "item.m", 2, "break")]));
 
     private static readonly string FixtureBody =
         """
-        {"format_version":3,
+        {"format_version":4,
         HASH
         "elements":["fire"],"stats":["str"],
-        "items":[{"id":"item.a","name":"A @U0022quoted@U0022 @U00E9","kind":"equip","icon":"icon.a","slots":["weapon"],"weapon_type":"dagger","visual":"model.a","use_sfx":"sfx.use"}],
+        "items":[{"id":"item.a","name":"A @U0022quoted@U0022 @U00E9","kind":"equip","icon":"icon.a","slots":["weapon"],"weapon_type":"dagger","visual":"model.a","use_sfx":"sfx.use","card_slots":2,"refinable":true}],
         "skills":[{"id":"skill.a","name":"Bolt","description":"Hits.","max_level":3,"passive":false,"range":6,"ground":true,"friendly":false,"area_shape":"square","area_radius":2,"cast_time_ms":500,"animation":"cast","icon":"icon.s"}],
         "jobs":[{"id":"job.a","name":"Jobber","skills":[{"skill":"skill.a","requires":[{"skill":"skill.b","level":2}]}]}],
         "statuses":[{"id":"status.a","name":"Stun","debuff":true}],
@@ -57,7 +58,8 @@ public class ClientBundleTests
         "warps":[{"cell":[1,0],"map":"map.b","target":[0,0]}],"npcs":[{"npc":"npc.a","cell":[0,0],"facing":"s"}],
         "zones":[{"kind":"safe","area":[0,0,2,1]}]}],
         "appearance":{"genders":[{"gender":"male","name":"Male","body":"model.b","faces":[{"id":"face.a","name":"Calm","model":"model.f"}],"hairstyles":[{"id":"hair.a","name":"Crop","model":"model.h"}],"default_face":"face.a","default_hairstyle":"hair.a"}],
-        "skin_tones":[{"id":"skin.a","name":"Fair","color":"#F6D9C4"}],"default_skin_tone":"skin.a","hair_colors":[{"id":"haircolor.a","name":"Raven","color":"#1E1B1D"}],"default_hair_color":"haircolor.a"}}
+        "skin_tones":[{"id":"skin.a","name":"Fair","color":"#F6D9C4"}],"default_skin_tone":"skin.a","hair_colors":[{"id":"haircolor.a","name":"Raven","color":"#1E1B1D"}],"default_hair_color":"haircolor.a"},
+        "refine":{"max_level":1,"levels":[{"level":1,"success_percent":90,"material":"item.m","material_quantity":2,"failure":"break"}]}}
         """.ReplaceLineEndings("").Replace("@U", ((char)92) + "u"); // @U stands for a JSON unicode escape
 
     [Fact]
@@ -89,13 +91,13 @@ public class ClientBundleTests
         [
             "ClientAppearance: Genders,SkinTones,DefaultSkinToneId,HairColors,DefaultHairColorId",
             "ClientAppearanceOption: Id,Name,ModelAssetKey",
-            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Dialogues,Quests,Maps,Appearance",
+            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Dialogues,Quests,Maps,Appearance,Refine",
             "ClientColorOption: Id,Name,Color",
             "ClientDialogue: Id,Start,Nodes",
             "ClientDialogueChoice: Text,Next,StartQuestId",
             "ClientDialogueNode: Key,SpeakerNpcId,PortraitAssetKey,Text,Next,Choices",
             "ClientGender: Gender,Name,BodyModelAssetKey,Faces,Hairstyles,DefaultFaceId,DefaultHairstyleId",
-            "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey,UseSfx,EquipSfx",
+            "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey,UseSfx,EquipSfx,CardSlots,Refinable",
             "ClientJob: Id,Name,Description,ParentJobId,WeaponTypes,ModelAssetKey,IconAssetKey,Skills",
             "ClientJobSkill: SkillId,MaxLevel,Requires",
             "ClientMap: Id,Name,SceneAssetKey,MusicAssetKey,AmbienceAssetKey,Width,Height,Cells,Warps,Npcs,Zones",
@@ -104,6 +106,8 @@ public class ClientBundleTests
             "ClientNpc: Id,Name,Title,DialogueId,ModelAssetKey,PortraitAssetKey",
             "ClientNpcPlacement: NpcId,Cell,Facing",
             "ClientQuest: Id,Name,Description,GiverNpcId,StepTexts",
+            "ClientRefine: MaxLevel,Levels",
+            "ClientRefineLevel: Level,SuccessPercent,MaterialItemId,MaterialQuantity,Failure",
             "ClientSkill: Id,Name,Description,MaxLevel,Passive,TargetRange,TargetGround,TargetFriendly,AreaShape,AreaRadius,CastTimeMs,AnimationId,IconAssetKey,VfxAssetKey,SfxAssetKey",
             "ClientSkillRequirement: SkillId,Level",
             "ClientStatus: Id,Name,Description,Debuff,IconAssetKey,VfxAssetKey",
@@ -117,7 +121,22 @@ public class ClientBundleTests
     {
         using var doc = JsonDocument.Parse(Export(Content).FileBytes);
         var root = doc.RootElement;
-        root.GetProperty("format_version").GetInt32().ShouldBe(3);
+        root.GetProperty("format_version").GetInt32().ShouldBe(4);
+        // T-402: card slots and refinable on equipment, and the refine steps as far as a player needs them to decide (chance, material, outcome).
+        var vest = root.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("id").GetString() == "item.padded_vest");
+        vest.GetProperty("card_slots").GetInt32().ShouldBe(1);
+        vest.GetProperty("refinable").GetBoolean().ShouldBeTrue();
+        var refine = root.GetProperty("refine");
+        refine.GetProperty("max_level").GetInt32().ShouldBe(Content.Refine.MaxLevel);
+        var levels = refine.GetProperty("levels").EnumerateArray().ToList();
+        levels.Count.ShouldBe(Content.Refine.Levels.Count);
+        for (var i = 0; i < levels.Count; i++)
+        {
+            levels[i].EnumerateObject().Select(p => p.Name).ShouldBe(["level", "success_percent", "material", "material_quantity", "failure"]);
+            levels[i].GetProperty("success_percent").GetInt32().ShouldBe(Content.Refine.Levels[i].SuccessPercent);
+            levels[i].GetProperty("material").GetString().ShouldBe(Content.Refine.Levels[i].MaterialItemId);
+            levels[i].GetProperty("failure").GetString().ShouldBe(Content.Refine.Levels[i].Failure);
+        }
         root.GetProperty("items").GetArrayLength().ShouldBe(Content.Items.Count);
         root.GetProperty("skills").GetArrayLength().ShouldBe(Content.Skills.Count);
         root.GetProperty("jobs").GetArrayLength().ShouldBe(Content.Jobs.Count);
@@ -299,7 +318,8 @@ public class ClientBundleTests
         // Every server-only property of every definition type the bundle reads gets a unique value; the output must be the same bytes.
         var sentinel = "ZZ-LEAK-9f2c";
         var probed = Rebuild(Content,
-            items: Replace(Content.Items, "item.bone_dirk", i => i with { Equip = i.Equip! with { WeaponAtk = 888_001, AttackRange = 88, MinBaseLevel = 77, CardSlots = 66, Refinable = true } }),
+            // Card slots and refinable are display data since T-402 (the bag shows sockets and offers refining), so they are not probed here.
+            items: Replace(Content.Items, "item.bone_dirk", i => i with { Equip = i.Equip! with { WeaponAtk = 888_001, AttackRange = 88, MinBaseLevel = 77, Element = "fire" } }),
             jobs: Replace(Content.Jobs, "job.warden", j => j with { JobExpTableId = sentinel, Requirements = new JobChangeRequirementsDef { MinBaseLevel = 888_002 } }),
             statuses: Replace(Content.Statuses, "status.stun", s => s with { Tags = [sentinel], MaxStacks = 888_003, TickIntervalMs = 888_004 }),
             npcs: Content.Npcs,
@@ -359,8 +379,8 @@ public class ClientBundleTests
         ContentDatabase c, Registry<JobDef>? jobs = null, Registry<SkillDef>? skills = null, Registry<ItemDef>? items = null,
         Registry<MonsterDef>? monsters = null, Registry<StatusDef>? statuses = null, Registry<QuestDef>? quests = null,
         Registry<NpcDef>? npcs = null, Registry<DropTableDef>? drops = null, Registry<MapDef>? maps = null,
-        Registry<ExpTableDef>? expTables = null, FormulaSetDef? formulas = null, BalanceDef? balance = null) =>
+        Registry<ExpTableDef>? expTables = null, FormulaSetDef? formulas = null, BalanceDef? balance = null, RefineDef? refine = null) =>
         new(jobs ?? c.Jobs, skills ?? c.Skills, items ?? c.Items, monsters ?? c.Monsters, statuses ?? c.Statuses, quests ?? c.Quests,
             npcs ?? c.Npcs, c.Dialogue, drops ?? c.Drops, maps ?? c.Maps, expTables ?? c.ExpTables, formulas ?? c.Formulas, c.Elements,
-            balance ?? c.Balance, c.Appearance, grids: c.Grids);
+            balance ?? c.Balance, c.Appearance, grids: c.Grids, refine: refine ?? c.Refine);
 }

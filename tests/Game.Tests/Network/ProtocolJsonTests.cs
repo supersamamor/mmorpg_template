@@ -36,6 +36,8 @@ public class ProtocolJsonTests
         { "equip into a slot", new EquipMessage(12, "accessory_2"), """{"type":"equip","entry":12,"slot":"accessory_2"}""" },
         { "unequip", new UnequipMessage("weapon"), """{"type":"unequip","slot":"weapon"}""" },
         { "drop_item", new DropItemMessage(12, 2), """{"type":"drop_item","entry":12,"quantity":2}""" },
+        { "insert_card", new InsertCardMessage(7, 12), """{"type":"insert_card","entry":7,"card":12}""" },
+        { "refine", new RefineMessage(7), """{"type":"refine","entry":7}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -128,6 +130,26 @@ public class ProtocolJsonTests
             "inventory_changed, weight only", new InventoryChangedMessage(6, "weight", null, 40, 2070, "normal", [], []),
             """{"type":"inventory_changed","rev":6,"cause":"weight","weight":40,"weight_limit":2070,"load":"normal"}"""
         },
+        {
+            "inventory with a socketed, refined weapon (owner only)",
+            new InventoryMessage(8, 100, 45, 2040, "normal", [new InventoryEntryRecord(1, "item.iron_blade", 1, "weapon", ["item.gelcap_card"], 3)]),
+            """{"type":"inventory","rev":8,"slots":100,"weight":45,"weight_limit":2040,"load":"normal","entries":[""" +
+            """{"id":1,"item":"item.iron_blade","quantity":1,"slot":"weapon","cards":["item.gelcap_card"],"refine":3}]}"""
+        },
+        {
+            "inventory_changed after a refine", new InventoryChangedMessage(9, "refined", "item.padded_vest", 43, 2040, "normal",
+                [new InventoryEntryRecord(3, "item.padded_vest", 1, null, null, 2)], [5]),
+            """{"type":"inventory_changed","rev":9,"cause":"refined","item":"item.padded_vest","weight":43,"weight_limit":2040,"load":"normal",""" +
+            "\"entries\":[{\"id\":3,\"item\":\"item.padded_vest\",\"quantity\":1,\"refine\":2}],\"removed\":[5]}"
+        },
+        {
+            "refine_result", new RefineResultMessage(3, "item.padded_vest", "success", 2),
+            """{"type":"refine_result","entry":3,"item":"item.padded_vest","result":"success","refine":2}"""
+        },
+        {
+            "rejected insert_card", new RejectedMessage("insert_card", "card_does_not_fit", null, null, 3),
+            """{"type":"rejected","intent":"insert_card","reason":"card_does_not_fit","entry":3}"""
+        },
         { "pong", new PongMessage(7), """{"type":"pong","seq":7}""" },
         { "bye", new ByeMessage("timeout"), """{"type":"bye","reason":"timeout"}""" },
     };
@@ -185,6 +207,12 @@ public class ProtocolJsonTests
     [InlineData("""{"type":"attack","target":99999999999999999999}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"attack","target":7""", ByeReasons.Malformed)]
     [InlineData("""{"type":"you_died"}""", ByeReasons.UnknownType)]   // server-to-client types are not accepted from clients
+    [InlineData("""{"type":"insert_card","entry":7}""", ByeReasons.Malformed)]            // no card
+    [InlineData("""{"type":"insert_card","card":12}""", ByeReasons.Malformed)]            // no equipment
+    [InlineData("""{"type":"insert_card","entry":7,"card":"12"}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"refine"}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"refine","entry":1.5}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"refine_result","entry":1,"item":"item.x","result":"success","refine":1}""", ByeReasons.UnknownType)]
     public void Bad_client_messages_name_their_reason(string json, string reason)
     {
         var read = ProtocolJson.ReadClient(Encoding.UTF8.GetBytes(json));

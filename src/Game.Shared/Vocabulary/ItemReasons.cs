@@ -54,6 +54,24 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>invalid_quantity</c>: the quantity to drop is below 1 or more than the entry holds.</summary>
         public const string InvalidQuantity = "invalid_quantity";
 
+        /// <summary><c>not_a_card</c>: the entry to socket is not a card.</summary>
+        public const string NotACard = "not_a_card";
+
+        /// <summary><c>card_does_not_fit</c>: the card's <c>slots</c> leave out every slot the equipment fits.</summary>
+        public const string CardDoesNotFit = "card_does_not_fit";
+
+        /// <summary><c>no_free_socket</c>: every one of the equipment's <c>card_slots</c> already holds a card (or it has none).</summary>
+        public const string NoFreeSocket = "no_free_socket";
+
+        /// <summary><c>not_refinable</c>: the equipment is not <c>refinable</c>.</summary>
+        public const string NotRefinable = "not_refinable";
+
+        /// <summary><c>at_max_refine</c>: the equipment is at <c>refine.yaml</c> <c>max_level</c>.</summary>
+        public const string AtMaxRefine = "at_max_refine";
+
+        /// <summary><c>missing_material</c>: the carried material for the next refine level is less than its quantity.</summary>
+        public const string MissingMaterial = "missing_material";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             ItemGone,
@@ -71,7 +89,13 @@ namespace Game.Shared.Vocabulary
             WrongJob,
             NotEquipped,
             ItemEquipped,
-            InvalidQuantity);
+            InvalidQuantity,
+            NotACard,
+            CardDoesNotFit,
+            NoFreeSocket,
+            NotRefinable,
+            AtMaxRefine,
+            MissingMaterial);
     }
 
     /// <summary>
@@ -114,7 +138,48 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>weight</c>: only the weight limit or the weight state changed (stats or level changed).</summary>
         public const string Weight = "weight";
 
+        /// <summary><c>card_inserted</c>: a card was socketed into an equipment entry (one card unit used up).</summary>
+        public const string CardInserted = "card_inserted";
+
+        /// <summary><c>refined</c>: a refine was tried: the material is used up and the entry went up, stayed, went down or broke (<c>refine_result</c> says which).</summary>
+        public const string Refined = "refined";
+
         /// <summary>Every term in this category, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight);
+        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined);
+    }
+
+    /// <summary>What a failed refine does to the equipment, per level of <c>refine.yaml</c> (<c>failure</c>; ARCHITECTURE §6.8). VOCABULARY.md: "Refine failures".</summary>
+    public static class RefineFailures
+    {
+        /// <summary><c>keep</c>: the refine level stays as it was.</summary>
+        public const string Keep = "keep";
+
+        /// <summary><c>down</c>: the refine level goes down by one (never below 0).</summary>
+        public const string Down = "down";
+
+        /// <summary><c>break</c>: the equipment is destroyed, with its cards.</summary>
+        public const string Break = "break";
+
+        /// <summary>Every term in this category, in documentation order.</summary>
+        public static readonly VocabularySet All = new VocabularySet(Keep, Down, Break);
+    }
+
+    /// <summary>How a refine came out: the <c>ItemRefined</c> event and the <c>refine_result</c> message's <c>result</c>. VOCABULARY.md: "Refine results".</summary>
+    public static class RefineResults
+    {
+        /// <summary><c>success</c>: the refine level went up by one.</summary>
+        public const string Success = "success";
+
+        /// <summary><c>keep</c>: it failed and the level stayed.</summary>
+        public const string Keep = RefineFailures.Keep;
+
+        /// <summary><c>down</c>: it failed and the level went down by one.</summary>
+        public const string Down = RefineFailures.Down;
+
+        /// <summary><c>break</c>: it failed and the equipment broke (it is gone, with its cards).</summary>
+        public const string Break = RefineFailures.Break;
+
+        /// <summary>Every term in this category, in documentation order.</summary>
+        public static readonly VocabularySet All = new VocabularySet(Success, Keep, Down, Break);
     }
 }

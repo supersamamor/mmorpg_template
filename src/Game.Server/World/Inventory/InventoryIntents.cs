@@ -17,3 +17,9 @@ public sealed record Unequip(EntityId Entity, string Slot) : IIntent;
 
 /// <summary>A player asks to put <c>Quantity</c> units of entry <c>EntryId</c> on the ground at its cell, for anyone to take.</summary>
 public sealed record DropItem(EntityId Entity, long EntryId, int Quantity) : IIntent;
+
+/// <summary>A player asks to socket the card in entry <c>CardEntryId</c> into the equipment entry <c>EntryId</c> (carried or worn), for good.</summary>
+public sealed record InsertCard(EntityId Entity, long EntryId, long CardEntryId) : IIntent;
+
+/// <summary>A player asks to refine the equipment entry <c>EntryId</c> (carried or worn) by one level, using the next step's material.</summary>
+public sealed record RefineItem(EntityId Entity, long EntryId) : IIntent;

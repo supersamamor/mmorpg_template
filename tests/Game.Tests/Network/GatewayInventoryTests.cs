@@ -1,5 +1,10 @@
+using Game.Content.Registry;
+using Game.Server.World;
+using Game.Server.World.Aoi;
+using Game.Shared.Definitions;
 using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
+using Game.Tests.World;
 
 namespace Game.Tests.Network;
 
@@ -53,5 +58,60 @@ public class GatewayInventoryTests
         dropped.Cause.ShouldBe(InventoryChanges.Dropped);
         await Poll.UntilAsync(() => client.SeenIds.Select(client.Seen).Count(r => r?.Kind == EntityKinds.Item && r.DisplayKey == "item.healing_draught"),
             n => n == 1, "the dropped draught on the ground");
+    }
+
+    /// <summary>
+    /// T-402 over the wire, on the sample content with a start kit of a worn Bone Dirk, a Padded Vest, a Gelcap Card and two Temper Shards: socket the card,
+    /// refine the dirk once (the first step of refine.yaml always succeeds), and see a refusal. Each change comes with the next rev; the refine's outcome follows
+    /// its change as refine_result; the full inventory after a resync carries the card and the level.
+    /// </summary>
+    [Fact]
+    public async Task Insert_card_and_refine_change_the_inventory_and_say_how_the_refine_came_out()
+    {
+        var db = TestGrids.SampleContent;
+        var kit = db.Balance with
+        {
+            NewCharacter = db.Balance.NewCharacter with
+            {
+                StartItems =
+                [
+                    new StartItemDef { ItemId = "item.bone_dirk", Equipped = true }, new StartItemDef { ItemId = "item.padded_vest" },
+                    new StartItemDef { ItemId = "item.gelcap_card" }, new StartItemDef { ItemId = "item.temper_shard", Quantity = 2 },
+                ],
+            },
+        };
+        var content = new ContentDatabase(db.Jobs, db.Skills, db.Items, db.Monsters, db.Statuses, db.Quests, db.Npcs, db.Dialogue, db.Drops, db.Maps,
+            db.ExpTables, db.Formulas, db.Elements, kit, db.Appearance, grids: db.Grids, refine: db.Refine);
+        await using var rig = await GatewayRig.StartAsync(content: content);
+        using var client = await rig.JoinAsync("smith");
+        var inventory = await client.WaitForAsync<InventoryMessage>();
+        long Id(string item) => inventory.Entries.Single(e => e.Item == item).Id;
+        var (dirk, vest, card, shards) = (Id("item.bone_dirk"), Id("item.padded_vest"), Id("item.gelcap_card"), Id("item.temper_shard"));
+
+        await client.SendAsync(new InsertCardMessage(vest, card));
+        var socketed = await client.WaitForAsync<InventoryChangedMessage>(m => m.Rev == 1);
+        socketed.Cause.ShouldBe(InventoryChanges.CardInserted);
+        socketed.Item.ShouldBe("item.padded_vest");
+        socketed.Removed.ShouldBe([card]);
+        socketed.Entries.Single().Cards.ShouldBe(["item.gelcap_card"]);
+
+        await client.SendAsync(new RefineMessage(dirk));
+        var refined = await client.WaitForAsync<InventoryChangedMessage>(m => m.Rev == 2);
+        refined.Cause.ShouldBe(InventoryChanges.Refined);
+        refined.Entries.Single(e => e.Id == dirk).ShouldBe(new InventoryEntryRecord(dirk, "item.bone_dirk", 1, EquipSlots.Weapon, null, 1));
+        refined.Entries.Single(e => e.Id == shards).Quantity.ShouldBe(1);
+        var result = await client.WaitForAsync<RefineResultMessage>();
+        result.ShouldBe(new RefineResultMessage(dirk, "item.bone_dirk", RefineResults.Success, 1));
+        client.Messages.IndexOf(result).ShouldBeGreaterThan(client.Messages.IndexOf(refined));
+
+        await client.SendAsync(new InsertCardMessage(dirk, card));   // the card is gone
+        (await client.WaitForAsync<RejectedMessage>(r => r.Intent == MessageTypes.InsertCard))
+            .ShouldBe(new RejectedMessage(MessageTypes.InsertCard, ItemReasons.ItemGone, null, null, dirk));
+
+        // A resync: the full inventory carries both.
+        rig.World.TryEnqueue(new RequestSnapshot(new EntityId(client.Id))).ShouldBe(EnqueueResult.Accepted);
+        var full = await client.WaitForAsync<InventoryMessage>(m => m.Rev == 2);
+        full.Entries.Single(e => e.Id == vest).Cards.ShouldBe(["item.gelcap_card"]);
+        full.Entries.Single(e => e.Id == dirk).Refine.ShouldBe(1);
     }
 }

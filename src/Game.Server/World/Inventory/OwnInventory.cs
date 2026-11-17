@@ -37,5 +37,10 @@ public sealed class OwnInventory
         return new InventoryChangedMessage(e.Revision, e.Cause, e.ItemId, e.Weight, e.WeightLimit, e.Load, entries, e.Removed);
     }
 
-    private static InventoryEntryRecord Record(InventoryEntry entry) => new(entry.Id, entry.ItemId, entry.Quantity, entry.Slot);
+    /// <summary>One entry as its owner sees it, cards and refine level included (only the owner ever gets these).</summary>
+    public static InventoryEntryRecord Record(InventoryEntry entry) =>
+        new(entry.Id, entry.ItemId, entry.Quantity, entry.Slot, entry.Cards.Count > 0 ? entry.Cards : null, entry.Refine);
+
+    /// <summary>The owner's <c>refine_result</c>.</summary>
+    public static RefineResultMessage Message(ItemRefined e) => new(e.EntryId, e.ItemId, e.Result, e.Level);
 }

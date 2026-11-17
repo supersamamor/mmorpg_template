@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Game.Shared.Definitions;
+using Game.Shared.Random;
 using Game.Shared.Vocabulary;
 
 namespace Game.Shared.Items
@@ -37,28 +38,50 @@ namespace Game.Shared.Items
     /// <param name="Displaced">Entries that come off (the slot's occupant, and a shield or two-handed weapon it cannot be worn with).</param>
     public sealed record EquipPlan(InventoryEntry Entry, ItemDef Item, string Slot, IReadOnlyList<InventoryEntry> Displaced);
 
+    /// <summary>A card socketing that passed every check.</summary>
+    /// <param name="Card">The card entry (one unit is used up).</param>
+    /// <param name="CardItem">The card item.</param>
+    /// <param name="Target">The equipment entry it goes into.</param>
+    /// <param name="TargetItem">The equipment item.</param>
+    /// <param name="Socket">The socket it fills (0-based: the number of cards the equipment held).</param>
+    public sealed record CardPlan(InventoryEntry Card, ItemDef CardItem, InventoryEntry Target, ItemDef TargetItem, int Socket);
+
+    /// <summary>A refine attempt that passed every check: the entry, its item and the step it tries (<c>refine.yaml</c>).</summary>
+    /// <param name="Entry">The equipment entry.</param>
+    /// <param name="Item">Its item.</param>
+    /// <param name="Step">The step to the next level.</param>
+    public sealed record RefinePlan(InventoryEntry Entry, ItemDef Item, RefineLevelDef Step);
+
     /// <summary>
     /// The inventory rules as plain functions on an <see cref="InventoryState"/> (ARCHITECTURE §6.8), shared by the server and the tests. Every
     /// operation checks everything first and returns an <see cref="ItemReasons"/> term without touching the state when it refuses; only then does
     /// it change the state, in steps that cannot fail. So an operation applies fully or not at all, and T-702 can wrap each one in one database
-    /// transaction without changing the rules. No I/O, no clock, no randomness: time and new ids come in as arguments.
+    /// transaction without changing the rules. No I/O, no clock and no random source of its own: time, new ids and the refine roll's
+    /// <see cref="IRandom"/> come in as arguments.
     /// </summary>
     public sealed class InventoryRules
     {
+        private static readonly RefineDef NoRefine = new RefineDef();
+
         private readonly IItemLookup _items;
         private readonly InventoryBalanceDef _balance;
+        private readonly RefineDef _refine;
         private readonly HashSet<string> _twoHanded;
 
-        /// <summary>Rules over <paramref name="items"/> with the numbers of <paramref name="balance"/>.</summary>
-        public InventoryRules(IItemLookup items, InventoryBalanceDef balance)
+        /// <summary>Rules over <paramref name="items"/> with the numbers of <paramref name="balance"/> and the refine table <paramref name="refine"/> (none: nothing refines).</summary>
+        public InventoryRules(IItemLookup items, InventoryBalanceDef balance, RefineDef? refine = null)
         {
             _items = items ?? throw new ArgumentNullException(nameof(items));
             _balance = balance ?? throw new ArgumentNullException(nameof(balance));
+            _refine = refine ?? NoRefine;
             _twoHanded = new HashSet<string>(balance.TwoHandedWeaponTypes, StringComparer.Ordinal);
         }
 
         /// <summary>The balance numbers.</summary>
         public InventoryBalanceDef Balance => _balance;
+
+        /// <summary>The refine table (<c>refine.yaml</c>).</summary>
+        public RefineDef Refine => _refine;
 
         /// <summary>The item lookup.</summary>
         public IItemLookup Items => _items;
@@ -103,9 +126,11 @@ namespace Game.Shared.Items
         /// first), then into new entries. Refused, with nothing changed, when the weight would pass <paramref name="weightLimit"/>
         /// (<c>too_heavy</c>) or the new entries do not fit <c>inventory.max_entries</c> (<c>inventory_full</c>); also <c>item_gone</c> for an unknown
         /// item and <c>invalid_quantity</c> below 1. New entries take ids from <paramref name="newId"/>, except that a single equipment item
-        /// keeps <paramref name="instanceId"/> when it is above 0 (an item dropped and picked up again).
+        /// keeps <paramref name="instanceId"/> when it is above 0 (an item dropped and picked up again). A single equipment item also gets
+        /// <paramref name="cards"/> and <paramref name="refine"/> (what it had when it was dropped).
         /// </summary>
-        public string? TryAdd(InventoryState state, string itemId, int quantity, int weightLimit, Func<long> newId, InventoryDelta delta, long instanceId = 0)
+        public string? TryAdd(InventoryState state, string itemId, int quantity, int weightLimit, Func<long> newId, InventoryDelta delta, long instanceId = 0,
+            IReadOnlyList<string>? cards = null, int refine = 0)
         {
             if (newId == null) throw new ArgumentNullException(nameof(newId));
             if (!_items.TryGet(itemId, out var item)) return ItemReasons.ItemGone;
@@ -145,8 +170,10 @@ namespace Game.Shared.Items
             {
                 var put = Math.Min(left, limit);
                 var id = first && instanceId > 0 && quantity == 1 && state.Find(instanceId) == null ? instanceId : newId();
-                first = false;
                 var entry = new InventoryEntry(id, itemId, put);
+                if (first && quantity == 1 && item.Kind == ItemKind.Equip && (refine > 0 || cards is { Count: > 0 }))
+                    entry = entry with { Cards = cards is { Count: > 0 } ? Copy(cards) : entry.Cards, Refine = Math.Max(0, refine) };
+                first = false;
                 state.Put(entry);
                 delta.Upsert(entry);
                 left -= put;
@@ -298,6 +325,140 @@ namespace Game.Shared.Items
             delta.Upsert(off);
             delta.TakenOff.Add(off);
             return null;
+        }
+
+        // ---- cards ------------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Checks socketing the card in entry <paramref name="cardEntryId"/> into equipment entry <paramref name="equipmentEntryId"/> (carried or worn).
+        /// Refused: <c>item_gone</c> (either entry missing), <c>not_a_card</c>, <c>not_equipment</c>, <c>card_does_not_fit</c> (none of the card's
+        /// <c>slots</c> is one of the equipment's), <c>no_free_socket</c> (its <c>card_slots</c> are all taken, or it has none).
+        /// </summary>
+        public string? PlanInsertCard(InventoryState state, long cardEntryId, long equipmentEntryId, out CardPlan? plan)
+        {
+            plan = null;
+            var card = state.Find(cardEntryId);
+            if (card == null || !_items.TryGet(card.ItemId, out var cardItem)) return ItemReasons.ItemGone;
+            if (cardItem.Kind != ItemKind.Card || cardItem.Card is not { } cardDef) return ItemReasons.NotACard;
+            var target = state.Find(equipmentEntryId);
+            if (target == null || !_items.TryGet(target.ItemId, out var item)) return ItemReasons.ItemGone;
+            if (item.Kind != ItemKind.Equip || item.Equip is not { } equip) return ItemReasons.NotEquipment;
+            if (!Fits(cardDef, equip)) return ItemReasons.CardDoesNotFit;
+            if (target.Cards.Count >= equip.CardSlots) return ItemReasons.NoFreeSocket;
+            plan = new CardPlan(card, cardItem, target, item, target.Cards.Count);
+            return null;
+        }
+
+        /// <summary>True when <paramref name="card"/> may go into equipment <paramref name="equip"/>: one of the card's slots is one of the item's.</summary>
+        public static bool Fits(ItemCardDef card, ItemEquipDef equip)
+        {
+            for (var i = 0; i < card.Slots.Count; i++)
+                if (Contains(equip.Slots, card.Slots[i])) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Applies a plan from <see cref="PlanInsertCard"/> on the same state: one card unit is used up and the card id is added to the equipment's
+        /// cards, for good. The weight goes down by the card's (the equipment's own weight does not change).
+        /// </summary>
+        public void ApplyInsertCard(InventoryState state, CardPlan plan, InventoryDelta delta)
+        {
+            Take(state, plan.Card, 1, delta);
+            var cards = new string[plan.Target.Cards.Count + 1];
+            for (var i = 0; i < plan.Target.Cards.Count; i++) cards[i] = plan.Target.Cards[i];
+            cards[cards.Length - 1] = plan.CardItem.Id;
+            var socketed = plan.Target with { Cards = cards };
+            state.Put(socketed);
+            delta.Upsert(socketed);
+        }
+
+        // ---- refine -----------------------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Checks refining equipment entry <paramref name="entryId"/> (carried or worn) by one level. Refused: <c>item_gone</c>, <c>not_equipment</c>,
+        /// <c>not_refinable</c> (not <c>refinable</c>), <c>at_max_refine</c> (at <c>max_level</c>, or no step for the next level),
+        /// <c>missing_material</c> (fewer carried units of the step's material than its quantity; the entry itself never counts).
+        /// </summary>
+        public string? PlanRefine(InventoryState state, long entryId, out RefinePlan? plan)
+        {
+            plan = null;
+            var entry = state.Find(entryId);
+            if (entry == null || !_items.TryGet(entry.ItemId, out var item)) return ItemReasons.ItemGone;
+            if (item.Kind != ItemKind.Equip || item.Equip is not { } equip) return ItemReasons.NotEquipment;
+            if (!equip.Refinable) return ItemReasons.NotRefinable;
+            if (entry.Refine >= _refine.MaxLevel || _refine.StepTo(entry.Refine + 1) is not { } step) return ItemReasons.AtMaxRefine;
+            if (CountCarried(state, step.MaterialItemId, entry.Id) < step.MaterialQuantity) return ItemReasons.MissingMaterial;
+            plan = new RefinePlan(entry, item, step);
+            return null;
+        }
+
+        /// <summary>
+        /// Applies a plan from <see cref="PlanRefine"/> on the same state and returns the <see cref="RefineResults"/> term. The material is used up first
+        /// (carried stacks, lowest id first), then one roll of <paramref name="random"/> decides: below <c>success_percent</c> the level goes up by one,
+        /// otherwise the step's <c>failure</c> applies (<c>keep</c>, <c>down</c> one level but not below 0, or <c>break</c>: the entry is gone, cards and all).
+        /// Exactly one value is drawn from <paramref name="random"/>, so a seeded source gives the same outcome every time.
+        /// </summary>
+        public string ApplyRefine(InventoryState state, RefinePlan plan, IRandom random, InventoryDelta delta)
+        {
+            if (random == null) throw new ArgumentNullException(nameof(random));
+            var left = plan.Step.MaterialQuantity;
+            for (var i = 0; i < state.Entries.Count && left > 0;)
+            {
+                var entry = state.Entries[i];
+                if (!IsMaterial(entry, plan.Step.MaterialItemId, plan.Entry.Id))
+                {
+                    i++;
+                    continue;
+                }
+                var take = Math.Min(left, entry.Quantity);
+                left -= take;
+                Take(state, entry, take, delta);
+                if (take < entry.Quantity) i++;   // a whole entry taken shifts the next one into place i
+            }
+
+            var success = random.Next(100) < plan.Step.SuccessPercent;
+            var result = success ? RefineResults.Success : plan.Step.Failure;
+            var current = state.Find(plan.Entry.Id) ?? plan.Entry;
+            switch (result)
+            {
+                case RefineResults.Success:
+                    Replace(state, current with { Refine = current.Refine + 1 }, delta);
+                    break;
+                case RefineResults.Down:
+                    if (current.Refine > 0) Replace(state, current with { Refine = current.Refine - 1 }, delta);
+                    break;
+                case RefineResults.Break:
+                    state.Remove(current.Id);
+                    delta.Gone(current.Id);
+                    state.Weight = WeightOf(state);
+                    break;
+            }
+            return result;
+        }
+
+        private static void Replace(InventoryState state, InventoryEntry entry, InventoryDelta delta)
+        {
+            state.Put(entry);
+            delta.Upsert(entry);
+        }
+
+        private static bool IsMaterial(InventoryEntry entry, string materialId, long refined) =>
+            entry.Id != refined && entry.Slot == null && string.Equals(entry.ItemId, materialId, StringComparison.Ordinal);
+
+        private static long CountCarried(InventoryState state, string materialId, long refined)
+        {
+            long count = 0;
+            var entries = state.Entries;
+            for (var i = 0; i < entries.Count; i++)
+                if (IsMaterial(entries[i], materialId, refined)) count += entries[i].Quantity;
+            return count;
+        }
+
+        private static string[] Copy(IReadOnlyList<string> list)
+        {
+            var copy = new string[list.Count];
+            for (var i = 0; i < copy.Length; i++) copy[i] = list[i];
+            return copy;
         }
 
         private static void AddDisplaced(List<InventoryEntry> list, InventoryEntry? occupant, InventoryEntry incoming)

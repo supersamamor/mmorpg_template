@@ -62,8 +62,10 @@ public sealed class Vitals
 /// <param name="OwnerUntilMs">Until when only <paramref name="Owner"/> may take it (<c>loot.priority_ms</c> after the drop).</param>
 /// <param name="ExpiresAtMs">When it disappears (<c>loot.lifetime_ms</c> after the drop, or <c>inventory.dropped_lifetime_ms</c> for a player's).</param>
 /// <param name="InstanceId">An equipment item a player dropped: its entry id, which it keeps when picked up again; 0 for a new item.</param>
+/// <param name="Cards">An equipment item a player dropped: its socketed cards, which it keeps (null for none). Never sent to clients.</param>
+/// <param name="Refine">An equipment item a player dropped: its refine level, which it keeps. Never sent to clients.</param>
 public sealed record GroundItem(string ItemId, int Quantity, EntityId Monster, EntityId? Owner, long DroppedAtMs, long OwnerUntilMs, long ExpiresAtMs,
-    long InstanceId = 0);
+    long InstanceId = 0, IReadOnlyList<string>? Cards = null, int Refine = 0);
 
 /// <summary>The loot rules as pure functions, so the pickup system (T-401) and the tests use the same answer.</summary>
 public static class LootRules

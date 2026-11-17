@@ -27,7 +27,9 @@ public static class ClientBundleBuilder
         content.Dialogue.All.Select(Dialogue).ToList(),
         content.Quests.All.Select(q => new ClientQuest(q.Id, q.Name, q.Description, q.GiverNpcId, q.Steps.Select(s => s.Description ?? "").ToList())).ToList(),
         content.Maps.All.Select(m => Map(m, content.GetGrid(m.Id))).ToList(),
-        Appearance(content.Appearance));
+        Appearance(content.Appearance),
+        new ClientRefine(content.Refine.MaxLevel, content.Refine.Levels.Select(l =>
+            new ClientRefineLevel(l.Level, l.SuccessPercent, l.MaterialItemId, l.MaterialQuantity, l.Failure)).ToList()));
 
     private static ClientAppearance Appearance(AppearanceDef a) => new(
         Genders.All.Where(a.Genders.ContainsKey).Select(g =>
@@ -54,7 +56,8 @@ public static class ClientBundleBuilder
         var kind = item.Kind.ToString().ToLowerInvariant();
         var slots = item.Equip?.Slots ?? item.Card?.Slots ?? [];
         return new ClientItem(item.Id, item.Name, item.Description, kind, item.IconAssetKey, item.GroundAssetKey,
-            slots.ToList(), item.Equip?.WeaponType, item.Equip?.VisualAssetKey, item.UseSfx, item.EquipSfx);
+            slots.ToList(), item.Equip?.WeaponType, item.Equip?.VisualAssetKey, item.UseSfx, item.EquipSfx,
+            item.Equip?.CardSlots ?? 0, item.Equip?.Refinable ?? false);
     }
 
     private static ClientSkill Skill(SkillDef skill)

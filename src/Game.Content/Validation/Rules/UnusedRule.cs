@@ -18,9 +18,11 @@ public sealed class UnusedRule : IValidationRule
         var db = context.Database;
         var refs = ContentWalker.Refs(db).ToList();
 
-        var usedItems = refs.Where(r => r.Kind == RefKind.Item).Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
+        var usedItems = refs.Where(r => r.Kind == RefKind.Item).Select(r => r.Id)
+            .Concat(db.Refine.Levels.Select(l => l.MaterialItemId))   // a refine material is a use (refine.yaml)
+            .ToHashSet(StringComparer.Ordinal);
         foreach (var item in db.Items.All.Where(i => !usedItems.Contains(i.Id)))
-            context.Warn(item.Id, "id", ValidationCodes.WarnUnusedItem, $"{item.Id} is not referenced by any drop table, quest or objective");
+            context.Warn(item.Id, "id", ValidationCodes.WarnUnusedItem, $"{item.Id} is not referenced by any drop table, quest, objective or refine step");
 
         var usedStatuses = refs.Where(r => r.Kind == RefKind.Status).Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
         foreach (var status in db.Statuses.All.Where(s => !usedStatuses.Contains(s.Id)))

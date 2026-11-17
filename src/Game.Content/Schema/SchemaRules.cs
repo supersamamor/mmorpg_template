@@ -23,6 +23,7 @@ internal static class SchemaRules
         ["AnimationId"] = AnimationIds.All,
         ["Stat"] = Stats.All,
         ["Facing"] = Directions.All,
+        ["Failure"] = RefineFailures.All,
     };
 
     /// <summary>(declaring type, property) → vocabulary per dictionary nesting level, for the keys.</summary>

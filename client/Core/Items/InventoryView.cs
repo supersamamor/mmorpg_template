@@ -24,6 +24,12 @@ public enum ItemActions
 
     /// <summary><c>drop_item</c>: anything not worn.</summary>
     Drop = 8,
+
+    /// <summary><c>insert_card</c>: a card (the panel then lists the equipment it fits).</summary>
+    InsertCard = 16,
+
+    /// <summary><c>refine</c>: refinable equipment, carried or worn (the panel then shows the next step before it is sent).</summary>
+    Refine = 32,
 }
 
 /// <summary>
@@ -155,14 +161,57 @@ public sealed class InventoryView
         Version++;
     }
 
-    /// <summary>What the panel offers for <paramref name="entry"/>, from the bundle's item kind and whether it is worn.</summary>
+    /// <summary>
+    /// What the panel offers for <paramref name="entry"/>, from the bundle's item kind and whether it is worn: a worn item can be taken off (and refined),
+    /// a carried one dropped and, by kind, used, put on, refined or (a card) socketed. The server checks everything again.
+    /// </summary>
     public static ItemActions ActionsFor(InventoryEntryRecord entry, ItemDisplay? item)
     {
-        if (entry.Slot is not null) return ItemActions.Unequip;
-        var actions = ItemActions.Drop;
+        var refine = item?.Kind == ItemKinds.Equip && item.Refinable ? ItemActions.Refine : ItemActions.None;
+        if (entry.Slot is not null) return ItemActions.Unequip | refine;
+        var actions = ItemActions.Drop | refine;
         if (item?.Kind == ItemKinds.Consumable) actions |= ItemActions.Use;
         if (item?.Kind == ItemKinds.Equip && item.Slots.Count > 0) actions |= ItemActions.Equip;
+        if (item?.Kind == ItemKinds.Card) actions |= ItemActions.InsertCard;
         return actions;
+    }
+
+    /// <summary>
+    /// The equipment entries (carried or worn, by id) that a card could go into: one of the card's slots is one of the item's, and it has a free card
+    /// slot. All of it is display data from the bundle and the server's entries; the server decides.
+    /// </summary>
+    public List<InventoryEntryRecord> CardTargets(ItemDisplay? card, Func<string, ItemDisplay?> items)
+    {
+        var targets = new List<InventoryEntryRecord>();
+        if (card is null || card.Kind != ItemKinds.Card) return targets;
+        for (var i = 0; i < _entries.Count; i++)
+        {
+            var entry = _entries[i];
+            if (items(entry.Item) is not { Kind: ItemKinds.Equip } item || entry.CardCount >= item.CardSlots) continue;
+            for (var s = 0; s < card.Slots.Count; s++)
+            {
+                if (!Contains(item.Slots, card.Slots[s])) continue;
+                targets.Add(entry);
+                break;
+            }
+        }
+        return targets;
+    }
+
+    /// <summary>How many units of <paramref name="itemId"/> are carried (not worn), over every stack.</summary>
+    public int Carried(string itemId)
+    {
+        var count = 0;
+        for (var i = 0; i < _entries.Count; i++)
+            if (_entries[i].Slot is null && string.Equals(_entries[i].Item, itemId, StringComparison.Ordinal)) count += _entries[i].Quantity;
+        return count;
+    }
+
+    private static bool Contains(IReadOnlyList<string> list, string value)
+    {
+        for (var i = 0; i < list.Count; i++)
+            if (string.Equals(list[i], value, StringComparison.Ordinal)) return true;
+        return false;
     }
 
     private int IndexOf(long id)

@@ -21,11 +21,11 @@ public sealed class ContentDatabase
         Registry<DropTableDef> drops, Registry<MapDef> maps, Registry<ExpTableDef> expTables,
         FormulaSetDef formulas, ElementTableDef elements, BalanceDef balance, AppearanceDef appearance,
         IReadOnlyDictionary<string, SourceLocation>? sources = null,
-        IReadOnlyDictionary<string, MapGrid>? grids = null)
+        IReadOnlyDictionary<string, MapGrid>? grids = null, RefineDef? refine = null)
     {
         Jobs = jobs; Skills = skills; Items = items; Monsters = monsters; Statuses = statuses; Quests = quests;
         Npcs = npcs; Dialogue = dialogue; Drops = drops; Maps = maps; ExpTables = expTables;
-        Formulas = formulas; Elements = elements; Balance = balance; Appearance = appearance;
+        Formulas = formulas; Elements = elements; Balance = balance; Appearance = appearance; Refine = refine ?? new RefineDef();
         _sources = sources ?? new Dictionary<string, SourceLocation>();
         Grids = grids ?? new Dictionary<string, MapGrid>();
         _registries = new IRegistry[] { jobs, skills, items, monsters, statuses, quests, npcs, dialogue, drops, maps, expTables };
@@ -63,6 +63,9 @@ public sealed class ContentDatabase
 
     /// <summary><c>content/appearance.yaml</c>: character-creation options (cosmetic only).</summary>
     public AppearanceDef Appearance { get; }
+
+    /// <summary><c>content/refine.yaml</c>: the refine steps (chance, material, failure) and the max level. Empty (nothing refines) when not given.</summary>
+    public RefineDef Refine { get; }
 
     /// <summary>Logic grid of every map, by map id. The loader guarantees one per entry of <see cref="Maps"/>.</summary>
     public IReadOnlyDictionary<string, MapGrid> Grids { get; }
