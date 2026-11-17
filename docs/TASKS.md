@@ -99,6 +99,12 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-402 | Cards and refining: socket cards, refine with data-driven chances and failure outcomes, bag panel | Claude Code | Sonnet 5.5 | [T-402](../tasks/prompts/T-402.md) | T-401 | Review | Touches `Net/**` for the two item messages only (approved by the user 2026-11-16) |
 | T-403 | Worn equipment on 3D characters: attach points, skinned meshes, weapon-type clips | Claude Code | Sonnet 5.5 | [T-403](../tasks/prompts/T-403.md) | T-401, T-207 | Review | ADR-002 #164, #170, #173 |
 
+## Phase 5 — Skills & statuses
+
+| ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
+|----|------|-------|-------|--------|------------|--------|-------|
+| T-501 | Effect runner + statuses: every effect type, status apply/stack/tick/expire, consumables, monster skills, statuses on the wire and client | Claude Code | Opus 5.5 | [T-501](../tasks/prompts/T-501.md) | T-401, T-402, T-303, T-309 | In Progress | Touches `Net/**` for status fields only (approved by the user 2026-11-17); ADR-002 #118, #171 |
+
 ## Phase 7 — Persistence & accounts
 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
@@ -112,7 +118,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
 | T-404 | 4 | Early balance with weapons: retune the Rock Beetle and Thornback Boar (ADR-002 #117, #175) | Claude Code | Sonnet 5.5 | Backlog |
 | T-405 | 4 | Equipment manifest validation (`attach` xor `skinned`, weapon-type clip names) and preloading worn visuals (ADR-002 #182) | Claude Code | Sonnet 5.5 | Backlog |
-| T-501 | 5 | Effect runner + statuses | Claude Code | Opus 5.5 | Backlog |
 | T-502 | 5 | Skill trees, job change, cast/cooldown | Claude Code | Sonnet 5.5 | Backlog |
 | T-503 | 5 | Stat and skill reset (respec) as an item or NPC service, data-driven cost | Claude Code | Sonnet 5.5 | Backlog |
 | T-601 | 6 | Dialogue graphs + NPC interaction | Claude Code | Sonnet 5.5 | Backlog |
