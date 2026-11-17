@@ -26,8 +26,11 @@ param(
     [string] $Godot = "",            # the Godot .NET console binary; default: $env:GODOT, then the winget install
     [int] $Repeat = 1,               # run each scenario this many times and print the count of each exit code (T-218)
     [string] $KeepLogs = "",         # keep each client run's stdout and stderr in this folder
-    [int] $ExportTimeoutSeconds = 900,   # release: the whole export (it builds the C# project first)
-    [int] $ExportExitSeconds = 60        # release: from every exported file written (and no longer growing) to Godot's exit (ADR-002 row 163)
+    [int] $ExportTimeoutSeconds = 600,   # release: one export attempt (it builds the C# project first; a clean one takes about 1 minute here)
+    [int] $ExportExitSeconds = 60,       # release: from every exported file written (and no longer growing) to Godot's exit (ADR-002 row 163)
+    [int] $ExportAttempts = 3,           # release: an export that times out or hangs at exit is retried this many times in all (T-221)
+    [int] $ImportTimeoutSeconds = 180,   # the import before the runs, per attempt (a clean one takes about 7 s); retried 3 times in all
+    [int] $ClientExitSeconds = 30        # from the client's verdict line ([e2e] PASS/FAIL) to its exit (T-221)
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -40,7 +43,7 @@ if ($LASTEXITCODE -ne 0) { throw "The server does not build." }
 dotnet build (Join-Path $client "GameClient.csproj") -v q --nologo | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "The client does not build." }
 & (Join-Path $client "mount-themes.ps1") | Out-Null   # res://themes (ARCHITECTURE §7.7)
-Import-GodotProject $godot $client -Force
+Import-GodotProject $godot $client -Force -TimeoutSeconds $ImportTimeoutSeconds
 
 $script:temp = $null
 $script:itemsTemp = $null
@@ -98,19 +101,11 @@ function Start-GameServer([switch] $Easy, [switch] $Items, [string[]] $Extra = @
     return [pscustomobject]@{ Process = $process; Log = $log }
 }
 
-# Stops a process and its direct children: `dotnet run` starts the server as a child, and Godot's Windows console wrapper (.console.exe) starts the game exe.
-function Stop-ProcessTree([int] $Id) {
-    if ((Get-Command Get-CimInstance -ErrorAction SilentlyContinue)) {
-        Get-CimInstance Win32_Process -Filter "ParentProcessId = $Id" -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
-    } else {
-        & pkill -KILL -P $Id 2>$null
-    }
-    Stop-Process -Id $Id -Force -ErrorAction SilentlyContinue
-}
-
+# Stop-ProcessTree (godot-path.ps1) stops the whole tree by process id: `dotnet run` starts the server as a child, and Godot's console wrapper the game exe.
 function Stop-GameServer($server) {
     if (-not $server) { return }
     Stop-ProcessTree $server.Process.Id
+    $null = $server.Process.WaitForExit(10000)
     Remove-Item $server.Log, "$($server.Log).err" -ErrorAction SilentlyContinue
 }
 
@@ -129,11 +124,14 @@ function Start-GodotClient([string[]] $UserArgs, [string] $Binary = $godot, [str
     return [pscustomobject]@{ Process = $process; Log = $log; Position = 0L }
 }
 
-# Prints the client's new [e2e]/[client] lines until it exits (or $TimeoutSeconds passes, which stops it and fails). $OnTick runs about every 0.3 s with
-# the lines that arrived; a line "[e2e] @ name" is a request to the script and is passed on as $OnMarker.
+# Prints the client's new [e2e]/[client] lines until it exits (or $TimeoutSeconds passes, which stops it and fails with 124). $OnTick runs about every 0.3 s with
+# the lines that arrived; a line "[e2e] @ name" is a request to the script and is passed on as $OnMarker. Once the client has printed its verdict
+# ("[e2e] PASS" or "[e2e] FAIL"), it has $ClientExitSeconds to exit; if it has not, it is stopped and the run fails with 125 (CLIENT HUNG AT EXIT, T-221).
 function Wait-GodotClient($run, [int] $TimeoutSeconds, [scriptblock] $OnMarker = $null, [scriptblock] $OnTick = $null) {
     $clock = [Diagnostics.Stopwatch]::StartNew()
     $text = New-Object Text.StringBuilder
+    $verdictAt = $null
+    $stuck = $null
     while ($true) {
         $exited = $run.Process.HasExited
         $stream = [IO.File]::Open($run.Log, "Open", "Read", "ReadWrite")
@@ -149,19 +147,32 @@ function Wait-GodotClient($run, [int] $TimeoutSeconds, [scriptblock] $OnMarker =
                 Write-Host $line
                 [void]$text.AppendLine($line)
                 if ($OnMarker -and $line -match "^\[e2e\] @ (\S+)") { & $OnMarker $Matches[1] }
+                if (-not $verdictAt -and $line -match "^\[e2e\] (PASS|FAIL)") { $verdictAt = $clock.Elapsed.TotalSeconds }
             }
         }
         if ($OnTick) { & $OnTick }
         if ($exited) { break }
-        if ($clock.Elapsed.TotalSeconds -gt $TimeoutSeconds) {
-            Stop-ProcessTree $run.Process.Id
+        $stuck = $null
+        if ($verdictAt -and ($clock.Elapsed.TotalSeconds - $verdictAt) -gt $ClientExitSeconds) {
+            $stuck = 125
+            Write-Host ("[run-e2e] CLIENT HUNG AT EXIT: it printed its verdict at {0:0.0} s but had not exited {1} s later; stopped it" -f $verdictAt, $ClientExitSeconds)
+        } elseif ($clock.Elapsed.TotalSeconds -gt $TimeoutSeconds) {
+            $stuck = 124
             Write-Host "[run-e2e] the client did not finish in $TimeoutSeconds s"
-            return [pscustomobject]@{ Code = 124; Text = $text.ToString() }
+        }
+        if ($stuck) {
+            if ($env:GODOT_STUCK_HOOK) { & $env:GODOT_STUCK_HOOK $run.Process.Id | Out-Null }
+            Stop-ProcessTree $run.Process.Id
+            $null = $run.Process.WaitForExit(10000)
+            break
         }
         Start-Sleep -Milliseconds 300
     }
-    $run.Process.WaitForExit()
-    $code = $run.Process.ExitCode
+    if ($stuck) { $code = $stuck }
+    else {
+        $null = $run.Process.WaitForExit(10000)   # it has exited; bounded anyway
+        $code = $run.Process.ExitCode
+    }
     if ($KeepLogs) {
         New-Item -ItemType Directory -Force -Path $KeepLogs | Out-Null
         $stem = Join-Path $KeepLogs ("run-{0:yyyyMMdd-HHmmss-fff}-code{1}" -f (Get-Date), $code)
@@ -279,52 +290,14 @@ function Invoke-Release {
     $folder = Split-Path -Parent $exe
     New-Item -ItemType Directory -Force -Path $folder | Out-Null
     # A stale build from an earlier run must never pass for this one (ADR-002 row 163): every file of the last export goes first.
-    $stem = [IO.Path]::GetFileNameWithoutExtension($exe)
-    # A client stopped a moment ago may still hold the exe for a second or two, so the delete is retried for up to 10 s.
-    $old = { @(Get-ChildItem $folder -File | Where-Object { $_.Name -eq [IO.Path]::GetFileName($exe) -or $_.Name -like "$stem.*" }) }
-    for ($try = 0; $try -lt 20 -and (& $old).Count -gt 0; $try++) {
-        & $old | Remove-Item -Force -ErrorAction SilentlyContinue
-        if ((& $old).Count -gt 0) { Start-Sleep -Milliseconds 500 }
-    }
-    if ((& $old).Count -gt 0) { Write-Host "[run-e2e] could not delete the old export: $((& $old | ForEach-Object Name) -join ', ')"; return 1 }
     $expected = @($exe, $console) + $(if ($linux) { @() } else { @([IO.Path]::ChangeExtension($exe, ".pck")) }) | Select-Object -Unique
-    $exportLog = [IO.Path]::GetTempFileName()
-    $export = Start-Process $godot -PassThru -NoNewWindow -RedirectStandardOutput $exportLog -RedirectStandardError "$exportLog.err" `
-        -ArgumentList @("--headless", "--path", "`"$client`"", "--export-release", "`"$preset`"", "`"$exe`"")
-    $null = $export.Handle
-    # Bounded waits: $ExportTimeoutSeconds for the whole export, and $ExportExitSeconds from the moment every file is written and has stopped
-    # growing to Godot's exit. Godot 4.7.2 once hung at exit with the files already written (row 163); that is reported, not waited out.
-    $clock = [Diagnostics.Stopwatch]::StartNew()
-    $writtenAt = $null
-    $lastSizes = ""
-    while (-not $export.HasExited) {
-        Start-Sleep -Milliseconds 500
-        $present = @($expected | Where-Object { Test-Path $_ })
-        $sizes = ($present | ForEach-Object { (Get-Item $_).Length }) -join ","
-        if ($present.Count -eq $expected.Count -and $sizes -eq $lastSizes) { if (-not $writtenAt) { $writtenAt = $clock.Elapsed.TotalSeconds } }
-        else { $writtenAt = $null }
-        $lastSizes = $sizes
-        if ($writtenAt -and ($clock.Elapsed.TotalSeconds - $writtenAt) -gt $ExportExitSeconds) {
-            Stop-ProcessTree $export.Id
-            Write-Host ("[run-e2e] EXPORT HUNG AT EXIT: Godot wrote every file ({0}) by {1:0} s but had not exited {2} s later; stopped it. The build is not trusted." -f (($expected | ForEach-Object { Split-Path -Leaf $_ }) -join ", "), $writtenAt, $ExportExitSeconds)
-            return 1
-        }
-        if ($clock.Elapsed.TotalSeconds -gt $ExportTimeoutSeconds) {
-            Stop-ProcessTree $export.Id
-            Write-Host "[run-e2e] the release export did not finish in $ExportTimeoutSeconds s (files written: $(@($expected | Where-Object { Test-Path $_ }).Count) of $($expected.Count)); stopped it"
-            return 1
-        }
+    $export = Invoke-ReleaseExport -Preset $preset -Exe $exe -Expected $expected
+    if (-not $export.Ok) {
+        $export.Output | Where-Object { $_ -match "ERROR|error" } | Select-Object -Last 20 | ForEach-Object { Write-Host $_ }
+        Write-Host "[run-e2e] the release export failed: $($export.Outcome)"
+        return 1
     }
-    $export.WaitForExit()
-    $exportCode = $export.ExitCode
-    if ($exportCode -ne 0) {
-        Get-Content $exportLog, "$exportLog.err" -ErrorAction SilentlyContinue | Where-Object { $_ -match "ERROR|error" } | Select-Object -Last 20 | ForEach-Object { Write-Host $_ }
-    }
-    Remove-Item $exportLog, "$exportLog.err" -ErrorAction SilentlyContinue
-    if ($exportCode -ne 0) { Write-Host "[run-e2e] the release export failed (exit code $exportCode)"; return 1 }
-    $missing = @($expected | Where-Object { -not (Test-Path $_) })
-    if ($missing.Count -gt 0) { Write-Host "[run-e2e] the release export exited 0 but wrote no $($missing -join ', ')"; return 1 }
-    Write-Host ("[run-e2e] release export: exit code 0 after {0:0} s" -f $clock.Elapsed.TotalSeconds)
+    Write-Host ("[run-e2e] release export: exit code 0 after {0:0} s (attempt {1})" -f $export.Seconds, $export.Attempts)
     Write-Host "[run-e2e] exported $preset to $output"
 
     # 1. ws:// is refused, and --set cannot turn it back on.
