@@ -7,7 +7,9 @@ param(
     [string] $Map = "",
     [switch] $Check,
     [string] $Content = "",
-    [string] $Godot = ""             # the Godot .NET console binary; default: $env:GODOT, then the winget install
+    [string] $Godot = "",            # the Godot .NET console binary; default: $env:GODOT, then the winget install
+    [int] $TimeoutSeconds = 300,     # one map export attempt (every map takes about 10 s here); a hang is retried, 3 attempts in all (T-221)
+    [int] $ImportTimeoutSeconds = 180
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
@@ -18,7 +20,7 @@ $godotPath = Resolve-Godot $Godot
 dotnet build (Join-Path $client "GameClient.csproj") -v q --nologo | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "The client does not build." }
 & (Join-Path $client "mount-themes.ps1") | Out-Null
-Import-GodotProject $godotPath $client -Force
+Import-GodotProject $godotPath $client -Force -TimeoutSeconds $ImportTimeoutSeconds
 
 $temp = $null
 if ($Check) {
@@ -31,14 +33,10 @@ $arguments = @("--headless", "--path", "`"$client`"", "res://addons/map_authorin
 $arguments += $(if ($Map) { @("--map", $Map) } else { @("--all") })
 if ($Content) { $arguments += @("--content", "`"$Content`"") }
 
-# Godot writes to stderr even when all is well, so its output goes to files and success is judged by the exit code.
-$log = [IO.Path]::GetTempFileName()
-$process = Start-Process $godotPath -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError "$log.err" -ArgumentList $arguments
-$null = $process.Handle
-$process.WaitForExit()
-$code = $process.ExitCode
-Get-Content $log | Where-Object { $_ -match "^\[map-export\]|Unhandled" } | ForEach-Object { Write-Host $_ }
-Remove-Item $log, "$log.err" -ErrorAction SilentlyContinue
+# Bounded and retried (godot-path.ps1): a real map problem exits 1 and is not retried; a hang is stopped and retried.
+$export = Invoke-GodotStep -Godot $godotPath -Step "map export" -Arguments $arguments -TimeoutSeconds $TimeoutSeconds
+$code = $export.Code
+$export.Output | Where-Object { $_ -match "^\[map-export\]|Unhandled" } | ForEach-Object { Write-Host $_ }
 
 if ($Check -and $code -eq 0) {
     foreach ($file in Get-ChildItem (Join-Path $temp "maps") -Filter *.grid.json) {
