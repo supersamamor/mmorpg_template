@@ -316,3 +316,12 @@ When writing these prompts, copy in the decisions listed:
 | 175 | Row 117: retune the Rock Beetle and Thornback Boar now that weapons exist (T-401 left it out of scope) | **→ T-404:** an early-balance pass with weapons, measured like T-309. |
 | 176 | Godot's headless `--import` hangs intermittently (3 in about 9 imports, not a stale cache), and the release export hung at exit twice; each passed on retry (T-401) | **→ T-221:** a bounded, retried import in `godot-path.ps1`, and a minimal reproduction if it's an engine bug. |
 | 177 | Drop drops the whole stack (T-401) | **→ Backlog:** a quantity picker, with the trade and storage UI. |
+
+## Addendum — T-403 (2026-11-17)
+| # | Question (source) | Decision |
+|---|---|---|
+| 178 | Worn pieces are merged into the body's skinned mesh (attached pieces weighted fully to their bone), so a dressed character stays one draw call; a merged mesh is cached by body, level of detail and set of pieces. Separate bone-attached nodes peaked at 117 in a crowd; merged, full gear peaks at 79 (92 with `--fight`) for 33–39 players on an integrated desktop GPU (T-403) | **Decided: accepted.** A change re-merges the character but loads only the changed pieces; that meets "swap only the changed pieces". The CPU cost of a merge on a phone goes on the phone checklist (row 112). |
+| 179 | Untextured materials that differ only in colour are baked into vertex colours to share one surface; a textured material keeps its own surface (T-403) | **Decided:** real equipment art uses one texture atlas per rig, so characters stay at one draw call. This is a rule for T-707 and any art pack. |
+| 180 | A missing or wrong equipment key draws the theme's missing model at 0.3 scale on bone 0 (the hips), with one warning per key. Weapon-type clips are manifest entries `<animation id>.<weapon type>`, falling back to the generic clip (T-403) | **Decided: accepted.** |
+| 181 | The Bone Dirk placeholder looks like a staff, because `themegen` picks the hand-weapon shape by a hash of the key (T-403) | **→ Backlog:** choose the shape by weapon type, with the next `themegen` change. |
+| 182 | Validate that each equipment manifest entry has exactly one of `attach` or `skinned`, and that weapon-type clip suffixes are known weapon types (T-403) | **→ T-405:** a small validation task, with preloading worn visuals (a `DisplayBundle` list of worn visual keys). |

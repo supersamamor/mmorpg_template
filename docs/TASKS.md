@@ -110,6 +110,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
 | T-404 | 4 | Early balance with weapons: retune the Rock Beetle and Thornback Boar (ADR-002 #117, #175) | Claude Code | Sonnet 5.5 | Backlog |
+| T-405 | 4 | Equipment manifest validation (`attach` xor `skinned`, weapon-type clip names) and preloading worn visuals (ADR-002 #182) | Claude Code | Sonnet 5.5 | Backlog |
 | T-221 | 2 | Bounded, retried Godot import in `godot-path.ps1`; reproduce the intermittent headless import hang (ADR-002 #176) | Claude Code | Opus 5.5 | Backlog |
 | T-501 | 5 | Effect runner + statuses | Claude Code | Opus 5.5 | Backlog |
 | T-502 | 5 | Skill trees, job change, cast/cooldown | Claude Code | Sonnet 5.5 | Backlog |
