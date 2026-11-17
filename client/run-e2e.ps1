@@ -47,6 +47,11 @@ Import-GodotProject $godot $client -Force -TimeoutSeconds $ImportTimeoutSeconds
 
 $script:temp = $null
 $script:itemsTemp = $null
+# Every process this script starts (servers, the server exe under `dotnet run`, Godot and its game exe). Start-Process with redirection makes children
+# inherit this script's handles, so anything left running keeps the caller's output pipe open and the caller waiting after the script has ended
+# (ADR-002 row 190). The final cleanup stops whatever is still running and says so (T-221).
+$script:started = New-Object Collections.ArrayList
+function Register-Started($process) { if ($process) { [void]$script:started.Add($process) } }
 
 # A temporary content copy where a new character wins every fight (monster stats do not change the bundle hash).
 function Get-EasyContent {
@@ -98,14 +103,23 @@ function Start-GameServer([switch] $Easy, [switch] $Items, [string[]] $Extra = @
         Start-Sleep -Milliseconds 200
     }
     Write-Host (Select-String -Path $log -Pattern "Content hash:").Line
-    return [pscustomobject]@{ Process = $process; Log = $log }
+    Register-Started $process
+    $child = $null
+    if (Get-Command Get-CimInstance -ErrorAction SilentlyContinue) {   # Windows; on Linux Stop-ProcessTree finds it with ps
+        $child = Get-CimInstance Win32_Process -Filter "ParentProcessId = $($process.Id)" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '^conhost' } | Select-Object -First 1
+    }
+    $child = $(if ($child) { Get-Process -Id $child.ProcessId -ErrorAction SilentlyContinue } else { $null })
+    if ($child) { $null = $child.Handle; Register-Started $child }
+    return [pscustomobject]@{ Process = $process; Child = $child; Log = $log }
 }
 
 # Stop-ProcessTree (godot-path.ps1) stops the whole tree by process id: `dotnet run` starts the server as a child, and Godot's console wrapper the game exe.
 function Stop-GameServer($server) {
     if (-not $server) { return }
     Stop-ProcessTree $server.Process.Id
+    if ($server.Child -and -not $server.Child.HasExited) { Stop-ProcessTree $server.Child.Id }   # in case the tree lookup missed it
     $null = $server.Process.WaitForExit(10000)
+    if ($server.Child) { $null = $server.Child.WaitForExit(10000) }
     Remove-Item $server.Log, "$($server.Log).err" -ErrorAction SilentlyContinue
 }
 
@@ -121,7 +135,10 @@ function Start-GodotClient([string[]] $UserArgs, [string] $Binary = $godot, [str
     $arguments += $UserArgs
     $process = Start-Process $Binary -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError "$log.err" -ArgumentList $arguments
     $null = $process.Handle
-    return [pscustomobject]@{ Process = $process; Engine = (Get-GodotEngineProcess $Binary $process); Log = $log; Position = 0L }
+    $engine = Get-GodotEngineProcess $Binary $process
+    Register-Started $process
+    Register-Started $engine
+    return [pscustomobject]@{ Process = $process; Engine = $engine; Log = $log; Position = 0L }
 }
 
 # Prints the client's new [e2e]/[client] lines until it exits (or $TimeoutSeconds passes, which stops it and fails with 124). $OnTick runs about every 0.3 s with
@@ -379,6 +396,13 @@ try {
     }
 }
 finally {
+    foreach ($process in $script:started) {
+        if (-not $process.HasExited) {
+            Write-Host "[run-e2e] stopping a leftover process: $($process.ProcessName) (pid $($process.Id))"
+            Stop-ProcessTree $process.Id
+            $null = $process.WaitForExit(10000)
+        }
+    }
     if ($script:temp) { Remove-Item $script:temp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:itemsTemp) { Remove-Item $script:itemsTemp -Recurse -Force -ErrorAction SilentlyContinue }
 }

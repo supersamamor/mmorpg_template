@@ -364,6 +364,13 @@ process id (`Stop-ProcessTree`, never by name: other worktrees run Godot too). W
 gets `-ClientExitSeconds` (30 s) to exit (125 and `CLIENT HUNG AT EXIT` otherwise), and every wait for a process that has already exited is bounded too.
 For evidence, set `$env:GODOT_STUCK_HOOK` to a program that takes a process id; it runs before a stuck or held process is stopped.
 
+**Waiting after the script has ended (ADR-002 row 190).** `Start-Process` with redirected output starts the child with handle inheritance on, so every
+process the script starts also holds the script's own stdout. If one outlives the script, whatever reads that output (a terminal pipe, an agent's shell,
+a CI step) waits until it exits, even though the script has finished: a child left running 12 s kept a caller waiting 12 s after the script printed its
+last line. A server left running waits until it is stopped, which matches row 190. The `replaced` stall itself was not reproduced (see the T-221 reply for
+the count). `run-e2e.ps1` now records every process it starts (each server, the server exe under `dotnet run`, each Godot wrapper and game exe), stops the
+server exe by id as well as its tree, and at the end stops anything still running, printing `[run-e2e] stopping a leftover process: <name> (pid N)`.
+
 **Why the import and the export hung (Godot 4.7.2 on Windows).** On Windows the scripts start Godot's console wrapper (`*_console.exe`), which
 starts the real Godot exe in a Windows job object and exits only when *every* process in that job has exited. In the editor (the import and the
 exports run the editor), Godot's Android export plugin polls `adb devices` about once a second whenever an Android preset is runnable; this
