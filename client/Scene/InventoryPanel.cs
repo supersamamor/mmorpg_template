@@ -48,6 +48,7 @@ public sealed class InventoryPanel
     private readonly Button _confirm = new() { Text = UiText.ConfirmRefine };
     private readonly Button _cancel = new() { Text = UiText.Cancel };
     private readonly GridContainer _choicesGrid = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+    private readonly Label _offer = Label(string.Empty);   // in the scroll: a card's targets heading or the refine offer (long text never pushes the buttons off screen)
     private readonly List<Button> _choiceButtons = new();
     private readonly List<long> _choiceIds = new();
     private readonly Dictionary<string, Button> _slotButtons = new(StringComparer.Ordinal);
@@ -86,6 +87,8 @@ public sealed class InventoryPanel
 
         _box.AddChild(_scroll);
         _scroll.AddChild(_content);
+        _content.AddChild(_offer);
+        _offer.Visible = false;
         _content.AddChild(_choicesGrid);
         _content.AddChild(_slotsGrid);
         _content.AddChild(_itemsGrid);
@@ -162,8 +165,8 @@ public sealed class InventoryPanel
         }
     }
 
-    /// <summary>The line under the items: the hint, the selected item, a card's targets or the refine offer (for the scripted run).</summary>
-    public string HintText => _hint.Text;
+    /// <summary>The line under the items (the hint or the selected item) and, while choosing, the card heading or the refine offer (for the scripted run).</summary>
+    public string HintText => _offer.Visible ? _hint.Text + " | " + _offer.Text : _hint.Text;
 
     private Button[] ActionButtons => new[] { _use, _equip, _unequip, _drop, _insertCard, _refine, _confirm, _cancel };
 
@@ -201,6 +204,7 @@ public sealed class InventoryPanel
         // Every label wraps at a width fixed here, so its height is right the first time it is laid out (no waiting for the containers to settle).
         _title.CustomMinimumSize = new Vector2(Mathf.Max(0, width - dp(24) - dp(96) - gap), 0);
         foreach (var label in new[] { _count, _weight, _hint }) label.CustomMinimumSize = new Vector2(width - dp(24), 0);
+        _offer.CustomMinimumSize = new Vector2(inner, 0);
         var columns = Mathf.Max(1, Mathf.FloorToInt((inner + gap) / (dp(CellDp) + gap)));
         _cellWidth = Mathf.Floor((inner - gap * (columns - 1)) / columns);
         _slotsGrid.Columns = columns;
@@ -261,6 +265,7 @@ public sealed class InventoryPanel
         var choosing = _mode != Mode.Actions;
         _slotsGrid.Visible = _itemsGrid.Visible = !choosing;
         _choicesGrid.Visible = _mode == Mode.CardTargets;
+        _offer.Visible = choosing;
 
         foreach (var (slot, button) in _slotButtons)
         {
@@ -287,7 +292,8 @@ public sealed class InventoryPanel
         for (var i = shown; i < _itemButtons.Count; i++) _itemButtons[i].Visible = false;
 
         var actions = selected is null ? ItemActions.None : InventoryView.ActionsFor(selected, _bundle.Item(selected.Item));
-        _hint.Text = selected is null ? UiText.PickAnItem : Line(selected);
+        // The fixed line names the selection short (with its level); its cards are on its button, so the line never grows past one item name.
+        _hint.Text = selected is null ? UiText.PickAnItem : UiText.Refined(UiText.ItemCount(_bundle.NameOf(selected.Item), selected.Quantity), selected.Refine);
         _use.Visible = !choosing && (actions & ItemActions.Use) != 0;
         _equip.Visible = !choosing && (actions & ItemActions.Equip) != 0;
         _unequip.Visible = !choosing && (actions & ItemActions.Unequip) != 0;
@@ -306,7 +312,7 @@ public sealed class InventoryPanel
     private void DrawCardTargets(InventoryEntryRecord card)
     {
         var targets = _session.Inventory.CardTargets(_bundle.Item(card.Item), _bundle.Item);
-        _hint.Text = UiText.ItemCount(_bundle.NameOf(card.Item), card.Quantity) + ". " + (targets.Count > 0 ? UiText.PickEquipmentForCard : UiText.NothingFitsCard);
+        _offer.Text = targets.Count > 0 ? UiText.PickEquipmentForCard : UiText.NothingFitsCard;
         for (var i = 0; i < targets.Count; i++)
         {
             var button = ChoiceButton(i);
@@ -323,10 +329,10 @@ public sealed class InventoryPanel
         var name = Line(entry);
         if (_bundle.RefineStepTo(entry.Refine + 1) is not { } step)
         {
-            _hint.Text = UiText.RefineMaxed(name);
+            _offer.Text = UiText.RefineMaxed(name);
             return;
         }
-        _hint.Text = UiText.RefineOffer(name, step.Level, step.SuccessPercent, _bundle.NameOf(step.Material), step.Quantity,
+        _offer.Text = UiText.RefineOffer(name, step.Level, step.SuccessPercent, _bundle.NameOf(step.Material), step.Quantity,
             _session.Inventory.Carried(step.Material), step.Failure);
         _confirm.Visible = true;
     }
@@ -407,10 +413,15 @@ public sealed class InventoryPanel
             _itemIds.Add(-1 - i);
         }
         for (var i = 12; i < _itemButtons.Count; i++) _itemButtons[i].Visible = false;
-        // The longest line the hint shows (a refine offer), and every action of the normal row at once.
-        _hint.Text = UiText.RefineOffer(UiText.EquipmentLine(_sampleName, 99, new[] { _sampleName }, 2), 99, 100, _sampleName, 999, 999, RefineFailures.Break);
-        _use.Visible = _equip.Visible = _unequip.Visible = _drop.Visible = _insertCard.Visible = _refine.Visible = true;
-        _confirm.Visible = _cancel.Visible = false;
+        // The longest selected line (refined equipment with two cards), four actions (more than any item offers at once: at most three) and,
+        // inside the scroll, the longest refine offer.
+        // A stack count (" x999") is longer than a refine level ("+7 "), and equipment never stacks, so this stays the longest selected line.
+        _hint.Text = UiText.ItemCount(_sampleName, 999);
+        foreach (var button in _itemButtons) if (button.Visible) button.Text = UiText.EquipmentLine(_sampleName, 99, new[] { _sampleName }, 2);
+        _equip.Visible = _drop.Visible = _insertCard.Visible = _refine.Visible = true;
+        _use.Visible = _unequip.Visible = _confirm.Visible = _cancel.Visible = false;
+        _offer.Text = UiText.RefineOffer(_hint.Text, 99, 100, _sampleName, 999, 999, RefineFailures.Break);
+        _offer.Visible = true;
         _choicesGrid.Visible = false;
         _slotsGrid.Visible = _itemsGrid.Visible = true;
     }
