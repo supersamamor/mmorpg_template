@@ -325,3 +325,15 @@ When writing these prompts, copy in the decisions listed:
 | 180 | A missing or wrong equipment key draws the theme's missing model at 0.3 scale on bone 0 (the hips), with one warning per key. Weapon-type clips are manifest entries `<animation id>.<weapon type>`, falling back to the generic clip (T-403) | **Decided: accepted.** |
 | 181 | The Bone Dirk placeholder looks like a staff, because `themegen` picks the hand-weapon shape by a hash of the key (T-403) | **→ Backlog:** choose the shape by weapon type, with the next `themegen` change. |
 | 182 | Validate that each equipment manifest entry has exactly one of `attach` or `skinned`, and that weapon-type clip suffixes are known weapon types (T-403) | **→ T-405:** a small validation task, with preloading worn visuals (a `DisplayBundle` list of worn visual keys). |
+
+## Addendum — T-402 (2026-11-17)
+| # | Question (source) | Decision |
+|---|---|---|
+| 183 | Refining is data in `content/refine.yaml`: max +7; +1 and +2 always succeed, then 90/75/60/45/30%; material Temper Shard ×1–3; a failure keeps the level up to +4, drops one at +5 and +6, and breaks the item at +7. One `Next(100)` from the instance random per try (T-402) | **Decided: accepted** as the starting table. It's balance data; tune it with T-404. |
+| 184 | Refine affects armour only through the item's own modifiers using the existing `refine` variable (Padded Vest `def: 4 + refine * 2`, Wooden Buckler `def: 2 + refine`); the weapon through `refine * 2` in `physical_damage`. No formula change (T-402) | **Decided: accepted.** |
+| 185 | One refine table for all gear (T-402) | **Decided: enough for v1.** A per-item table id waits until there's a reason for different tables. |
+| 186 | Cards are permanent, count only while the item is worn (source `card:<entry>:<socket>`), and their weight goes away when socketed (T-402) | **Decided: accepted.** Card removal → T-601 or later, as an NPC service. |
+| 187 | `insert_card` and `refine` work anywhere, cost no currency, and don't need an NPC (T-402) | **→ T-601** decides whether refining moves behind an NPC service; a currency cost waits for currency. |
+| 188 | In the bag, tapping a worn slot now selects the item (Take off, Refine) instead of taking it off at once, reversing T-401 (T-402) | **Decided: accepted.** It avoids taking gear off by accident on a phone. |
+| 189 | Bundle format 4 adds item `card_slots`, `refinable` and the refine table (chance, material, failure; no drop rates). The rate limit covers the new intents, because it applies to every inbound message (T-402) | **Decided: accepted.** |
+| 190 | `run-e2e.ps1` once kept waiting after the `replaced` client had passed and exited, until its server was stopped (T-402) | **→ T-221**, with the import and export hangs. |
