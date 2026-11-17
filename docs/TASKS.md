@@ -76,6 +76,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-218 | Client robustness: root-cause the headless exit crash with model preload; validator check for manifest `fallbacks` | Claude Code | Opus 5.5 | [T-218](../tasks/prompts/T-218.md) | T-207 | Review | ADR-002 #133, #135 |
 | T-219 | Phase 2 leftovers: terrain-aware tap picking, theme-chain key checks, `MapGridFile` comment, `export-maps -Check` in CI | Claude Code | Sonnet 5.5 | [T-219](../tasks/prompts/T-219.md) | T-208, T-218 | Review | ADR-002 #142, #143, #145, #146 |
 | T-220 | Phase 3 leftovers: crowd draw calls under 100, release-export guard in `run-e2e.ps1`, scripted hill tap, audio key chain | Claude Code | Opus 5.5 | [T-220](../tasks/prompts/T-220.md) | T-219, T-303, T-305 | Review | ADR-002 #148, #149, #155, #163 |
+| T-221 | Godot tooling hangs: one bounded, retried helper for import and export, bounded harness waits, root cause of the import and export-exit hangs | Claude Code | Opus 5.5 | [T-221](../tasks/prompts/T-221.md) | T-218, T-220 | In Progress | ADR-002 #163, #176, #190 |
 
 ## Phase 3 — Combat loop
 
@@ -111,7 +112,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
 | T-404 | 4 | Early balance with weapons: retune the Rock Beetle and Thornback Boar (ADR-002 #117, #175) | Claude Code | Sonnet 5.5 | Backlog |
 | T-405 | 4 | Equipment manifest validation (`attach` xor `skinned`, weapon-type clip names) and preloading worn visuals (ADR-002 #182) | Claude Code | Sonnet 5.5 | Backlog |
-| T-221 | 2 | Bounded, retried Godot import in `godot-path.ps1`; reproduce the intermittent headless import hang (ADR-002 #176) | Claude Code | Opus 5.5 | Backlog |
 | T-501 | 5 | Effect runner + statuses | Claude Code | Opus 5.5 | Backlog |
 | T-502 | 5 | Skill trees, job change, cast/cooldown | Claude Code | Sonnet 5.5 | Backlog |
 | T-503 | 5 | Stat and skill reset (respec) as an item or NPC service, data-driven cost | Claude Code | Sonnet 5.5 | Backlog |
