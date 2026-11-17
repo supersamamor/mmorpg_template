@@ -337,3 +337,14 @@ When writing these prompts, copy in the decisions listed:
 | 188 | In the bag, tapping a worn slot now selects the item (Take off, Refine) instead of taking it off at once, reversing T-401 (T-402) | **Decided: accepted.** It avoids taking gear off by accident on a phone. |
 | 189 | Bundle format 4 adds item `card_slots`, `refinable` and the refine table (chance, material, failure; no drop rates). The rate limit covers the new intents, because it applies to every inbound message (T-402) | **Decided: accepted.** |
 | 190 | `run-e2e.ps1` once kept waiting after the `replaced` client had passed and exited, until its server was stopped (T-402) | **→ T-221**, with the import and export hangs. |
+
+## Addendum — T-221 (2026-11-17)
+| # | Question (source) | Decision |
+|---|---|---|
+| 191 | Cause of the Windows `--import` and export-exit hangs: the editor's Android plugin polls `adb devices` (our debug preset is `runnable=true`), adb forks a server into the console wrapper's job, and headless Godot reads `shutdown_adb_on_exit` too late to stop it, so the wrapper waits forever after Godot exited 0. Minimal repro hung 4/4, 0/4 with `runnable=false`. Not related to row 141 (T-221) | **Decided: accepted** as the explanation. It's an engine bug; the workaround stays. |
+| 192 | One helper, `Invoke-GodotStep` in `godot-path.ps1`, runs every headless step with a per-step limit, an output-complete check and a shorter exit wait, stops the process tree by id, and retries a bounded number of times. A wrapper held after Godot exited is judged by Godot's own exit code (T-221) | **Decided: accepted.** Limits: import 180 s ×3, map export 300 s ×3, Android export 900 s ×2 (600 s on CI), release export 600 s ×3 (×2 on CI). |
+| 193 | Proof: import 29 clean + 1 wrapper held (recovered) of 30, release export 19 + 1 of 20, no retries needed, no failures (T-221) | **Decided: accepted.** |
+| 194 | Row 190 was not reproduced (20/20 passes). Mechanism shown: a child started with redirected output inherits the script's output handle, so a server left running holds the caller. `run-e2e.ps1` now stops every process it started, and a client that printed its result gets 30 s to exit (T-221) | **Decided: accepted.** |
+| 195 | CI Godot job timeouts raised to each script's worst case plus margin (job 200 min). The job has never run on GitHub (T-221) | **Decided: accepted.** First real run → T-005 or the first push. |
+| 196 | Set `runnable=false` on the Android debug preset to stop adb polling at the source (T-221 follow-up) | **Open — user.** It disables one-click deploy from the editor; the helper already handles the hang. |
+| 197 | Report the `shutdown_adb_on_exit` headless bug to Godot (T-221 follow-up) | **Open — user.** It's a public post. |
