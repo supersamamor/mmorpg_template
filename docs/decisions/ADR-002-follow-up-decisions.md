@@ -388,3 +388,14 @@ When writing these prompts, copy in the decisions listed:
 | 223 | Equipping still has one 60–105 ms frame: the body re-merge in `GearMesher.Dress` (T-405) | **→ T-222** if the toon material work touches `GearMesher`; otherwise **→ Backlog:** build the merge ahead of time or spread it over frames. |
 | 224 | `themegen` reads each weapon's type from `content/items/*.yaml` (`--content` to override) to pick its placeholder shape (T-405) | **Decided: accepted.** Placeholder generation may read content; the game client still reads only the bundle. |
 | 225 | `ModelStore.HasPiece` is true for a piece that failed to load, so a failed preload isn't retried (T-405) | **→ T-222** (same files). |
+
+## Addendum — T-222 (2026-11-18)
+| # | Question (source) | Decision |
+|---|---|---|
+| 226 | Toon look as theme data: `themes/default/render/` (toon light include, toon and outline shaders and materials, environment scene), found by a `"render"` tag on manifest entries (`mat.toon`, `mat.outline`, `scene.environment`); a theme without them falls back to the old look with one warning; `toon_shading` switches it off (T-222) | **Decided: accepted.** Follows ADR-003. |
+| 227 | Outlines: inverted hull as a `material_overlay`, closed by an outline direction themegen writes into glTF `TANGENT`; on living characters, monsters, NPCs and ground items within `outline_distance_cells` = 10, at most `outline_max_count` = 6 nearest (T-222) | **Decided: accepted.** |
+| 228 | Godot's Mobile renderer counter doesn't count the overlay pass. Measured crowd peak 97 at 37 on screen; if each outline is one more GPU draw, the worst case is 103 (over §9's 100) (T-222) | **→ T-803:** measure the real overlay cost on a phone; until then the cap of 6 stays, and lowering it to 3 is the fallback. |
+| 229 | Placeholder triangles rose (crowd peak 12.9k → 57k, dressed 83k), under the 150k budget; one 1024² hard shadow map, 24-unit range (T-222) | **Decided: accepted.** Shadow cost goes on the T-803 checklist. |
+| 230 | Body re-merge (`GearMesher`) runs on a worker and preloaded pieces are read ahead: worst equip frame 58.9 → 35 ms (closes row 223). Failed pieces retry up to `piece_load_attempts` = 3 (closes row 225). Skill slot text redraws only per whole second and shrinks to fit (closes row 220) (T-222) | **Decided: accepted.** |
+| 231 | Godot's glTF importer ignores `COLOR_0`, so `GearMesher` and `ToonLook` apply vertex colours themselves; the job palette lives in `themes/default/palette.json`, read only by themegen (T-222) | **Decided: accepted.** |
+| 232 | Leftovers: ARCHITECTURE §8 still says placeholders are coloured from the key; map scenes include the toon light by an absolute `res://themes/default/...` path; the `--measure` client sometimes stays in Reconnecting on a loaded machine (3 of 9); one run showed the HUD at 61 canvas draws (T-222) | **→ T-406** (new backlog row: client and theme leftovers after the toon pass). |

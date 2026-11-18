@@ -121,6 +121,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
 | T-404 | 4 | Early balance with weapons: retune the Rock Beetle and Thornback Boar (ADR-002 #117, #175) | Claude Code | Sonnet 5.5 | Backlog |
+| T-406 | 4 | Toon pass leftovers: ARCHITECTURE §8 placeholder colours, theme-relative toon light include in map scenes, `--measure` stuck in Reconnecting, HUD canvas draw spike (ADR-002 #232) | Claude Code | Sonnet 5.5 | Backlog |
 | T-601 | 6 | Dialogue graphs + NPC interaction | Claude Code | Sonnet 5.5 | Backlog |
 | T-602 | 6 | Quest state machine on event bus | Claude Code | Opus 5.5 | Backlog |
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
