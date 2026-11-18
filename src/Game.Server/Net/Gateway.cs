@@ -5,6 +5,7 @@ using Game.Server.Hosting;
 using Game.Server.World;
 using Game.Server.World.Aoi;
 using Game.Server.World.Combat;
+using Game.Server.World.Effects;
 using Game.Server.World.Inventory;
 using Game.Shared.Progression;
 using Game.Shared.Protocol;
@@ -144,7 +145,12 @@ public sealed class Gateway
             events.Subscribe<PlayerRespawned>(e => Owner(e.Player)?.Post(new RespawnedMessage(e.MapId, e.Cell, e.Hp)));
             events.Subscribe<ExpGained>(e => PostExp(e.Player));
             events.Subscribe<ExpLost>(e => PostExp(e.Player));
-            events.Subscribe<PlayerProgressed>(OnProgressed);
+            events.Subscribe<PlayerProgressed>(e => OnProgressed(instance.MapId, e));
+            // Skills, owner only (T-502): refusals as rejected, the cooldown that starts, and the whole list after anything that changes it.
+            events.Subscribe<SkillRefused>(e => Owner(e.Caster)?.Post(new RejectedMessage(MessageTypes.UseSkill, e.Reason, null, e.Target?.Value, Skill: e.SkillId)));
+            events.Subscribe<SkillLearnRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(MessageTypes.LearnSkill, e.Reason, null, Skill: e.SkillId)));
+            events.Subscribe<JobChangeRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(MessageTypes.ChangeJob, e.Reason, null, Skill: e.JobId)));
+            events.Subscribe<SkillCooldownStarted>(e => Owner(e.Player)?.Post(new CooldownMessage(e.SkillId, e.Ms)));
             // Inventory, owner only: each change, each refine's outcome (after its change), and each refused item intent as rejected.
             events.Subscribe<InventoryChanged>(e => Owner(e.Player)?.Post(OwnInventory.Message(e)));
             events.Subscribe<ItemRefined>(e => Owner(e.Player)?.Post(OwnInventory.Message(e)));
@@ -470,11 +476,31 @@ public sealed class Gateway
         if (Inventory?.For(player) is { } inventory) Owner(player)?.Post(inventory);
     }
 
-    private void OnProgressed(PlayerProgressed e)
+    /// <summary>Tick thread of the player's instance (the only thread that touches its skills and cooldowns).</summary>
+    internal void PostSkills(string mapId, EntityId player)
+    {
+        if (Progress is null || Owner(player) is not { } session || !_world.TryGetInstance(mapId, out var instance) || !instance.TryGetEntity(player, out var entity)) return;
+        if (Progress.SkillsFor(entity) is { } skills) session.Post(skills);
+    }
+
+    private void OnProgressed(string mapId, PlayerProgressed e)
     {
         if (Owner(e.Player) is not { } session) return;
-        if (e.Change is LevelUp up) session.Post(new LevelUpMessage(up.NewLevel, null));
-        else if (e.Change is JobLevelUp jobUp) session.Post(new LevelUpMessage(null, jobUp.NewLevel));
+        if (e.Change is LevelUp up)
+        {
+            session.Post(new LevelUpMessage(up.NewLevel, null));
+            PostSkills(mapId, e.Player);   // a job may have become available
+        }
+        else if (e.Change is JobLevelUp jobUp)
+        {
+            session.Post(new LevelUpMessage(null, jobUp.NewLevel));
+            PostSkills(mapId, e.Player);   // new points, and maybe a job to change to
+        }
+        else if (e.Change is SkillLearned or JobChanged)
+        {
+            PostSkills(mapId, e.Player);
+            PostExp(e.Player);   // a new job starts at job level 1
+        }
     }
 
     private void OnEnteredMap(EntityEnteredMap e)

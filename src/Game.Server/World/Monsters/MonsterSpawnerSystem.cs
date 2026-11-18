@@ -147,6 +147,7 @@ public sealed class MonsterSpawnerSystem : ITickSystem
                 e.DefinitionId = def.Id;
                 e.Stats = _catalog.CreateStats(def);
                 e.Owner = ownerId;
+                e.SummonedByPlayer = owner.Kind == EntityKind.Player;
             });
             _summons.Add(id.Value, new Summoned(ownerId, def.Id, expires));
             Spawned++;

@@ -101,6 +101,20 @@ public sealed class ViewMessageWriter
             }
             w.WriteEndArray();
         }
+        var starts = delta.Casts;
+        if (starts.Count > 0)
+        {
+            w.WriteStartArray("casts");
+            for (var i = 0; i < starts.Count; i++) ProtocolJson.WriteCast(w, starts[i].Caster.Value, starts[i].Skill, starts[i].Ms);
+            w.WriteEndArray();
+        }
+        var ends = delta.CastEnds;
+        if (ends.Count > 0)
+        {
+            w.WriteStartArray("cast_ends");
+            for (var i = 0; i < ends.Count; i++) ProtocolJson.WriteCastEnd(w, ends[i].Caster.Value, ends[i].Skill, ends[i].Result!);
+            w.WriteEndArray();
+        }
         if (delta.Vitals is { } own) ProtocolJson.WriteVitals(w, own.Hp, own.MaxHp, own.Sp, own.MaxSp);
         w.WriteEndObject();
         return End();

@@ -38,6 +38,10 @@ public class ProtocolJsonTests
         { "drop_item", new DropItemMessage(12, 2), """{"type":"drop_item","entry":12,"quantity":2}""" },
         { "insert_card", new InsertCardMessage(7, 12), """{"type":"insert_card","entry":7,"card":12}""" },
         { "refine", new RefineMessage(7), """{"type":"refine","entry":7}""" },
+        { "use_skill on an entity", new UseSkillMessage("skill.twin_strike", null, 7), """{"type":"use_skill","skill":"skill.twin_strike","target":7}""" },
+        { "use_skill on the ground at a level", new UseSkillMessage("skill.mana_font", 2, null, new GridCell(5, 6)), """{"type":"use_skill","skill":"skill.mana_font","level":2,"cell":[5,6]}""" },
+        { "learn_skill", new LearnSkillMessage("skill.twin_strike"), """{"type":"learn_skill","skill":"skill.twin_strike"}""" },
+        { "change_job", new ChangeJobMessage("job.spellbinder"), """{"type":"change_job","job":"job.spellbinder"}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -90,6 +94,21 @@ public class ProtocolJsonTests
         {
             "rejected attack", new RejectedMessage("attack", "target_gone", null, 99),
             """{"type":"rejected","intent":"attack","reason":"target_gone","target":99}"""
+        },
+        {
+            "delta with casts: a cast bar opens and one closes",
+            new DeltaMessage(7, [], [], [], null, null, [new CastRecord(7, "skill.ember_bolt", 993)], [new CastEndRecord(9, "skill.venom_sting", "done")]),
+            """{"type":"delta","tick":7,"casts":[[7,"skill.ember_bolt",993]],"cast_ends":[[9,"skill.venom_sting","done"]]}"""
+        },
+        {
+            "skills", new SkillsMessage("job.wanderer", 3, [new SkillLevelRecord("skill.second_wind", 2)], [new SkillCooldownRecord("skill.second_wind", 4000)], ["job.spellbinder"]),
+            """{"type":"skills","job":"job.wanderer","points":3,"levels":[["skill.second_wind",2]],"cooldowns":[["skill.second_wind",4000]],"jobs":["job.spellbinder"]}"""
+        },
+        { "skills, nothing yet", new SkillsMessage("job.wanderer", 0, [], [], []), """{"type":"skills","job":"job.wanderer","points":0,"levels":[],"cooldowns":[],"jobs":[]}""" },
+        { "cooldown", new CooldownMessage("skill.twin_strike", 1500), """{"type":"cooldown","skill":"skill.twin_strike","ms":1500}""" },
+        {
+            "rejected skill intent", new RejectedMessage("use_skill", "on_cooldown", null, 7, Skill: "skill.twin_strike"),
+            """{"type":"rejected","intent":"use_skill","reason":"on_cooldown","target":7,"skill":"skill.twin_strike"}"""
         },
         { "attack_stopped", new AttackStoppedMessage(7, "target_dead"), """{"type":"attack_stopped","target":7,"reason":"target_dead"}""" },
         {

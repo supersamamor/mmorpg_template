@@ -184,6 +184,71 @@ public static class UiText
     /// <summary>The refine confirmation button.</summary>
     public const string ConfirmRefine = "Refine now";
 
+    /// <summary>The skills button (T-502).</summary>
+    public const string Skills = "Skills";
+
+    /// <summary>The skill panel's title.</summary>
+    public const string SkillsTitle = "Skills";
+
+    /// <summary>The skill panel's hint when nothing is selected.</summary>
+    public const string PickASkill = "Tap a skill to read it or learn it.";
+
+    /// <summary>The learn button.</summary>
+    public const string Learn = "Learn";
+
+    /// <summary>Points left to spend, e.g. <c>Skill points: 3</c>.</summary>
+    public static string SkillPoints(int points) => "Skill points: " + points.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>The player's job line in the skill panel.</summary>
+    public static string JobLine(string job) => "Job: " + job;
+
+    /// <summary>A skill's level in the tree, e.g. <c>Lv 2/5</c>.</summary>
+    public static string SkillLevel(int level, int max) => "Lv " + level.ToString(CultureInfo.InvariantCulture) + "/" + max.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>A requirement that is not met, e.g. <c>Needs Ember Bolt Lv 2</c>.</summary>
+    public static string Needs(string skill, int level) => "Needs " + skill + " Lv " + level.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>A passive skill's tag.</summary>
+    public const string Passive = "Passive";
+
+    /// <summary>The job-change button for a job the player can change to.</summary>
+    public static string BecomeJob(string job) => "Become " + job;
+
+    /// <summary>The skill bar's cooldown text, whole seconds left rounded up.</summary>
+    public static string CooldownLeft(double seconds) => Math.Ceiling(seconds).ToString(CultureInfo.InvariantCulture) + "s";
+
+    /// <summary>The flash when a skill needs a target (T-502): tap an enemy.</summary>
+    public static string TapTarget(string skill) => skill + ": tap a target";
+
+    /// <summary>The flash when a skill needs a cell: tap the ground.</summary>
+    public static string TapGround(string skill) => skill + ": tap the ground";
+
+    /// <summary>The flash for a refused skill intent (a "Skill reasons" term); empty for a reason that needs no word.</summary>
+    public static string SkillRefused(string reason) => reason switch
+    {
+        SkillReasons.NotLearned => "You have not learned that.",
+        SkillReasons.LevelTooHigh => "You have not learned that level.",
+        SkillReasons.PassiveSkill => "That works by itself.",
+        SkillReasons.NotEnoughSp => "Not enough SP.",
+        SkillReasons.OnCooldown => "Not ready yet.",
+        SkillReasons.WrongWeapon => "Your weapon cannot do that.",
+        SkillReasons.OutOfRange or "no_line_of_sight" => "You cannot reach that.",
+        SkillReasons.SafeZone => "Not here.",
+        SkillReasons.InvalidTarget => "That is not a target for it.",
+        SkillReasons.TargetGone or SkillReasons.TargetDead => "That target is gone.",
+        SkillReasons.CannotUseSkills => "You cannot use skills right now.",
+        SkillReasons.NotEnoughPoints => "No skill points left.",
+        SkillReasons.NotInTree => "Your job cannot learn that.",
+        SkillReasons.AtMaxLevel => "Already at its highest level.",
+        SkillReasons.PrerequisiteNotMet => "Learn the skill before it first.",
+        SkillReasons.BaseLevelTooLow => "Your level is too low for that job.",
+        SkillReasons.JobLevelTooLow => "Your job level is too low for that job.",
+        SkillReasons.QuestNotCompleted => "A quest for that job is not done yet.",
+        SkillReasons.NotUnlocked => "That job is not open to you yet.",
+        SkillReasons.WrongParentJob or SkillReasons.SameJob or SkillReasons.UnknownJob or SkillReasons.UnknownSkill => "That is not possible.",
+        _ => string.Empty,
+    };
+
     /// <summary>Cancels a pending choice (card target or refine).</summary>
     public const string Cancel = "Cancel";
 

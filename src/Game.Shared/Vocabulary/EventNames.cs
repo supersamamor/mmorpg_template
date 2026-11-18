@@ -168,6 +168,18 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>SkillRefused</c>: a skill request was dropped (reason: a <c>SkillReasons</c> term).</summary>
         public const string SkillRefused = "SkillRefused";
 
+        /// <summary><c>SkillCastEnded</c>: a cast ended: done, cancelled or interrupted.</summary>
+        public const string SkillCastEnded = "SkillCastEnded";
+
+        /// <summary><c>SkillCooldownStarted</c>: a player's skill went on cooldown.</summary>
+        public const string SkillCooldownStarted = "SkillCooldownStarted";
+
+        /// <summary><c>SkillLearnRefused</c>: a learn_skill intent was refused.</summary>
+        public const string SkillLearnRefused = "SkillLearnRefused";
+
+        /// <summary><c>JobChangeRefused</c>: a change_job intent was refused.</summary>
+        public const string JobChangeRefused = "JobChangeRefused";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -224,6 +236,10 @@ namespace Game.Shared.Vocabulary
             SkillCastStarted,
             SkillRequested,
             SkillUsed,
-            SkillRefused);
+            SkillRefused,
+            SkillCastEnded,
+            SkillCooldownStarted,
+            SkillLearnRefused,
+            JobChangeRefused);
     }
 }

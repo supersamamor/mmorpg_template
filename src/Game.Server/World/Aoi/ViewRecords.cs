@@ -46,6 +46,9 @@ public readonly record struct OwnVitals(int Hp, int MaxHp, int Sp, int MaxSp);
 /// <param name="Result">A <c>HitResults</c> term.</param>
 public readonly record struct HitView(EntityId Attacker, EntityId Target, int Amount, string Result);
 
+/// <summary>A cast that began (<c>Ms</c> above 0) or, with a <c>Result</c>, ended (T-502); seen by whoever sees the caster.</summary>
+public readonly record struct CastView(EntityId Caster, string Skill, int Ms, string? Result);
+
 /// <summary>The parts of an <see cref="EntityView"/> that changed (VOCABULARY "View fields").</summary>
 [Flags]
 public enum ViewFields
@@ -129,6 +132,8 @@ public sealed class ViewDelta
     internal readonly List<EntityChange> ChangedList = new();
     internal readonly List<EntityId> DisappearedList = new();
     internal readonly List<HitView> HitList = new();
+    internal readonly List<CastView> StartList = new();
+    internal readonly List<CastView> EndList = new();
 
     internal ViewDelta()
     {
@@ -155,10 +160,16 @@ public sealed class ViewDelta
     /// <summary>This tick's attacks whose attacker or target the observer sees (after this delta), in the order combat resolved them.</summary>
     public IReadOnlyList<HitView> Hits => HitList;
 
+    /// <summary>Casts that began this tick whose caster the observer sees.</summary>
+    public IReadOnlyList<CastView> Casts => StartList;
+
+    /// <summary>Casts that ended this tick whose caster the observer sees.</summary>
+    public IReadOnlyList<CastView> CastEnds => EndList;
+
     /// <summary>The observer's own HP and SP when one of them changed this tick, else null.</summary>
     public OwnVitals? Vitals { get; internal set; }
 
-    internal bool IsEmpty => AppearedList.Count == 0 && ChangedList.Count == 0 && DisappearedList.Count == 0 && HitList.Count == 0 && Vitals is null;
+    internal bool IsEmpty => AppearedList.Count == 0 && ChangedList.Count == 0 && DisappearedList.Count == 0 && HitList.Count == 0 && StartList.Count == 0 && EndList.Count == 0 && Vitals is null;
 
     internal void Clear()
     {
@@ -166,6 +177,8 @@ public sealed class ViewDelta
         ChangedList.Clear();
         DisappearedList.Clear();
         HitList.Clear();
+        StartList.Clear();
+        EndList.Clear();
         Vitals = null;
     }
 }

@@ -3,6 +3,7 @@ using Game.Server.World.Effects;
 using Game.Shared.Definitions;
 using Game.Shared.Effects;
 using Game.Shared.Formulas;
+using Game.Shared.Protocol;
 using Game.Shared.Stats;
 using Game.Shared.Vocabulary;
 using Game.Shared.World;
@@ -55,6 +56,7 @@ public sealed class MonsterAiSystem : ITickSystem
     private readonly FormulaContext _formula = new(FormulaSymbols.Default);
     private readonly Dictionary<long, Brain> _byId = new();
     private readonly List<Brain> _brains = new();     // sorted by entity id
+    private readonly List<Brain> _allies = new();     // the brains of players' summons
     private PlayerGrid? _players;
     private MapInstance? _instance;
     private long _tick = -1;
@@ -143,6 +145,12 @@ public sealed class MonsterAiSystem : ITickSystem
         var provoker = brain.Provoker;
         brain.Provoker = null;
 
+        if (brain.Entity.SummonedByPlayer && brain.Entity.Owner is { } owner)
+        {
+            Ally(context, brain, owner, provoker);
+            return true;
+        }
+
         if (brain.State == AiStates.Return)
         {
             Return(context, brain);
@@ -216,7 +224,7 @@ public sealed class MonsterAiSystem : ITickSystem
             GiveUp(context, brain, AggroReasons.TargetGone);
             return;
         }
-        if (GridDistance.Chebyshev(entity.Cell, brain.Home) > brain.Def.Ai.ChaseRange)
+        if (!entity.SummonedByPlayer && GridDistance.Chebyshev(entity.Cell, brain.Home) > brain.Def.Ai.ChaseRange)
         {
             GiveUp(context, brain, AggroReasons.Leash);
             return;
@@ -288,7 +296,7 @@ public sealed class MonsterAiSystem : ITickSystem
             var level = Math.Max(1, entry.Level);
             WriteCaster(stats, level);
             var castMs = (int)Math.Max(0, Math.Floor(skill.CastTimeMs.Evaluate(_formula) * stats.Get(CastTimeModStat) + 1e-9));
-            var cast = brain.Casting = new CastState(i, skill, level, aim.Ground || self ? null : target.Id, aim.Ground ? target.Cell : null, _nowMs + castMs);
+            var cast = brain.Casting = new CastState(i, skill, level, aim.Ground || self ? null : target.Id, aim.Ground ? target.Cell : null, _nowMs + castMs, castMs);
             Casts++;
             if (castMs > 0)
             {
@@ -307,15 +315,93 @@ public sealed class MonsterAiSystem : ITickSystem
         var cast = brain.Casting!;
         if (brain.Entity.CannotUseSkills)
         {
-            brain.Casting = null;
+            EndCast(context, brain, CastResults.Interrupted);
             return;
         }
         if (_nowMs < cast.EndsAtMs) return;
-        brain.Casting = null;
+        EndCast(context, brain, CastResults.Done);
         WriteCaster(brain.Entity.Stats!, cast.Level);
         var cooldown = Math.Max(0, cast.Skill.CooldownMs.Evaluate(_formula));
         brain.SkillReadyMs[cast.Entry] = _nowMs + (long)Math.Floor(cooldown + 1e-9);
         context.Publish(new SkillRequested(brain.Entity.Id, cast.Skill.Id, cast.Level, cast.Target, cast.Cell, _nowMs));
+    }
+
+    /// <summary>Clears the cast in progress and, when it had a cast time, tells observers how it ended (<c>SkillCastEnded</c>).</summary>
+    private static void EndCast(TickContext context, Brain brain, string result)
+    {
+        if (brain.Casting is not { } cast) return;
+        brain.Casting = null;
+        if (cast.CastMs > 0) context.Publish(new SkillCastEnded(brain.Entity.Id, cast.Skill.Id, result));
+    }
+
+    // ---- a player's summon (T-502) ----------------------------------------------------------------------------------------------------
+    //
+    // The rule: a summon is on its owner's side. It never scans for players and never targets one; it attacks the nearest living monster that is not
+    // a player's summon, within chase_range of itself and of its owner, or whoever just hit its owner or itself. With nothing to fight it follows its owner
+    // to within balance ai.wander_radius cells. It has no home and no leash. It earns nobody EXP or loot (credit goes to players only).
+
+    private void Ally(TickContext context, Brain brain, EntityId ownerId, EntityId? provoker)
+    {
+        var entity = brain.Entity;
+        if (!Alive(context, ownerId, out var owner))
+        {
+            if (brain.Walking || brain.MovePending(_tick)) Stop(context, brain);
+            return;
+        }
+        var range = brain.Def.Ai.ChaseRange;
+        if (brain.Target is { } current)
+        {
+            if (brain.Unreachable || !Alive(context, current, out var enemy) || enemy.OnPlayerSide || GridDistance.Chebyshev(owner.Cell, enemy.Cell) > range)
+            {
+                context.Publish(new AggroLost(entity.Id, current, AggroReasons.TargetGone));
+                EndCast(context, brain, CastResults.Interrupted);
+                brain.Target = null;
+                brain.Unreachable = false;
+            }
+        }
+        if (brain.Target is null)
+        {
+            if (provoker is { } source && Alive(context, source, out var attacker) && !attacker.OnPlayerSide) Engage(context, brain, source, AggroReasons.Attacked);
+            else if (_nowMs >= brain.NextThinkMs)
+            {
+                brain.NextThinkMs = _nowMs + _ai.ThinkIntervalMs;
+                Scans++;
+                if (NearestEnemy(entity, owner, range) is { } found) Engage(context, brain, found, AggroReasons.Sighted);
+            }
+        }
+        if (brain.Target is not null)
+        {
+            Pursue(context, brain);
+            return;
+        }
+
+        brain.State = AiStates.Idle;
+        var follow = GridDistance.Chebyshev(entity.Cell, owner.Cell) > _ai.WanderRadius;
+        if (!follow)
+        {
+            if (brain.Walking || brain.MovePending(_tick)) Stop(context, brain);
+            return;
+        }
+        if (brain.Walking || brain.MovePending(_tick) || _nowMs < brain.NextRepathMs) return;
+        Move(context, brain, owner.Cell);
+        brain.NextRepathMs = _nowMs + _ai.RepathIntervalMs;
+    }
+
+    /// <summary>The nearest living monster of the wild side within <paramref name="range"/> of the summon and of its owner (ties: the lower id).</summary>
+    private EntityId? NearestEnemy(Entity summon, Entity owner, int range)
+    {
+        EntityId? best = null;
+        var bestDistance = int.MaxValue;
+        foreach (var other in _brains)   // sorted by id, so the first of equal distances wins
+        {
+            var e = other.Entity;
+            if (e.Dead || e.OnPlayerSide) continue;
+            var distance = GridDistance.Chebyshev(summon.Cell, e.Cell);
+            if (distance > range || distance >= bestDistance || GridDistance.Chebyshev(owner.Cell, e.Cell) > range) continue;
+            best = e.Id;
+            bestDistance = distance;
+        }
+        return best;
     }
 
     private void WriteCaster(StatSheet stats, int level)
@@ -362,7 +448,7 @@ public sealed class MonsterAiSystem : ITickSystem
         if (brain.Target is { } target) context.Publish(new AggroLost(brain.Entity.Id, target, reason));
         brain.Target = null;
         brain.Unreachable = false;
-        brain.Casting = null;
+        EndCast(context, brain, CastResults.Interrupted);
         brain.State = AiStates.Return;
         brain.ReturnDeadlineMs = _nowMs + _ai.ReturnTimeoutMs;
         if (Same(brain.Entity.Cell, brain.Home))
@@ -420,6 +506,7 @@ public sealed class MonsterAiSystem : ITickSystem
             NextThinkMs = _nowMs + e.Entity.Value % Math.Max(1, _ai.ThinkIntervalMs / TickRate.IntervalMs) * TickRate.IntervalMs,
         };
         _byId.Add(e.Entity.Value, brain);
+        if (entity.SummonedByPlayer) _allies.Add(brain);
         var index = _brains.BinarySearch(brain, BrainOrder.Instance);
         _brains.Insert(index < 0 ? ~index : index, brain);
     }
@@ -429,11 +516,16 @@ public sealed class MonsterAiSystem : ITickSystem
         // A same-map warp (the return timeout) leaves and re-enters: only forget a monster that is really gone from this instance.
         if (e.Kind != EntityKind.Monster || _instance!.TryGetEntity(e.Entity, out _) || !_byId.Remove(e.Entity.Value, out var brain)) return;
         _brains.RemoveAt(_brains.BinarySearch(brain, BrainOrder.Instance));
+        _allies.Remove(brain);
     }
 
     private void OnDamage(DamageDealt e)
     {
-        if (_byId.TryGetValue(e.Target.Value, out var brain) && e.Source != e.Target) brain.Provoker = e.Source;
+        if (e.Source == e.Target) return;
+        if (_byId.TryGetValue(e.Target.Value, out var brain)) brain.Provoker = e.Source;
+        // Whoever hits a player is also set on by that player's summons.
+        foreach (var ally in _allies)
+            if (ally.Entity.Owner == e.Target && ally.Provoker is null && ally.Target is null) ally.Provoker = e.Source;
     }
 
     private void Walking(EntityId id, bool walking)
@@ -485,7 +577,7 @@ public sealed class MonsterAiSystem : ITickSystem
         public bool MovePending(long tick) => MoveIssued && tick - MoveIssuedTick <= 1;
     }
 
-    private sealed record CastState(int Entry, CompiledSkill Skill, int Level, EntityId? Target, GridCell? Cell, long EndsAtMs);
+    private sealed record CastState(int Entry, CompiledSkill Skill, int Level, EntityId? Target, GridCell? Cell, long EndsAtMs, int CastMs);
 
     private sealed class BrainOrder : IComparer<Brain>
     {

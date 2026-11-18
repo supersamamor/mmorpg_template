@@ -136,6 +136,17 @@ In `StatusRemoved` (a status that runs out raises `StatusExpired` instead): `rem
 ## Skill reasons
 In `SkillRefused` (a `SkillRequested` dropped before its effects ran): `caster_dead`, `target_dead`, `target_gone`, `out_of_range`, `no_line_of_sight`, `safe_zone`,
 `invalid_target`, `cannot_use_skills` (a status with `prevents_skills`).
+Player skills (T-502), in `SkillRefused` for a `use_skill`, in `SkillLearnRefused` for a `learn_skill` and in `JobChangeRefused` for a `change_job`, and on the wire as
+`rejected` (`intent` `use_skill`, `learn_skill` or `change_job`, with `skill` naming the skill or job):
+- use: `unknown_skill`, `not_learned` (level 0), `passive_skill` (cannot be cast), `level_too_high` (above the learned level), `not_enough_sp`, `on_cooldown`,
+  `wrong_weapon` (not in `weapon_types`; no weapon counts as `unarmed`). Range, sight, side and safe zone use the terms above.
+- learn: `unknown_skill`, `not_in_tree` (not in the job's tree or a parent job's), `at_max_level`, `prerequisite_not_met`, `not_enough_points`.
+- job change: `unknown_job`, `same_job`, `wrong_parent_job`, `base_level_too_low`, `job_level_too_low`, `quest_not_completed`, `not_unlocked`
+  (the first failed requirement, in this order).
+
+## Cast results
+In `SkillCastEnded` and a delta's `cast_ends`: `done` (the cast time ran out), `cancelled` (the caster moved, gave a new order or stopped), `interrupted` (a stun,
+death, lost target, or SP or cooldown that no longer allow it).
 
 ## Inventory
 **Entry**: one stack of an item, or one equipment item with its own instance id; worn entries stay in the inventory and count toward `inventory.max_entries`
@@ -168,7 +179,7 @@ Two-handed (`balance.yaml` `inventory.two_handed_weapon_types`): `sword_2h`, `st
 `MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `MonsterReturned`, `AttackRequested`, `AttackRefused`, `AttackStarted`, `AttackStopped`,
 `ExpGained`, `ExpLost`, `PlayerRespawned`, `ItemDropped`, `ItemExpired`, `ItemUnequipped`, `ItemDiscarded`, `ItemRefused`, `InventoryChanged`,
 `CardInserted`, `ItemRefined`, `StatusRemoved`, `HpRestored`, `SpRestored`, `KnockedBack`, `Teleported`, `SummonRequested`, `MonsterSummoned`, `AreaApplied`,
-`SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`
+`SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`, `SkillCastEnded`, `SkillCooldownStarted`, `SkillLearnRefused`, `JobChangeRefused`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -252,9 +263,9 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `pong`, `bye`
-Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`.
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `cooldown`, `pong`, `bye`
+Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `cooldown`.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,

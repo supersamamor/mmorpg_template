@@ -1,4 +1,5 @@
 using Game.Server.Events;
+using Game.Server.World.Effects;
 using Game.Server.World.Combat;
 using Game.Server.World.Monsters;
 using Game.Shared.Definitions;
@@ -61,6 +62,8 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
     private readonly List<EntityId> _snapshotIds = new();
     private readonly ViewSnapshot _snapshot = new();
     private readonly ViewDelta _delta = new();
+    private readonly List<CastView> _castStarts = new();         // this tick's SkillCastStarted
+    private readonly List<CastView> _castEnds = new();           // this tick's SkillCastEnded
     private readonly List<HitView> _hits = new();           // this tick's DamageDealt, in raise order
     private readonly List<long> _relinked = new();          // entities whose attack link changed this tick
     private readonly VisibleCap _cap;
@@ -142,6 +145,10 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
             if (_byId.TryGetValue(hit.Attacker.Value, out var attacker)) _grid.Touch(attacker.Bucket, tick);
             if (_byId.TryGetValue(hit.Target.Value, out var target)) _grid.Touch(target.Bucket, tick);
         }
+        foreach (var cast in _castStarts)
+            if (_byId.TryGetValue(cast.Caster.Value, out var caster)) _grid.Touch(caster.Bucket, tick);
+        foreach (var cast in _castEnds)
+            if (_byId.TryGetValue(cast.Caster.Value, out var caster)) _grid.Touch(caster.Bucket, tick);
         // So does a new or ended attack: it can change who the crowd cap keeps, even when nothing moved.
         foreach (var id in _relinked)
             if (_byId.TryGetValue(id, out var linked)) _grid.Touch(linked.Bucket, tick);
@@ -160,6 +167,8 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         }
         ObserverCount = observers;
         _hits.Clear();
+        _castStarts.Clear();
+        _castEnds.Clear();
     }
 
     private void Subscribe(MapInstance instance)
@@ -171,6 +180,8 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         _subscribed.Subscribe<MovementStopped>(OnMovementStopped);
         _subscribed.Subscribe<EntityEnteredMap>(OnEnteredMap);
         _subscribed.Subscribe<DamageDealt>(OnDamageDealt);
+        _subscribed.Subscribe<SkillCastStarted>(e => _castStarts.Add(new CastView(e.Caster, e.SkillId, e.CastMs, null)));
+        _subscribed.Subscribe<SkillCastEnded>(e => _castEnds.Add(new CastView(e.Caster, e.SkillId, 0, e.Result)));
         _subscribed.Subscribe<AttackStarted>(e => SetAttacking(e.Attacker, e.Target));
         _subscribed.Subscribe<AttackStopped>(e => ClearAttacking(e.Attacker, e.Target));
         _subscribed.Subscribe<AggroGained>(e => SetChasing(e.Monster, e.Target));
@@ -430,6 +441,10 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         }
         foreach (var hit in _hits)
             if (Sees(visible, hit.Attacker.Value) || Sees(visible, hit.Target.Value)) delta.HitList.Add(hit);
+        foreach (var cast in _castStarts)
+            if (Sees(visible, cast.Caster.Value)) delta.StartList.Add(cast);
+        foreach (var cast in _castEnds)
+            if (Sees(visible, cast.Caster.Value)) delta.EndList.Add(cast);
         if (vitalsChanged) delta.Vitals = vitals;
         if (delta.IsEmpty) return;
         delta.Tick = tick;

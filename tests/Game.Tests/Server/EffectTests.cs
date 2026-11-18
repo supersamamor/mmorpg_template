@@ -419,6 +419,7 @@ public class EffectTests
         var started = rig.TimedOf<SkillCastStarted>().First();
         started.Event.SkillId.ShouldBe("skill.venom_sting");
         started.Event.CastMs.ShouldBeInRange(1, 300);   // 300 × cast_time_mod
+        rig.Of<SkillCastEnded>().First().ShouldBe(new SkillCastEnded(started.Event.Caster, "skill.venom_sting", Game.Shared.Protocol.CastResults.Done));
         var requested = rig.TimedOf<SkillRequested>().First();
         (requested.Tick - started.Tick).ShouldBeInRange(2, 4);   // the cast time passes on the tick clock
         rig.Of<DamageDealt>().ShouldContain(d => d.Target == player);

@@ -19,7 +19,7 @@ public sealed class RecordingSink : IViewSink
     public sealed record SnapshotCopy(long Tick, string MapId, EntityId Observer, List<EntityView> Entities, OwnVitals? Vitals = null);
 
     public sealed record DeltaCopy(long Tick, string MapId, EntityId Observer, List<EntityView> Appeared, List<EntityChange> Changed, List<EntityId> Disappeared,
-        List<HitView>? Hits = null, OwnVitals? Vitals = null);
+        List<HitView>? Hits = null, OwnVitals? Vitals = null, List<CastView>? Casts = null, List<CastView>? CastEnds = null);
 
     public int Count => Lines.Count;
 
@@ -35,7 +35,7 @@ public sealed class RecordingSink : IViewSink
     public void OnDelta(ViewDelta delta)
     {
         Deltas.Add(new DeltaCopy(delta.Tick, delta.MapId, delta.Observer, delta.Appeared.ToList(), delta.Changed.ToList(), delta.Disappeared.ToList(),
-            delta.Hits.ToList(), delta.Vitals));
+            delta.Hits.ToList(), delta.Vitals, delta.Casts.ToList(), delta.CastEnds.ToList()));
         var parts = delta.Appeared.Select(e => "+" + e.Id)
             .Concat(delta.Changed.Select(c => $"~{c.View.Id}[{Fields(c.Fields)}]"))
             .Concat(delta.Disappeared.Select(id => "-" + id))

@@ -10,12 +10,15 @@
 #                                                         then wear the vest, socket the card (max HP up), refine the dagger once (hits up) (T-402)
 #   .\client\run-e2e.ps1 -Run statuses                    use a Swift Elixir (Swift in the HUD), fight a slime until it casts Iron Guard (Iron Skin marker above it) (T-501;
 #                                                         content copy: weak but tough slimes that cast Iron Guard, new characters start with a Swift Elixir)
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, bye, release
+#   .\client\run-e2e.ps1 -Run skills                      fight monsters that cast Mana Font (a cast bar over a monster) until the EXP brings skill points and a job to change to, then through the
+#                                                         skill panel: learn a skill, change job, learn a ranged attack; press its skill bar slot, tap a monster, see the own cast bar, the hit and
+#                                                         the cooldown sweep (T-502; content copy: weak monsters worth a lot of EXP, 3 skill points a job level)
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, bye, release
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -50,6 +53,7 @@ Import-GodotProject $godot $client -Force -TimeoutSeconds $ImportTimeoutSeconds
 $script:temp = $null
 $script:itemsTemp = $null
 $script:statusesTemp = $null
+$script:skillsTemp = $null
 # Every process this script starts (servers, the server exe under `dotnet run`, Godot and its game exe). Start-Process with redirection makes children
 # inherit this script's handles, so anything left running keeps the caller's output pipe open and the caller waiting after the script has ended
 # (ADR-002 row 190). The final cleanup stops whatever is still running and says so (T-221).
@@ -110,11 +114,34 @@ function Get-StatusesContent {
     return (Join-Path $script:statusesTemp "content")
 }
 
-function Start-GameServer([switch] $Easy, [switch] $Items, [switch] $Statuses, [string[]] $Extra = @()) {
+# The skills run's copy (T-502): the weak monsters, but with 60 HP so a cast has time to show, worth 3000 base and job EXP (one kill brings a few levels and the
+# job's requirements), casting Mana Font whenever their attack is due (a cast bar over a monster), and 3 skill points a job level. Monster AI, EXP and the
+# progression numbers are server-only data: the bundle hash does not change.
+function Get-SkillsContent {
+    if ($script:skillsTemp) { return (Join-Path $script:skillsTemp "content") }
+    $script:skillsTemp = Join-Path ([IO.Path]::GetTempPath()) ("t502-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $script:skillsTemp | Out-Null
+    Copy-Item (Get-EasyContent) (Join-Path $script:skillsTemp "content") -Recurse
+    Copy-Item (Join-Path $root "themes") (Join-Path $script:skillsTemp "themes") -Recurse
+    foreach ($file in Get-ChildItem (Join-Path $script:skillsTemp "content/monsters") -Filter *.yaml) {
+        $text = [IO.File]::ReadAllText($file.FullName)
+        $text = $text -replace 'max_hp: \d+', 'max_hp: 60' -replace '(?m)^base_exp: \d+', 'base_exp: 3000' -replace '(?m)^job_exp: \d+', 'job_exp: 3000'
+        $text = $text -replace '(?m)^  skills:\r?\n(    .*\r?\n)+', ''
+        $text = $text -replace '(?m)^  chase_range: (\d+)', "  chase_range: `$1`n  skills:`n    - { skill_id: skill.mana_font, level: 1, chance: 1 }"
+        [IO.File]::WriteAllText($file.FullName, $text)
+    }
+    $balance = Join-Path $script:skillsTemp "content/balance.yaml"
+    $text = [IO.File]::ReadAllText($balance) -replace 'skill_points_per_job_level: "1"', 'skill_points_per_job_level: "3"'
+    [IO.File]::WriteAllText($balance, $text)
+    return (Join-Path $script:skillsTemp "content")
+}
+
+function Start-GameServer([switch] $Easy, [switch] $Items, [switch] $Statuses, [switch] $Skills, [string[]] $Extra = @()) {
     $log = [IO.Path]::GetTempFileName()
     $arguments = @("run", "--no-build", "--project", "src/Game.Server", "--")
     if ($Items) { $arguments += (Get-ItemsContent) }
     elseif ($Statuses) { $arguments += (Get-StatusesContent) }
+    elseif ($Skills) { $arguments += (Get-SkillsContent) }
     elseif ($Easy) { $arguments += (Get-EasyContent) }
     $arguments += @("--seed", "$Seed", "--net-port", "$Port") + $Extra
     $process = Start-Process dotnet -PassThru -NoNewWindow -WorkingDirectory $root -RedirectStandardOutput $log -RedirectStandardError "$log.err" -ArgumentList $arguments
@@ -280,6 +307,11 @@ function Invoke-Scenario([string] $Name) {
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-statuses" @()) -EngineArgs $engineArgs
                 return (Wait-GodotClient $run 300).Code
             }
+            "skills" {
+                $server = Start-GameServer -Skills
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-skills" @()) -EngineArgs $engineArgs
+                return (Wait-GodotClient $run 400).Code
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -406,7 +438,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 $failed = @()
@@ -432,6 +464,7 @@ finally {
     }
     if ($script:temp) { Remove-Item $script:temp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:itemsTemp) { Remove-Item $script:itemsTemp -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($script:skillsTemp) { Remove-Item $script:skillsTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:statusesTemp) { Remove-Item $script:statusesTemp -Recurse -Force -ErrorAction SilentlyContinue }
 }
 if ($failed.Count -gt 0) { Write-Host "[run-e2e] FAILED: $($failed -join ', ')"; exit 1 }

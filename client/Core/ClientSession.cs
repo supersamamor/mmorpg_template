@@ -2,6 +2,7 @@ using Game.Client.Core.Bundle;
 using Game.Client.Core.Combat;
 using Game.Client.Core.Items;
 using Game.Client.Core.Net;
+using Game.Client.Core.Skills;
 using Game.Client.Core.Ui;
 using Game.Client.Core.World;
 using Game.Server.Net;
@@ -31,7 +32,9 @@ public sealed class ClientSession
         Connection = new ConnectionMachine(config, random);
         World = new WorldView(config);
         Ui = new UiState(config, bundle);
+        Skills = new SkillBook(bundle);
         Hotbar = new HotbarModel(config.HotbarSlots);
+        Hotbar.Bind(Skills, new SkillActivator(this));
         Numbers = new DamageNumberPool(config.MaxDamageNumbers, config.DamageNumberSeconds, config.DamageNumberLaneSeconds);
         World.Combat.Impact += Numbers.OnImpact;
     }
@@ -57,6 +60,9 @@ public sealed class ClientSession
     /// <summary>The hotbar's slots. Empty until T-502 binds skills; the client sends no skill intent yet.</summary>
     public HotbarModel Hotbar { get; }
 
+    /// <summary>The player's own skills, cooldowns and skill tree rows (T-502).</summary>
+    public SkillBook Skills { get; }
+
     /// <summary>Server messages applied so far (for measuring).</summary>
     public long MessagesApplied { get; private set; }
 
@@ -66,6 +72,7 @@ public sealed class ClientSession
         World.Reset();
         Ui.Reset();
         Inventory.Reset();
+        Skills.Reset();
         Numbers.Clear();
         Connection.Login(name, wallNow);
         RunCommands();
@@ -92,6 +99,15 @@ public sealed class ClientSession
     public void TapGround(GridCell cell, double viewNow)
     {
         if (Connection.Phase != ConnectionPhase.Online || Ui.Dead) return;
+        if (Ui.PendingSkill is { } pending)
+        {
+            if (_bundle.Skill(pending) is { Ground: true })
+            {
+                CastSkill(pending, null, cell);
+                return;
+            }
+            Ui.ClearPending();   // a ground tap is not the target the skill waits for: it is a walk
+        }
         Send(new MoveMessage(cell));
         Ui.OnMoveSent(cell, viewNow);
     }
@@ -100,6 +116,12 @@ public sealed class ClientSession
     public void TapEntity(long id)
     {
         if (Connection.Phase != ConnectionPhase.Online || Ui.Dead) return;
+        if (Ui.PendingSkill is { } pending && _bundle.Skill(pending) is { } waiting)
+        {
+            if (waiting.Ground && World.Find(id) is { } at) CastSkill(pending, null, at.Cell);
+            else CastSkill(pending, id, null);
+            return;
+        }
         Send(new AttackMessage(id));
         Ui.OnAttackSent(id);
     }
@@ -113,6 +135,43 @@ public sealed class ClientSession
     }
 
     /// <summary>The panel's Use button.</summary>
+    /// <summary>
+    /// A skill bar press (T-502). A skill on the caster goes out at once; one that needs an enemy goes out on the current target if there is a living one,
+    /// else waits for a tap on one; a ground skill waits for a tap on the ground. A second press of a waiting skill cancels it. The server checks everything.
+    /// </summary>
+    public void PressSkill(string skillId, double viewNow)
+    {
+        if (Connection.Phase != ConnectionPhase.Online || Ui.Dead || _bundle.Skill(skillId) is not { Passive: false } skill) return;
+        if (Ui.PendingSkill == skillId)
+        {
+            Ui.ClearPending();
+            return;
+        }
+        if (skill.OnSelf || (skill.Friendly && !skill.Ground))
+        {
+            CastSkill(skillId, null, null);
+            return;
+        }
+        if (!skill.Ground && Ui.Target is { } target && World.Find(target) is { Dead: false })
+        {
+            CastSkill(skillId, target, null);
+            return;
+        }
+        Ui.SetPending(skillId, skill.Ground ? UiText.TapGround(skill.Name) : UiText.TapTarget(skill.Name), viewNow);
+    }
+
+    private void CastSkill(string skillId, long? target, GridCell? cell)
+    {
+        Send(new UseSkillMessage(skillId, null, target, cell));
+        Ui.OnSkillSent(target);
+    }
+
+    /// <summary>Spends a skill point on a skill (T-502); the server answers with the new list or a refusal.</summary>
+    public void LearnSkill(string skillId) => SendItem(new LearnSkillMessage(skillId));
+
+    /// <summary>Asks to change job (T-502).</summary>
+    public void ChangeJob(string jobId) => SendItem(new ChangeJobMessage(jobId));
+
     public void UseItem(long entry) => SendItem(new UseItemMessage(entry));
 
     /// <summary>The panel's Equip button (the server picks the slot).</summary>
@@ -177,12 +236,17 @@ public sealed class ClientSession
         }
         Connection.Tick(wallNow);
         RunCommands();
+        _lastViewNow = viewNow;
         World.Advance(viewNow);
+        Skills.Update(viewNow);
         Ui.Tick(World, viewNow);
     }
 
+    private double _lastViewNow;
+
     private void Apply(ServerMessage message, double wallNow, double viewNow)
     {
+        _lastViewNow = viewNow;
         MessagesApplied++;
         switch (message)
         {
@@ -206,6 +270,12 @@ public sealed class ClientSession
                 break;
             case ExpMessage exp:
                 World.ApplyExp(exp);
+                break;
+            case SkillsMessage skills:
+                Skills.Apply(skills, viewNow);
+                break;
+            case CooldownMessage cooldown:
+                Skills.ApplyCooldown(cooldown, viewNow);
                 break;
             case InventoryMessage inventory:
                 Inventory.Apply(inventory);
@@ -273,4 +343,13 @@ public sealed class ClientSession
     }
 
     private void Send(ClientMessage message) => _socket.Send(ProtocolJson.ToBytes(message));
+
+    /// <summary>Binds the skill bar's slots to <see cref="PressSkill"/>.</summary>
+    private sealed class SkillActivator(ClientSession session) : IHotbarActivator
+    {
+        public void Activate(int index)
+        {
+            if (session.Skills.SkillAt(index) is { } skill) session.PressSkill(skill, session._lastViewNow);
+        }
+    }
 }

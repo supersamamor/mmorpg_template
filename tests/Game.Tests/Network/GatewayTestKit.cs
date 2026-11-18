@@ -41,7 +41,7 @@ public sealed class GatewayRig : IAsyncDisposable
         Content = content;
         var clock = new SystemClock();
         ContentHash = ClientBundleExporter.Hash(Content);
-        var progressions = new InMemoryProgressionStore();
+        var progressions = Progressions;
         World = new GameWorld(Content.Grids.Values, ServerPipeline.Create(Content, progressions, Inventories, clock), 1, clock, Log);
         Start = new NewCharacters(Content);
         Gateway = new Gateway(World, Start, options, Clock, Log, ContentHash, progress: new OwnProgress(Content, progressions),
@@ -51,6 +51,9 @@ public sealed class GatewayRig : IAsyncDisposable
 
     /// <summary>The players' inventories (the inventory systems write them; the gateway's own inventory messages read them).</summary>
     public InMemoryInventoryStore Inventories { get; } = new();
+
+    /// <summary>The players' progression (levels, points, skills): tests may set a character up here.</summary>
+    public InMemoryProgressionStore Progressions { get; } = new();
 
     public GatewayHost Host => _host ?? throw new InvalidOperationException("Not started.");
 

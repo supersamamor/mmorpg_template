@@ -113,6 +113,8 @@ public sealed class DisplayBundle
     private readonly Dictionary<string, MapData> _maps = new Dictionary<string, MapData>(StringComparer.Ordinal);
     private readonly Dictionary<string, ItemDisplay> _items = new Dictionary<string, ItemDisplay>(StringComparer.Ordinal);
     private readonly Dictionary<string, StatusDisplay> _statuses = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, SkillDisplay> _skills = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, JobDisplay> _jobs = new(StringComparer.Ordinal);
     private readonly List<RefineStep> _refineSteps = new List<RefineStep>();
 
     private DisplayBundle(int formatVersion, string contentHash)
@@ -164,6 +166,12 @@ public sealed class DisplayBundle
     /// <summary>A status's icon and vfx asset keys (T-501), or null for an id the bundle does not have.</summary>
     public StatusDisplay? Status(string? statusId) => statusId is not null && _statuses.TryGetValue(statusId, out var status) ? status : null;
 
+    /// <summary>A skill's display and targeting data (T-502), or null for an id the bundle does not have.</summary>
+    public SkillDisplay? Skill(string? skillId) => skillId is not null && _skills.TryGetValue(skillId, out var skill) ? skill : null;
+
+    /// <summary>A job's display data and skill tree (T-502), or null for an id the bundle does not have.</summary>
+    public JobDisplay? Job(string? jobId) => jobId is not null && _jobs.TryGetValue(jobId, out var job) ? job : null;
+
     /// <summary>The highest refine level (<c>refine.yaml</c>); 0 when nothing refines.</summary>
     public int RefineMaxLevel { get; private set; }
 
@@ -194,6 +202,8 @@ public sealed class DisplayBundle
                     var id = Text(entry, "id");
                     result._names[id] = Text(entry, "name");
                     ReadSounds(result, list, id, entry);
+                    if (list == "skills") result._skills[id] = ReadSkill(id, result._names[id], entry);
+                    if (list == "jobs") result._jobs[id] = ReadJob(id, result._names[id], entry);
                     if (list == "items") result._items[id] = ReadItem(id, result._names[id], entry);
                     if (list == "statuses")
                         result._statuses[id] = new StatusDisplay(id, result._names[id], entry.TryGetProperty("debuff", out var debuff) && debuff.ValueKind == JsonValueKind.True,
@@ -258,6 +268,31 @@ public sealed class DisplayBundle
         };
     }
 
+    private static SkillDisplay ReadSkill(string id, string name, JsonElement entry) =>
+        new(id, name, OptionalText(entry, "description"), Int(entry, "max_level", 1), Flag(entry, "passive"), Int(entry, "range", 0), Flag(entry, "ground"), Flag(entry, "friendly"),
+            entry.TryGetProperty("cast_time_ms", out var cast) && cast.ValueKind == JsonValueKind.Number ? cast.GetInt32() : null, OptionalText(entry, "icon"));
+
+    private static JobDisplay ReadJob(string id, string name, JsonElement entry)
+    {
+        var skills = new List<JobSkillDisplay>();
+        if (entry.TryGetProperty("skills", out var list) && list.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var skill in list.EnumerateArray())
+            {
+                var needs = new List<SkillNeed>();
+                if (skill.TryGetProperty("requires", out var requires) && requires.ValueKind == JsonValueKind.Array)
+                    foreach (var need in requires.EnumerateArray()) needs.Add(new SkillNeed(Text(need, "skill"), Int(need, "level", 1)));
+                skills.Add(new JobSkillDisplay(Text(skill, "skill"), skill.TryGetProperty("max_level", out var max) && max.ValueKind == JsonValueKind.Number ? max.GetInt32() : null, needs));
+            }
+        }
+        return new JobDisplay(id, name, OptionalText(entry, "description"), OptionalText(entry, "parent"), skills);
+    }
+
+    private static int Int(JsonElement element, string name, int fallback) =>
+        element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.Number ? value.GetInt32() : fallback;
+
+    private static bool Flag(JsonElement element, string name) => element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
+
     private static void ReadRefine(DisplayBundle bundle, JsonElement root)
     {
         if (!root.TryGetProperty("refine", out var refine)) return;   // no refine steps: nothing is offered for refining
@@ -321,3 +356,29 @@ public sealed record RefineStep(int Level, int SuccessPercent, string Material, 
 
 /// <summary>What the client shows of a status (T-501): its name, whether it is a debuff, its icon and its vfx asset keys (theme data, resolved by the theme chain, §7.7).</summary>
 public sealed record StatusDisplay(string Id, string Name, bool Debuff, string? IconKey, string? VfxKey);
+
+/// <summary>A skill as the display bundle describes it (T-502): never costs, cooldowns or effect numbers.</summary>
+/// <param name="Id">Skill id.</param>
+/// <param name="Name">Display name.</param>
+/// <param name="Description">Display text, or null.</param>
+/// <param name="MaxLevel">The skill's highest level.</param>
+/// <param name="Passive">True for a passive skill (never cast).</param>
+/// <param name="Range">Target range in cells; 0 targets the user.</param>
+/// <param name="Ground">True to aim at a ground cell.</param>
+/// <param name="Friendly">True to target allies.</param>
+/// <param name="CastTimeMs">The cast time when the content gives a fixed number, else null.</param>
+/// <param name="Icon">The icon's asset key, or null.</param>
+public sealed record SkillDisplay(string Id, string Name, string? Description, int MaxLevel, bool Passive, int Range, bool Ground, bool Friendly, int? CastTimeMs, string? Icon)
+{
+    /// <summary>True when the skill acts on the caster without aiming (range 0, not a ground skill).</summary>
+    public bool OnSelf => !Ground && Range <= 0;
+}
+
+/// <summary>A skill that must be learned to a level first.</summary>
+public sealed record SkillNeed(string SkillId, int Level);
+
+/// <summary>One entry of a job's skill tree.</summary>
+public sealed record JobSkillDisplay(string SkillId, int? MaxLevel, IReadOnlyList<SkillNeed> Requires);
+
+/// <summary>A job and its skill tree (T-502).</summary>
+public sealed record JobDisplay(string Id, string Name, string? Description, string? Parent, IReadOnlyList<JobSkillDisplay> Skills);
