@@ -103,7 +103,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
-| T-501 | Effect runner + statuses: every effect type, status apply/stack/tick/expire, consumables, monster skills, statuses on the wire and client | Claude Code | Opus 5.5 | [T-501](../tasks/prompts/T-501.md) | T-401, T-402, T-303, T-309 | In Progress | Touches `Net/**` for status fields only (approved by the user 2026-11-17); ADR-002 #118, #171 |
+| T-501 | Effect runner + statuses: every effect type, status apply/stack/tick/expire, consumables, monster skills, statuses on the wire and client | Claude Code | Opus 5.5 | [T-501](../tasks/prompts/T-501.md) | T-401, T-402, T-303, T-309 | Review | Touches `Net/**` for status fields only (approved by the user 2026-11-17); ADR-002 #118, #171 |
 
 ## Phase 7 — Persistence & accounts
 

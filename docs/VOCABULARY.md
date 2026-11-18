@@ -124,6 +124,19 @@ Sizes: `small`, `medium`, `large`
 | `summon`         | Spawn a monster                             |
 | `area`           | Wrap child effects over an AoE shape        |
 
+All ten run in the one effect runner (T-501, ARCHITECTURE §6.3). Where each may stand is checked at load (`EffectSupport`, validation code `effect.unsupported`):
+`modify_stat` only directly in a status's `on_apply` (its modifier has the source `status:<id>` and lasts as long as the status); `teleport` and `summon` only
+directly in a skill or a consumable; no `area` inside an `area`; a ground skill's own effects aim at a cell (`area`, `summon`, `teleport`); `knockback` never on
+the caster itself; a status never applies itself. **Save point**: until save points exist (T-601), a player's is the respawn point of the map it is on.
+
+## Status end reasons
+In `StatusRemoved` (a status that runs out raises `StatusExpired` instead): `removed` (a `remove_status` by id or tag), `died` (every status ends on death),
+`warped` (its bearer moved to another map: statuses are timed by one map instance's tick clock; a warp within the map keeps them).
+
+## Skill reasons
+In `SkillRefused` (a `SkillRequested` dropped before its effects ran): `caster_dead`, `target_dead`, `target_gone`, `out_of_range`, `no_line_of_sight`, `safe_zone`,
+`invalid_target`, `cannot_use_skills` (a status with `prevents_skills`).
+
 ## Inventory
 **Entry**: one stack of an item, or one equipment item with its own instance id; worn entries stay in the inventory and count toward `inventory.max_entries`
 and the weight. **Weight**: the sum of `weight × quantity` over every entry; the limit is the derived stat `weight_limit`. **Source** of an equipped entry's
@@ -154,7 +167,8 @@ Two-handed (`balance.yaml` `inventory.two_handed_weapon_types`): `sword_2h`, `st
 `EntityEnteredMap`, `EntityLeftMap`, `WarpRejected`, `MovementStarted`, `CellReached`,
 `MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `MonsterReturned`, `AttackRequested`, `AttackRefused`, `AttackStarted`, `AttackStopped`,
 `ExpGained`, `ExpLost`, `PlayerRespawned`, `ItemDropped`, `ItemExpired`, `ItemUnequipped`, `ItemDiscarded`, `ItemRefused`, `InventoryChanged`,
-`CardInserted`, `ItemRefined`
+`CardInserted`, `ItemRefined`, `StatusRemoved`, `HpRestored`, `SpRestored`, `KnockedBack`, `Teleported`, `SummonRequested`, `MonsterSummoned`, `AreaApplied`,
+`SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -162,16 +176,20 @@ Two-handed (`balance.yaml` `inventory.two_handed_weapon_types`): `sword_2h`, `st
 **Snapshot**: an observer's full view. **Delta**: one tick's `appeared` / `changed` / `disappeared`.
 
 ## View fields
-In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`, `speed`, `display_key`, `hp`, `dead`, `mine`, `weapon`, `worn`.
+In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`, `speed`, `display_key`, `hp`, `dead`, `mine`, `weapon`, `worn`, `statuses`.
 `hp`: HP as a fraction 0–1 in steps of 0.01 (never 0 while alive, never 1 while hurt), only for entities that fight. `dead`: true while dead.
 `mine`: a ground item only, true when this client may pick it up now. `weapon` (a "Weapon types" term) and `worn` (item ids with a worn visual, in
-"Equipment slots" order): players only, what they hold and wear; a change sends both. A ground item's record also has `quantity` (it never changes).
+"Equipment slots" order): players only, what they hold and wear; a change sends both.
+`statuses` (T-501): every entity's active statuses, each `{id, stacks, left_ms, debuff}` (`left_ms`: simulated ms left at the message's tick; `debuff` only when
+true), sent when one starts, stacks, is refreshed or ends (the whole list; empty when none is left), never per tick; never a chance, a number or the applier. A ground item's record also has `quantity` (it never changes).
 A delta may also carry `hits` (this tick's attacks the client can see: `[attacker, target, amount, result]` with a "Hit results" term) and
 `vitals` (the client's own `hp`, `max_hp`, `sp`, `max_sp`, when they changed; also in every snapshot).
 
 ## Movement reasons
-In `MoveRejected`: `out_of_bounds`, `not_walkable`, `start_not_walkable`, `no_path`, `path_too_long`, `search_limit`, `no_speed`
-In `MovementStopped`: `arrived`, `cancelled`, `warped`, `died`, `no_speed`
+In `MoveRejected`: `out_of_bounds`, `not_walkable`, `start_not_walkable`, `no_path`, `path_too_long`, `search_limit`, `no_speed`, `cannot_move`
+In `MovementStopped`: `arrived`, `cancelled`, `warped`, `died`, `no_speed`, `cannot_move`
+`cannot_move`: a status with `prevents_move` holds the entity (refused, not queued; a walker stops on the last cell it reached). `warped` also ends a walk that a
+same-map warp (a knockback, a teleport) interrupted.
 
 ## Monster AI states
 `idle`, `wander`, `chase`, `attack`, `return` (ARCHITECTURE §6.6)
@@ -182,18 +200,19 @@ In `AggroLost`: `target_gone`, `leash`, `unreachable`
 
 ## Attack reasons
 In `AttackRefused` and `AttackStopped`: `attacker_dead`, `target_dead`, `target_gone`, `out_of_range`, `no_line_of_sight`, `safe_zone`, `invalid_target`,
-`unreachable`, `cancelled`, `overweight` (ARCHITECTURE §6.7; `overweight`: the player carries at least `inventory.overweight_percent` of its weight limit)
+`unreachable`, `cancelled`, `overweight`, `cannot_attack` (ARCHITECTURE §6.7; `overweight`: the player carries at least `inventory.overweight_percent` of its
+weight limit; `cannot_attack`: a status with `prevents_attack` holds it: a new attack is refused, a running auto-attack pauses)
 On the wire in `rejected` (`intent` `attack`) and `attack_stopped`. The gateway also refuses an `attack` itself: `target_gone` for an id the client
 does not see, `invalid_target` for itself or anything but a monster.
 
 ## Item reasons
 In `ItemRefused` and on the wire in `rejected` (`intent` `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card` or `refine`); nothing changed (ARCHITECTURE §6.8):
-`item_gone`, `not_yours`, `unreachable`, `cancelled`, `too_heavy`, `inventory_full`, `not_usable`, `cooldown`, `unsupported_effect`, `not_equipment`,
+`item_gone`, `not_yours`, `unreachable`, `cancelled`, `too_heavy`, `inventory_full`, `not_usable`, `cooldown`, `not_equipment`,
 `wrong_slot`, `level_too_low`, `wrong_job`, `not_equipped`, `item_equipped`, `invalid_quantity`, `not_a_card`, `card_does_not_fit`, `no_free_socket`,
 `not_refinable`, `at_max_refine`, `missing_material`.
 `card_does_not_fit`: none of the card's `slots` is one of the equipment's. `no_free_socket`: its `card_slots` are full (or it has none).
 `at_max_refine`: at `refine.yaml` `max_level`. `missing_material`: fewer carried units of the next step's material than its quantity.
-`not_yours`: another player still has loot priority. `unsupported_effect`: a consumable with an effect type other than `heal` / `restore_sp` (until T-501).
+`not_yours`: another player still has loot priority. (T-501 removed `unsupported_effect`: every effect type runs, and one that cannot run where it stands is a load error.)
 `wrong_job`: the item's `job_ids` leave the job out, or the job's `weapon_types` leave the weapon's type out. `item_equipped`: worn items are not used or dropped.
 
 ## Weight states
@@ -211,7 +230,8 @@ What a failed refine does, per step of `refine.yaml` (`failure`): `keep` (the le
 In `ItemRefined` and the owner's `refine_result` (`result`): `success` (one level up), then the failure terms `keep`, `down`, `break`.
 
 ## Hit results
-In `DamageDealt`: `hit`, `crit`, `miss`
+In `DamageDealt` (and the wire's `hits`): `hit`, `crit`, `miss`, `status` (damage from a status's `on_tick`, e.g. poison: not an attack, so it always lands, never
+crits and shows no swing; its source is the status's applier)
 
 ## Effect names (client)
 Presentation hooks the client plays on combat events; theme data, not content. A manifest entry names the effect it plays with an `"effect"` field (`vfx.hit.normal` -> `effect.hit`, `vfx.hit.crit` -> `effect.crit`,

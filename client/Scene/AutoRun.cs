@@ -731,6 +731,7 @@ public sealed class AutoRun
         World.Combat.Impact += count;
         var droppedBefore = World.Combat.Dropped;
         int maxNumbers = 0, maxEffects = 0, maxPending = 0, calmFrames = 0, fxFrames = 0;
+        int maxStatused = 0, maxDebuffed = 0, maxMarks = 0;   // T-501
         double calmDraws = 0, fxDraws = 0, maxShown = 0;
         _main.CountAllocations = true;
         if (Array.IndexOf(_args, "--fight") >= 0) _ = HuntOneAsync(60); // the player fights too, so dealt and taken numbers show
@@ -754,6 +755,12 @@ public sealed class AutoRun
             sumDraws += draws;
             sumTriangles += triangles;
             sumOnScreen += CountOnScreen();
+            if (frames % 10 == 0)
+            {
+                maxStatused = Math.Max(maxStatused, World.Entities.Count(e => e.Statuses.Count > 0));
+                maxDebuffed = Math.Max(maxDebuffed, World.Entities.Count(e => e.HasDebuff));
+                maxMarks = Math.Max(maxMarks, _main.Presenter?.StatusMarkCount ?? 0);
+            }
             if (_main.Fx is { } fx)
             {
                 var (numbers, effects) = fx.Active;
@@ -793,6 +800,8 @@ public sealed class AutoRun
         await BreakdownAsync();
         Print($"measure: peak frame by pass: 3D {peak.Opaque}, shadow {peak.Shadow}, canvas (HUD, numbers) {peak.Canvas}; {peak.OnScreen} entities on screen, visuals at LOD0 {peak.Lod0}, LOD1 {peak.Lod1}");
         Print($"measure: draw calls avg {(calmFrames > 0 ? calmDraws / calmFrames : 0):0.0} in {calmFrames} frames with no number or effect on screen, {(fxFrames > 0 ? fxDraws / fxFrames : 0):0.0} in {fxFrames} frames with some");
+        Print($"measure: statuses (T-501): at most {maxStatused} entities in view with statuses ({maxDebuffed} with a debuff) and {maxMarks} markers at once; at the end " +
+              $"{World.Entities.Count(e => e.Statuses.Count > 0)} with statuses, own [{string.Join(", ", World.Own?.Statuses.Select(st => st.Id) ?? [])}]");
         Print($"measure: static memory {OS.GetStaticMemoryUsage() / (1024 * 1024)} MB; video {Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / (1024 * 1024):0} MB; adapter {RenderingServer.GetVideoAdapterName()}");
         if (!shot) await ShotAsync();
 
