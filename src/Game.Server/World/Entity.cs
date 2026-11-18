@@ -141,6 +141,12 @@ public sealed class Entity
     /// </summary>
     public long InCombatUntilMs { get; set; }
 
+    /// <summary>
+    /// The NPC service (a <c>ServiceIds</c> term) a player has open (T-601), or null. Set by the dialogue system on an <c>open_service</c> action and cleared when the
+    /// player leaves talking range, warps, dies or closes; the inventory reads it to gate <c>refine</c>.
+    /// </summary>
+    public string? OpenService { get; set; }
+
     /// <summary>A player's skill cooldowns (T-502), kept by combat; null for everything else.</summary>
     public Game.Shared.Skills.SkillCooldowns? Cooldowns { get; set; }
 

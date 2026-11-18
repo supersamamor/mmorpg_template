@@ -111,7 +111,7 @@ public class ValidatorTests : IDisposable
     [InlineData("quests/gear_up.yaml", "status_id: status.swift", "status_id: status.nope", "rewards[3].status_id")]
     [InlineData("items/iron_blade.yaml", "job_ids: [job.warden]", "job_ids: [job.nope]", "equip.job_ids[0]")]
     [InlineData("monsters/gel_slime.yaml", "drop.tier1_supplies", "drop.nope", "drop_table_ids[1]")]
-    [InlineData("dialogue/guide_intro.yaml", "start_quest_id: quest.first_hunt", "start_quest_id: quest.nope", "nodes.greet.choices[0].start_quest_id")]
+    [InlineData("dialogue/guide_intro.yaml", "quest_id: quest.first_hunt", "quest_id: quest.nope", "nodes.greet.choices[0].actions[0].quest_id")]
     public void Dangling_reference_is_reported(string file, string from, string to, string path)
     {
         Edit(file, from, to);
@@ -306,6 +306,86 @@ public class ValidatorTests : IDisposable
 
         ShouldBe(Single(report, ValidationCodes.WarnDialogueUnreachable), "dialogue/guide_intro.yaml", "nodes.orphan", ValidationSeverity.Warning);
         report.IsValid.ShouldBeTrue();
+    }
+
+    // ---- dialogue conditions and actions (T-601) -------------------------------------------------------------------------------------
+
+    private void AddChoice(string choiceYaml) =>
+        File.AppendAllText(Path.Combine(_temp, "dialogue", "guide_intro.yaml"), "  extra:\n    text: More.\n    choices:\n      - text: Pick\n        next: null\n" + choiceYaml);
+
+    [Theory]
+    [InlineData("        conditions:\n          - type: has_item\n            item_id: item.nope\n", "conditions[0].item_id")]
+    [InlineData("        conditions:\n          - type: job_is\n            job_id: job.nope\n", "conditions[0].job_id")]
+    [InlineData("        conditions:\n          - type: job_is_not\n            job_id: job.nope\n", "conditions[0].job_id")]
+    [InlineData("        conditions:\n          - type: has_status\n            status_id: status.nope\n", "conditions[0].status_id")]
+    [InlineData("        actions:\n          - type: take_item\n            item_id: item.nope\n", "actions[0].item_id")]
+    [InlineData("        actions:\n          - type: give_item\n            item_id: item.nope\n", "actions[0].item_id")]
+    [InlineData("        actions:\n          - type: start_quest\n            quest_id: quest.nope\n", "actions[0].quest_id")]
+    public void A_dialogue_condition_or_action_naming_something_missing_is_reported(string yaml, string path)
+    {
+        AddChoice(yaml);
+
+        ShouldBe(Single(Validate(), ValidationCodes.RefMissing), "dialogue/guide_intro.yaml", "nodes.extra.choices[0]." + path);
+    }
+
+    [Theory]
+    [InlineData("        conditions:\n          - type: base_level\n", "conditions[0]")]
+    [InlineData("        conditions:\n          - type: job_level\n            min: 5\n            max: 2\n", "conditions[0]")]
+    [InlineData("        conditions:\n          - type: has_item\n            item_id: item.gel_glob\n            quantity: 0\n", "conditions[0].quantity")]
+    [InlineData("        actions:\n          - type: give_item\n            item_id: item.gel_glob\n            quantity: 0\n", "actions[0].quantity")]
+    [InlineData("        actions:\n          - type: take_item\n            item_id: item.gel_glob\n            quantity: -2\n", "actions[0].quantity")]
+    [InlineData("        actions:\n          - type: set_save_point\n            x: 999\n            y: 0\n", "actions[0]")]
+    public void Unusable_dialogue_values_are_reported(string yaml, string path)
+    {
+        AddChoice(yaml);
+
+        ShouldBe(Single(Validate(), ValidationCodes.DialogueInvalid), "dialogue/guide_intro.yaml", "nodes.extra.choices[0]." + path);
+    }
+
+    [Fact]
+    public void An_unknown_service_is_reported()
+    {
+        AddChoice("        actions:\n          - type: open_service\n            service: bank\n");
+
+        ShouldBe(Single(Validate(), ValidationCodes.VocabUnknown), "dialogue/guide_intro.yaml", "nodes.extra.choices[0].actions[0].service");
+    }
+
+    [Fact]
+    public void A_save_point_needs_an_npc_with_the_dialogue_on_a_map()
+    {
+        AddChoice("        actions:\n          - type: set_save_point\n            x: 12\n            y: 12\n");
+        File.WriteAllText(Path.Combine(_temp, "dialogue", "lonely.yaml"),
+            "id: dialogue.lonely\nname: Lonely\nstart: a\nnodes:\n  a:\n    text: Hi.\n    choices:\n      - text: Home\n        next: null\n        actions:\n          - type: set_save_point\n            x: 12\n            y: 12\n");
+
+        var issue = Single(Validate(), ValidationCodes.DialogueInvalid);
+
+        issue.File.ShouldBe("dialogue/lonely.yaml");
+        issue.Message.ShouldContain("NPC");
+    }
+
+    [Fact]
+    public void A_dialogue_effect_the_runner_cannot_run_there_is_reported()
+    {
+        AddChoice("        actions:\n          - type: run_effects\n            effects:\n              - type: knockback\n");
+
+        ShouldBe(Single(Validate(), ValidationCodes.EffectUnsupported), "dialogue/guide_intro.yaml", "nodes.extra.choices[0].actions[0].effects[0]");
+    }
+
+    [Fact]
+    public void Resets_are_allowed_in_a_service_but_still_not_in_a_skill()
+    {
+        Validate().Issues.ShouldBeEmpty("the guide's reset choices are services: " + string.Join("\n", Validate().Issues));
+        Edit("skills/second_wind.yaml", "effects:\n", "effects:\n  - type: reset_stats\n");
+
+        Validate().Issues.Count(i => i.Code == ValidationCodes.EffectUnsupported).ShouldBe(1);
+    }
+
+    [Fact]
+    public void The_talk_range_must_be_at_least_one_in_the_balance()
+    {
+        Edit("balance.yaml", "talk_range: 2", "talk_range: 0");
+
+        ShouldBe(Single(Validate(), ValidationCodes.BalanceRange), "balance.yaml", "dialogue.talk_range");
     }
 
     // ---- formulas ----------------------------------------------------------------------------------------------

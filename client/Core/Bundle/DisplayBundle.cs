@@ -116,6 +116,7 @@ public sealed class DisplayBundle
     private readonly Dictionary<string, StatusDisplay> _statuses = new(StringComparer.Ordinal);
     private readonly Dictionary<string, SkillDisplay> _skills = new(StringComparer.Ordinal);
     private readonly Dictionary<string, JobDisplay> _jobs = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, NpcDisplay> _npcs = new(StringComparer.Ordinal);
     private readonly List<RefineStep> _refineSteps = new List<RefineStep>();
 
     private DisplayBundle(int formatVersion, string contentHash)
@@ -165,6 +166,9 @@ public sealed class DisplayBundle
     public ItemDisplay? Item(string? itemId) => itemId is not null && _items.TryGetValue(itemId, out var item) ? item : null;
 
     /// <summary>A status's icon and vfx asset keys (T-501), or null for an id the bundle does not have.</summary>
+    /// <summary>An NPC's name, title and portrait key for the dialogue panel (T-601), or null for an id the bundle does not have.</summary>
+    public NpcDisplay? Npc(string? npcId) => npcId is not null && _npcs.TryGetValue(npcId, out var npc) ? npc : null;
+
     public StatusDisplay? Status(string? statusId) => statusId is not null && _statuses.TryGetValue(statusId, out var status) ? status : null;
 
     /// <summary>A skill's display and targeting data (T-502), or null for an id the bundle does not have.</summary>
@@ -209,6 +213,7 @@ public sealed class DisplayBundle
                     if (list == "skills") result._skills[id] = ReadSkill(id, result._names[id], entry);
                     if (list == "jobs") result._jobs[id] = ReadJob(id, result._names[id], entry);
                     if (list == "items") result._items[id] = ReadItem(id, result._names[id], entry);
+                    if (list == "npcs") result._npcs[id] = new NpcDisplay(id, result._names[id], OptionalText(entry, "title"), OptionalText(entry, "portrait"));
                     if (list == "statuses")
                         result._statuses[id] = new StatusDisplay(id, result._names[id], entry.TryGetProperty("debuff", out var debuff) && debuff.ValueKind == JsonValueKind.True,
                             OptionalText(entry, "icon"), OptionalText(entry, "vfx"));
@@ -367,6 +372,9 @@ public sealed record ItemDisplay(string Id, string Name, string Kind, string? Ic
 public sealed record RefineStep(int Level, int SuccessPercent, string Material, int Quantity, string Failure);
 
 /// <summary>What the client shows of a status (T-501): its name, whether it is a debuff, its icon and its vfx asset keys (theme data, resolved by the theme chain, §7.7).</summary>
+/// <summary>An NPC for the dialogue panel: name, title under it, and the portrait asset key (the panel falls back to a letter when the theme has none).</summary>
+public sealed record NpcDisplay(string Id, string Name, string? Title, string? Portrait);
+
 public sealed record StatusDisplay(string Id, string Name, bool Debuff, string? IconKey, string? VfxKey);
 
 /// <summary>A skill as the display bundle describes it (T-502): never costs, cooldowns or effect numbers.</summary>

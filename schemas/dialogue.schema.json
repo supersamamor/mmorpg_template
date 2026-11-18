@@ -64,13 +64,552 @@
                   ],
                   "description": "Node to go to; null ends the dialogue."
                 },
-                "start_quest_id": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
-                  "pattern": "^quest\\.[a-z0-9_]+$",
-                  "description": "Quest to start when chosen (quest.*); the server checks its prerequisites."
+                "conditions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "base_level"
+                          },
+                          "min": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "description": "Lowest base level that passes; null for no lower bound."
+                          },
+                          "max": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "description": "Highest base level that passes; null for no upper bound."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "base_level: the base level is at least Min and at most Max (either may be left out)."
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "job_level"
+                          },
+                          "min": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "description": "Lowest job level that passes; null for no lower bound."
+                          },
+                          "max": {
+                            "type": [
+                              "integer",
+                              "null"
+                            ],
+                            "description": "Highest job level that passes; null for no upper bound."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "job_level: the job level is at least Min and at most Max (either may be left out)."
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "job_is"
+                          },
+                          "job_id": {
+                            "type": "string",
+                            "pattern": "^job\\.[a-z0-9_]+$",
+                            "description": "Job id (job.*)."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "job_is: the character has this job.",
+                        "required": [
+                          "job_id"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "job_is_not"
+                          },
+                          "job_id": {
+                            "type": "string",
+                            "pattern": "^job\\.[a-z0-9_]+$",
+                            "description": "Job id (job.*)."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "job_is_not: the character does not have this job.",
+                        "required": [
+                          "job_id"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "has_item"
+                          },
+                          "item_id": {
+                            "type": "string",
+                            "pattern": "^item\\.[a-z0-9_]+$",
+                            "description": "Item id (item.*)."
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "description": "How many. Default 1."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "has_item: the bag holds at least Quantity of the item (worn equipment does not count).",
+                        "required": [
+                          "item_id"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "has_status"
+                          },
+                          "status_id": {
+                            "type": "string",
+                            "pattern": "^status\\.[a-z0-9_]+$",
+                            "description": "Status id (status.*)."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "has_status: the character has the status active.",
+                        "required": [
+                          "status_id"
+                        ]
+                      }
+                    ],
+                    "description": "A test on the talking player that decides whether a choice is shown. In content each condition is a map whose type key selects the concrete record (DialogueConditions). Quest-state conditions join this family in T-602."
+                  },
+                  "description": "The choice is shown only when every condition holds (all of them; none means always)."
+                },
+                "actions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "type"
+                    ],
+                    "anyOf": [
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "start_quest"
+                          },
+                          "quest_id": {
+                            "type": "string",
+                            "pattern": "^quest\\.[a-z0-9_]+$",
+                            "description": "Quest id (quest.*)."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "start_quest: raises QuestStartRequested for the quest. The quest system (T-602) checks prerequisites and starts it; until then nothing handles the event.",
+                        "required": [
+                          "quest_id"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "set_save_point"
+                          },
+                          "x": {
+                            "type": "integer",
+                            "description": "Cell x; the cell must be walkable."
+                          },
+                          "y": {
+                            "type": "integer",
+                            "description": "Cell y."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "set_save_point: the save point becomes this cell of the NPC's own map. Teleports to the save point and a respawn after death use it."
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "run_effects"
+                          },
+                          "effects": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "type"
+                              ],
+                              "anyOf": [
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "damage"
+                                    },
+                                    "magic": {
+                                      "type": "boolean",
+                                      "description": "True to use the magic damage formula; false (default) for physical."
+                                    },
+                                    "multiplier": {
+                                      "type": "string",
+                                      "description": "Formula scaling the base damage, e.g. \"1 + level * 0.3\". Default \"1\"."
+                                    },
+                                    "element": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ],
+                                      "enum": [
+                                        "neutral",
+                                        "fire",
+                                        "water",
+                                        "earth",
+                                        "wind",
+                                        "holy",
+                                        "shadow",
+                                        "poison",
+                                        "ghost",
+                                        "undead",
+                                        null
+                                      ],
+                                      "description": "Element id (Elements). Null uses the attacker's attack element."
+                                    },
+                                    "hits": {
+                                      "type": "integer",
+                                      "description": "Number of hits; the total is split visually only. Default 1."
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "damage: physical or magic damage. The base amount comes from the physical or magic damage formula in formulas.yaml, scaled by Multiplier, then the element table applies."
+                                },
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "heal"
+                                    },
+                                    "amount": {
+                                      "type": "string",
+                                      "description": "HP restored, as a formula."
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "heal: restore HP."
+                                },
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "restore_sp"
+                                    },
+                                    "amount": {
+                                      "type": "string",
+                                      "description": "SP restored, as a formula."
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "restore_sp: restore SP."
+                                },
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "apply_status"
+                                    },
+                                    "status_id": {
+                                      "type": "string",
+                                      "pattern": "^status\\.[a-z0-9_]+$",
+                                      "description": "Status id (status.*)."
+                                    },
+                                    "chance": {
+                                      "type": "string",
+                                      "description": "Probability 0–1 as a formula. Default \"1\" (always). The caller rolls with injected RNG."
+                                    },
+                                    "duration_ms": {
+                                      "type": "string",
+                                      "description": "Duration in milliseconds, as a formula."
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "apply_status: apply a status with a chance and a duration.",
+                                  "required": [
+                                    "status_id"
+                                  ]
+                                },
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "remove_status"
+                                    },
+                                    "status_ids": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string",
+                                        "pattern": "^status\\.[a-z0-9_]+$"
+                                      },
+                                      "description": "Status ids to remove."
+                                    },
+                                    "tags": {
+                                      "type": "array",
+                                      "items": {
+                                        "type": "string"
+                                      },
+                                      "description": "Remove every active status carrying any of these tags (Tags)."
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "remove_status: cleanse statuses by id and/or tag."
+                                },
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "modify_stat"
+                                    },
+                                    "modifier": {
+                                      "type": "object",
+                                      "properties": {
+                                        "stat": {
+                                          "type": "string",
+                                          "enum": [
+                                            "str",
+                                            "agi",
+                                            "vit",
+                                            "int",
+                                            "dex",
+                                            "luk",
+                                            "max_hp",
+                                            "max_sp",
+                                            "atk",
+                                            "matk",
+                                            "def",
+                                            "mdef",
+                                            "hit",
+                                            "flee",
+                                            "crit",
+                                            "aspd",
+                                            "move_speed",
+                                            "cast_time_mod",
+                                            "hp_regen",
+                                            "sp_regen",
+                                            "weight_limit"
+                                          ],
+                                          "description": "Primary or derived stat id (Stats), e.g. str, atk."
+                                        },
+                                        "op": {
+                                          "enum": [
+                                            "flat",
+                                            "percent",
+                                            "override"
+                                          ],
+                                          "description": "How the value combines with the stat."
+                                        },
+                                        "value": {
+                                          "type": "string",
+                                          "description": "Amount as a formula string, so it can be a constant (\"5\") or scaled (\"level * 2\", \"refine * 3\"). Only whitelisted formula variables are allowed."
+                                        }
+                                      },
+                                      "additionalProperties": false,
+                                      "description": "The modifier to apply."
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "modify_stat: a temporary stat modifier. Used in OnApply; it lasts as long as the status and is removed with it."
+                                },
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "knockback"
+                                    },
+                                    "cells": {
+                                      "type": "integer",
+                                      "description": "Distance in cells. Stops early at unwalkable cells."
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "knockback: push the target away from the source."
+                                },
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "teleport"
+                                    },
+                                    "to_save_point": {
+                                      "type": "boolean",
+                                      "description": "Go to the character's save point; other fields are ignored."
+                                    },
+                                    "map_id": {
+                                      "type": [
+                                        "string",
+                                        "null"
+                                      ],
+                                      "pattern": "^map\\.[a-z0-9_]+$",
+                                      "description": "Destination map id (map.*). Null means the current map."
+                                    },
+                                    "x": {
+                                      "type": [
+                                        "integer",
+                                        "null"
+                                      ],
+                                      "description": "Destination cell X. Null (with Y) means a random walkable cell."
+                                    },
+                                    "y": {
+                                      "type": [
+                                        "integer",
+                                        "null"
+                                      ],
+                                      "description": "Destination cell Y. Null (with X) means a random walkable cell."
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "teleport: move the caster. With ToSavePoint it goes to the save point; otherwise to MapId (or the current map) at X/Y (or a random walkable cell when they are omitted)."
+                                },
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "summon"
+                                    },
+                                    "monster_id": {
+                                      "type": "string",
+                                      "pattern": "^monster\\.[a-z0-9_]+$",
+                                      "description": "Monster id (monster.*)."
+                                    },
+                                    "count": {
+                                      "type": "integer",
+                                      "description": "How many to spawn. Default 1."
+                                    },
+                                    "duration_ms": {
+                                      "type": [
+                                        "integer",
+                                        "null"
+                                      ],
+                                      "description": "Lifetime in milliseconds; null means until killed."
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "summon: spawn monsters near the caster.",
+                                  "required": [
+                                    "monster_id"
+                                  ]
+                                },
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "area"
+                                    },
+                                    "radius": {
+                                      "type": "integer",
+                                      "description": "Radius in cells (Chebyshev). 0 is the target cell only."
+                                    },
+                                    "friendly": {
+                                      "type": "boolean",
+                                      "description": "True to affect allies (heals, buffs); false (default) to affect enemies."
+                                    },
+                                    "effects": {
+                                      "type": "array",
+                                      "items": {
+                                        "$ref": "#/properties/nodes/additionalProperties/properties/choices/items/properties/actions/items/anyOf/2/properties/effects/items"
+                                      },
+                                      "description": "Effects applied to each entity in the area."
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "area: apply child effects to every valid entity within Radius cells (Chebyshev, i.e. a square) of the effect's target."
+                                },
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "reset_stats"
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "reset_stats (T-503): every allocated primary stat goes back to the start value and exactly the points spent come back as unspent stat points. Only on a consumable (or, later, a service), and only on its user."
+                                },
+                                {
+                                  "properties": {
+                                    "type": {
+                                      "const": "reset_skills"
+                                    }
+                                  },
+                                  "additionalProperties": false,
+                                  "description": "reset_skills (T-503): every learned skill goes back to 0, exactly the skill points spent come back, passives come off and running casts are cancelled; cooldowns are kept. Only on a consumable (or, later, a service), and only on its user."
+                                }
+                              ],
+                              "description": "One unit of gameplay behavior (ARCHITECTURE §6.3). Skills, consumables, cards and statuses are lists of effects. In content each effect is a map whose type key selects the concrete record; the discriminator → type table is Effects. Type is computed from the concrete record, so it can never disagree with the record's shape."
+                            },
+                            "description": "The effects, in order."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "run_effects: run the effects on the character, as a consumable would (it is caster and target). Resets are allowed here (a service)."
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "take_item"
+                          },
+                          "item_id": {
+                            "type": "string",
+                            "pattern": "^item\\.[a-z0-9_]+$",
+                            "description": "Item id (item.*)."
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "description": "How many. Default 1."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "take_item: remove Quantity of the item from the bag. Refused (nothing changes) when the bag holds less.",
+                        "required": [
+                          "item_id"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "give_item"
+                          },
+                          "item_id": {
+                            "type": "string",
+                            "pattern": "^item\\.[a-z0-9_]+$",
+                            "description": "Item id (item.*)."
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "description": "How many. Default 1."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "give_item: put Quantity of the item in the bag. Refused (nothing changes) when it would not fit or be too heavy.",
+                        "required": [
+                          "item_id"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "open_service"
+                          },
+                          "service": {
+                            "type": "string",
+                            "description": "A ServiceIds term."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "open_service: opens an NPC service for the character; it stays open until the character walks out of talking range, warps, dies or closes it.",
+                        "required": [
+                          "service"
+                        ]
+                      }
+                    ],
+                    "description": "Something that happens when a choice is picked. In content each action is a map whose type key selects the concrete record (DialogueActions). A choice's item actions apply as one transaction; see ARCHITECTURE §6.4."
+                  },
+                  "description": "Run in order when the choice is picked, before the dialogue moves to Next."
                 }
               },
               "additionalProperties": false,
@@ -92,7 +631,7 @@
     }
   },
   "additionalProperties": false,
-  "description": "A dialogue graph: nodes keyed by a local node id, starting at Start.",
+  "description": "A dialogue graph: nodes keyed by a local node id, starting at Start. The server runs it (ARCHITECTURE §6.4); the client never sees the graph.",
   "required": [
     "id",
     "name",

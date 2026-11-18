@@ -69,6 +69,24 @@ namespace Game.Shared.Protocol
         /// <summary><c>raise_stat</c> (T-503, client to server): spend stat points on a primary stat.</summary>
         public const string RaiseStat = "raise_stat";
 
+        /// <summary><c>talk</c> (T-601, client to server): walk up to an NPC in view and start its dialogue.</summary>
+        public const string Talk = "talk";
+
+        /// <summary><c>dialogue_choice</c> (T-601, client to server): pick a shown choice (or, at a node without choices, continue with index 0).</summary>
+        public const string DialogueChoice = "dialogue_choice";
+
+        /// <summary><c>dialogue_close</c> (T-601, client to server): end the dialogue and any service it opened.</summary>
+        public const string DialogueClose = "dialogue_close";
+
+        /// <summary><c>dialogue</c> (T-601, server to client, owner only): the dialogue is at this node.</summary>
+        public const string Dialogue = "dialogue";
+
+        /// <summary><c>dialogue_ended</c> (T-601, server to client, owner only): the dialogue and its services ended.</summary>
+        public const string DialogueEnded = "dialogue_ended";
+
+        /// <summary><c>service_opened</c> (T-601, server to client, owner only): an NPC service opened for the character.</summary>
+        public const string ServiceOpened = "service_opened";
+
         /// <summary><c>stats</c> (T-503, server to client, owner only): base stats, unspent stat points, each stat's next cost and the panel's derived stats.</summary>
         public const string Stats = "stats";
 
@@ -121,10 +139,10 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);

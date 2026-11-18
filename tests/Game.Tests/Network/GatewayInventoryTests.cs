@@ -71,6 +71,7 @@ public class GatewayInventoryTests
         var db = TestGrids.SampleContent;
         var kit = db.Balance with
         {
+            Dialogue = db.Balance.Dialogue with { RefineNeedsService = false },   // this test is about the inventory messages, not the smith
             NewCharacter = db.Balance.NewCharacter with
             {
                 StartItems =

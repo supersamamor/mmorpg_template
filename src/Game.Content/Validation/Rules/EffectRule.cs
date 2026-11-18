@@ -34,6 +34,12 @@ public sealed class EffectRule : IValidationRule
             if (status.MaxStacks < 1)
                 context.Error(status.Id, "max_stacks", ValidationCodes.EffectUnsupported, "max_stacks must be at least 1");
         }
+        foreach (var dialogue in db.Dialogue.All)
+            foreach (var (key, node) in dialogue.Nodes.OrderBy(n => n.Key, StringComparer.Ordinal))
+                for (var c = 0; c < node.Choices.Count; c++)
+                    for (var a = 0; a < node.Choices[c].Actions.Count; a++)
+                        if (node.Choices[c].Actions[a] is RunEffectsAction run)
+                            Check(context, dialogue.Id, $"nodes.{key}.choices[{c}].actions[{a}].effects", run.Effects, EffectSite.Service, null, null);
     }
 
     private static void Check(ValidationContext context, string owner, string path, IReadOnlyList<EffectDef> effects, EffectSite site, string? statusId,

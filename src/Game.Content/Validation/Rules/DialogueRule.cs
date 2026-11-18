@@ -1,3 +1,6 @@
+using Game.Shared.Definitions;
+using Game.Shared.Vocabulary;
+
 namespace Game.Content.Validation.Rules;
 
 /// <summary>
@@ -29,6 +32,7 @@ public sealed class DialogueRule : IValidationRule
                 }
             }
 
+            CheckChoices(context, d);
             var reached = new HashSet<string>(StringComparer.Ordinal);
             var pending = new Stack<string>();
             if (d.Nodes.ContainsKey(d.Start)) pending.Push(d.Start);
@@ -43,5 +47,60 @@ public sealed class DialogueRule : IValidationRule
             foreach (var key in d.Nodes.Keys.Where(k => !reached.Contains(k)))
                 context.Warn(d.Id, $"nodes.{key}", ValidationCodes.WarnDialogueUnreachable, $"Node '{key}' is not reachable from start '{d.Start}'");
         }
+    }
+
+    /// <summary>
+    /// The values of conditions and actions (T-601): level bounds in order, quantities of at least 1, services that exist, save point cells that are
+    /// walkable on every map where an NPC with this dialogue stands.
+    /// </summary>
+    private static void CheckChoices(ValidationContext context, DialogueDef d)
+    {
+        var db = context.Database;
+        var maps = db.Grids.Values.Where(g => g.Npcs.Any(n => db.Npcs.TryGet(n.NpcId, out var npc) && string.Equals(npc.DialogueId, d.Id, StringComparison.Ordinal))).ToList();
+        foreach (var (key, node) in d.Nodes.OrderBy(n => n.Key, StringComparer.Ordinal))
+            for (var i = 0; i < node.Choices.Count; i++)
+            {
+                var choice = node.Choices[i];
+                var p = $"nodes.{key}.choices[{i}]";
+                for (var c = 0; c < choice.Conditions.Count; c++)
+                {
+                    var cp = $"{p}.conditions[{c}]";
+                    switch (choice.Conditions[c])
+                    {
+                        case BaseLevelCondition { Min: null, Max: null }:
+                        case JobLevelCondition { Min: null, Max: null }:
+                            context.Error(d.Id, cp, ValidationCodes.DialogueInvalid, "give min, max or both");
+                            break;
+                        case BaseLevelCondition b when b.Min > b.Max:
+                        case JobLevelCondition j when j.Min > j.Max:
+                            context.Error(d.Id, cp, ValidationCodes.DialogueInvalid, "min is above max, so the condition never holds");
+                            break;
+                        case HasItemCondition { Quantity: < 1 }:
+                            context.Error(d.Id, cp + ".quantity", ValidationCodes.DialogueInvalid, "quantity must be at least 1");
+                            break;
+                    }
+                }
+                for (var a = 0; a < choice.Actions.Count; a++)
+                {
+                    var ap = $"{p}.actions[{a}]";
+                    switch (choice.Actions[a])
+                    {
+                        case TakeItemAction { Quantity: < 1 }:
+                        case GiveItemAction { Quantity: < 1 }:
+                            context.Error(d.Id, ap + ".quantity", ValidationCodes.DialogueInvalid, "quantity must be at least 1");
+                            break;
+                        case OpenServiceAction s when !ServiceIds.All.Contains(s.Service):
+                            context.Error(d.Id, ap + ".service", ValidationCodes.VocabUnknown, $"'{s.Service}' is not a service ({string.Join(", ", ServiceIds.All.Ordered)})");
+                            break;
+                        case SetSavePointAction save:
+                            foreach (var grid in maps)
+                                if (!grid.IsWalkable(save.X, save.Y))
+                                    context.Error(d.Id, ap, ValidationCodes.DialogueInvalid, $"save point ({save.X},{save.Y}) is not a walkable cell of {grid.MapId}, where an NPC with this dialogue stands");
+                            if (maps.Count == 0)
+                                context.Error(d.Id, ap, ValidationCodes.DialogueInvalid, "set_save_point needs an NPC with this dialogue placed on a map: the save point is a cell of the NPC's map");
+                            break;
+                    }
+                }
+            }
     }
 }

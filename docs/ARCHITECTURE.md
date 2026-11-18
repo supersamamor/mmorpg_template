@@ -214,9 +214,9 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 - **Whitelist, not blacklist.** `Game.Shared/ClientContent` holds one plain record per definition type, and
   `Game.Content/ClientBundle/ClientBundleBuilder` copies each field by hand. A field added to a server definition reaches the client
   only when someone maps it there; a test fails if a client record gains a field without the table below changing.
-- **Format:** `format_version` (now `4`; 2 added the sound keys, 3 the appearance options, 4 item `card_slots` / `refinable` and the `refine` steps) is the first field. The client refuses a bundle with a version it does not know. Bump it
+- **Format:** `format_version` (now `5`; 2 added the sound keys, 3 the appearance options, 4 item `card_slots` / `refinable` and the `refine` steps, 5 dropped the dialogue graphs and an NPC's dialogue id: the server runs dialogue, T-601) is the first field. The client refuses a bundle with a version it does not know. Bump it
   on any change to the bundle's shape.
-- **Canonical output:** compact JSON, UTF-8 without BOM, one final `\n`, fixed property order, lists ordered by id (dialogue nodes by key),
+- **Canonical output:** compact JSON, UTF-8 without BOM, one final `\n`, fixed property order, lists ordered by id,
   integers and booleans only, non-ASCII (and `<>&'"+`) escaped as `\uXXXX`, null values left out. Two exports of the same content are byte-identical on any OS.
 - **Content hash:** SHA-256, lowercase hex, over the bundle JSON **without** the `content_hash` property and without the final `\n`.
   The file is the same JSON with `"content_hash"` inserted right after `format_version`. The server computes the same hash with the same builder at
@@ -232,8 +232,8 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 | Jobs | id, name, description, parent job, usable weapon types, model, icon, skill tree (skill, max level, required skills) | stat bonuses, change requirements, EXP table id |
 | Statuses | id, name, description, buff or debuff, icon, vfx | effects, tick interval, stacks, tags, `prevents_*` flags |
 | Monsters | id, name, model, sound keys (aggro, hit, die) | level, race, size, element, stats, attack range, EXP, drop table links, AI |
-| NPCs | id, name, title, dialogue id, model, portrait | — |
-| Dialogue | id, start node, nodes (speaker, portrait, text, next, choices with text / next / quest id) | — |
+| NPCs | id, name, title, model, portrait | dialogue id |
+| Dialogue | — | the whole graph: nodes, texts, conditions, actions and quest ids (the server runs it and sends one node at a time, T-601) |
 | Quests | id, name, description, giver NPC, display text of each step | prerequisites, objectives and counts, rewards, repeatable flag |
 | Maps | id, name, scene, music, ambience key, width, height, cell flags (`walkable`, `blocks_los`; base64, as in the grid file), warps (cell, target map, target cell), NPC placements, zones | `spawns`, `source_scene_hash` |
 | Appearance | genders (body model, faces, hairstyles, defaults), skin tones and hair colours: ids, names, asset keys, colours | — (cosmetic only) |
@@ -302,6 +302,38 @@ New *kind* of behavior = new effect type + tests.
 State machine per quest: `prerequisites → steps[objective] → rewards`.
 Objectives listen to the event bus (`MonsterKilled`, `ItemAcquired`, `NpcTalked`, …).
 Quest state per character is persisted as `{questId, stepIndex, counters}`.
+Dialogue graphs, NPCs and their services are T-601; quests are T-602. The sections below are the dialogue half of this chapter.
+
+#### 6.4.1 NPCs and dialogue (T-601)
+`DialogueSystem` (`Game.Server/World/Dialogue`) owns the NPC entities and the dialogues players have with them. It runs after the monster AI and before combat.
+- **NPC entities.** On an instance's first tick every `npcs` placement of its map grid becomes an `EntityKind.Npc` entity on its cell and facing, `DefinitionId` the NPC id. A placement of an
+  NPC the content does not have throws at that first tick (the validator reports it earlier: `ref.missing`). An NPC has no stats and no vitals: it never moves, is not a combatant (an attack
+  is refused `invalid_target`, a skill `target_gone`, areas skip it) and the AOI treats it like any entity (view radius and the crowd cap's `cap_reserved_npcs` apply).
+  **Blocking:** an NPC does **not** block its cell. Entities do not block each other in v1 (`MovementSystem`), the pathfinder works on the immutable grid, and a tap on an NPC is a `talk`
+  that stops the player beside it; making NPC cells unwalkable per instance is a later change if players standing on NPCs turns out to matter.
+- **Talking.** `talk` (`target`: an NPC entity in view; the gateway answers `target_gone` / `invalid_target` itself, like `attack`) is refused with a "Dialogue reasons" term when the player is dead,
+  the target is gone or not an NPC, or the NPC has no dialogue. From beyond `dialogue.talk_range` (Chebyshev, `balance.yaml`) the player is walked in with a `MoveTo` like an auto-attack or a pick-up
+  (another order cancels it, `unreachable` when there is no way); then the dialogue starts and `NpcTalked` is raised. One dialogue per player: a new talk ends the old one (`replaced`). It ends
+  (`dialogue_ended`) when the player walks beyond the range, warps, dies or leaves the world, or the NPC is gone.
+- **The graph.** The server keeps the player's node and sends it (`dialogue`: the speaker's NPC id, an optional portrait key, the text and the *shown* choices with their original indices).
+  `dialogue_choice` (`index`) moves on; the client never decides where a choice leads. A choice is *shown* when every one of its `conditions` holds, and is checked again when picked
+  (`invalid_choice`). A node without shown choices is a "continue": index 0 follows its `next`, and a null `next` ends the dialogue (`finished`) after the player has read the node.
+  The client gets no graph, condition or action in its display bundle (format 5): only the NPCs' names, titles and portraits.
+- **Conditions** (`Game.Shared/Dialogue/DialogueRules`, pure over `IDialoguePlayer`): `base_level` / `job_level` (`min`, `max`), `job_is`, `job_is_not`, `has_item` (`item_id`, `quantity`), `has_status`.
+  **The seam for T-602:** a quest-state condition is a new record in `Discriminators.DialogueConditions`, a term in `DialogueConditionTypes`, one member on `IDialoguePlayer` and one case in
+  `DialogueRules.Matches`; nothing else changes. An unknown condition type hides its choice.
+- **Actions**, in order when a choice is picked: `start_quest` raises `QuestStartRequested` (nothing handles it until T-602; it replaces the old `start_quest_id`), `set_save_point` (a cell of the NPC's map),
+  `run_effects` (an effect list, `EffectSite.Service`: the player is caster and target, resets allowed), `take_item` / `give_item`, `open_service`. Systems talk by events (rule 7):
+  - **Items.** A choice's `take_item` / `give_item` actions are one transaction: the dialogue system publishes `DialogueItemsRequested`, the inventory applies all takes then all gives
+    (`InventoryRules.TryExchange`, all or nothing, rule 10) and answers `DialogueItemsResolved`. Meanwhile the dialogue is `busy`. On a refusal (`missing_item`, `inventory_full`, `too_heavy`) nothing
+    changed and the player stays at the node (`rejected` on the wire); on success the other actions run and the dialogue moves on. The inventory change goes out as `inventory_changed` (`exchanged`).
+  - **Effects.** `DialogueEffectsRequested` is run by combat's effect runner on its next tick, like a consumable's effects (so they apply one tick later; row 203's edge case).
+  - **Save point.** `ISavePointStore` (in memory until T-702, shared by every instance) holds a character's save point. **The rule:** `teleport` with `to_save_point` and the respawn after death both go
+    to it; a character without one uses the respawn point of the map it is on (`CombatContent.RespawnPointFor`). It is forgotten when the character leaves the world.
+  - **Services.** `open_service` sets `Entity.OpenService` and sends `service_opened`; it stays open until the player walks beyond the talk range, warps, dies, closes or talks to someone else (a
+    finished graph leaves it open). **Refine:** with `dialogue.refine_needs_service` (on in `balance.yaml`) the `refine` intent is refused `service_required` unless a `refine` service is open;
+    the starter meadow's smith opens it. `insert_card` stays free anywhere. **Resets:** Odalys offers a free stat reset and skill reset to characters below base level 10 (`base_level` condition and
+    `run_effects`), the same line as `progression.reset.free_below_base_level`; the reset items stay. The NPC reset does not apply `progression.reset.refuse_in_combat` (the safe zone is the site).
 
 ### 6.5 Progression
 Base level + job level, separate EXP tables. Stat points per base level and skill points
@@ -519,7 +551,7 @@ One path for touch and mouse (`InputRouter`; a mouse arrives as touch index 0, s
   at once; the character moves when the server confirms (≤ 1 tick). `rejected` removes the marker quietly.
 - **Tap a monster** → `attack`, with a target ring. It is picked on screen, at least half the platform's minimum touch target (48 dp Android, 44 pt iOS) on each side
   of its centre, or as wide as the shape looks if that is more. The client checks no range, path or walkability. A tap that is not on a monster but on a ground
-  item (the same pick radius, at the bag's height) sends `pick_up`; the loot ring shows what this client may take, the server decides. Talking comes with NPCs.
+  item (the same pick radius, at the bag's height) sends `pick_up`; the loot ring shows what this client may take, the server decides. **Tap an NPC** (T-601) → `talk`: the same pick radius; the nearest of monster, item and NPC within reach wins (a monster wins a tie, then an item), so an NPC tapped directly beats the ground under it. The server walks the character up and starts the dialogue. A skill waiting for its target ignores NPCs.
 - **Long-press** (still for 0.5 s) on any entity shows a small info panel with what the display bundle says (name, stack count, kind) and nothing else; on the ground it
   does nothing. It fires once, while the finger is down, and the lift that ends it is never a tap. Any later touch hides the panel.
 - **Drag** (past the threshold) is neither tap nor long-press. **Pinch** (two fingers, past an 8 dp dead zone) and the scroll wheel zoom the camera inside its clamp;
@@ -566,6 +598,10 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   (ATK, MATK, DEF, HIT, FLEE, ASPD, max HP and SP) as one wrapping line, in a scroll container, every button at the touch minimum. It only sends `raise_stat`.
   **Reset items** (the bundle marks them `confirm_use`): Use in the bag first shows what the item does and a "Use it" button; only that sends `use_item`. The server's refusal
   (`reset_in_combat` and so on) appears on the flash line and the item stays. The skill panel redraws on the `skills` message the reset sends.
+- **Dialogue** (T-601, `client/Scene/DialoguePanel.cs`, view model `client/Core/Dialogue/DialogueView.cs`). A panel at the bottom of the safe area, so the world stays in view: the speaker's
+  portrait (the theme's `portrait.*` texture, else the first letter of the name, §7.7), name and title (from the display bundle), the line, and the choices as buttons of at least the touch
+  target (48 dp), in a scroll container; a Close button. It only sends `dialogue_choice` and `dialogue_close`; it closes when the server says `dialogue_ended`. A `service_opened` for `refine`
+  opens the bag, where the refine button is; `rejected` `service_required` is said on the flash line.
 - **Where the client's own words live (ADR-002 row 120).** In `client/Core/UiText.cs`: one static class of constants and small formatting functions in English, and nowhere
   else (a test fails on a literal assigned to a text property in `client/Scene`). Why: the refusal and update screens must read even when the bundle, theme or any data
   file is missing or broken, which rules out loading them; the pure core and its tests can use them; a typo or a missing word is a compile error; and the number of
@@ -930,10 +966,13 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   | `learn_skill` | C→S | `skill` (spend one skill point) (T-502) |
   | `change_job` | C→S | `job` (T-502) |
   | `raise_stat` | C→S | `stat` (a primary stat id), `amount` (steps of +1, default 1, at most 99) (T-503) |
+  | `talk` | C→S | `target` (an NPC entity in view): the server walks the character into `dialogue.talk_range` and starts its dialogue; a request, it may come back `rejected` with a "Dialogue reasons" term (T-601) |
+  | `dialogue_choice` | C→S | `index` (a shown choice's index from `dialogue`; 0 at a node without choices) (T-601) |
+  | `dialogue_close` | C→S | none: end the dialogue and any service it opened (T-601) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
-  | `rejected` | S→C | `intent` (`move`, `attack`, an item intent, or `use_skill`, `learn_skill`, `change_job`, `raise_stat`), `reason` (a `MoveRejected`, "Attack reasons", "Item reasons" or "Skill reasons" term), `cell` (move), `target` (attack, `pick_up`, `use_skill`), `entry` (`use_item`, `equip`, `drop_item`; the equipment entry for `insert_card`, `refine`), `slot` (`equip`, `unequip`), `skill` (the skill, or for `change_job` the job) |
+  | `rejected` | S→C | `intent` (`move`, `attack`, an item intent, or `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`), `reason` (a `MoveRejected`, "Attack reasons", "Item reasons", "Skill reasons" or "Dialogue reasons" term), `cell` (move), `target` (attack, `pick_up`, `use_skill`, `talk`), `entry` (`use_item`, `equip`, `drop_item`; the equipment entry for `insert_card`, `refine`), `slot` (`equip`, `unequip`), `skill` (the skill, or for `change_job` the job) |
   | `attack_stopped` | S→C (owner) | `target`, `reason` (an "Attack reasons" term) |
   | `exp` | S→C (owner) | `base_level`, `base_exp`, `base_next`, `job_level`, `job_exp`, `job_next` (`*_next` = EXP the level needs, 0 at the cap) |
   | `level_up` | S→C (owner) | `base_level` or `job_level` (one message per level reached) |
@@ -942,6 +981,9 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   | `inventory` | S→C (owner) | `rev`, `slots` (most entries), `weight`, `weight_limit`, `load` (a "Weight states" term), `entries` (`[{id, item, quantity, slot?, cards?, refine?}]`, by id; `cards` and `refine` only when the equipment has any, and only ever to the owner). After every snapshot (join, resume, warp, resync); it replaces what the client had |
   | `inventory_changed` | S→C (owner) | `rev` (one more than the last), `cause` (an "Inventory changes" term), `item`, `weight`, `weight_limit`, `load`, `entries` (added or changed, as they are now), `removed` (ids); empty lists left out. A client that sees a gap in `rev` keeps what it has until the next `inventory` |
   | `refine_result` | S→C (owner) | `entry`, `item`, `result` (a "Refine results" term: `success`, `keep`, `down`, `break`), `refine` (the level now; what it had when it broke) |
+  | `dialogue` | S→C (owner) | `npc` (entity id), `speaker` (an `npc.*` id: name, title and portrait are in the display bundle), `portrait` (a key overriding the speaker's, if any), `text`, `choices` (`[{index,text}]`, the shown ones), `more` (only with no choices: the dialogue goes on after this node) (T-601) |
+  | `dialogue_ended` | S→C (owner) | `reason` (a "Dialogue end reasons" term) (T-601) |
+  | `service_opened` | S→C (owner) | `service` (a "Service ids" term), `npc` (T-601) |
   | `skills` | S→C (owner) | `job`, `points` (unspent), `levels` (`[["skill.x",2],...]`), `cooldowns` (`[["skill.x",ms left],...]`), `jobs` (the jobs `change_job` would accept now). After every snapshot, a learn, a job change and a level (T-502) |
   | `stats` | S→C (owner) | `points` (unspent stat points), `stats` (`[["str",3,2],...]`: stat id, base value, the cost of its next +1, 0 at the maximum), `derived` (`[["atk",12],...]`: `DerivedStats.Panel`, floored from the sheet). After every snapshot, a raise, a stat reset, a level, a job change, a learned skill, a skill reset and a gear change (T-503). The client never computes a cost or a derived value |
   | `cooldown` | S→C (owner) | `skill`, `ms`: the skill went on cooldown when its cast ended (T-502) |

@@ -129,7 +129,7 @@ Sizes: `small`, `medium`, `large`
 All twelve run in the one effect runner (T-501, ARCHITECTURE §6.3). Where each may stand is checked at load (`EffectSupport`, validation code `effect.unsupported`):
 `modify_stat` only directly in a status's `on_apply` (its modifier has the source `status:<id>` and lasts as long as the status); `teleport` and `summon` only
 directly in a skill or a consumable; no `area` inside an `area`; a ground skill's own effects aim at a cell (`area`, `summon`, `teleport`); `knockback` never on
-the caster itself; a status never applies itself; `reset_stats` and `reset_skills` only directly in a consumable (later also a service, T-601), never in a skill, a status or an `area`, and they act on the
+the caster itself; a status never applies itself; `reset_stats` and `reset_skills` only directly in a consumable or a dialogue `run_effects` action (an NPC service, T-601), never in a skill, a status or an `area`, and they act on the
 user only. **Save point**: until save points exist (T-601), a player's is the respawn point of the map it is on.
 
 ## Reset effects (T-503)
@@ -184,6 +184,28 @@ Two-handed (`balance.yaml` `inventory.two_handed_weapon_types`): `sword_2h`, `st
 ## Reward types
 `exp`, `item`, `currency`, `skill_point`, `stat_point`, `unlock_job`, `status`
 
+## Dialogue condition types
+The `type` of a choice's `conditions` entry (T-601); a choice is shown only when every condition holds (ARCHITECTURE §6.4). Quest-state conditions join in T-602.
+`base_level` (`min`, `max`: either may be left out), `job_level` (`min`, `max`), `job_is` (`job_id`), `job_is_not` (`job_id`), `has_item` (`item_id`, `quantity`, default 1; the bag, worn pieces excluded),
+`has_status` (`status_id`)
+
+## Dialogue action types
+The `type` of a choice's `actions` entry (T-601); they run in order when the choice is picked:
+`start_quest` (`quest_id`: raises `QuestStartRequested`, which nothing handles until T-602), `set_save_point` (`x`, `y`: a cell of the NPC's map), `run_effects` (`effects`: run on the player as a consumable would, resets allowed),
+`take_item` / `give_item` (`item_id`, `quantity`, default 1: a choice's item actions are one all-or-nothing transaction), `open_service` (`service`: a service id)
+
+## Service ids
+What an `open_service` action opens: `refine`. A service stays open until the player walks beyond `dialogue.talk_range` of the NPC, warps, dies, closes or talks to someone else.
+
+## Dialogue reasons
+In `DialogueRefused` and on the wire as `rejected` (`intent` `talk` or `dialogue_choice`); nothing changed (ARCHITECTURE §6.4):
+`target_gone`, `invalid_target` (not an NPC), `dead`, `no_dialogue` (the NPC has nothing to say, or the player is in no dialogue), `unreachable`, `cancelled` (another order while walking to the NPC),
+`invalid_choice` (no such choice, or its conditions do not hold), `busy` (the previous choice's items are still being applied), `missing_item`, `inventory_full`, `too_heavy` (an item action failed: nothing changed).
+
+## Dialogue end reasons
+In `DialogueEnded` and on the wire as `dialogue_ended`: `finished` (the graph reached its end; a service it opened stays open), `closed`, `moved_away`, `warped`, `died`, `replaced` (talking to another NPC), `npc_gone`, `disconnected`.
+Any reason other than `finished` ends the services the dialogue opened too.
+
 ## Events (event bus)
 `EntitySpawned`, `EntityDied`, `MonsterKilled`, `DamageDealt`, `ItemAcquired`,
 `ItemUsed`, `ItemEquipped`, `NpcTalked`, `ZoneEntered`,
@@ -194,7 +216,8 @@ Two-handed (`balance.yaml` `inventory.two_handed_weapon_types`): `sword_2h`, `st
 `ExpGained`, `ExpLost`, `PlayerRespawned`, `ItemDropped`, `ItemExpired`, `ItemUnequipped`, `ItemDiscarded`, `ItemRefused`, `InventoryChanged`,
 `CardInserted`, `ItemRefined`, `StatusRemoved`, `HpRestored`, `SpRestored`, `KnockedBack`, `Teleported`, `SummonRequested`, `MonsterSummoned`, `AreaApplied`,
 `SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`, `SkillCastEnded`, `SkillCooldownStarted`, `SkillLearnRefused`, `JobChangeRefused`,
-`StatRaised`, `StatRaiseRefused`, `StatsReset`, `SkillsReset`
+`StatRaised`, `StatRaiseRefused`, `StatsReset`, `SkillsReset`,
+`DialogueShown`, `DialogueEnded`, `DialogueRefused`, `ServiceOpened`, `QuestStartRequested`, `SavePointSet`, `DialogueEffectsRequested`, `DialogueItemsRequested`, `DialogueItemsResolved`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -235,7 +258,8 @@ does not see, `invalid_target` for itself or anything but a monster.
 In `ItemRefused` and on the wire in `rejected` (`intent` `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card` or `refine`); nothing changed (ARCHITECTURE §6.8):
 `item_gone`, `not_yours`, `unreachable`, `cancelled`, `too_heavy`, `inventory_full`, `not_usable`, `cooldown`, `not_equipment`,
 `wrong_slot`, `level_too_low`, `wrong_job`, `not_equipped`, `item_equipped`, `invalid_quantity`, `not_a_card`, `card_does_not_fit`, `no_free_socket`,
-`not_refinable`, `at_max_refine`, `missing_material`, `reset_in_combat`, `reset_dead`, `nothing_to_reset`.
+`not_refinable`, `at_max_refine`, `missing_material`, `reset_in_combat`, `reset_dead`, `nothing_to_reset`, `service_required`.
+`service_required` (T-601): `refine` works only while an NPC's `refine` service is open and in reach (`dialogue.refine_needs_service`).
 Reset items (T-503): `reset_in_combat` and `reset_dead` follow `progression.reset`; `nothing_to_reset` means no stat was raised (or no skill learned). All three leave the item in the bag.
 `card_does_not_fit`: none of the card's `slots` is one of the equipment's. `no_free_socket`: its `card_slots` are full (or it has none).
 `at_max_refine`: at `refine.yaml` `max_level`. `missing_material`: fewer carried units of the next step's material than its quantity.
@@ -248,7 +272,7 @@ In `inventory` and `inventory_changed` (`load`).
 
 ## Inventory changes
 In `inventory_changed` `cause`: `picked_up`, `used`, `equipped`, `unequipped`, `dropped`, `weight` (only the weight limit or state changed),
-`card_inserted`, `refined` (any refine attempt: the material is used up whatever the result).
+`card_inserted`, `refined` (any refine attempt: the material is used up whatever the result), `exchanged` (a dialogue's `take_item` / `give_item` actions, T-601).
 
 ## Refine failures
 What a failed refine does, per step of `refine.yaml` (`failure`): `keep` (the level stays), `down` (one level down, not below 0), `break` (the item is gone, with its cards).
@@ -285,9 +309,9 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `pong`, `bye`
-Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`.
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `pong`, `bye`
+Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,

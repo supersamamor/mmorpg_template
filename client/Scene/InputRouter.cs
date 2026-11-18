@@ -97,15 +97,17 @@ public sealed class InputRouter
     }
 
     /// <summary>
-    /// A tap: the living monster or ground item nearest the finger within its reach (a monster wins a tie): attack it or pick it up; else the ground. It only
+    /// A tap: the living monster, ground item or NPC nearest the finger within its reach (a monster wins a tie, then an item): attack it, pick it up or talk to it;
+    /// an NPC tapped directly beats the ground under it (T-601, ADR-002 row 174). Else the ground. It only
     /// asks; range, path, walkability and who may take an item are the server's.
     /// </summary>
     private void OnTap(Vector2 position, double now)
     {
         // A skill waiting for its target (T-502) only looks for monsters: a loot bag beside one must not take the tap.
-        if (PickEntity(position, EntityKinds.Monster, _session.Ui.PendingSkill is null ? EntityKinds.Item : null) is { } id && _session.World.Find(id) is { } picked)
+        if (PickEntity(position, EntityKinds.Monster, _session.Ui.PendingSkill is null ? EntityKinds.Item : null, _session.Ui.PendingSkill is null ? EntityKinds.Npc : null) is { } id && _session.World.Find(id) is { } picked)
         {
-            if (picked.Kind == EntityKinds.Item) _session.TapItem(id);
+            if (picked.Kind == EntityKinds.Npc) _session.TapNpc(id);
+            else if (picked.Kind == EntityKinds.Item) _session.TapItem(id);
             else _session.TapEntity(id);
             return;
         }
@@ -123,8 +125,8 @@ public sealed class InputRouter
         _hud.ShowInfo(EntityInfo.Title(entity, _bundle), EntityInfo.Subtitle(entity), position);
     }
 
-    /// <summary>The living entity of <paramref name="kind"/> or <paramref name="other"/> (any kind, dead included, when both are null) nearest the touch within its reach.</summary>
-    private long? PickEntity(Vector2 position, string? kind, string? other)
+    /// <summary>The living entity of <paramref name="kind"/>, <paramref name="other"/> or <paramref name="third"/> (any kind, dead included, when both are null) nearest the touch within its reach.</summary>
+    private long? PickEntity(Vector2 position, string? kind, string? other, string? third = null)
     {
         var camera = _camera.Camera;
         var metrics = _hud.Metrics;
@@ -135,8 +137,8 @@ public sealed class InputRouter
         for (var i = 0; i < entities.Count; i++)
         {
             var entity = entities[i];
-            if (kind is not null && ((entity.Kind != kind && entity.Kind != other) || entity.Dead)) continue;
-            var lift = entity.Kind == EntityKinds.Item ? 0.15f : 0.45f;   // a loot bag lies low; a monster's middle is about half a cell up
+            if (kind is not null && ((entity.Kind != kind && entity.Kind != other && entity.Kind != third) || entity.Dead)) continue;
+            var lift = entity.Kind == EntityKinds.Item ? 0.15f : entity.Kind == EntityKinds.Npc ? 0.8f : 0.45f;   // a loot bag lies low; a monster's middle is about half a cell up
             var world = new Vector3((float)entity.X, _ground.At(entity.X, entity.Z) + lift, (float)entity.Z);
             if (camera.IsPositionBehind(world)) continue;
             var center = camera.UnprojectPosition(world);

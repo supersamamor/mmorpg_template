@@ -140,3 +140,9 @@ inventory:
   dropped_lifetime_ms: 120000
   # Held in both hands: a two-handed sword, a staff and a bow leave no hand for a shield (equipping one takes the other off).
   two_handed_weapon_types: [sword_2h, staff, bow]
+dialogue:
+  # A dialogue starts and lasts within 2 cells (diagonals included) of the NPC: close enough to read as a conversation, far enough that a tap on an NPC
+  # does not have to walk onto it. A talk from farther walks the player in first; walking beyond this ends the dialogue and any service it opened.
+  talk_range: 2
+  # Refining needs a smith: the refine intent works only while an NPC's refine service is open (an open_service action) and the player is still in reach.
+  refine_needs_service: true

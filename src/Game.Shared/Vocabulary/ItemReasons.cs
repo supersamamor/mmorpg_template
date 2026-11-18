@@ -79,6 +79,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>nothing_to_reset</c> (T-503): the reset item would change nothing (no stat raised, or no skill learned); it is not used up.</summary>
         public const string NothingToReset = "nothing_to_reset";
 
+        /// <summary><c>service_required</c> (T-601): <c>refine</c> works only while an NPC's refine service is open and in reach (<c>dialogue.refine_needs_service</c>).</summary>
+        public const string ServiceRequired = "service_required";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             ItemGone,
@@ -104,7 +107,8 @@ namespace Game.Shared.Vocabulary
             MissingMaterial,
             ResetInCombat,
             ResetDead,
-            NothingToReset);
+            NothingToReset,
+            ServiceRequired);
     }
 
     /// <summary>
@@ -153,8 +157,11 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>refined</c>: a refine was tried: the material is used up and the entry went up, stayed, went down or broke (<c>refine_result</c> says which).</summary>
         public const string Refined = "refined";
 
+        /// <summary><c>exchanged</c> (T-601): a dialogue's <c>take_item</c> / <c>give_item</c> actions changed the bag.</summary>
+        public const string Exchanged = "exchanged";
+
         /// <summary>Every term in this category, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined);
+        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined, Exchanged);
     }
 
     /// <summary>What a failed refine does to the equipment, per level of <c>refine.yaml</c> (<c>failure</c>; ARCHITECTURE §6.8). VOCABULARY.md: "Refine failures".</summary>

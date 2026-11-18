@@ -55,8 +55,8 @@ public class ContentLoaderTests
         db.Monsters.Count.ShouldBe(5);
         db.Statuses.Count.ShouldBe(4);
         db.Quests.Count.ShouldBe(4);
-        db.Npcs.Count.ShouldBe(2);
-        db.Dialogue.Count.ShouldBe(2);
+        db.Npcs.Count.ShouldBe(3);
+        db.Dialogue.Count.ShouldBe(3);
         db.Drops.Count.ShouldBe(8);
         db.Maps.Count.ShouldBe(2);
         db.ExpTables.Count.ShouldBe(3);

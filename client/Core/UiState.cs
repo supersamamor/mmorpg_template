@@ -115,6 +115,11 @@ public sealed class UiState
             if (UiText.ItemRefused(rejected.Reason) is { Length: > 0 } why) SetFlash(why, now);
             return;
         }
+        if (rejected.Intent is MessageTypes.Talk or MessageTypes.DialogueChoice)
+        {
+            if (UiText.DialogueRefused(rejected.Reason) is { Length: > 0 } talkWhy) SetFlash(talkWhy, now);
+            return;
+        }
         if (rejected.Intent == MessageTypes.RaiseStat)
         {
             if (UiText.StatRefused(rejected.Reason) is { Length: > 0 } statWhy) SetFlash(statWhy, now);

@@ -79,7 +79,15 @@ public sealed class BalanceRule : IValidationRule
         Loot(context, balance.Loot);
         NewCharacter(context, balance.NewCharacter);
         Inventory(context, balance.Inventory);
+        Dialogue(context, balance.Dialogue);
         StartItems(context, balance.NewCharacter);
+    }
+
+    /// <summary>The talking range is at least 1.</summary>
+    private static void Dialogue(ValidationContext context, DialogueBalanceDef d)
+    {
+        if (d.TalkRange < 1)
+            Range(context, "dialogue.talk_range", "must be at least 1.");
     }
 
     /// <summary>The inventory numbers are usable, and the two-handed list names weapon types.</summary>

@@ -177,7 +177,7 @@ public class DefinitionConstructionTests
             Start = "hello",
             Nodes = new Dictionary<string, DialogueNodeDef>
             {
-                ["hello"] = new() { Text = "Hello.", Choices = [new DialogueChoiceDef { Text = "Help?", Next = "quest", StartQuestId = "quest.test_hunt" }] },
+                ["hello"] = new() { Text = "Hello.", Choices = [new DialogueChoiceDef { Text = "Help?", Next = "quest", Actions = [new StartQuestAction { QuestId = "quest.test_hunt" }] }] },
                 ["quest"] = new() { Text = "Go hunt." },
             },
         };

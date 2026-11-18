@@ -44,7 +44,7 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 ||
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -77,6 +77,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-statuses") >= 0) await StatusesRunAsync();
             else if (Array.IndexOf(_args, "--e2e-skills") >= 0) await SkillsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-stats") >= 0) await StatsRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-dialogue") >= 0) await DialogueRunAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
@@ -809,6 +810,78 @@ public sealed class AutoRun
         Press(hud.BagButton);
         await FramesAsync(2);
         Print("stats: points back, stats back, both items kept");
+    }
+
+    /// <summary>
+    /// T-601's run (real content): the guide Odalys stands in the safe zone. Tap her through the input path (the server walks the character up), see the dialogue
+    /// panel with her name, title and portrait and the choices the server shows, pick the one that leads to her services, see the next node, pick the save point,
+    /// see the confirming node, finish with its button, then talk again and close with the Close button. Every node, choice and reply is the server's; the run only
+    /// presses what the panel shows.
+    /// </summary>
+    private async Task DialogueRunAsync()
+    {
+        await LoginAsync();
+        var hud = _main.Hud!;
+        var dialogue = Session.Dialogue;
+        var panel = hud.Dialogue!;
+        var bundle = _main.Bundle!;
+
+        EntityView? Guide() => World.Entities.FirstOrDefault(e => e.Kind == EntityKinds.Npc && bundle.NameOf(e.DisplayKey) == "Odalys");
+        await UntilAsync(() => Guide() is not null, 10, "the guide in view");
+        var guide = Guide()!;
+        Print($"dialogue: {bundle.NameOf(guide.DisplayKey)} #{guide.Id} at {guide.Cell}, own {Own().Cell}");
+        Check(!panel.Open, "no dialogue panel before talking");
+
+        // Walk away first, so the talk has to walk the character back into range.
+        var map = CurrentMap();
+        GridCell? far = null;
+        for (var dy = 0; dy <= 3 && far is null; dy++)   // five cells east, inside the safe zone, so no monster is near
+            far = map.IsWalkable(guide.Cell.X + 5, guide.Cell.Y + dy) ? new GridCell(guide.Cell.X + 5, guide.Cell.Y + dy) : null;
+        Check(far is not null, "a walkable cell five cells from the guide");
+        await TapCellAsync(far!.Value);
+        await UntilAsync(() => Own().Cell.X == far.Value.X && Own().Cell.Y == far.Value.Y && !Own().IsWalking, 30, "walking away from the guide");
+        Print($"dialogue: walked away to {Own().Cell}");
+
+        await TapWorldAsync(new Vector3((float)guide.X, 0.8f, (float)guide.Z));
+        await UntilAsync(() => dialogue.Open, 20, "the dialogue after the walk up");
+        await FramesAsync(3);
+        var own = Own().Cell;
+        Check(Math.Max(Math.Abs(own.X - guide.Cell.X), Math.Abs(own.Y - guide.Cell.Y)) <= 2, "the server walked the character into talking range first");
+        Check(panel.Open && panel.Text.StartsWith("Odalys | Vale Guide | ", StringComparison.Ordinal), "the panel shows the speaker's name and title");
+        Check(dialogue.Choices.Count >= 3, "the server shows the first node's choices");
+        Print($"dialogue: panel {panel.Text}");
+        Print($"dialogue: layout {panel.Layout}; portrait {(panel.ShowsPortrait ? "texture" : "letter fallback")}");
+        await ShotAsync("-dialogue");
+
+        int Find(string text) => dialogue.Choices.ToList().FindIndex(c => c.Text.Contains(text, StringComparison.Ordinal));
+        string Node() => dialogue.Text;
+        var first = Node();
+        var more = Find("something else");
+        Check(more >= 0, "the first node has the choice that leads to the services");
+        Press(panel.ChoiceButtons[more].Button);
+        await UntilAsync(() => Node() != first, 10, "the next node");
+        await FramesAsync(3);
+        Print($"dialogue: next {panel.Text}");
+        Check(dialogue.Open && dialogue.Choices.Count >= 2, "the next node shows its choices (the level-gated reset ones too: a new character is below level 10)");
+
+        var home = Find("home");
+        Check(home >= 0, "the services node has the save point choice");
+        var services = Node();
+        Press(panel.ChoiceButtons[home].Button);
+        await UntilAsync(() => Node() != services, 10, "the confirming node");
+        await FramesAsync(3);
+        Print($"dialogue: after the save point {panel.Text}");
+        Check(dialogue.Choices.Count == 0 && !dialogue.More, "the last node has no choices and ends the dialogue");
+        Check(panel.ChoiceButtons.Count == 1, "the panel offers one button to finish");
+        Press(panel.ChoiceButtons[0].Button);
+        await UntilAsync(() => !dialogue.Open && !panel.Open, 10, "the panel closing when the server ends the dialogue");
+
+        // Again, and close it with the Close button.
+        await TapWorldAsync(new Vector3((float)guide.X, 0.8f, (float)guide.Z));
+        await UntilAsync(() => dialogue.Open, 20, "the dialogue again");
+        Press(panel.CloseButton);
+        await UntilAsync(() => !dialogue.Open && !panel.Open, 10, "Close ending the dialogue");
+        Print("dialogue: walked up, talked, chose, saw the next nodes, finished, talked again, closed");
     }
 
     private static void Press(Button button) => button.EmitSignal(BaseButton.SignalName.Pressed);

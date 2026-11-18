@@ -60,7 +60,6 @@ public static class ClientBundleWriter
             Array(w, "statuses", bundle.Statuses, Status);
             Array(w, "monsters", bundle.Monsters, Monster);
             Array(w, "npcs", bundle.Npcs, Npc);
-            Array(w, "dialogues", bundle.Dialogues, Dialogue);
             Array(w, "quests", bundle.Quests, Quest);
             Array(w, "maps", bundle.Maps, Map);
             Appearance(w, bundle.Appearance);
@@ -240,30 +239,8 @@ public static class ClientBundleWriter
         w.WriteString("id", n.Id);
         w.WriteString("name", n.Name);
         Opt(w, "title", n.Title);
-        Opt(w, "dialogue", n.DialogueId);
         Opt(w, "model", n.ModelAssetKey);
         Opt(w, "portrait", n.PortraitAssetKey);
-    }
-
-    private static void Dialogue(Utf8JsonWriter w, ClientDialogue d)
-    {
-        w.WriteString("id", d.Id);
-        w.WriteString("start", d.Start);
-        Array(w, "nodes", d.Nodes, (nw, n) =>
-        {
-            nw.WriteString("key", n.Key);
-            Opt(nw, "speaker", n.SpeakerNpcId);
-            Opt(nw, "portrait", n.PortraitAssetKey);
-            nw.WriteString("text", n.Text);
-            Opt(nw, "next", n.Next);
-            if (n.Choices.Count > 0)
-                Array(nw, "choices", n.Choices, (cw, c) =>
-                {
-                    cw.WriteString("text", c.Text);
-                    Opt(cw, "next", c.Next);
-                    Opt(cw, "quest", c.StartQuestId);
-                });
-        });
     }
 
     private static void Quest(Utf8JsonWriter w, ClientQuest q)

@@ -53,6 +53,24 @@ namespace Game.Shared.Definitions
             (RewardTypes.UnlockJob, typeof(UnlockJobReward)),
             (RewardTypes.Status, typeof(StatusReward)));
 
+        /// <summary><see cref="DialogueConditionDef"/> subtypes by <see cref="DialogueConditionTypes"/> value.</summary>
+        public static readonly IReadOnlyDictionary<string, System.Type> DialogueConditions = Table(
+            (DialogueConditionTypes.BaseLevel, typeof(BaseLevelCondition)),
+            (DialogueConditionTypes.JobLevel, typeof(JobLevelCondition)),
+            (DialogueConditionTypes.JobIs, typeof(JobIsCondition)),
+            (DialogueConditionTypes.JobIsNot, typeof(JobIsNotCondition)),
+            (DialogueConditionTypes.HasItem, typeof(HasItemCondition)),
+            (DialogueConditionTypes.HasStatus, typeof(HasStatusCondition)));
+
+        /// <summary><see cref="DialogueActionDef"/> subtypes by <see cref="DialogueActionTypes"/> value.</summary>
+        public static readonly IReadOnlyDictionary<string, System.Type> DialogueActions = Table(
+            (DialogueActionTypes.StartQuest, typeof(StartQuestAction)),
+            (DialogueActionTypes.SetSavePoint, typeof(SetSavePointAction)),
+            (DialogueActionTypes.RunEffects, typeof(RunEffectsAction)),
+            (DialogueActionTypes.TakeItem, typeof(TakeItemAction)),
+            (DialogueActionTypes.GiveItem, typeof(GiveItemAction)),
+            (DialogueActionTypes.OpenService, typeof(OpenServiceAction)));
+
         /// <summary>Every polymorphic base type and its discriminator table.</summary>
         public static readonly IReadOnlyDictionary<System.Type, IReadOnlyDictionary<string, System.Type>> ByBaseType =
             new ReadOnlyDictionary<System.Type, IReadOnlyDictionary<string, System.Type>>(
@@ -61,6 +79,8 @@ namespace Game.Shared.Definitions
                     [typeof(EffectDef)] = Effects,
                     [typeof(QuestObjectiveDef)] = QuestObjectives,
                     [typeof(RewardDef)] = Rewards,
+                    [typeof(DialogueConditionDef)] = DialogueConditions,
+                    [typeof(DialogueActionDef)] = DialogueActions,
                 });
 
         private static IReadOnlyDictionary<string, System.Type> Table(params (string Discriminator, System.Type Type)[] entries)

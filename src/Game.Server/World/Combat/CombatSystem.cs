@@ -1,4 +1,5 @@
 using Game.Server.Events;
+using Game.Server.World.Dialogue;
 using Game.Server.World.Effects;
 using Game.Server.World.Inventory;
 using Game.Server.World.Monsters;
@@ -50,6 +51,7 @@ public sealed partial class CombatSystem : ITickSystem
 
     private readonly CombatContent _content;
     private readonly IPlayerProgressionStore _progressions;
+    private readonly ISavePointStore? _savePoints;
     private readonly ProgressionRules _progression;
     private readonly Func<ProgressionState> _newCharacter;
     private readonly AttackContext _attack = new();
@@ -73,6 +75,8 @@ public sealed partial class CombatSystem : ITickSystem
     private List<SkillRequested> _skillResolving = new();
     private List<ItemUsed> _itemUses = new();
     private List<ItemUsed> _itemResolving = new();
+    private List<DialogueEffectsRequested> _dialogueEffects = new();
+    private List<DialogueEffectsRequested> _dialogueEffectsRunning = new();
     private readonly List<(int Distance, long Id)> _area = new();
     private EffectRunner? _runner;
     private EffectHost? _host;
@@ -83,11 +87,15 @@ public sealed partial class CombatSystem : ITickSystem
     private long _tick;
     private long _nowMs;
 
-    /// <summary>Creates the combat system for one instance; <paramref name="progressions"/> is shared by every instance.</summary>
-    public CombatSystem(CombatContent content, IPlayerProgressionStore progressions)
+    /// <summary>
+    /// Creates the combat system for one instance; <paramref name="progressions"/> is shared by every instance, and so is <paramref name="savePoints"/> (T-601):
+    /// a player with a save point respawns and teleports <c>to_save_point</c> there, one without at its map's respawn point.
+    /// </summary>
+    public CombatSystem(CombatContent content, IPlayerProgressionStore progressions, ISavePointStore? savePoints = null)
     {
         _content = content ?? throw new ArgumentNullException(nameof(content));
         _progressions = progressions ?? throw new ArgumentNullException(nameof(progressions));
+        _savePoints = savePoints;
         _progression = new ProgressionRules(content.Balance, content.Progression);
         var startJob = content.Balance.NewCharacter.StartJobId;
         _newCharacter = () => _progression.NewCharacter(startJob);
@@ -230,6 +238,7 @@ public sealed partial class CombatSystem : ITickSystem
         events.Subscribe<MonsterReturned>(OnReturned);
         events.Subscribe<SkillRequested>(e => _skillRequests.Add(e));
         events.Subscribe<ItemUsed>(e => _itemUses.Add(e));
+        events.Subscribe<DialogueEffectsRequested>(e => _dialogueEffects.Add(e));
 
         // Entities that were there before combat first ran (tests, a system added late) join now.
         foreach (var entity in instance.Entities) Track(entity);
@@ -346,7 +355,14 @@ public sealed partial class CombatSystem : ITickSystem
         return null;
     }
 
-    /// <summary>A dead player comes back at the respawn point with <c>death.respawn_hp_percent</c> of its max HP.</summary>
+    /// <summary>
+    /// Where <paramref name="player"/> comes back after death and where a <c>teleport</c> <c>to_save_point</c> takes it (T-601): the save point an NPC set
+    /// (<c>set_save_point</c>), else the respawn point of the map it is on.
+    /// </summary>
+    internal (string MapId, GridCell Cell) SavePointOf(Entity player) =>
+        _savePoints is not null && _savePoints.TryGet(player.Id, out var point) ? (point.MapId, point.Cell) : _content.RespawnPointFor(_instance!.MapId);
+
+    /// <summary>A dead player comes back at its save point (see <see cref="SavePointOf"/>) with <c>death.respawn_hp_percent</c> of its max HP.</summary>
     private void Revive(TickContext context, Entity player)
     {
         if (player.Kind != EntityKind.Player || !player.Dead || player.Vitals is not { } vitals || player.Stats is not { } stats) return;
@@ -354,7 +370,7 @@ public sealed partial class CombatSystem : ITickSystem
         var hp = (int)Math.Max(1, (long)vitals.MaxHp * _content.Balance.Death.RespawnHpPercent / 100);
         vitals.Hp = Math.Min(hp, Math.Max(1, vitals.MaxHp));
         player.Dead = false;
-        var (mapId, cell) = _content.RespawnPointFor(_instance!.MapId);
+        var (mapId, cell) = SavePointOf(player);
         context.Warp(player.Id, mapId, cell);
         context.Publish(new PlayerRespawned(player.Id, mapId, cell, vitals.Hp));
     }

@@ -5,6 +5,7 @@ using Game.Server.Hosting;
 using Game.Server.World;
 using Game.Server.World.Aoi;
 using Game.Server.World.Combat;
+using Game.Server.World.Dialogue;
 using Game.Server.World.Effects;
 using Game.Server.World.Inventory;
 using Game.Shared.Progression;
@@ -169,6 +170,11 @@ public sealed class Gateway
             });
             events.Subscribe<ItemRefined>(e => Owner(e.Player)?.Post(OwnInventory.Message(e)));
             events.Subscribe<ItemRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(e.Intent, e.Reason, null, e.Target, e.EntryId, e.Slot)));
+            // Dialogue (T-601), owner only: the node the player is at, how it ended, a service that opened, and a refused talk or choice as rejected.
+            events.Subscribe<DialogueShown>(e => Owner(e.Player)?.Post(new DialogueMessage(e.Npc.Value, e.Speaker, e.Portrait, e.Text, e.Choices, e.More)));
+            events.Subscribe<DialogueEnded>(e => Owner(e.Player)?.Post(new DialogueEndedMessage(e.Reason)));
+            events.Subscribe<ServiceOpened>(e => Owner(e.Player)?.Post(new ServiceOpenedMessage(e.Service, e.Npc.Value)));
+            events.Subscribe<DialogueRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(e.Intent, e.Reason, null, e.Target)));
         }
     }
 

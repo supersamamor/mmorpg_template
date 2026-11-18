@@ -43,6 +43,9 @@ public class ProtocolJsonTests
         { "learn_skill", new LearnSkillMessage("skill.twin_strike"), """{"type":"learn_skill","skill":"skill.twin_strike"}""" },
         { "change_job", new ChangeJobMessage("job.spellbinder"), """{"type":"change_job","job":"job.spellbinder"}""" },
         { "raise_stat", new RaiseStatMessage("str", 2), """{"type":"raise_stat","stat":"str","amount":2}""" },
+        { "talk", new TalkMessage(12), """{"type":"talk","target":12}""" },
+        { "dialogue_choice", new DialogueChoiceMessage(2), """{"type":"dialogue_choice","index":2}""" },
+        { "dialogue_close", new DialogueCloseMessage(), """{"type":"dialogue_close"}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -108,10 +111,24 @@ public class ProtocolJsonTests
         { "skills, nothing yet", new SkillsMessage("job.wanderer", 0, [], [], []), """{"type":"skills","job":"job.wanderer","points":0,"levels":[],"cooldowns":[],"jobs":[]}""" },
         { "cooldown", new CooldownMessage("skill.twin_strike", 1500), """{"type":"cooldown","skill":"skill.twin_strike","ms":1500}""" },
         {
+            "dialogue", new DialogueMessage(12, "npc.guide", null, "Hello.", [new DialogueChoiceRecord(0, "Hi"), new DialogueChoiceRecord(2, "Bye")], false),
+            """{"type":"dialogue","npc":12,"speaker":"npc.guide","text":"Hello.","choices":[{"index":0,"text":"Hi"},{"index":2,"text":"Bye"}]}"""
+        },
+        {
+            "dialogue continue", new DialogueMessage(12, "npc.guide", "portrait.x", "Go.", [], true),
+            """{"type":"dialogue","npc":12,"speaker":"npc.guide","portrait":"portrait.x","text":"Go.","choices":[],"more":true}"""
+        },
+        { "dialogue_ended", new DialogueEndedMessage(DialogueEndReasons.MovedAway), """{"type":"dialogue_ended","reason":"moved_away"}""" },
+        { "service_opened", new ServiceOpenedMessage(ServiceIds.Refine, 12), """{"type":"service_opened","service":"refine","npc":12}""" },
+        {
             "stats", new StatsMessage(4, [new StatRecord("str", 3, 2), new StatRecord("luk", 99, 0)], [new DerivedRecord("atk", 12), new DerivedRecord("max_hp", 55)]),
             """{"type":"stats","points":4,"stats":[["str",3,2],["luk",99,0]],"derived":[["atk",12],["max_hp",55]]}"""
         },
         { "stats, nothing yet", new StatsMessage(0, [], []), """{"type":"stats","points":0,"stats":[],"derived":[]}""" },
+        {
+            "rejected talk", new RejectedMessage(MessageTypes.Talk, DialogueReasons.Unreachable, null, 12),
+            """{"type":"rejected","intent":"talk","reason":"unreachable","target":12}"""
+        },
         {
             "rejected raise_stat", new RejectedMessage(MessageTypes.RaiseStat, StatReasons.NotEnoughPoints, null, Stat: "str"),
             """{"type":"rejected","intent":"raise_stat","reason":"not_enough_points","stat":"str"}"""

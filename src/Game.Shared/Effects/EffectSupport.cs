@@ -17,6 +17,9 @@ namespace Game.Shared.Effects
         /// <summary>A consumable: the user is caster and target.</summary>
         Item,
 
+        /// <summary>A dialogue <c>run_effects</c> action (an NPC service): the talking player is caster and target, as for a consumable.</summary>
+        Service,
+
         /// <summary>A status's <c>on_apply</c>: its applier is the caster, its bearer the target.</summary>
         StatusOnApply,
 
@@ -63,11 +66,11 @@ namespace Game.Shared.Effects
                     return null;
                 case ResetStatsEffect _:
                 case ResetSkillsEffect _:
-                    return site == EffectSite.Item && !inArea
+                    return (site == EffectSite.Item || site == EffectSite.Service) && !inArea
                         ? null
                         : effect.Type + " changes its user's points for good: it is allowed only directly in a consumable (or a service), never in a skill, a status or an area";
                 case KnockbackEffect knockback:
-                    if (!inArea && (site == EffectSite.Item || site == EffectSite.SelfSkill))
+                    if (!inArea && (site == EffectSite.Item || site == EffectSite.Service || site == EffectSite.SelfSkill))
                         return "knockback pushes its target away from the caster: the target here is the caster itself";
                     if (knockback.Cells < 1) return "cells must be at least 1";
                     break;

@@ -74,6 +74,7 @@ public sealed class Hud
     private InventoryPanel? _bag;
     private SkillPanel? _skillPanel;
     private StatsPanel? _statsPanel;
+    private DialoguePanel? _dialoguePanel;
     private readonly Button _skillsButton = new() { Text = UiText.Skills, Visible = false };
     private readonly List<ColorRect> _sweeps = new();   // one cooldown overlay per hotbar slot (T-502)
     private string? _pendingShown;
@@ -218,6 +219,12 @@ public sealed class Hud
 
         if (session is not null && bundle is not null) _bag = new InventoryPanel(_safe, session, bundle, _interactive, Tap);
         if (session is not null && bundle is not null) _skillPanel = new SkillPanel(_safe, session, bundle, _interactive, Tap);
+        if (session is not null && bundle is not null)
+        {
+            _dialoguePanel = new DialoguePanel(_safe, session, bundle, _interactive, Tap);
+            // A service the server opened (refining at a smith) is a panel of its own: the bag, where the refine button lives.
+            session.ServiceOpened += _ => _bag?.SetOpen(true);
+        }
         if (session is not null)
         {
             _statsPanel = new StatsPanel(_safe, session, _interactive, Tap);
@@ -414,6 +421,9 @@ public sealed class Hud
     /// <summary>The stats panel (T-503), or null without a session.</summary>
     public StatsPanel? Stats => _statsPanel;
 
+    /// <summary>The dialogue panel (T-601), or null without a session.</summary>
+    public DialoguePanel? Dialogue => _dialoguePanel;
+
     /// <summary>The skills button (for the scripted run).</summary>
     public Button SkillsButton => _skillsButton;
 
@@ -430,6 +440,7 @@ public sealed class Hud
             _statusVersion = -1;   // the status icons can load now
             if (_bag is not null) _bag.IconLoader = value;
             if (_skillPanel is not null) _skillPanel.IconLoader = value;
+            if (_dialoguePanel is not null) _dialoguePanel.IconLoader = value;
         }
     }
 
@@ -575,6 +586,7 @@ public sealed class Hud
         _hotbarRow.AddThemeConstantOverride("separation", Mathf.RoundToInt(margin));
         _bag?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _statsPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
+        _dialoguePanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _soundGrid.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(Dp(8)));
         _soundGrid.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(Dp(8)));
@@ -686,6 +698,7 @@ public sealed class Hud
         _bag?.Refresh();
         _skillPanel?.Refresh();
         _statsPanel?.Refresh();
+        _dialoguePanel?.Refresh();
     }
 
     /// <summary>The own character's status icons shown now, and their texts (for the scripted run).</summary>

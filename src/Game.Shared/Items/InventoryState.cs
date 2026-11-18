@@ -81,6 +81,15 @@ namespace Game.Shared.Items
             return null;
         }
 
+        /// <summary>A copy of the entries, to put back with <see cref="Restore"/> when a multi-step change fails half way.</summary>
+        internal List<InventoryEntry> Snapshot() => new List<InventoryEntry>(_entries);
+
+        internal void Restore(List<InventoryEntry> entries)
+        {
+            _entries.Clear();
+            _entries.AddRange(entries);
+        }
+
         internal int IndexOf(long id)
         {
             int lo = 0, hi = _entries.Count - 1;

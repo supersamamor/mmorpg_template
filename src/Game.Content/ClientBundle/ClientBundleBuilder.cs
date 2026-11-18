@@ -23,8 +23,7 @@ public static class ClientBundleBuilder
         content.Jobs.All.Select(Job).ToList(),
         content.Statuses.All.Select(s => new ClientStatus(s.Id, s.Name, s.Description, s.Debuff, s.IconAssetKey, s.VfxAssetKey)).ToList(),
         content.Monsters.All.Select(Monster).ToList(),
-        content.Npcs.All.Select(n => new ClientNpc(n.Id, n.Name, n.Title, n.DialogueId, n.ModelAssetKey, n.PortraitAssetKey)).ToList(),
-        content.Dialogue.All.Select(Dialogue).ToList(),
+        content.Npcs.All.Select(n => new ClientNpc(n.Id, n.Name, n.Title, n.ModelAssetKey, n.PortraitAssetKey)).ToList(),
         content.Quests.All.Select(q => new ClientQuest(q.Id, q.Name, q.Description, q.GiverNpcId, q.Steps.Select(s => s.Description ?? "").ToList())).ToList(),
         content.Maps.All.Select(m => Map(m, content.GetGrid(m.Id))).ToList(),
         Appearance(content.Appearance),
@@ -86,11 +85,6 @@ public static class ClientBundleBuilder
         job.ModelAssetKey, job.IconAssetKey,
         job.Skills.Select(s => new ClientJobSkill(s.SkillId, s.MaxLevel,
             s.Requires.Select(r => new ClientSkillRequirement(r.SkillId, r.Level)).ToList())).ToList());
-
-    private static ClientDialogue Dialogue(DialogueDef dialogue) => new(dialogue.Id, dialogue.Start,
-        dialogue.Nodes.OrderBy(n => n.Key, StringComparer.Ordinal).Select(n => new ClientDialogueNode(
-            n.Key, n.Value.SpeakerNpcId, n.Value.PortraitAssetKey, n.Value.Text, n.Value.Next,
-            n.Value.Choices.Select(c => new ClientDialogueChoice(c.Text, c.Next, c.StartQuestId)).ToList())).ToList());
 
     private static ClientMap Map(MapDef map, MapGrid grid)
     {

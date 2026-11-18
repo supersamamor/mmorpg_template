@@ -24,15 +24,13 @@ public class ClientBundleTests
     // ---- shape ----
 
     private static readonly Shared.ClientContent.ClientBundle Fixture = new(
-        4, ["fire"], ["str"],
+        5, ["fire"], ["str"],
         [new ClientItem("item.a", "A \"quoted\" é", null, "equip", "icon.a", null, ["weapon"], "dagger", "model.a", "sfx.use", null, 2, true)],
         [new ClientSkill("skill.a", "Bolt", "Hits.", 3, false, 6, true, false, ClientAreaShapes.Square, 2, 500, "cast", "icon.s", null, null)],
         [new ClientJob("job.a", "Jobber", null, null, [], null, null, [new ClientJobSkill("skill.a", null, [new ClientSkillRequirement("skill.b", 2)])])],
         [new ClientStatus("status.a", "Stun", null, true, null, null)],
         [new ClientMonster("monster.a", "Blob", "model.m", new ClientMonsterSounds(null, "sfx.hit", "sfx.die"))],
-        [new ClientNpc("npc.a", "Guide", "Helper", "dialogue.a", null, null)],
-        [new ClientDialogue("dialogue.a", "start", [new ClientDialogueNode("start", null, null, "Hi", null,
-            [new ClientDialogueChoice("Yes", null, "quest.a")])])],
+        [new ClientNpc("npc.a", "Guide", "Helper", null, null)],
         [new ClientQuest("quest.a", "Q", null, "npc.a", ["Do it."])],
         [new ClientMap("map.a", "Map", "scene.a", null, "ambience.a", 2, 1, "AwM=", [new ClientWarp(new GridCell(1, 0), "map.b", new GridCell(0, 0))],
             [new ClientNpcPlacement("npc.a", new GridCell(0, 0), "s")], [new ClientZone("safe", new GridRect(0, 0, 2, 1))])],
@@ -43,7 +41,7 @@ public class ClientBundleTests
 
     private static readonly string FixtureBody =
         """
-        {"format_version":4,
+        {"format_version":5,
         HASH
         "elements":["fire"],"stats":["str"],
         "items":[{"id":"item.a","name":"A @U0022quoted@U0022 @U00E9","kind":"equip","icon":"icon.a","slots":["weapon"],"weapon_type":"dagger","visual":"model.a","use_sfx":"sfx.use","card_slots":2,"refinable":true}],
@@ -51,8 +49,7 @@ public class ClientBundleTests
         "jobs":[{"id":"job.a","name":"Jobber","skills":[{"skill":"skill.a","requires":[{"skill":"skill.b","level":2}]}]}],
         "statuses":[{"id":"status.a","name":"Stun","debuff":true}],
         "monsters":[{"id":"monster.a","name":"Blob","model":"model.m","sounds":{"hit":"sfx.hit","die":"sfx.die"}}],
-        "npcs":[{"id":"npc.a","name":"Guide","title":"Helper","dialogue":"dialogue.a"}],
-        "dialogues":[{"id":"dialogue.a","start":"start","nodes":[{"key":"start","text":"Hi","choices":[{"text":"Yes","quest":"quest.a"}]}]}],
+        "npcs":[{"id":"npc.a","name":"Guide","title":"Helper"}],
         "quests":[{"id":"quest.a","name":"Q","giver":"npc.a","steps":["Do it."]}],
         "maps":[{"id":"map.a","name":"Map","scene":"scene.a","ambience":"ambience.a","width":2,"height":1,"cells":"AwM=",
         "warps":[{"cell":[1,0],"map":"map.b","target":[0,0]}],"npcs":[{"npc":"npc.a","cell":[0,0],"facing":"s"}],
@@ -91,11 +88,8 @@ public class ClientBundleTests
         [
             "ClientAppearance: Genders,SkinTones,DefaultSkinToneId,HairColors,DefaultHairColorId",
             "ClientAppearanceOption: Id,Name,ModelAssetKey",
-            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Dialogues,Quests,Maps,Appearance,Refine",
+            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Quests,Maps,Appearance,Refine",
             "ClientColorOption: Id,Name,Color",
-            "ClientDialogue: Id,Start,Nodes",
-            "ClientDialogueChoice: Text,Next,StartQuestId",
-            "ClientDialogueNode: Key,SpeakerNpcId,PortraitAssetKey,Text,Next,Choices",
             "ClientGender: Gender,Name,BodyModelAssetKey,Faces,Hairstyles,DefaultFaceId,DefaultHairstyleId",
             "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey,UseSfx,EquipSfx,CardSlots,Refinable,ConfirmUse",
             "ClientJob: Id,Name,Description,ParentJobId,WeaponTypes,ModelAssetKey,IconAssetKey,Skills",
@@ -103,7 +97,7 @@ public class ClientBundleTests
             "ClientMap: Id,Name,SceneAssetKey,MusicAssetKey,AmbienceAssetKey,Width,Height,Cells,Warps,Npcs,Zones",
             "ClientMonster: Id,Name,ModelAssetKey,Sounds",
             "ClientMonsterSounds: Aggro,Hit,Die",
-            "ClientNpc: Id,Name,Title,DialogueId,ModelAssetKey,PortraitAssetKey",
+            "ClientNpc: Id,Name,Title,ModelAssetKey,PortraitAssetKey",
             "ClientNpcPlacement: NpcId,Cell,Facing",
             "ClientQuest: Id,Name,Description,GiverNpcId,StepTexts",
             "ClientRefine: MaxLevel,Levels",
@@ -121,7 +115,7 @@ public class ClientBundleTests
     {
         using var doc = JsonDocument.Parse(Export(Content).FileBytes);
         var root = doc.RootElement;
-        root.GetProperty("format_version").GetInt32().ShouldBe(4);
+        root.GetProperty("format_version").GetInt32().ShouldBe(5);
         // T-402: card slots and refinable on equipment, and the refine steps as far as a player needs them to decide (chance, material, outcome).
         var vest = root.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("id").GetString() == "item.padded_vest");
         vest.GetProperty("card_slots").GetInt32().ShouldBe(1);

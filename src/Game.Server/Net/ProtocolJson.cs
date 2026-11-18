@@ -38,7 +38,7 @@ public static class ProtocolJson
             var reader = new Utf8JsonReader(utf8, new JsonReaderOptions { MaxDepth = MaxClientDepth });
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ClientMessage>(ByeReasons.Malformed);
             string? type = null, name = null, content = null, resume = null, slot = null, skill = null, job = null, stat = null;
-            int? version = null, quantity = null, level = null, amount = null;
+            int? version = null, quantity = null, level = null, amount = null, index = null;
             long? seq = null, target = null, entry = null, card = null;
             GridCell? cell = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
@@ -62,6 +62,7 @@ public static class ProtocolJson
                     case "job": job = String(ref reader); break;
                     case "stat": stat = String(ref reader); break;
                     case "amount": amount = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var am) ? am : throw Bad(); break;
+                    case "index": index = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var ix) ? ix : throw Bad(); break;
                     case "level": level = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var lv) ? lv : throw Bad(); break;
                     case "quantity": quantity = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var q) ? q : throw Bad(); break;
                     default: reader.Skip(); break;
@@ -91,6 +92,9 @@ public static class ProtocolJson
                 MessageTypes.LearnSkill => skill is { } learned ? new LearnSkillMessage(learned) : null,
                 MessageTypes.ChangeJob => job is { } changed ? new ChangeJobMessage(changed) : null,
                 MessageTypes.RaiseStat => stat is { } raised ? new RaiseStatMessage(raised, amount ?? 1) : null,
+                MessageTypes.Talk => target is { } npc ? new TalkMessage(npc) : null,
+                MessageTypes.DialogueChoice => index is { } picked ? new DialogueChoiceMessage(picked) : null,
+                MessageTypes.DialogueClose => new DialogueCloseMessage(),
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -168,6 +172,12 @@ public static class ProtocolJson
                 break;
             case ChangeJobMessage change:
                 w.WriteString("job", change.Job);
+                break;
+            case TalkMessage talk:
+                w.WriteNumber("target", talk.Target);
+                break;
+            case DialogueChoiceMessage choice:
+                w.WriteNumber("index", choice.Index);
                 break;
             case RaiseStatMessage raise:
                 w.WriteString("stat", raise.Stat);
@@ -365,6 +375,29 @@ public static class ProtocolJson
                 w.WriteString("result", refined.Result);
                 w.WriteNumber("refine", refined.Refine);
                 break;
+            case DialogueMessage dialogue:
+                w.WriteNumber("npc", dialogue.Npc);
+                w.WriteString("speaker", dialogue.Speaker);
+                if (dialogue.Portrait is not null) w.WriteString("portrait", dialogue.Portrait);
+                w.WriteString("text", dialogue.Text);
+                w.WriteStartArray("choices");
+                foreach (var c in dialogue.Choices)
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("index", c.Index);
+                    w.WriteString("text", c.Text);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+                if (dialogue.Choices.Count == 0) w.WriteBoolean("more", dialogue.More);
+                break;
+            case DialogueEndedMessage ended:
+                w.WriteString("reason", ended.Reason);
+                break;
+            case ServiceOpenedMessage opened:
+                w.WriteString("service", opened.Service);
+                w.WriteNumber("npc", opened.Npc);
+                break;
             case PongMessage pong:
                 w.WriteNumber("seq", pong.Seq);
                 break;
@@ -418,6 +451,10 @@ public static class ProtocolJson
             string? stat = null;
             List<string>? jobs = null;
             int points = 0, ms = 0;
+            string? speaker = null, portrait = null, text = null, service = null;
+            long? npc = null;
+            bool more = false;
+            List<DialogueChoiceRecord>? choices = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var key = reader.GetString();
@@ -452,6 +489,13 @@ public static class ProtocolJson
                     case "job": job = String(ref reader); break;
                     case "points": points = reader.GetInt32(); break;
                     case "ms": ms = reader.GetInt32(); break;
+                    case "npc": npc = reader.GetInt64(); break;
+                    case "speaker": speaker = String(ref reader); break;
+                    case "portrait": portrait = String(ref reader); break;
+                    case "text": text = String(ref reader); break;
+                    case "service": service = String(ref reader); break;
+                    case "more": more = reader.GetBoolean(); break;
+                    case "choices": choices = ReadChoices(ref reader); break;
                     case "levels": levels = ReadPairs(ref reader); break;
                     case "cooldowns": cooldowns = ReadPairs(ref reader); break;
                     case "jobs": jobs = ReadStrings(ref reader); break;
@@ -510,6 +554,9 @@ public static class ProtocolJson
                         (cooldowns ?? []).ConvertAll(c => new SkillCooldownRecord(c.Item1, c.Item2)), (IReadOnlyList<string>?)jobs ?? Array.Empty<string>()),
                 MessageTypes.Stats => new StatsMessage(points, statRows ?? [], (derived ?? []).ConvertAll(d => new DerivedRecord(d.Item1, d.Item2))),
                 MessageTypes.Cooldown => skill is null ? null : new CooldownMessage(skill, ms),
+                MessageTypes.Dialogue => npc is null || speaker is null || text is null ? null : new DialogueMessage(npc.Value, speaker, portrait, text, (IReadOnlyList<DialogueChoiceRecord>?)choices ?? Array.Empty<DialogueChoiceRecord>(), more),
+                MessageTypes.DialogueEnded => reason is null ? null : new DialogueEndedMessage(reason),
+                MessageTypes.ServiceOpened => service is null || npc is null ? null : new ServiceOpenedMessage(service, npc.Value),
                 MessageTypes.Pong => new PongMessage(seq),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason),
                 null => null,
@@ -643,6 +690,31 @@ public static class ProtocolJson
                 }
             }
             list.Add(new InventoryEntryRecord(id, item ?? throw Bad(), quantity, slot, cards, refine));
+        }
+        return list;
+    }
+
+    private static List<DialogueChoiceRecord> ReadChoices(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+        var list = new List<DialogueChoiceRecord>();
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            if (reader.TokenType != JsonTokenType.StartObject) throw Bad();
+            int? index = null;
+            string? text = null;
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var key = reader.GetString();
+                reader.Read();
+                switch (key)
+                {
+                    case "index": index = reader.GetInt32(); break;
+                    case "text": text = String(ref reader); break;
+                    default: reader.Skip(); break;
+                }
+            }
+            list.Add(new DialogueChoiceRecord(index ?? throw Bad(), text ?? throw Bad()));
         }
         return list;
     }
