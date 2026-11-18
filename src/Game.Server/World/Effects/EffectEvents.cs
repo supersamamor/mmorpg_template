@@ -178,3 +178,31 @@ public sealed record JobChangeRefused(EntityId Player, string JobId, string Reas
     /// <inheritdoc />
     public string Name => EventNames.JobChangeRefused;
 }
+
+/// <summary><c>StatRaised</c> (T-503): <c>Player</c> raised primary stat <c>Stat</c> to <c>Value</c>, spending <c>Cost</c> stat points.</summary>
+public sealed record StatRaised(EntityId Player, string Stat, int Value, int Cost) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.StatRaised;
+}
+
+/// <summary><c>StatRaiseRefused</c> (T-503): a <c>raise_stat</c> of <c>Player</c> was refused for a <see cref="StatReasons"/> term; nothing changed.</summary>
+public sealed record StatRaiseRefused(EntityId Player, string Stat, string Reason) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.StatRaiseRefused;
+}
+
+/// <summary><c>StatsReset</c> (T-503): <c>Player</c>'s allocated stats went back to the start value; <c>Refunded</c> stat points came back.</summary>
+public sealed record StatsReset(EntityId Player, int Refunded) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.StatsReset;
+}
+
+/// <summary><c>SkillsReset</c> (T-503): <c>Player</c>'s learned skills went back to 0; <c>Refunded</c> skill points came back.</summary>
+public sealed record SkillsReset(EntityId Player, int Refunded) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.SkillsReset;
+}

@@ -71,6 +71,7 @@ public sealed class Hud
     private readonly Control _hotbarSpacer = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private InventoryPanel? _bag;
     private SkillPanel? _skillPanel;
+    private StatsPanel? _statsPanel;
     private readonly Button _skillsButton = new() { Text = UiText.Skills, Visible = false };
     private readonly List<ColorRect> _sweeps = new();   // one cooldown overlay per hotbar slot (T-502)
     private string? _pendingShown;
@@ -212,6 +213,15 @@ public sealed class Hud
 
         if (session is not null && bundle is not null) _bag = new InventoryPanel(_safe, session, bundle, _interactive, Tap);
         if (session is not null && bundle is not null) _skillPanel = new SkillPanel(_safe, session, bundle, _interactive, Tap);
+        if (session is not null)
+        {
+            _statsPanel = new StatsPanel(_safe, session, _interactive, Tap);
+            if (_skillPanel is not null)
+            {
+                _skillPanel.ShowStats = () => _statsPanel.SetOpen(true);
+                _statsPanel.BackToSkills = () => _skillPanel.SetOpen(true);
+            }
+        }
         _interactive.Add(_skillsButton);
 
         _infoTitle.HorizontalAlignment = HorizontalAlignment.Left;
@@ -395,6 +405,9 @@ public sealed class Hud
     /// <summary>The skill tree panel (T-502; for the scripted run).</summary>
     public SkillPanel? Skills => _skillPanel;
 
+    /// <summary>The stats panel (T-503), or null without a session.</summary>
+    public StatsPanel? Stats => _statsPanel;
+
     /// <summary>The skills button (for the scripted run).</summary>
     public Button SkillsButton => _skillsButton;
 
@@ -552,6 +565,7 @@ public sealed class Hud
         _hotbarSpacer.CustomMinimumSize = new Vector2(bagSize.X * 1.25f, 0);   // a quarter wider than the bag: its text may need that at the smallest scale
         _hotbarRow.AddThemeConstantOverride("separation", Mathf.RoundToInt(margin));
         _bag?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
+        _statsPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _soundGrid.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(Dp(8)));
         _soundGrid.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(Dp(8)));
@@ -624,6 +638,7 @@ public sealed class Hud
             {
                 _bag?.SetOpen(false);
                 _skillPanel?.SetOpen(false);
+                _statsPanel?.SetOpen(false);
             }
         }
         if (_uiVersion != ui.Version)
@@ -660,6 +675,7 @@ public sealed class Hud
         if (_hotbarModel is not null && (_hotbarVersion != _hotbarModel.Version || _pendingShown != ui.PendingSkill)) RefreshHotbar();
         _bag?.Refresh();
         _skillPanel?.Refresh();
+        _statsPanel?.Refresh();
     }
 
     /// <summary>The own character's status icons shown now, and their texts (for the scripted run).</summary>

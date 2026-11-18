@@ -19,6 +19,14 @@ progression:
   max_stat_value: 99
   # Cost to raise a stat from its current value by one: 2 points up to 10, rising by 1 every 10 points (2..11).
   stat_point_cost: floor((stat_value - 1) / 10) + 2
+  # Resetting stats or skills with an item (T-503). There is no currency yet, so a reset costs the item itself.
+  reset:
+    # Below base level 10 a reset is free: the item does its work and is kept, so a new player can try builds while learning the game.
+    free_below_base_level: 10
+    # No reset within the out-of-combat delay (regen.out_of_combat_delay_ms) of the last damage dealt or taken: no mid-fight respec.
+    refuse_in_combat: true
+    # A dead character cannot reset.
+    refuse_when_dead: true
 combat:
   # A hit that lands always deals at least 1 damage, so heavy armor never makes a target immune.
   min_damage: 1
@@ -80,9 +88,12 @@ new_character:
   # Everyone starts as a Wanderer and picks a job later (the job is also what other players see them as until gear exists).
   start_job_id: job.wanderer
   # The Bone Dirk's description promises every wanderer one; it is worn from the start. Three draughts get a new player through the first fights.
+  # One reset of each kind (T-503), so the first respec never needs a shop: below level 10 a reset is free and keeps the item, after that it is used up.
   start_items:
     - { item_id: item.bone_dirk, equipped: true }
     - { item_id: item.healing_draught, quantity: 3 }
+    - { item_id: item.realign_tonic, quantity: 1 }
+    - { item_id: item.blank_page, quantity: 1 }
 ai:
   # An awake aggressive monster looks around for a player three times a second: quick enough that walking into its range feels
   # immediate, and a fraction of the per-tick work of scanning every tick.

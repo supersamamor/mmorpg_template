@@ -42,7 +42,7 @@ namespace Game.Server.World.Combat;
 /// </remarks>
 public sealed partial class CombatSystem : ITickSystem
 {
-    private static readonly IReadOnlyCollection<Type> Owned = [typeof(AttackTarget), typeof(StopAttack), typeof(Respawn), typeof(UseSkill), typeof(LearnSkill), typeof(ChangeJob)];
+    private static readonly IReadOnlyCollection<Type> Owned = [typeof(AttackTarget), typeof(StopAttack), typeof(Respawn), typeof(UseSkill), typeof(LearnSkill), typeof(ChangeJob), typeof(RaiseStat)];
     private static readonly int AspdStat = StatIndex.IndexOf(DerivedStats.Aspd);
     private static readonly int HpRegenStat = StatIndex.IndexOf(DerivedStats.HpRegen);
     private static readonly int SpRegenStat = StatIndex.IndexOf(DerivedStats.SpRegen);
@@ -305,6 +305,7 @@ public sealed partial class CombatSystem : ITickSystem
                 case UseSkill use: StartSkill(context, entity, use); break;
                 case LearnSkill learn: Learn(context, entity, learn.SkillId); break;
                 case ChangeJob change: ChangeJobOf(context, entity, change.JobId); break;
+                case RaiseStat raise: RaiseStatOf(context, entity, raise.StatId, raise.Amount); break;
             }
         }
     }
@@ -542,8 +543,13 @@ public sealed partial class CombatSystem : ITickSystem
     {
         Resolved++;
         var resume = _nowMs + _content.Balance.Regen.OutOfCombatDelayMs;   // any resolved attack, a miss too, is combat for both
-        if (attacker is not null && !fromStatus) attacker.RegenResumeMs = resume;
+        if (attacker is not null && !fromStatus)
+        {
+            attacker.RegenResumeMs = resume;
+            attacker.Entity.InCombatUntilMs = resume;
+        }
         target.RegenResumeMs = resume;
+        target.Entity.InCombatUntilMs = resume;
         var vitals = target.Entity.Vitals!;
         var before = vitals.Hp;
         vitals.Hp = (int)Math.Clamp((long)before - result.Damage, 0, Math.Max(before, vitals.MaxHp));

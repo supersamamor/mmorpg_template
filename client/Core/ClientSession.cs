@@ -3,6 +3,7 @@ using Game.Client.Core.Combat;
 using Game.Client.Core.Items;
 using Game.Client.Core.Net;
 using Game.Client.Core.Skills;
+using Game.Client.Core.Stats;
 using Game.Client.Core.Ui;
 using Game.Client.Core.World;
 using Game.Server.Net;
@@ -33,6 +34,7 @@ public sealed class ClientSession
         World = new WorldView(config);
         Ui = new UiState(config, bundle);
         Skills = new SkillBook(bundle);
+        Stats = new StatBook();
         Hotbar = new HotbarModel(config.HotbarSlots);
         Hotbar.Bind(Skills, new SkillActivator(this));
         Numbers = new DamageNumberPool(config.MaxDamageNumbers, config.DamageNumberSeconds, config.DamageNumberLaneSeconds);
@@ -63,6 +65,9 @@ public sealed class ClientSession
     /// <summary>The player's own skills, cooldowns and skill tree rows (T-502).</summary>
     public SkillBook Skills { get; }
 
+    /// <summary>The player's own stat points, stats and derived stats (T-503).</summary>
+    public StatBook Stats { get; }
+
     /// <summary>Server messages applied so far (for measuring).</summary>
     public long MessagesApplied { get; private set; }
 
@@ -73,6 +78,7 @@ public sealed class ClientSession
         Ui.Reset();
         Inventory.Reset();
         Skills.Reset();
+        Stats.Reset();
         Numbers.Clear();
         Connection.Login(name, wallNow);
         RunCommands();
@@ -168,6 +174,9 @@ public sealed class ClientSession
 
     /// <summary>Spends a skill point on a skill (T-502); the server answers with the new list or a refusal.</summary>
     public void LearnSkill(string skillId) => SendItem(new LearnSkillMessage(skillId));
+
+    /// <summary>Spends stat points on one primary stat (T-503); the server prices the step and answers with the new stats or a refusal.</summary>
+    public void RaiseStat(string statId, int amount = 1) => SendItem(new RaiseStatMessage(statId, amount));
 
     /// <summary>Asks to change job (T-502).</summary>
     public void ChangeJob(string jobId) => SendItem(new ChangeJobMessage(jobId));
@@ -273,6 +282,9 @@ public sealed class ClientSession
                 break;
             case SkillsMessage skills:
                 Skills.Apply(skills, viewNow);
+                break;
+            case StatsMessage stats:
+                Stats.Apply(stats);
                 break;
             case CooldownMessage cooldown:
                 Skills.ApplyCooldown(cooldown, viewNow);

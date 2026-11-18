@@ -29,6 +29,7 @@ public sealed class SkillPanel
     private readonly Label _title = Wrapped(UiText.SkillsTitle);
     private readonly Label _status = Wrapped(string.Empty);
     private readonly Button _close = new() { Text = UiText.Close };
+    private readonly Button _stats = new() { Text = UiText.Stats };
     private readonly ScrollContainer _scroll = new() { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
     private readonly VBoxContainer _content = new() { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
     private readonly Label _hint = Wrapped(UiText.PickASkill);
@@ -60,6 +61,7 @@ public sealed class SkillPanel
         var header = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         _title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         header.AddChild(_title);
+        header.AddChild(_stats);
         header.AddChild(_close);
         _box.AddChild(header);
         _box.AddChild(_status);
@@ -79,11 +81,19 @@ public sealed class SkillPanel
         }
         _learn.Pressed += OnLearn;
         _close.Pressed += () => { _tap(); SetOpen(false); };
+        _stats.Pressed += () => { _tap(); SetOpen(false); ShowStats?.Invoke(); };
+        _interactive.Add(_stats);
         _interactive.Add(_learn);
         _interactive.Add(_close);
         _interactive.Add(_panel);
         _interactive.Add(_scroll);
     }
+
+    /// <summary>Raised by the Stats button, after the panel closed: the HUD opens the stats panel (T-503).</summary>
+    public Action? ShowStats { get; set; }
+
+    /// <summary>The Stats button (for the scripted run).</summary>
+    public Button StatsButton => _stats;
 
     /// <summary>Finds an icon texture by asset key (the theme), or null; the HUD sets it once the theme is loaded.</summary>
     public Func<string, Texture2D?>? IconLoader { get; set; }
@@ -144,7 +154,8 @@ public sealed class SkillPanel
         _panelStyle.SetCornerRadiusAll(Mathf.RoundToInt(dp(6)));
         _box.AddThemeConstantOverride("separation", gap);
         _content.AddThemeConstantOverride("separation", gap);
-        _title.CustomMinimumSize = new Vector2(Mathf.Max(0, width - dp(24) - dp(96) - gap), 0);
+        _title.CustomMinimumSize = new Vector2(Mathf.Max(0, width - dp(24) - dp(96) * 2 - gap * 2), 0);
+        _stats.CustomMinimumSize = new Vector2(dp(96), target);
         foreach (var label in new[] { _status, _hint }) label.CustomMinimumSize = new Vector2(width - dp(24), 0);
         _close.CustomMinimumSize = new Vector2(dp(96), target);
         _actions.AddThemeConstantOverride("h_separation", gap);

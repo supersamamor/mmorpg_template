@@ -66,6 +66,12 @@ namespace Game.Shared.Protocol
         /// <summary><c>change_job</c> (T-502).</summary>
         public const string ChangeJob = "change_job";
 
+        /// <summary><c>raise_stat</c> (T-503, client to server): spend stat points on a primary stat.</summary>
+        public const string RaiseStat = "raise_stat";
+
+        /// <summary><c>stats</c> (T-503, server to client, owner only): base stats, unspent stat points, each stat's next cost and the panel's derived stats.</summary>
+        public const string Stats = "stats";
+
         /// <summary><c>skills</c> (T-502).</summary>
         public const string Skills = "skills";
 
@@ -115,10 +121,10 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Cooldown, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);

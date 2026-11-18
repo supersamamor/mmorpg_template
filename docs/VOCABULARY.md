@@ -123,11 +123,25 @@ Sizes: `small`, `medium`, `large`
 | `teleport`       | Move caster (random/save point/map)         |
 | `summon`         | Spawn a monster                             |
 | `area`           | Wrap child effects over an AoE shape        |
+| `reset_stats`    | Allocated stats back to the start value, points refunded (T-503) |
+| `reset_skills`   | Learned skills back to 0, points refunded, passives off (T-503) |
 
-All ten run in the one effect runner (T-501, ARCHITECTURE §6.3). Where each may stand is checked at load (`EffectSupport`, validation code `effect.unsupported`):
+All twelve run in the one effect runner (T-501, ARCHITECTURE §6.3). Where each may stand is checked at load (`EffectSupport`, validation code `effect.unsupported`):
 `modify_stat` only directly in a status's `on_apply` (its modifier has the source `status:<id>` and lasts as long as the status); `teleport` and `summon` only
 directly in a skill or a consumable; no `area` inside an `area`; a ground skill's own effects aim at a cell (`area`, `summon`, `teleport`); `knockback` never on
-the caster itself; a status never applies itself. **Save point**: until save points exist (T-601), a player's is the respawn point of the map it is on.
+the caster itself; a status never applies itself; `reset_stats` and `reset_skills` only directly in a consumable (later also a service, T-601), never in a skill, a status or an `area`, and they act on the
+user only. **Save point**: until save points exist (T-601), a player's is the respawn point of the map it is on.
+
+## Reset effects (T-503)
+`reset_stats`: every primary stat goes back to `progression.starting_stat_value` and exactly the points those steps cost (the sum of `stat_point_cost` over each +1 step) come back
+as unspent stat points. `reset_skills`: every learned skill goes to 0, exactly one skill point per level learned comes back, passive modifiers come off the sheet, a running cast is
+cancelled and cooldowns are kept. Neither changes levels, EXP, job or unspent points. A reset that would change nothing does nothing. The rules for using a reset **item** are data,
+`balance.yaml` `progression.reset`: `free_below_base_level` (below it the reset happens and the item is kept), `refuse_in_combat` (no reset within `regen.out_of_combat_delay_ms` of the
+last damage dealt or taken) and `refuse_when_dead`. There is no currency yet, so a reset costs the item.
+
+## Stat reasons
+In `StatRaiseRefused` and on the wire as `rejected` (`intent` `raise_stat`, with `stat` naming the stat); nothing changed:
+`unknown_stat` (not a primary stat), `invalid_amount` (below 1 or above 99 steps), `at_max_value` (would pass `progression.max_stat_value`), `not_enough_points`, `dead`.
 
 ## Status end reasons
 In `StatusRemoved` (a status that runs out raises `StatusExpired` instead): `removed` (a `remove_status` by id or tag), `died` (every status ends on death),
@@ -179,7 +193,8 @@ Two-handed (`balance.yaml` `inventory.two_handed_weapon_types`): `sword_2h`, `st
 `MovementStopped`, `MoveRejected`, `AggroGained`, `AggroLost`, `MonsterReturned`, `AttackRequested`, `AttackRefused`, `AttackStarted`, `AttackStopped`,
 `ExpGained`, `ExpLost`, `PlayerRespawned`, `ItemDropped`, `ItemExpired`, `ItemUnequipped`, `ItemDiscarded`, `ItemRefused`, `InventoryChanged`,
 `CardInserted`, `ItemRefined`, `StatusRemoved`, `HpRestored`, `SpRestored`, `KnockedBack`, `Teleported`, `SummonRequested`, `MonsterSummoned`, `AreaApplied`,
-`SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`, `SkillCastEnded`, `SkillCooldownStarted`, `SkillLearnRefused`, `JobChangeRefused`
+`SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`, `SkillCastEnded`, `SkillCooldownStarted`, `SkillLearnRefused`, `JobChangeRefused`,
+`StatRaised`, `StatRaiseRefused`, `StatsReset`, `SkillsReset`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -220,7 +235,8 @@ does not see, `invalid_target` for itself or anything but a monster.
 In `ItemRefused` and on the wire in `rejected` (`intent` `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card` or `refine`); nothing changed (ARCHITECTURE §6.8):
 `item_gone`, `not_yours`, `unreachable`, `cancelled`, `too_heavy`, `inventory_full`, `not_usable`, `cooldown`, `not_equipment`,
 `wrong_slot`, `level_too_low`, `wrong_job`, `not_equipped`, `item_equipped`, `invalid_quantity`, `not_a_card`, `card_does_not_fit`, `no_free_socket`,
-`not_refinable`, `at_max_refine`, `missing_material`.
+`not_refinable`, `at_max_refine`, `missing_material`, `reset_in_combat`, `reset_dead`, `nothing_to_reset`.
+Reset items (T-503): `reset_in_combat` and `reset_dead` follow `progression.reset`; `nothing_to_reset` means no stat was raised (or no skill learned). All three leave the item in the bag.
 `card_does_not_fit`: none of the card's `slots` is one of the equipment's. `no_free_socket`: its `card_slots` are full (or it has none).
 `at_max_refine`: at `refine.yaml` `max_level`. `missing_material`: fewer carried units of the next step's material than its quantity.
 `not_yours`: another player still has loot priority. (T-501 removed `unsupported_effect`: every effect type runs, and one that cannot run where it stands is a load error.)
@@ -263,9 +279,9 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `cooldown`, `pong`, `bye`
-Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `cooldown`.
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `pong`, `bye`
+Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,

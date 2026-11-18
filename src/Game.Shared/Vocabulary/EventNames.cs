@@ -180,6 +180,18 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>JobChangeRefused</c>: a change_job intent was refused.</summary>
         public const string JobChangeRefused = "JobChangeRefused";
 
+        /// <summary><c>StatRaised</c> (T-503): a raise_stat spent stat points on a primary stat.</summary>
+        public const string StatRaised = "StatRaised";
+
+        /// <summary><c>StatRaiseRefused</c> (T-503): a raise_stat intent was refused.</summary>
+        public const string StatRaiseRefused = "StatRaiseRefused";
+
+        /// <summary><c>StatsReset</c> (T-503): a reset_stats effect put every allocated stat back and refunded the points.</summary>
+        public const string StatsReset = "StatsReset";
+
+        /// <summary><c>SkillsReset</c> (T-503): a reset_skills effect dropped every learned skill and refunded the points.</summary>
+        public const string SkillsReset = "SkillsReset";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -240,6 +252,10 @@ namespace Game.Shared.Vocabulary
             SkillCastEnded,
             SkillCooldownStarted,
             SkillLearnRefused,
-            JobChangeRefused);
+            JobChangeRefused,
+            StatRaised,
+            StatRaiseRefused,
+            StatsReset,
+            SkillsReset);
     }
 }

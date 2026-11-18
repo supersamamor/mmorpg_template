@@ -48,7 +48,7 @@ public sealed class InventoryRig
             .Add(() => new MovementSystem(TestGrids.Roomy))
             .Add(() => new MonsterSpawnerSystem(Catalog, 0))
             .Add(() => new CombatSystem(combat, Progressions))
-            .Add(() => new InventorySystem(Items, Store, Clock));
+            .Add(() => new InventorySystem(Items, Store, Clock, Progressions));
         if (aoi) pipeline.Add(() => new AoiSystem(4, 2, int.MaxValue, 0, default));
         World = new GameWorld([TestCombat.Open(width, height)], pipeline, 1, Clock, Log);
         Instance.Events.SubscribeAll(e => Events.Add((Instance.TickNumber, e)));

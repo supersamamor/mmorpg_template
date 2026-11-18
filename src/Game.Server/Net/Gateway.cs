@@ -150,9 +150,23 @@ public sealed class Gateway
             events.Subscribe<SkillRefused>(e => Owner(e.Caster)?.Post(new RejectedMessage(MessageTypes.UseSkill, e.Reason, null, e.Target?.Value, Skill: e.SkillId)));
             events.Subscribe<SkillLearnRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(MessageTypes.LearnSkill, e.Reason, null, Skill: e.SkillId)));
             events.Subscribe<JobChangeRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(MessageTypes.ChangeJob, e.Reason, null, Skill: e.JobId)));
+            // Stats (T-503), owner only: a refused raise as rejected, and the whole stats message after anything that changes it.
+            events.Subscribe<StatRaiseRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(MessageTypes.RaiseStat, e.Reason, null, Stat: e.Stat)));
+            events.Subscribe<StatRaised>(e => PostStats(instance.MapId, e.Player));
+            events.Subscribe<StatsReset>(e => PostStats(instance.MapId, e.Player));
+            events.Subscribe<SkillsReset>(e =>
+            {
+                PostSkills(instance.MapId, e.Player);
+                PostStats(instance.MapId, e.Player);   // passives came off
+            });
             events.Subscribe<SkillCooldownStarted>(e => Owner(e.Player)?.Post(new CooldownMessage(e.SkillId, e.Ms)));
             // Inventory, owner only: each change, each refine's outcome (after its change), and each refused item intent as rejected.
-            events.Subscribe<InventoryChanged>(e => Owner(e.Player)?.Post(OwnInventory.Message(e)));
+            events.Subscribe<InventoryChanged>(e =>
+            {
+                Owner(e.Player)?.Post(OwnInventory.Message(e));
+                if (e.Cause is Game.Shared.Vocabulary.InventoryChanges.Equipped or Game.Shared.Vocabulary.InventoryChanges.Unequipped or Game.Shared.Vocabulary.InventoryChanges.CardInserted or Game.Shared.Vocabulary.InventoryChanges.Refined)
+                    PostStats(instance.MapId, e.Player);   // gear changes the derived stats
+            });
             events.Subscribe<ItemRefined>(e => Owner(e.Player)?.Post(OwnInventory.Message(e)));
             events.Subscribe<ItemRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(e.Intent, e.Reason, null, e.Target, e.EntryId, e.Slot)));
         }
@@ -483,6 +497,13 @@ public sealed class Gateway
         if (Progress.SkillsFor(entity) is { } skills) session.Post(skills);
     }
 
+    /// <summary>Tick thread of the player's instance (the only thread that touches its progression and sheet).</summary>
+    internal void PostStats(string mapId, EntityId player)
+    {
+        if (Progress is null || Owner(player) is not { } session || !_world.TryGetInstance(mapId, out var instance) || !instance.TryGetEntity(player, out var entity)) return;
+        if (Progress.StatsFor(entity) is { } stats) session.Post(stats);
+    }
+
     private void OnProgressed(string mapId, PlayerProgressed e)
     {
         if (Owner(e.Player) is not { } session) return;
@@ -490,15 +511,18 @@ public sealed class Gateway
         {
             session.Post(new LevelUpMessage(up.NewLevel, null));
             PostSkills(mapId, e.Player);   // a job may have become available
+            PostStats(mapId, e.Player);    // new stat points and stats that follow the level
         }
         else if (e.Change is JobLevelUp jobUp)
         {
             session.Post(new LevelUpMessage(null, jobUp.NewLevel));
             PostSkills(mapId, e.Player);   // new points, and maybe a job to change to
+            PostStats(mapId, e.Player);    // job bonuses follow the job level
         }
         else if (e.Change is SkillLearned or JobChanged)
         {
             PostSkills(mapId, e.Player);
+            PostStats(mapId, e.Player);   // a passive or a job's bonuses change the derived stats
             PostExp(e.Player);   // a new job starts at job level 1
         }
     }

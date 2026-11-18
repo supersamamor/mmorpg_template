@@ -292,6 +292,9 @@ New *kind* of behavior = new effect type + tests.
   resolution (`cannot_use_skills`).
 - **Load errors, not runtime refusals.** `EffectSupport` (validation code `effect.unsupported`) refuses an effect the runner cannot run where it stands
   (VOCABULARY "Effect types"); a status applying itself is refused, and nesting of statuses' `on_apply` stops at `EffectRunner.MaxDepth`.
+- **Reset effects** (T-503). `reset_stats` and `reset_skills` run through the same runner as every effect, so a consumable (and, with T-601, an NPC service) uses them as data.
+  They are load-validated: only directly in a consumable, never in a skill, a status or an `area`, and they act on the user. The world applies them through
+  `IEffectWorld.ResetStats` / `ResetSkills` (combat hosts them) and announces `StatsReset` / `SkillsReset`. See §6.5 for what they change.
 - **Events** (hard rule 7): `DamageDealt` (result `status` for ticks), `HpRestored`, `SpRestored`, `StatusApplied`, `StatusExpired`, `StatusRemoved`,
   `KnockedBack`, `Teleported`, `SummonRequested` → `MonsterSummoned`, `AreaApplied`; skills: `SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`.
 
@@ -315,6 +318,15 @@ in the progression store (in memory until T-702): skill points, learned levels, 
   job's stat bonuses (`job:<id>` modifiers) are removed and the new job's added at job level 1; the player's `DefinitionId` becomes the job id, which is what usable
   weapon types and the look follow. `JobChanged` goes out as `PlayerProgressed`. Quests and unlocks are T-602: until then a job with `quest_ids` or `requires_unlock`
   (the sample's Warden) is refused with `quest_not_completed` / `not_unlocked`; the sample's Spellbinder (base 5, job 5) is the job a scripted run reaches.
+- **Raising stats** (T-503). `raise_stat` (`stat`, `amount`) runs `ProgressionRules.RaiseStat` on the progression store: each +1 step costs `stat_point_cost` of the value before it, up to
+  `max_stat_value`, all or nothing. The new base value goes on the stat sheet in the same tick (`sheet.Base[stat]`), so every derived stat and the HP and SP pools follow at once.
+  Refusals are "Stat reasons" terms (`StatRaiseRefused`, on the wire `rejected` with `stat`). `stats` tells the client the points, each stat's next cost and the panel's derived stats.
+- **Resets** (T-503). `ProgressionRules.ResetStats` puts every stat back to `starting_stat_value` and refunds exactly the cost of the steps taken (`StatPointsSpent`); `ResetSkills` drops every
+  skill to 0 and refunds one skill point per level learned; the host then takes the passive modifiers off the sheet and cancels a running cast; cooldowns are kept (they are timed on
+  the clock). Levels, EXP, the job and unspent points never change. **Rules for the item** are data in `balance.yaml` `progression.reset`, checked by the inventory *before* anything is
+  used up (`InventorySystem.CheckReset`, which reads the shared progression store and `Entity.InCombatUntilMs`, both plain data): `refuse_when_dead` → `reset_dead`, `refuse_in_combat`
+  (a hit dealt or taken within `regen.out_of_combat_delay_ms`) → `reset_in_combat`, nothing allocated or learned → `nothing_to_reset`; below `free_below_base_level` the reset runs and the
+  item is **kept** (its cooldown still runs). A reset costs the item itself: there is no currency yet (T-601 adds NPC services that reuse the same effects).
 - **Passives.** A learned `passive` skill adds its `passive_modifiers` to the stat sheet with the source `skill:<id>` (formulas of `level` and the sheet's own variables),
   removed and added again on every level change and when the character enters a map; it cannot be cast (`passive_skill`).
 - **Casting.** See §6.7 (player skills). Cooldowns live on `Entity.Cooldowns` (`SkillCooldowns`), counted on the map's tick clock and carried across a map change as time
@@ -548,6 +560,12 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   lacks; locked rows are dimmed, learnable ones tinted), the selected skill's description and a Learn button, and one button per job the server says the player may change
   to. It only sends `learn_skill` and `change_job`; the new `skills` message redraws it. **Cast bars:** one amber bar above any caster in view (the player's own and monsters'), a
   second multimesh next to the HP bars (one draw call, none while nobody casts), filled by the cast time the server sent and closed by `cast_ends`, death or leaving view.
+- **Stats** (T-503, `client/Scene/StatsPanel.cs`, view model `client/Core/Stats/StatBook.cs`). Opened with the Stats button in the skill panel's header (the Skills button on the bottom
+  edge is the one entry, so the full phone HUD gets no new button; the stats panel has a Skills button back). It shows the unspent stat points, the six stats as label and `+ (cost)`
+  button pairs in a two-column grid (the cost is the server's `next cost`; the button is greyed when the points do not cover it, and the server decides anyway) and the derived stats
+  (ATK, MATK, DEF, HIT, FLEE, ASPD, max HP and SP) as one wrapping line, in a scroll container, every button at the touch minimum. It only sends `raise_stat`.
+  **Reset items** (the bundle marks them `confirm_use`): Use in the bag first shows what the item does and a "Use it" button; only that sends `use_item`. The server's refusal
+  (`reset_in_combat` and so on) appears on the flash line and the item stays. The skill panel redraws on the `skills` message the reset sends.
 - **Where the client's own words live (ADR-002 row 120).** In `client/Core/UiText.cs`: one static class of constants and small formatting functions in English, and nowhere
   else (a test fails on a literal assigned to a text property in `client/Scene`). Why: the refusal and update screens must read even when the bundle, theme or any data
   file is missing or broken, which rules out loading them; the pure core and its tests can use them; a typo or a missing word is a compile error; and the number of
@@ -867,10 +885,11 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   | `use_skill` | C→S | `skill`, optional `level` (up to the learned level), `target` (an entity id in view) or `cell` (ground); a request, it may come back `rejected` (T-502) |
   | `learn_skill` | C→S | `skill` (spend one skill point) (T-502) |
   | `change_job` | C→S | `job` (T-502) |
+  | `raise_stat` | C→S | `stat` (a primary stat id), `amount` (steps of +1, default 1, at most 99) (T-503) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
-  | `rejected` | S→C | `intent` (`move`, `attack`, an item intent, or `use_skill`, `learn_skill`, `change_job`), `reason` (a `MoveRejected`, "Attack reasons", "Item reasons" or "Skill reasons" term), `cell` (move), `target` (attack, `pick_up`, `use_skill`), `entry` (`use_item`, `equip`, `drop_item`; the equipment entry for `insert_card`, `refine`), `slot` (`equip`, `unequip`), `skill` (the skill, or for `change_job` the job) |
+  | `rejected` | S→C | `intent` (`move`, `attack`, an item intent, or `use_skill`, `learn_skill`, `change_job`, `raise_stat`), `reason` (a `MoveRejected`, "Attack reasons", "Item reasons" or "Skill reasons" term), `cell` (move), `target` (attack, `pick_up`, `use_skill`), `entry` (`use_item`, `equip`, `drop_item`; the equipment entry for `insert_card`, `refine`), `slot` (`equip`, `unequip`), `skill` (the skill, or for `change_job` the job) |
   | `attack_stopped` | S→C (owner) | `target`, `reason` (an "Attack reasons" term) |
   | `exp` | S→C (owner) | `base_level`, `base_exp`, `base_next`, `job_level`, `job_exp`, `job_next` (`*_next` = EXP the level needs, 0 at the cap) |
   | `level_up` | S→C (owner) | `base_level` or `job_level` (one message per level reached) |
@@ -880,6 +899,7 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   | `inventory_changed` | S→C (owner) | `rev` (one more than the last), `cause` (an "Inventory changes" term), `item`, `weight`, `weight_limit`, `load`, `entries` (added or changed, as they are now), `removed` (ids); empty lists left out. A client that sees a gap in `rev` keeps what it has until the next `inventory` |
   | `refine_result` | S→C (owner) | `entry`, `item`, `result` (a "Refine results" term: `success`, `keep`, `down`, `break`), `refine` (the level now; what it had when it broke) |
   | `skills` | S→C (owner) | `job`, `points` (unspent), `levels` (`[["skill.x",2],...]`), `cooldowns` (`[["skill.x",ms left],...]`), `jobs` (the jobs `change_job` would accept now). After every snapshot, a learn, a job change and a level (T-502) |
+  | `stats` | S→C (owner) | `points` (unspent stat points), `stats` (`[["str",3,2],...]`: stat id, base value, the cost of its next +1, 0 at the maximum), `derived` (`[["atk",12],...]`: `DerivedStats.Panel`, floored from the sheet). After every snapshot, a raise, a stat reset, a level, a job change, a learned skill, a skill reset and a gear change (T-503). The client never computes a cost or a derived value |
   | `cooldown` | S→C (owner) | `skill`, `ms`: the skill went on cooldown when its cast ended (T-502) |
   | `pong` | S→C | `seq` |
   | `bye` | S→C (last) | `reason` (VOCABULARY "Bye reasons"), followed by the close frame |

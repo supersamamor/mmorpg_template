@@ -5,6 +5,7 @@ using Game.Server.World.Combat;
 using Game.Shared.Definitions;
 using Game.Shared.Progression;
 using Game.Shared.Protocol;
+using Game.Shared.Vocabulary;
 
 namespace Game.Server.Net;
 
@@ -54,6 +55,24 @@ public sealed class OwnProgress
             .Select(c => new SkillCooldownRecord(c.Key, (int)Math.Min(c.Value, int.MaxValue))).ToList();
         var jobs = _database.Jobs.All.Where(j => _rules.CanChangeJob(state, j.Id).Allowed).Select(j => j.Id).ToList();
         return new SkillsMessage(state.JobId, state.SkillPoints, levels, cooldowns, jobs);
+    }
+
+    /// <summary>
+    /// The player's <c>stats</c> message (T-503): unspent stat points, each primary stat with the cost of its next +1 (0 at the maximum), and the panel's
+    /// derived stats from the entity's sheet, floored. Null without a progression or a sheet.
+    /// </summary>
+    public StatsMessage? StatsFor(Entity player)
+    {
+        if (!_store.TryGet(player.Id, out var state) || player.Stats is not { } sheet) return null;
+        var max = _database.Balance.Progression.MaxStatValue;
+        var stats = PrimaryStats.All.Ordered
+            .Select(s =>
+            {
+                var value = state.StatValue(s);
+                return new StatRecord(s, value, value >= max ? 0 : _rules.StatRaiseCost(value));
+            }).ToList();
+        var derived = DerivedStats.Panel.Ordered.Select(d => new DerivedRecord(d, sheet.GetInt(d))).ToList();
+        return new StatsMessage(state.StatPoints, stats, derived);
     }
 
     /// <summary>EXP level <paramref name="level"/> needs to level up (entry <c>level - 1</c>); 0 at the cap or without a table.</summary>

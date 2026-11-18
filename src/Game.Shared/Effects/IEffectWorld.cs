@@ -120,6 +120,12 @@ namespace Game.Shared.Effects
         /// <summary>A <c>summon</c> near <paramref name="near"/>, owned by <paramref name="caster"/>.</summary>
         void Summon(long caster, SummonEffect effect, GridCell near);
 
+        /// <summary>A <c>reset_stats</c> on <paramref name="target"/> (always the item's user): reset its allocated stats and refund the points.</summary>
+        void ResetStats(long caster, long target);
+
+        /// <summary>A <c>reset_skills</c> on <paramref name="target"/> (always the item's user): reset its learned skills and refund the points.</summary>
+        void ResetSkills(long caster, long target);
+
         /// <summary>An <c>area</c> ran its children on <paramref name="targets"/> entities.</summary>
         void AreaApplied(long caster, GridCell center, int radius, int targets);
     }

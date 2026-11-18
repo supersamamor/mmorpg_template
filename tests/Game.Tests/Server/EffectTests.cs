@@ -524,6 +524,10 @@ public class EffectTests
 
         public void Summon(long caster, SummonEffect effect, GridCell near) { }
 
+        public void ResetStats(long caster, long target) { }
+
+        public void ResetSkills(long caster, long target) { }
+
         public void AreaApplied(long caster, GridCell center, int radius, int targets) { }
     }
 }

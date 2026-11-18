@@ -265,6 +265,16 @@ public sealed partial class CombatSystem
         public void Summon(long caster, SummonEffect effect, GridCell near) =>
             Publish(new SummonRequested(new EntityId(caster), effect.MonsterId, effect.Count, near, effect.DurationMs));
 
+        public void ResetStats(long caster, long target)
+        {
+            if (combat._combatants.TryGetValue(target, out var t) && !t.Entity.Dead) combat.ResetStatsOf(combat._context!, t.Entity);
+        }
+
+        public void ResetSkills(long caster, long target)
+        {
+            if (combat._combatants.TryGetValue(target, out var t) && !t.Entity.Dead) combat.ResetSkillsOf(combat._context!, t.Entity);
+        }
+
         public void AreaApplied(long caster, GridCell center, int radius, int targets) =>
             Publish(new AreaApplied(new EntityId(caster), center, radius, targets));
 

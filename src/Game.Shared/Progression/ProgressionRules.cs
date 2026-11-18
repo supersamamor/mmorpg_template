@@ -212,6 +212,52 @@ namespace Game.Shared.Progression
             return new SpendResult(SpendError.None, (int)cost, value + amount, Array.Empty<IProgressionEvent>());
         }
 
+        /// <summary>Stat points spent so far: the cost of every +1 step from the start value to each stat's current value.</summary>
+        /// <param name="state">The character; not changed.</param>
+        public int StatPointsSpent(ProgressionState state)
+        {
+            long spent = 0;
+            foreach (var stat in PrimaryStats.All.Ordered)
+            {
+                var value = state.Stats.TryGetValue(stat, out var v) ? v : _balance.StartingStatValue;
+                for (var at = _balance.StartingStatValue; at < value; at++) spent += StatRaiseCost(at);
+            }
+            return (int)Math.Min(spent, int.MaxValue);
+        }
+
+        /// <summary>
+        /// <c>reset_stats</c> (T-503): puts every allocated primary stat back to the start value and returns exactly the points those steps cost
+        /// (<see cref="StatPointsSpent"/>) to <see cref="ProgressionState.StatPoints"/>. Nothing allocated: nothing changes and the result is 0.
+        /// </summary>
+        /// <param name="state">The character; changed only when something was allocated.</param>
+        public ResetResult ResetStats(ProgressionState state)
+        {
+            var refund = StatPointsSpent(state);
+            if (refund <= 0) return new ResetResult(0);
+            foreach (var stat in PrimaryStats.All.Ordered) state.Stats[stat] = _balance.StartingStatValue;
+            state.StatPoints = (int)Math.Min((long)state.StatPoints + refund, int.MaxValue);
+            return new ResetResult(refund);
+        }
+
+        /// <summary>
+        /// <c>reset_skills</c> (T-503): drops every learned skill to level 0 and returns one skill point per level learned. Nothing learned:
+        /// nothing changes and the result is 0. Applying the removal to passives and casts is the host's job.
+        /// </summary>
+        /// <param name="state">The character; changed only when something was learned.</param>
+        public ResetResult ResetSkills(ProgressionState state)
+        {
+            long refund = 0;
+            foreach (var level in state.Skills.Values) refund += Math.Max(0, level);
+            if (refund <= 0)
+            {
+                state.Skills.Clear();
+                return new ResetResult(0);
+            }
+            state.Skills.Clear();
+            state.SkillPoints = (int)Math.Min(state.SkillPoints + refund, int.MaxValue);
+            return new ResetResult((int)Math.Min(refund, int.MaxValue));
+        }
+
         /// <summary>Learns a skill or raises it by one level, spending one skill point.</summary>
         /// <param name="state">The character; changed only on success.</param>
         /// <param name="skillId">Skill id.</param>

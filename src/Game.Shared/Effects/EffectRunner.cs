@@ -156,6 +156,12 @@ namespace Game.Shared.Effects
                 case CompiledPlain plain when plain.Def is RemoveStatusEffect remove:
                     Remove(target.Id, remove);
                     break;
+                case CompiledPlain plain when plain.Def is ResetStatsEffect:
+                    _world.ResetStats(caster.Id, target.Id);
+                    break;
+                case CompiledPlain plain when plain.Def is ResetSkillsEffect:
+                    _world.ResetSkills(caster.Id, target.Id);
+                    break;
                 case CompiledPlain plain when plain.Def is KnockbackEffect knockback:
                     Knockback(caster, target, origin, knockback.Cells);
                     break;

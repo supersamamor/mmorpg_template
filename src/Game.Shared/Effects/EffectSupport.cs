@@ -61,6 +61,11 @@ namespace Game.Shared.Effects
                     if (summon.Count < 1) return "count must be at least 1";
                     if (summon.DurationMs.HasValue && summon.DurationMs.Value <= 0) return "duration_ms must be above 0 when given";
                     return null;
+                case ResetStatsEffect _:
+                case ResetSkillsEffect _:
+                    return site == EffectSite.Item && !inArea
+                        ? null
+                        : effect.Type + " changes its user's points for good: it is allowed only directly in a consumable (or a service), never in a skill, a status or an area";
                 case KnockbackEffect knockback:
                     if (!inArea && (site == EffectSite.Item || site == EffectSite.SelfSkill))
                         return "knockback pushes its target away from the caster: the target here is the caster itself";

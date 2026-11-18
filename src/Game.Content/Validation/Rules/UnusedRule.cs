@@ -20,9 +20,10 @@ public sealed class UnusedRule : IValidationRule
 
         var usedItems = refs.Where(r => r.Kind == RefKind.Item).Select(r => r.Id)
             .Concat(db.Refine.Levels.Select(l => l.MaterialItemId))   // a refine material is a use (refine.yaml)
+            .Concat(db.Balance.NewCharacter.StartItems.Select(i => i.ItemId))   // so is a new character's start item (balance.yaml)
             .ToHashSet(StringComparer.Ordinal);
         foreach (var item in db.Items.All.Where(i => !usedItems.Contains(i.Id)))
-            context.Warn(item.Id, "id", ValidationCodes.WarnUnusedItem, $"{item.Id} is not referenced by any drop table, quest, objective or refine step");
+            context.Warn(item.Id, "id", ValidationCodes.WarnUnusedItem, $"{item.Id} is not referenced by any drop table, quest, objective, refine step or start item");
 
         var usedStatuses = refs.Where(r => r.Kind == RefKind.Status).Select(r => r.Id).ToHashSet(StringComparer.Ordinal);
         foreach (var status in db.Statuses.All.Where(s => !usedStatuses.Contains(s.Id)))

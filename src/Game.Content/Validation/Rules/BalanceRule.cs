@@ -36,6 +36,9 @@ public sealed class BalanceRule : IValidationRule
         if (p.MaxStatValue < p.StartingStatValue)
             Range(context, "progression.max_stat_value", $"must not be below starting_stat_value ({p.StartingStatValue}).");
 
+        if (p.Reset.FreeBelowBaseLevel < 0)
+            Range(context, "progression.reset.free_below_base_level", "must not be negative.");
+
         if (c.MinDamage < 0)
             Range(context, "combat.min_damage", "must not be negative.");
         if (c.MaxDamage < c.MinDamage)

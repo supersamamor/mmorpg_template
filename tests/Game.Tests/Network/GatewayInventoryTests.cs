@@ -22,8 +22,8 @@ public class GatewayInventoryTests
         inventory.Rev.ShouldBe(0);
         inventory.Slots.ShouldBe(rig.Content.Balance.Inventory.MaxEntries);
         inventory.Load.ShouldBe(WeightStates.Normal);
-        inventory.Entries.Select(e => (e.Item, e.Quantity, e.Slot)).ShouldBe([("item.bone_dirk", 1, EquipSlots.Weapon), ("item.healing_draught", 3, (string?)null)]);
-        inventory.Weight.ShouldBe(30 + 3 * 5);
+        inventory.Entries.Select(e => (e.Item, e.Quantity, e.Slot)).ShouldBe([("item.bone_dirk", 1, EquipSlots.Weapon), ("item.healing_draught", 3, (string?)null), ("item.realign_tonic", 1, null), ("item.blank_page", 1, null)]);
+        inventory.Weight.ShouldBe(30 + 3 * 5 + 2 + 2);
         var own = await Poll.UntilAsync(() => client.Seen(client.Id), r => r is not null, "own record");
         own!.Weapon.ShouldBe(WeaponTypes.Dagger);
         own.Worn.ShouldBe(["item.bone_dirk"]);

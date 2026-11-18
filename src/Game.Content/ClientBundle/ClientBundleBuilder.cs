@@ -57,7 +57,8 @@ public static class ClientBundleBuilder
         var slots = item.Equip?.Slots ?? item.Card?.Slots ?? [];
         return new ClientItem(item.Id, item.Name, item.Description, kind, item.IconAssetKey, item.GroundAssetKey,
             slots.ToList(), item.Equip?.WeaponType, item.Equip?.VisualAssetKey, item.UseSfx, item.EquipSfx,
-            item.Equip?.CardSlots ?? 0, item.Equip?.Refinable ?? false);
+            item.Equip?.CardSlots ?? 0, item.Equip?.Refinable ?? false,
+            item.Consumable?.Effects.Any(e => e is ResetStatsEffect or ResetSkillsEffect) ?? false);
     }
 
     private static ClientSkill Skill(SkillDef skill)

@@ -130,7 +130,7 @@ public static class ServerPipeline
             .Add(() => new MonsterSpawnerSystem(monsters, balance.Death.CorpseMs))
             .Add(() => MonsterAiSystem.Create(monsters, balance))
             .Add(() => new CombatSystem(combat, progressions))
-            .Add(() => new InventorySystem(items, inventories, clock))
+            .Add(() => new InventorySystem(items, inventories, clock, progressions))
             .Add(() => AoiSystem.Create(balance));
     }
 }
