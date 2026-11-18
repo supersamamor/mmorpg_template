@@ -5,6 +5,8 @@ using Game.Client.Core.Audio;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Combat;
 using Game.Client.Core.Net;
+using Game.Client.Core.Skills;
+using Game.Client.Core.Ui;
 using Game.Client.Core.World;
 using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
@@ -42,7 +44,7 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 ||
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -73,6 +75,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-hill") >= 0) await HillRunAsync();
             else if (Array.IndexOf(_args, "--e2e-items") >= 0) await ItemsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-statuses") >= 0) await StatusesRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-skills") >= 0) await SkillsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
@@ -226,6 +229,162 @@ public sealed class AutoRun
               $"markers drawn {_main.Presenter!.StatusMarkCount}; effects started {_main.Fx?.Totals.Effects}");
         Check(_main.Presenter!.StatusMarkCount >= 1, "a status marker above the monster");
         await ShotAsync();
+    }
+
+    /// <summary>
+    /// T-502's run (on a content copy with weak monsters that give a lot of EXP, cast Mana Font when they fight, and 3 skill points a job level): fight until the
+    /// level-ups bring skill points and a job to change to, watching a monster's cast bar; open the skill panel through the HUD, learn a skill of the first job,
+    /// change job, learn a ranged attack of the new job, then press its skill bar slot, tap a monster, and see the own cast bar, the hit and the cooldown sweep.
+    /// Every step goes through the HUD and the input path; no skill or job id is in this code.
+    /// </summary>
+    private async Task SkillsRunAsync()
+    {
+        await LoginAsync();
+        var hud = _main.Hud!;
+        var book = Session.Skills;
+        await UntilAsync(() => book.Known, 10, "the own skills after the snapshot");
+        Check(book.Points == 0 && book.ChangeableJobs.Count == 0 && book.ActiveSkills.Count == 0, "a new character: no points, no job to change to, nothing on the skill bar");
+        var firstJob = book.JobId;
+
+        var open = NearestOpenCellOutsideSafeZones(CurrentMap(), Own().Cell);
+        await TapCellAsync(open);
+        await UntilAsync(() => !Own().IsWalking && Own().Cell.X == open.X && Own().Cell.Y == open.Y, 30, "leaving the safe zone");
+        var sawMonsterBar = false;
+        var clock = Stopwatch.StartNew();
+        while ((book.Points == 0 || book.ChangeableJobs.Count == 0) && clock.Elapsed.TotalSeconds < 150)
+        {
+            var monster = NearestMonster();
+            if (monster is null)
+            {
+                await WalkTowardMapMiddleAsync();
+                continue;
+            }
+            if (!OnScreen(monster))
+            {
+                await TapCellAsync(StepToward(monster.Cell));
+                await SecondsAsync(1);
+                continue;
+            }
+            await TapWorldAsync(new Vector3((float)monster.X, 0.45f, (float)monster.Z));
+            var fight = Stopwatch.StartNew();
+            while (fight.Elapsed.TotalSeconds < 20 && World.Find(monster.Id) is { Dead: false })
+            {
+                if (!sawMonsterBar && World.Casts.Any(c => c.Caster != World.OwnId && c.Fraction(Clocks.View()) > 0.45) && _main.Presenter!.CastBarCount > 0)   // half full for the picture
+                {
+                    sawMonsterBar = true;
+                    Print($"skills: a cast bar over monster #{monster.Id} ({_main.Bundle!.NameOf(monster.DisplayKey)}): {World.Casts.Count} open, {_main.Presenter.CastBarCount} drawn");
+                    await ShotAsync("-cast");
+                }
+                await FrameAsync();
+            }
+            await SecondsAsync(0.4);
+        }
+        Check(book.Points > 0 && book.ChangeableJobs.Count > 0, $"skill points and a job to change to after the fights (points {book.Points}, jobs {book.ChangeableJobs.Count})");
+        Check(sawMonsterBar, "a cast bar drawn over a casting monster");
+        Print($"skills: {book.Points} points, may change to {string.Join(", ", book.ChangeableJobs)}");
+
+        // The panel: learn something of the first job's tree.
+        Press(hud.SkillsButton);
+        await FramesAsync(4);
+        var panel = hud.Skills!;
+        Check(panel.Open && panel.RowButtons.Count > 0, "the skill panel opens with the tree's rows");
+        var first = book.Rows.First(r => r.State == SkillState.Learnable);
+        var points = book.Points;
+        Press(panel.RowButtons.First(r => r.Skill == first.SkillId).Button);
+        await FramesAsync(3);
+        Check(panel.LearnButton.Visible, "a learnable row offers Learn");
+        Print($"skills: tree layout: {panel.Layout}");
+        await ShotAsync("-tree");
+        Press(panel.LearnButton);
+        await UntilAsync(() => book.Level(first.SkillId) == 1 && book.Points == points - 1, 10, "the learned skill and one point less");
+        Print($"skills: learned {_main.Bundle!.NameOf(first.SkillId)}; {panel.StatusText}");
+
+        // Job change through the panel.
+        var job = book.ChangeableJobs[0];
+        await FramesAsync(3);
+        Check(panel.JobButtons.Any(b => b.Job == job), "the panel offers the job change");
+        Press(panel.JobButtons.First(b => b.Job == job).Button);
+        await UntilAsync(() => book.JobId == job, 10, "the new job");
+        await FramesAsync(3);
+        Check(book.Rows.Any(r => r.JobId == job), "the tree now has the new job's rows");
+        Check(book.Level(first.SkillId) == 1, "the learned skill stays after the job change");
+        Check(Own().DisplayKey == job, "the character is seen with the new job");
+
+        // Learn a ranged attack of the new job and put it on a slot.
+        SkillRow? attack = null;
+        foreach (var row in book.Rows)
+            if (row.JobId == job && row.State == SkillState.Learnable && _main.Bundle!.Skill(row.SkillId) is { Passive: false, Ground: false, Friendly: false, Range: > 1 }) { attack = row; break; }
+        Check(attack is not null, "a learnable ranged attack in the new job");
+        await FramesAsync(2);
+        Press(panel.RowButtons.First(r => r.Skill == attack!.SkillId).Button);
+        await FramesAsync(2);
+        Press(panel.LearnButton);
+        await UntilAsync(() => book.Level(attack!.SkillId) == 1, 10, "the attack skill learned");
+        Press(hud.SkillsButton);
+        await FramesAsync(3);
+        Check(!panel.Open, "the skills button closes the panel");
+        var slot = book.ActiveSkills.ToList().IndexOf(attack!.SkillId);
+        Check(slot >= 0 && hud.HotbarSlots[slot].Text.Contains(_main.Bundle!.NameOf(attack.SkillId), StringComparison.Ordinal), "the skill is on the skill bar");
+
+        // Cast it: press the slot, tap a monster. A pick-up still under way (loot from the fights) walks the character and cancels a cast, so each attempt
+        // first stands still with no target, and an attempt that never reaches a cooldown is simply made again.
+        var hitsBefore = 0;
+        World.Combat.Impact += (in HitImpact impact) =>
+        {
+            if (impact.Attacker == World.OwnId && impact.Kind != HitKind.Status) hitsBefore++;
+        };
+        var sawOwnBar = false;
+        var sweep = false;
+        EntityView? target = null;
+        for (var attempt = 1; attempt <= 5 && !sweep; attempt++)
+        {
+            var here = Own().Cell;
+            var away = here;
+            foreach (var (dx, dy) in new[] { (2, 0), (-2, 0), (0, 2), (0, -2) })
+                if (CurrentMap().IsWalkable(here.X + dx, here.Y + dy)) { away = new GridCell(here.X + dx, here.Y + dy); break; }
+            await TapCellAsync(away);   // a move order ends any auto-attack or pick-up still running and clears the target
+            await UntilAsync(() => !Own().IsWalking && Session.Ui.Target is null, 10, "standing still with no target");
+            await SecondsAsync(1.5);
+            target = null;
+            var search = Stopwatch.StartNew();
+            while (target is null && search.Elapsed.TotalSeconds < 60)
+            {
+                target = NearestMonster();
+                if (target is null) { await WalkTowardMapMiddleAsync(); continue; }
+                if (!OnScreen(target)) { await TapCellAsync(StepToward(target.Cell)); await SecondsAsync(1); target = null; }
+            }
+            Check(target is not null, "a monster on screen to cast at");
+            Press(hud.HotbarSlots[slot]);
+            await FramesAsync(2);
+            Check(Session.Ui.PendingSkill == attack.SkillId && Session.Ui.Flash.Length > 0,
+                $"the press makes the skill wait for a target and says so (pending {Session.Ui.PendingSkill}, flash '{Session.Ui.Flash}', target {Session.Ui.Target}, press {hud.LastHotbarPress}, slot {slot})");
+            var tapping = TapWorldAsync(new Vector3((float)target!.X, 0.45f, (float)target.Z));   // watched while it runs: the cast may be over before the tap helper returns
+            var wait = Stopwatch.StartNew();
+            while (wait.Elapsed.TotalSeconds < 6 && !sweep)
+            {
+                if (World.Casts.Any(c => c.Caster == World.OwnId) && _main.Presenter!.CastBarCount > 0) sawOwnBar = true;
+                if (book.AnyCooldown && book.CooldownFraction(attack.SkillId) > 0.3)
+                {
+                    sweep = true;
+                    await FramesAsync(1);
+                    Print($"skills: cooldown running on {_main.Bundle.NameOf(attack.SkillId)}: {book.CooldownLeft(attack.SkillId):0.00} s left; slot text [{hud.HotbarSlots[slot].Text.Replace((char)10, '|')}]");
+                    Check(!((IHotbarContent)book).Slot(slot).Usable, "a skill on cooldown is not usable");
+                    await ShotAsync("-cooldown");
+                }
+                await FrameAsync();
+            }
+            await tapping;
+            if (!sweep) Print($"skills: attempt {attempt} did not reach a cooldown (flash '{Session.Ui.Flash}', own cell {Own().Cell}, monster #{target.Id} at {World.Find(target.Id)?.Cell}, sp {World.Vitals?.Sp}); trying again");
+        }
+        Check(sawOwnBar, "the own cast bar was drawn while casting");
+        Check(sweep, "the skill went on cooldown");
+        var presses = hud.HotbarPresses;
+        Press(hud.HotbarSlots[slot]);
+        Check(hud.LastHotbarPress == HotbarPress.Unusable && hud.HotbarPresses == presses + 1, "a press during the cooldown is refused by the bar and sends nothing");
+        await UntilAsync(() => !book.AnyCooldown, 10, "the cooldown to run out");
+        Check(((IHotbarContent)book).Slot(slot).Usable, "the skill is usable again");
+        await UntilAsync(() => hitsBefore > 0, 5, "the skill hit its target");
+        Print($"skills: own cast bar seen {sawOwnBar}; hits by me {hitsBefore}; first job {firstJob}, now {book.JobId}");
     }
 
     private async Task ItemsRunAsync()
@@ -731,7 +890,8 @@ public sealed class AutoRun
         World.Combat.Impact += count;
         var droppedBefore = World.Combat.Dropped;
         int maxNumbers = 0, maxEffects = 0, maxPending = 0, calmFrames = 0, fxFrames = 0;
-        int maxStatused = 0, maxDebuffed = 0, maxMarks = 0;   // T-501
+        int maxStatused = 0, maxDebuffed = 0, maxMarks = 0, maxCastBars = 0;   // T-501, T-502
+        var synthCasts = Array.IndexOf(_args, "--measure-casts") >= 0;   // T-502, measuring only: every entity in view is shown casting, to count the cast bars' cost
         double calmDraws = 0, fxDraws = 0, maxShown = 0;
         _main.CountAllocations = true;
         if (Array.IndexOf(_args, "--fight") >= 0) _ = HuntOneAsync(60); // the player fights too, so dealt and taken numbers show
@@ -760,6 +920,12 @@ public sealed class AutoRun
                 maxStatused = Math.Max(maxStatused, World.Entities.Count(e => e.Statuses.Count > 0));
                 maxDebuffed = Math.Max(maxDebuffed, World.Entities.Count(e => e.HasDebuff));
                 maxMarks = Math.Max(maxMarks, _main.Presenter?.StatusMarkCount ?? 0);
+                maxCastBars = Math.Max(maxCastBars, _main.Presenter?.CastBarCount ?? 0);
+                if (synthCasts && frames % 20 == 0)
+                {
+                    var open = World.Entities.Where(e => !e.Dead).Select(e => new CastRecord(e.Id, "measure", 1500)).ToList();
+                    World.ApplyDelta(new DeltaMessage(World.Tick, [], [], [], null, null, open), Clocks.View());
+                }
             }
             if (_main.Fx is { } fx)
             {
@@ -800,6 +966,7 @@ public sealed class AutoRun
         await BreakdownAsync();
         Print($"measure: peak frame by pass: 3D {peak.Opaque}, shadow {peak.Shadow}, canvas (HUD, numbers) {peak.Canvas}; {peak.OnScreen} entities on screen, visuals at LOD0 {peak.Lod0}, LOD1 {peak.Lod1}");
         Print($"measure: draw calls avg {(calmFrames > 0 ? calmDraws / calmFrames : 0):0.0} in {calmFrames} frames with no number or effect on screen, {(fxFrames > 0 ? fxDraws / fxFrames : 0):0.0} in {fxFrames} frames with some");
+        Print($"measure: cast bars (T-502): at most {maxCastBars} drawn at once{(synthCasts ? " (a synthetic cast on every entity in view)" : string.Empty)}");
         Print($"measure: statuses (T-501): at most {maxStatused} entities in view with statuses ({maxDebuffed} with a debuff) and {maxMarks} markers at once; at the end " +
               $"{World.Entities.Count(e => e.Statuses.Count > 0)} with statuses, own [{string.Join(", ", World.Own?.Statuses.Select(st => st.Id) ?? [])}]");
         Print($"measure: static memory {OS.GetStaticMemoryUsage() / (1024 * 1024)} MB; video {Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / (1024 * 1024):0} MB; adapter {RenderingServer.GetVideoAdapterName()}");

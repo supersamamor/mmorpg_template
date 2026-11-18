@@ -17,6 +17,7 @@ public sealed class WorldView
     private readonly List<EntityView> _removed = new List<EntityView>();
     private readonly Stack<EntityView> _pool = new Stack<EntityView>();
     private readonly HashSet<long> _seen = new HashSet<long>();
+    private readonly List<CastBar> _casts = new List<CastBar>();
     private double _renderDelay;
     private double _lastAdvance = double.NaN;
 
@@ -54,6 +55,12 @@ public sealed class WorldView
     /// <summary>Every entity in view, in no particular order. Index it in per-frame code, so nothing allocates an enumerator.</summary>
     public IReadOnlyList<EntityView> Entities => _entities;
 
+    /// <summary>The cast bars open now (T-502): any caster in view, the own character included, in the order they started.</summary>
+    public IReadOnlyList<CastBar> Casts => _casts;
+
+    /// <summary>Counts changes to <see cref="Casts"/> (a bar opened or closed).</summary>
+    public int CastVersion { get; private set; }
+
     /// <summary>Entities that left the view since <see cref="ClearRemoved"/>; the presenter releases their visuals.</summary>
     public IReadOnlyList<EntityView> Removed => _removed;
 
@@ -87,6 +94,11 @@ public sealed class WorldView
         }
         for (var i = _entities.Count - 1; i >= 0; i--)
             if (!_seen.Contains(_entities[i].Id)) Remove(_entities[i].Id);
+        if (_casts.Count > 0)
+        {
+            _casts.Clear();   // a snapshot is state, not history: casts under way are not told again
+            CastVersion++;
+        }
         if (snapshot.Vitals is { } vitals) SetVitals(vitals);
     }
 
@@ -101,10 +113,15 @@ public sealed class WorldView
             if (_byId.TryGetValue(change.Id, out var entity))
             {
                 entity.Apply(change, now, _renderDelay, _config.SnapDistanceCells, _config.GlideCellsPerSecond);
+                if ((change.Fields & ChangedFields.Dead) != 0 && entity.Dead) CloseCast(change.Id);
                 if ((change.Fields & ChangedFields.Dead) != 0 && entity.Dead) entity.DelayDeath(Combat.LatestImpactOn(entity.Id, 0)); // the death waits for the killing blow
             }
         }
         for (var i = 0; i < delta.Disappeared.Count; i++) Remove(delta.Disappeared[i]);
+        if (delta.Casts is { Count: > 0 } casts)
+            for (var i = 0; i < casts.Count; i++) OpenCast(casts[i], now);
+        if (delta.CastEnds is { Count: > 0 } ends)
+            for (var i = 0; i < ends.Count; i++) CloseCast(ends[i].Caster);
         if (delta.Vitals is { } vitals) SetVitals(vitals);
     }
 
@@ -155,6 +172,8 @@ public sealed class WorldView
     public void Reset()
     {
         for (var i = _entities.Count - 1; i >= 0; i--) Remove(_entities[i].Id);
+        _casts.Clear();
+        CastVersion++;
         MapId = null;
         OwnId = 0;
         Tick = 0;
@@ -177,6 +196,7 @@ public sealed class WorldView
     private void Remove(long id)
     {
         if (!_byId.TryGetValue(id, out var entity)) return;
+        CloseCast(id);
         _byId.Remove(id);
         var index = _entities.IndexOf(entity);
         _entities[index] = _entities[_entities.Count - 1];
@@ -184,9 +204,55 @@ public sealed class WorldView
         _removed.Add(entity);
     }
 
+    private void OpenCast(CastRecord record, double now)
+    {
+        CloseCast(record.Caster);
+        _casts.Add(new CastBar(record.Caster, record.Skill, now, record.Ms / 1000.0));
+        CastVersion++;
+    }
+
+    private void CloseCast(long caster)
+    {
+        for (var i = 0; i < _casts.Count; i++)
+        {
+            if (_casts[i].Caster != caster) continue;
+            _casts.RemoveAt(i);
+            CastVersion++;
+            return;
+        }
+    }
+
     private void SetVitals(VitalsRecord vitals)
     {
         Vitals = vitals;
         StatsVersion++;
     }
+}
+
+/// <summary>A cast under way (T-502): who, which skill, when it began on the view clock and how long it takes.</summary>
+public sealed class CastBar
+{
+    /// <summary>Creates a bar that began at <paramref name="start"/> and lasts <paramref name="seconds"/>.</summary>
+    public CastBar(long caster, string skill, double start, double seconds)
+    {
+        Caster = caster;
+        Skill = skill;
+        Start = start;
+        Seconds = seconds;
+    }
+
+    /// <summary>The caster's entity id.</summary>
+    public long Caster { get; }
+
+    /// <summary>The skill being cast.</summary>
+    public string Skill { get; }
+
+    /// <summary>When the cast began, on the view clock.</summary>
+    public double Start { get; }
+
+    /// <summary>The cast time in seconds (the server's, so it already includes the caster's cast time modifier).</summary>
+    public double Seconds { get; }
+
+    /// <summary>How far along it is at view time <paramref name="now"/>, 0 to 1.</summary>
+    public double Fraction(double now) => Seconds <= 0 ? 1 : Math.Clamp((now - Start) / Seconds, 0, 1);
 }

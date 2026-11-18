@@ -102,7 +102,8 @@ public sealed class InputRouter
     /// </summary>
     private void OnTap(Vector2 position, double now)
     {
-        if (PickEntity(position, EntityKinds.Monster, EntityKinds.Item) is { } id && _session.World.Find(id) is { } picked)
+        // A skill waiting for its target (T-502) only looks for monsters: a loot bag beside one must not take the tap.
+        if (PickEntity(position, EntityKinds.Monster, _session.Ui.PendingSkill is null ? EntityKinds.Item : null) is { } id && _session.World.Find(id) is { } picked)
         {
             if (picked.Kind == EntityKinds.Item) _session.TapItem(id);
             else _session.TapEntity(id);

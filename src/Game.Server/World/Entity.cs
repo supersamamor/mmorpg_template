@@ -129,6 +129,15 @@ public sealed class Entity
     /// <summary>The entity that summoned this monster (a <c>summon</c> effect), or null for everything else. Set by the spawner.</summary>
     public EntityId? Owner { get; set; }
 
+    /// <summary>True for a monster summoned by a player (T-502): it is on the players' side (ARCHITECTURE §6.3), whoever owns it later.</summary>
+    public bool SummonedByPlayer { get; set; }
+
+    /// <summary>The players' side: a player or a player's summon. Everything else is the monsters' side.</summary>
+    public bool OnPlayerSide => Kind == EntityKind.Player || SummonedByPlayer;
+
+    /// <summary>A player's skill cooldowns (T-502), kept by combat; null for everything else.</summary>
+    public Game.Shared.Skills.SkillCooldowns? Cooldowns { get; set; }
+
     /// <summary>A status with <c>prevents_move</c> holds it (only statuses timed on its current map count: see <see cref="Game.Shared.Effects.StatusSet.MapId"/>).</summary>
     public bool CannotMove => Statuses is { PreventsMove: true } s && string.Equals(s.MapId, MapId, StringComparison.Ordinal);
 

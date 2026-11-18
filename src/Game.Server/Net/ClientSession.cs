@@ -137,6 +137,7 @@ public sealed class ClientSession : IViewSink
         if (!Queue.PostSnapshot(_views.Write(snapshot))) Bye(ByeReasons.TooSlow);
         _gateway.PostExp(snapshot.Observer); // a fresh view (join, resume, warp, resync) comes with the own levels and EXP
         _gateway.PostInventory(snapshot.Observer); // and the whole own inventory
+        _gateway.PostSkills(snapshot.MapId, snapshot.Observer); // and the own skills, points and cooldowns
         _gateway.Stats.AddSinkTime(Stopwatch.GetTimestamp() - started);
     }
 
@@ -399,6 +400,15 @@ public sealed class ClientSession : IViewSink
             case RefineMessage refine:
                 if (Entity is { } refiner) _gateway.Enqueue(new RefineItem(refiner, refine.Entry));
                 break;
+            case UseSkillMessage cast:
+                RequestSkill(cast);
+                break;
+            case LearnSkillMessage learn:
+                if (Entity is { } learner) _gateway.Enqueue(new LearnSkill(learner, learn.Skill));
+                break;
+            case ChangeJobMessage job:
+                if (Entity is { } changer) _gateway.Enqueue(new ChangeJob(changer, job.Job));
+                break;
         }
     }
 
@@ -462,6 +472,23 @@ public sealed class ClientSession : IViewSink
     /// The target must be in the client's view (else <c>target_gone</c>: it does not exist for this client) and a monster other than itself
     /// (else <c>invalid_target</c>: no PvP in v1). Combat checks the rest on the tick (dead, safe zone) and may still refuse.
     /// </summary>
+    /// <summary>A <c>use_skill</c>: a given entity target must be in the client's view (else <c>target_gone</c>); combat checks the rest on the tick.</summary>
+    private void RequestSkill(UseSkillMessage cast)
+    {
+        if (Entity is not { } id) return;
+        if (cast.Target is { } target && target != id.Value)
+        {
+            bool seen;
+            lock (_visible) seen = _visible.ContainsKey(target);
+            if (!seen)
+            {
+                Post(new RejectedMessage(MessageTypes.UseSkill, SkillReasons.TargetGone, null, target, Skill: cast.Skill));
+                return;
+            }
+        }
+        _gateway.Enqueue(new UseSkill(id, cast.Skill, cast.Level ?? 0, cast.Target is { } t ? new EntityId(t) : null, cast.Cell));
+    }
+
     private void RequestAttack(AttackMessage attack)
     {
         if (Entity is not { } id) return;

@@ -279,7 +279,8 @@ New *kind* of behavior = new effect type + tests.
   movement ends an interrupted walk with `warped`, and observers see a cell change (the client glides or snaps, §7). Forced moves ignore `prevents_move`.
 - **Summon** asks the spawner (`SummonRequested`): the summons are ordinary monsters with `Entity.Owner` set, created on a random walkable cell within one
   cell of the target cell. **Cap:** an owner has at most the effect's `count` live summons of that monster (casting again tops them up). They are never
-  respawned and are despawned after `duration_ms` (or as a corpse when killed). A player's summon is still a monster to everyone in v1 (allied summons: T-502).
+  respawned and are despawned after `duration_ms` (or as a corpse when killed). **Allied summons** (T-502): a summon of a player has `Entity.SummonedByPlayer`, which
+  puts it on the players' side (`Entity.OnPlayerSide`) for every side check (skill targets, `area`, auto-attack). It is described in §6.6.
 - **Statuses** (`StatusSet` on `Entity.Statuses`). **Stacking:** applying a status the bearer lacks starts it (1 stack); again below `max_stacks` adds a stack
   and runs `on_apply` once more (a stacked `modify_stat` counts per stack); at `max_stacks` it only refreshes. Either way its end becomes the later of the
   current end and now + the new duration, its tick schedule stays, and the newest applier becomes its source. `on_tick` runs once per stack every
@@ -303,6 +304,21 @@ Quest state per character is persisted as `{questId, stepIndex, counters}`.
 Base level + job level, separate EXP tables. Stat points per base level and skill points
 per job level, stat point cost, the stat range and combat clamps come from `balance.yaml`
 (`BalanceDef`); the max base level is the base EXP table length + 1. Job change requirements from `JobDef`.
+
+**Player skills** (T-502; combat hosts them, `CombatSystem.PlayerSkills.cs`, rules in `Game.Shared/Skills` and `Progression`). State per character is the `ProgressionState`
+in the progression store (in memory until T-702): skill points, learned levels, job, completed quests and unlocked jobs.
+- **Learning.** `learn_skill` spends one point on a skill of the current job's tree or a parent job's (`ProgressionRules.LearnSkill`): up to the tree entry's `max_level`
+  (else the skill's), only when every `requires` entry is met. Refusals are "Skill reasons" terms (`SkillLearnRefused`).
+- **Job change.** `change_job` to a job whose `parent_job_id` is the current job and whose `requirements` are met (base level, job level, `quest_ids` all in
+  `CompletedQuests`, and `requires_unlock` in `UnlockedJobs`; refused with the first failure's term). **Carried over:** base level and EXP, stats and stat points, **unspent skill
+  points and every learned skill** (parent jobs' skills stay usable and passive). **Reset:** job level to 1 and job EXP to 0 (the new job has its own EXP table). The old
+  job's stat bonuses (`job:<id>` modifiers) are removed and the new job's added at job level 1; the player's `DefinitionId` becomes the job id, which is what usable
+  weapon types and the look follow. `JobChanged` goes out as `PlayerProgressed`. Quests and unlocks are T-602: until then a job with `quest_ids` or `requires_unlock`
+  (the sample's Warden) is refused with `quest_not_completed` / `not_unlocked`; the sample's Spellbinder (base 5, job 5) is the job a scripted run reaches.
+- **Passives.** A learned `passive` skill adds its `passive_modifiers` to the stat sheet with the source `skill:<id>` (formulas of `level` and the sheet's own variables),
+  removed and added again on every level change and when the character enters a map; it cannot be cast (`passive_skill`).
+- **Casting.** See §6.7 (player skills). Cooldowns live on `Entity.Cooldowns` (`SkillCooldowns`), counted on the map's tick clock and carried across a map change as time
+  left, so a warp neither resets nor stretches a cooldown.
 
 ### 6.6 Monster AI
 Two systems in `Game.Server/World/Monsters`, after movement in the tick (`ServerPipeline`: movement, `monster_spawner`, `monster_ai`, `combat`, AOI).
@@ -335,6 +351,12 @@ Two systems in `Game.Server/World/Monsters`, after movement in the tick (`Server
   no hostile skill on a player in a safe zone; else `SkillRefused`), running the skill's effects through the runner (§6.3). The cooldown (`cooldown_ms`)
   starts when the cast ends. A lost target or `prevents_skills` drops a cast. A monster held by `prevents_move` sends no moves and one held by
   `prevents_attack` requests no attacks. `stats --duel` models the same choice (ADR-002 row 118).
+- **A player's summon** (T-502, ADR-002 row 205). The rule: it is on its owner's side. `Ally` replaces the wild state machine for a monster with
+  `SummonedByPlayer`: it never scans for or targets a player; it attacks the nearest living monster that is not a player's summon within its `chase_range` of itself **and**
+  of its owner (a scan every `think_interval_ms`), or whoever just hit its owner or itself; with nothing to fight it follows its owner to within `ai.wander_radius` cells
+  (re-pathing every `repath_interval_ms`). It has no home and no leash and stays idle while its owner is gone. It earns nobody EXP or loot (credit goes to players only).
+  Combat refuses a player's `attack` on it (`invalid_target`), and areas and skills treat it as an ally.
+- **Cast events** (T-502). A monster's cast with a cast time also raises `SkillCastEnded` (`done`, or `interrupted` when it loses its target or is stunned), for the cast bars.
 - **The AI only decides.** It walks with `MoveTo` / `StopMove` intents (applied on the next tick) and follows the movement events; it asks
   combat to attack with the `AttackRequested` event (attacker, target, both cells, range, time). Combat (§6.7) re-checks and resolves the hit and
   publishes `DamageDealt` / `EntityDied`, which the AI and the spawner listen to. Nobody calls another system.
@@ -361,6 +383,15 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
   in order, each re-checked (both alive on this map, a player target not in a `safe` zone, Chebyshev distance within the request's range,
   and for a ranged attack (range above 1) line of sight between the two cells, and an attacker free of `prevents_attack`; otherwise `AttackRefused` with a reason) →
   skill requests → consumables used → player auto-attacks in entity id order → ground item expiry → status looks.
+- **Player skills** (T-502). `UseSkill` is an intent combat owns (with `LearnSkill` and `ChangeJob`). It is checked on arrival, in this order: caster alive, skill known,
+  learned (`not_learned`), not passive, level up to the learned level (`level_too_high`), not held by `prevents_skills`, weapon type in `weapon_types` (`unarmed` without a
+  weapon: `wrong_weapon`), off cooldown, SP for the cost at that level (`not_enough_sp`), a hostile skill not from a safe zone, then the aim: a ground skill needs an
+  in-bounds cell, an entity skill a living target on the right side (`friendly` against the players' side; none given: a friendly skill is cast on the caster).
+  An accepted order replaces any auto-attack or cast and **walks into range** like an auto-attack (`target.range` Chebyshev, and line of sight above range 1), then
+  **casts standing still** for `cast_time_ms` × the caster's `cast_time_mod` (floored; `SkillCastStarted` when above 0). A move, `stop`, a new order, death,
+  `prevents_skills` or a lost target ends the cast without cost (`SkillCastEnded` `cancelled` or `interrupted`). **When the cast time is up** the SP is spent and the cooldown
+  starts (`SkillCooldownStarted`, `SkillCastEnded` `done`) and a `SkillRequested` goes out, which the effect runner's host resolves on the next tick with all the checks of
+  §6.6 (range and sight again; a refusal there still costs the SP). Cost, cast time and cooldown are formulas of the skill `level`.
 - **Player auto-attack.** `AttackTarget` (monsters only; refused in a `safe` zone) keeps attacking until the target dies or leaves, the player
   sends `StopAttack`, a new move order (seen as a `MovementStarted` / `MovementStopped` combat did not cause), or no path leads into range.
   The player walks in with `MoveTo` (re-path at most every `combat.player_repath_interval_ms`) and attacks at its `aspd` within
@@ -482,9 +513,11 @@ One path for touch and mouse (`InputRouter`; a mouse arrives as touch index 0, s
 - **Drag** (past the threshold) is neither tap nor long-press. **Pinch** (two fingers, past an 8 dp dead zone) and the scroll wheel zoom the camera inside its clamp;
   a pinch never taps, and neither does the finger left after it.
 - **UI first.** A touch that begins on a button, field or panel belongs to the UI until it ends and never reaches the world. A full-screen panel blocks everything.
-- **Hotbar** buttons call `HotbarModel.Press(slot)`. The seam for T-502 is `IHotbarContent` (what the slots hold, with a version counter so a slot redraws only
-  when it changes) and `IHotbarActivator` (what an activated slot does: T-502 sends the `UseSkill` intent from there). Until they are bound every slot is an empty
-  placeholder, a press gives visual feedback only, and the client sends nothing. Ground-target skills: pick the skill, then tap a cell (T-502).
+- **Hotbar** buttons call `HotbarModel.Press(slot)`. T-502 binds them to the skill bar: `SkillBook` is the `IHotbarContent` (the learned active skills in tree order, a slot's cooldown fraction, and a
+  version that moves every frame a cooldown runs) and `ClientSession.PressSkill` the activator. A skill on the caster is sent at once; one that needs an enemy is sent on the
+  current target if it is alive, else it **waits for a tap** on one (the slot is lit and the flash says so; a second press cancels); a ground skill waits for a tap on the
+  ground (a tap on an enemy aims at its cell). A tap on the ground while an enemy skill waits is a walk and cancels the wait. The slot shows a dark sweep over the
+  cooldown and its whole seconds; a press during the cooldown is refused by the bar and sends nothing. Friendly skills that need a target are cast on the caster in v1.
 - A virtual joystick is backlog.
 
 ### 7.4 UI
@@ -510,6 +543,11 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   actions: Use, Equip, Take off, Drop (from the bundle's item kind and whether it is worn). A tap on a worn slot takes it off. It only sends intents; the
   server's `inventory_changed` redraws it. It redraws only when the view's `Version` moves and costs nothing while closed. The layout check covers it open
   and filled with the longest words at every screen shape and scale (controls inside a scroll container may be scrolled out of sight; only their sizes count).
+- **Skills** (T-502, `client/Scene/SkillPanel.cs`, view model `client/Core/Skills/SkillBook.cs`). The Skills button (bottom left, beside the hotbar, while online) opens a panel
+  like the bag: the job and unspent points, one row for every skill of the job's tree and its parents' trees (name, `Lv x/max`, and while locked the requirements it
+  lacks; locked rows are dimmed, learnable ones tinted), the selected skill's description and a Learn button, and one button per job the server says the player may change
+  to. It only sends `learn_skill` and `change_job`; the new `skills` message redraws it. **Cast bars:** one amber bar above any caster in view (the player's own and monsters'), a
+  second multimesh next to the HP bars (one draw call, none while nobody casts), filled by the cast time the server sent and closed by `cast_ends`, death or leaving view.
 - **Where the client's own words live (ADR-002 row 120).** In `client/Core/UiText.cs`: one static class of constants and small formatting functions in English, and nowhere
   else (a test fails on a literal assigned to a text property in `client/Scene`). Why: the refusal and update screens must read even when the bundle, theme or any data
   file is missing or broken, which rules out loading them; the pure core and its tests can use them; a typo or a missing word is a compile error; and the number of
@@ -812,10 +850,13 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   | `drop_item` | C→S | `entry`, `quantity` (onto the character's cell, for anyone) |
   | `insert_card` | C→S | `entry` (the equipment entry, carried or worn), `card` (the card entry); for good (T-402) |
   | `refine` | C→S | `entry` (an equipment entry, carried or worn); the outcome comes back as `inventory_changed` (`refined`) then `refine_result` (T-402) |
+  | `use_skill` | C→S | `skill`, optional `level` (up to the learned level), `target` (an entity id in view) or `cell` (ground); a request, it may come back `rejected` (T-502) |
+  | `learn_skill` | C→S | `skill` (spend one skill point) (T-502) |
+  | `change_job` | C→S | `job` (T-502) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
-  | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `vitals` (when changed); empty ones left out |
-  | `rejected` | S→C | `intent` (`move`, `attack` or an item intent), `reason` (a `MoveRejected`, "Attack reasons" or "Item reasons" term), `cell` (move), `target` (attack, `pick_up`), `entry` (`use_item`, `equip`, `drop_item`; the equipment entry for `insert_card`, `refine`), `slot` (`equip`, `unequip`) |
+  | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
+  | `rejected` | S→C | `intent` (`move`, `attack`, an item intent, or `use_skill`, `learn_skill`, `change_job`), `reason` (a `MoveRejected`, "Attack reasons", "Item reasons" or "Skill reasons" term), `cell` (move), `target` (attack, `pick_up`, `use_skill`), `entry` (`use_item`, `equip`, `drop_item`; the equipment entry for `insert_card`, `refine`), `slot` (`equip`, `unequip`), `skill` (the skill, or for `change_job` the job) |
   | `attack_stopped` | S→C (owner) | `target`, `reason` (an "Attack reasons" term) |
   | `exp` | S→C (owner) | `base_level`, `base_exp`, `base_next`, `job_level`, `job_exp`, `job_next` (`*_next` = EXP the level needs, 0 at the cap) |
   | `level_up` | S→C (owner) | `base_level` or `job_level` (one message per level reached) |
@@ -824,6 +865,8 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
   | `inventory` | S→C (owner) | `rev`, `slots` (most entries), `weight`, `weight_limit`, `load` (a "Weight states" term), `entries` (`[{id, item, quantity, slot?, cards?, refine?}]`, by id; `cards` and `refine` only when the equipment has any, and only ever to the owner). After every snapshot (join, resume, warp, resync); it replaces what the client had |
   | `inventory_changed` | S→C (owner) | `rev` (one more than the last), `cause` (an "Inventory changes" term), `item`, `weight`, `weight_limit`, `load`, `entries` (added or changed, as they are now), `removed` (ids); empty lists left out. A client that sees a gap in `rev` keeps what it has until the next `inventory` |
   | `refine_result` | S→C (owner) | `entry`, `item`, `result` (a "Refine results" term: `success`, `keep`, `down`, `break`), `refine` (the level now; what it had when it broke) |
+  | `skills` | S→C (owner) | `job`, `points` (unspent), `levels` (`[["skill.x",2],...]`), `cooldowns` (`[["skill.x",ms left],...]`), `jobs` (the jobs `change_job` would accept now). After every snapshot, a learn, a job change and a level (T-502) |
+  | `cooldown` | S→C (owner) | `skill`, `ms`: the skill went on cooldown when its cast ended (T-502) |
   | `pong` | S→C | `seq` |
   | `bye` | S→C (last) | `reason` (VOCABULARY "Bye reasons"), followed by the close frame |
 

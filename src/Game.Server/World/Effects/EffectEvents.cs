@@ -146,3 +146,35 @@ public sealed class StatusLook
     /// <summary>The <see cref="StatusSet.Revision"/> it was built from.</summary>
     public int Revision { get; }
 }
+
+/// <summary>
+/// <c>SkillCastEnded</c> (T-502): the cast of <c>SkillId</c> by <c>Caster</c> ended with a <see cref="Game.Shared.Protocol.CastResults"/> term: <c>done</c>
+/// (the cast time ran out; <c>SkillRequested</c> follows), <c>cancelled</c> (the caster moved, gave a new order or stopped) or <c>interrupted</c>.
+/// Raised for every caster whose cast had a cast time (monsters included), so observers can close the cast bar.
+/// </summary>
+public sealed record SkillCastEnded(EntityId Caster, string SkillId, string Result) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.SkillCastEnded;
+}
+
+/// <summary><c>SkillCooldownStarted</c> (T-502): <c>SkillId</c> of player <c>Player</c> is on cooldown for <c>Ms</c> milliseconds.</summary>
+public sealed record SkillCooldownStarted(EntityId Player, string SkillId, int Ms) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.SkillCooldownStarted;
+}
+
+/// <summary><c>SkillLearnRefused</c> (T-502): a <c>learn_skill</c> of <c>Player</c> was refused for a <see cref="SkillReasons"/> term.</summary>
+public sealed record SkillLearnRefused(EntityId Player, string SkillId, string Reason) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.SkillLearnRefused;
+}
+
+/// <summary><c>JobChangeRefused</c> (T-502): a <c>change_job</c> of <c>Player</c> was refused; <c>Reason</c> is the first failed requirement's term.</summary>
+public sealed record JobChangeRefused(EntityId Player, string JobId, string Reason) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.JobChangeRefused;
+}

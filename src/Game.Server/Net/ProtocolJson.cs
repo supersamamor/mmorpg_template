@@ -37,8 +37,8 @@ public static class ProtocolJson
         {
             var reader = new Utf8JsonReader(utf8, new JsonReaderOptions { MaxDepth = MaxClientDepth });
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ClientMessage>(ByeReasons.Malformed);
-            string? type = null, name = null, content = null, resume = null, slot = null;
-            int? version = null, quantity = null;
+            string? type = null, name = null, content = null, resume = null, slot = null, skill = null, job = null;
+            int? version = null, quantity = null, level = null;
             long? seq = null, target = null, entry = null, card = null;
             GridCell? cell = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
@@ -58,6 +58,9 @@ public static class ProtocolJson
                     case "cell": cell = Cell(ref reader); break;
                     case "entry": entry = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var en) ? en : throw Bad(); break;
                     case "slot": slot = String(ref reader); break;
+                    case "skill": skill = String(ref reader); break;
+                    case "job": job = String(ref reader); break;
+                    case "level": level = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var lv) ? lv : throw Bad(); break;
                     case "quantity": quantity = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var q) ? q : throw Bad(); break;
                     default: reader.Skip(); break;
                 }
@@ -82,6 +85,9 @@ public static class ProtocolJson
                 MessageTypes.DropItem => entry is { } dropped && quantity is { } count ? new DropItemMessage(dropped, count) : null,
                 MessageTypes.InsertCard => entry is { } socketed && card is { } inserted ? new InsertCardMessage(socketed, inserted) : null,
                 MessageTypes.Refine => entry is { } refined ? new RefineMessage(refined) : null,
+                MessageTypes.UseSkill => skill is { } cast ? new UseSkillMessage(cast, level, target, cell) : null,
+                MessageTypes.LearnSkill => skill is { } learned ? new LearnSkillMessage(learned) : null,
+                MessageTypes.ChangeJob => job is { } changed ? new ChangeJobMessage(changed) : null,
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -148,6 +154,18 @@ public static class ProtocolJson
             case RefineMessage refine:
                 w.WriteNumber("entry", refine.Entry);
                 break;
+            case UseSkillMessage use:
+                w.WriteString("skill", use.Skill);
+                if (use.Level is { } level) w.WriteNumber("level", level);
+                if (use.Target is { } target) w.WriteNumber("target", target);
+                if (use.Cell is { } cell) WriteCell(w, "cell", cell);
+                break;
+            case LearnSkillMessage learn:
+                w.WriteString("skill", learn.Skill);
+                break;
+            case ChangeJobMessage change:
+                w.WriteString("job", change.Job);
+                break;
         }
         w.WriteEndObject();
     }
@@ -205,7 +223,48 @@ public static class ProtocolJson
                     foreach (var h in hits) WriteHit(w, h.Attacker, h.Target, h.Amount, h.Result);
                     w.WriteEndArray();
                 }
+                if (delta.Casts is { Count: > 0 } casts)
+                {
+                    w.WriteStartArray("casts");
+                    foreach (var c in casts) WriteCast(w, c.Caster, c.Skill, c.Ms);
+                    w.WriteEndArray();
+                }
+                if (delta.CastEnds is { Count: > 0 } ends)
+                {
+                    w.WriteStartArray("cast_ends");
+                    foreach (var c in ends) WriteCastEnd(w, c.Caster, c.Skill, c.Result);
+                    w.WriteEndArray();
+                }
                 if (delta.Vitals is { } vitals) WriteVitals(w, vitals.Hp, vitals.MaxHp, vitals.Sp, vitals.MaxSp);
+                break;
+            case SkillsMessage skills:
+                w.WriteString("job", skills.Job);
+                w.WriteNumber("points", skills.Points);
+                w.WriteStartArray("levels");
+                foreach (var l in skills.Levels)
+                {
+                    w.WriteStartArray();
+                    w.WriteStringValue(l.Skill);
+                    w.WriteNumberValue(l.Level);
+                    w.WriteEndArray();
+                }
+                w.WriteEndArray();
+                w.WriteStartArray("cooldowns");
+                foreach (var c in skills.Cooldowns)
+                {
+                    w.WriteStartArray();
+                    w.WriteStringValue(c.Skill);
+                    w.WriteNumberValue(c.Ms);
+                    w.WriteEndArray();
+                }
+                w.WriteEndArray();
+                w.WriteStartArray("jobs");
+                foreach (var j in skills.Jobs) w.WriteStringValue(j);
+                w.WriteEndArray();
+                break;
+            case CooldownMessage cooldown:
+                w.WriteString("skill", cooldown.Skill);
+                w.WriteNumber("ms", cooldown.Ms);
                 break;
             case RejectedMessage rejected:
                 w.WriteString("intent", rejected.Intent);
@@ -214,6 +273,7 @@ public static class ProtocolJson
                 if (rejected.Target is { } target) w.WriteNumber("target", target);
                 if (rejected.Entry is { } entry) w.WriteNumber("entry", entry);
                 if (rejected.Slot is not null) w.WriteString("slot", rejected.Slot);
+                if (rejected.Skill is not null) w.WriteString("skill", rejected.Skill);
                 break;
             case AttackStoppedMessage stopped:
                 w.WriteNumber("target", stopped.Target);
@@ -308,7 +368,7 @@ public static class ProtocolJson
         {
             var reader = new Utf8JsonReader(utf8);
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ServerMessage>(ByeReasons.Malformed);
-            string? type = null, map = null, intent = null, reason = null, content = null, token = null, slot = null, cause = null, item = null, load = null, result = null;
+            string? type = null, map = null, intent = null, reason = null, content = null, token = null, slot = null, cause = null, item = null, load = null, result = null, skill = null, job = null;
             long tick = 0, id = 0, seq = 0, baseExp = 0, baseNext = 0, jobExp = 0, jobNext = 0, rev = 0;
             long? target = null, killer = null, entry = null;
             int version = 0, tickRate = 0, hp = 0, slots = 0, weight = 0, weightLimit = 0, refine = 0;
@@ -321,6 +381,11 @@ public static class ProtocolJson
             var changed = new List<ChangeRecord>();
             var gone = new List<long>();
             List<HitRecord>? hits = null;
+            List<CastRecord>? casts = null;
+            List<CastEndRecord>? castEnds = null;
+            List<(string, int)>? levels = null, cooldowns = null;
+            List<string>? jobs = null;
+            int points = 0, ms = 0;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var key = reader.GetString();
@@ -349,6 +414,15 @@ public static class ProtocolJson
                         while (reader.Read() && reader.TokenType != JsonTokenType.EndArray) gone.Add(reader.GetInt64());
                         break;
                     case "hits": hits = ReadHits(ref reader); break;
+                    case "casts": casts = ReadCasts(ref reader); break;
+                    case "cast_ends": castEnds = ReadCastEnds(ref reader); break;
+                    case "skill": skill = String(ref reader); break;
+                    case "job": job = String(ref reader); break;
+                    case "points": points = reader.GetInt32(); break;
+                    case "ms": ms = reader.GetInt32(); break;
+                    case "levels": levels = ReadPairs(ref reader); break;
+                    case "cooldowns": cooldowns = ReadPairs(ref reader); break;
+                    case "jobs": jobs = ReadStrings(ref reader); break;
                     case "vitals": vitals = ReadVitals(ref reader); break;
                     case "target": target = reader.GetInt64(); break;
                     case "killer": killer = reader.GetInt64(); break;
@@ -383,8 +457,8 @@ public static class ProtocolJson
             {
                 MessageTypes.Welcome => map is null ? null : new WelcomeMessage(version, id, map, tickRate, content, token),
                 MessageTypes.Snapshot => map is null ? null : new SnapshotMessage(tick, map, id, entities, vitals),
-                MessageTypes.Delta => new DeltaMessage(tick, entities, changed, gone, hits, vitals),
-                MessageTypes.Rejected => intent is null || reason is null ? null : new RejectedMessage(intent, reason, cell, target, entry, slot),
+                MessageTypes.Delta => new DeltaMessage(tick, entities, changed, gone, hits, vitals, casts, castEnds),
+                MessageTypes.Rejected => intent is null || reason is null ? null : new RejectedMessage(intent, reason, cell, target, entry, slot, skill),
                 MessageTypes.AttackStopped => target is null || reason is null ? null : new AttackStoppedMessage(target.Value, reason),
                 MessageTypes.Exp => baseLevel is null || jobLevel is null ? null : new ExpMessage(baseLevel.Value, baseExp, baseNext, jobLevel.Value, jobExp, jobNext),
                 MessageTypes.LevelUp => (baseLevel is null) == (jobLevel is null) ? null : new LevelUpMessage(baseLevel, jobLevel),
@@ -396,6 +470,10 @@ public static class ProtocolJson
                     : new InventoryChangedMessage(rev, cause, item, weight, weightLimit, load,
                         (IReadOnlyList<InventoryEntryRecord>?)inventoryEntries ?? Array.Empty<InventoryEntryRecord>(), (IReadOnlyList<long>?)removed ?? Array.Empty<long>()),
                 MessageTypes.RefineResult => entry is null || item is null || result is null ? null : new RefineResultMessage(entry.Value, item, result, refine),
+                MessageTypes.Skills => job is null ? null
+                    : new SkillsMessage(job, points, (levels ?? []).ConvertAll(l => new SkillLevelRecord(l.Item1, l.Item2)),
+                        (cooldowns ?? []).ConvertAll(c => new SkillCooldownRecord(c.Item1, c.Item2)), (IReadOnlyList<string>?)jobs ?? Array.Empty<string>()),
+                MessageTypes.Cooldown => skill is null ? null : new CooldownMessage(skill, ms),
                 MessageTypes.Pong => new PongMessage(seq),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason),
                 null => null,
@@ -547,6 +625,24 @@ public static class ProtocolJson
         w.WriteNumberValue(attacker);
         w.WriteNumberValue(target);
         w.WriteNumberValue(amount);
+        w.WriteStringValue(result);
+        w.WriteEndArray();
+    }
+
+    internal static void WriteCast(Utf8JsonWriter w, long caster, string skill, int ms)
+    {
+        w.WriteStartArray();
+        w.WriteNumberValue(caster);
+        w.WriteStringValue(skill);
+        w.WriteNumberValue(ms);
+        w.WriteEndArray();
+    }
+
+    internal static void WriteCastEnd(Utf8JsonWriter w, long caster, string skill, string result)
+    {
+        w.WriteStartArray();
+        w.WriteNumberValue(caster);
+        w.WriteStringValue(skill);
         w.WriteStringValue(result);
         w.WriteEndArray();
     }
@@ -705,6 +801,61 @@ public static class ProtocolJson
             hits.Add(new HitRecord(attacker, target, amount, result));
         }
         return hits;
+    }
+
+    /// <summary><c>[[caster,"skill",ms],...]</c>.</summary>
+    private static List<CastRecord> ReadCasts(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+        var list = new List<CastRecord>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.StartArray)
+        {
+            reader.Read();
+            var caster = reader.GetInt64();
+            reader.Read();
+            var skill = String(ref reader) ?? throw Bad();
+            reader.Read();
+            var ms = reader.GetInt32();
+            if (!reader.Read() || reader.TokenType != JsonTokenType.EndArray) throw Bad();
+            list.Add(new CastRecord(caster, skill, ms));
+        }
+        return list;
+    }
+
+    /// <summary><c>[[caster,"skill","result"],...]</c>.</summary>
+    private static List<CastEndRecord> ReadCastEnds(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+        var list = new List<CastEndRecord>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.StartArray)
+        {
+            reader.Read();
+            var caster = reader.GetInt64();
+            reader.Read();
+            var skill = String(ref reader) ?? throw Bad();
+            reader.Read();
+            var result = String(ref reader) ?? throw Bad();
+            if (!reader.Read() || reader.TokenType != JsonTokenType.EndArray) throw Bad();
+            list.Add(new CastEndRecord(caster, skill, result));
+        }
+        return list;
+    }
+
+    /// <summary><c>[["name",n],...]</c> as (name, number) pairs.</summary>
+    private static List<(string, int)> ReadPairs(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+        var list = new List<(string, int)>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.StartArray)
+        {
+            reader.Read();
+            var name = String(ref reader) ?? throw Bad();
+            reader.Read();
+            var n = reader.GetInt32();
+            if (!reader.Read() || reader.TokenType != JsonTokenType.EndArray) throw Bad();
+            list.Add((name, n));
+        }
+        return list;
     }
 
     private static VitalsRecord ReadVitals(ref Utf8JsonReader reader)

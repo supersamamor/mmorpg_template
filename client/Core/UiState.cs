@@ -35,6 +35,9 @@ public sealed class UiState
     /// <summary>The flash line; empty when nothing shows.</summary>
     public string Flash { get; private set; } = string.Empty;
 
+    /// <summary>The skill waiting for a tap on a target or the ground (T-502), or null.</summary>
+    public string? PendingSkill { get; private set; }
+
     /// <summary>Counts level-ups (base or job), so the presenter plays its effect and the HUD flashes once per level.</summary>
     public int LevelUpSerial { get; private set; }
 
@@ -59,6 +62,33 @@ public sealed class UiState
     }
 
     /// <summary>A ground item tap went out as <c>pick_up</c>: a new walk ends the highlight, as it ends the attack on the server.</summary>
+    /// <summary>A skill that needs a tap: the next tap on an enemy or the ground casts it. The flash says so.</summary>
+    public void SetPending(string skillId, string message, double now)
+    {
+        PendingSkill = skillId;
+        SetFlash(message, now);
+    }
+
+    /// <summary>Drops the pending skill (cast, cancelled or the character died).</summary>
+    public void ClearPending()
+    {
+        if (PendingSkill is null) return;
+        PendingSkill = null;
+        Version++;
+    }
+
+    /// <summary>A <c>use_skill</c> went out: the target (if any) is the one shown, and nothing is pending any more.</summary>
+    public void OnSkillSent(long? target)
+    {
+        PendingSkill = null;
+        if (target is { } id)
+        {
+            Target = id;
+            Marker = null;
+        }
+        Version++;
+    }
+
     public void OnPickUpSent()
     {
         Marker = null;
@@ -83,6 +113,13 @@ public sealed class UiState
         if (IsItemIntent(rejected.Intent))
         {
             if (UiText.ItemRefused(rejected.Reason) is { Length: > 0 } why) SetFlash(why, now);
+            return;
+        }
+        if (IsSkillIntent(rejected.Intent))
+        {
+            if (rejected.Intent == MessageTypes.UseSkill) PendingSkill = null;
+            if (UiText.SkillRefused(rejected.Reason) is { Length: > 0 } skillWhy) SetFlash(skillWhy, now);
+            Version++;
             return;
         }
         // A stun (T-501): say why the tap did nothing.
@@ -110,6 +147,7 @@ public sealed class UiState
     /// <summary><c>you_died</c>.</summary>
     public void OnYouDied()
     {
+        PendingSkill = null;
         SetDead(true);
         Marker = null;
         Target = null;
@@ -180,10 +218,14 @@ public sealed class UiState
     {
         Marker = null;
         Target = null;
+        PendingSkill = null;
         Dead = false;
         Flash = string.Empty;
         Version++;
     }
+
+    private static bool IsSkillIntent(string intent) =>
+        intent == MessageTypes.UseSkill || intent == MessageTypes.LearnSkill || intent == MessageTypes.ChangeJob;
 
     private static bool IsItemIntent(string intent) =>
         intent == MessageTypes.PickUp || intent == MessageTypes.UseItem || intent == MessageTypes.Equip || intent == MessageTypes.Unequip || intent == MessageTypes.DropItem

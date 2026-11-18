@@ -74,7 +74,7 @@ public sealed partial class CombatSystem
         {
             if (request.Target is not { } id || !_combatants.TryGetValue(id.Value, out var t)) return SkillReasons.TargetGone;
             if (t.Entity.Dead) return SkillReasons.TargetDead;
-            var sameSide = (t.Entity.Kind == EntityKind.Player) == (caster.Entity.Kind == EntityKind.Player);
+            var sameSide = t.Entity.OnPlayerSide == caster.Entity.OnPlayerSide;
             if (sameSide != target.Friendly) return SkillReasons.InvalidTarget;
             if (!target.Friendly && t.Entity.Kind == EntityKind.Player && InSafeZone(t.Entity.Cell)) return SkillReasons.SafeZone;
             to = t.Entity.Cell;
@@ -125,7 +125,7 @@ public sealed partial class CombatSystem
         var e = c.Entity;
         var weapon = e.Weapon;
         var def = c.Def;
-        return new EffectActor(e.Id.Value, e.Stats!, e.Cell, e.Facing, e.Dead, e.Kind == EntityKind.Player,
+        return new EffectActor(e.Id.Value, e.Stats!, e.Cell, e.Facing, e.Dead, e.OnPlayerSide,
             attackElement: weapon is not null ? weapon.Element : ElementOf(def),
             defenseElement: ElementOf(def),
             race: def is { Race.Length: > 0 } ? def.Race : null,
@@ -178,7 +178,7 @@ public sealed partial class CombatSystem
                 if (e.Dead || e.Stats is null) continue;
                 var distance = GridDistance.Chebyshev(center, e.Cell);
                 if (distance > radius) continue;
-                var sameSide = (e.Kind == EntityKind.Player) == caster.Player;
+                var sameSide = e.OnPlayerSide == caster.Player;
                 if (sameSide != friendly) continue;
                 if (!friendly && e.Kind == EntityKind.Player && combat.InSafeZone(e.Cell)) continue;
                 if (distance > 0 && !LineOfSight.HasLineOfSight(grid, center, e.Cell)) continue;

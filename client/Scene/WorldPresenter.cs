@@ -17,6 +17,7 @@ public sealed class WorldPresenter
     private const int MaxBars = 256;
     private const float BarHeight = 2.05f;
     private const float StatusMarkAbove = 0.22f;   // the status dot sits just above the HP bar
+    private const float CastBarAbove = 0.14f;      // the cast bar (T-502) sits just above the HP bar, filling left to right as the cast runs
 
     private readonly WorldView _world;
     private readonly UiState _ui;
@@ -27,6 +28,7 @@ public sealed class WorldPresenter
     private readonly MultiMesh _bars;
     private readonly MultiMesh _rings;
     private readonly MultiMesh _statusMarks;
+    private readonly MultiMesh _castBars;
     private readonly MeshInstance3D _marker;
     private readonly MeshInstance3D _ring;
     private bool[] _fullRate = new bool[64];
@@ -43,6 +45,9 @@ public sealed class WorldPresenter
 
     /// <summary>A status started on an entity (T-501): status id, world x, ground height, world z, and whether it is the own character. Its vfx plays there.</summary>
     public event Action<string, float, float, float, bool>? StatusStarted;
+
+    /// <summary>Cast bars drawn above casters this frame (for the scripted run and measuring).</summary>
+    public int CastBarCount => _castBars.VisibleInstanceCount;
 
     /// <summary>Status markers drawn above other characters this frame (for the scripted run and measuring).</summary>
     public int StatusMarkCount => _statusMarks.VisibleInstanceCount;
@@ -162,6 +167,39 @@ public sealed class WorldPresenter
             CustomAabb = new Aabb(new Vector3(-4096, -8, -4096), new Vector3(8192, 16, 8192)),
         });
 
+        // Cast bars (T-502): the HP bar's billboard shader again in amber, one multimesh for every caster in view, so one draw call and none when nobody casts.
+        var castShader = new Shader
+        {
+            Code = """
+                shader_type spatial;
+                render_mode unshaded, cull_disabled, shadows_disabled;
+                varying float fill;
+                void vertex() {
+                    fill = INSTANCE_CUSTOM.r;
+                    vec3 center = MODEL_MATRIX[3].xyz;
+                    MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], vec4(center, 1.0));
+                }
+                void fragment() {
+                    ALBEDO = UV.x < fill ? vec3(1.0, 0.75, 0.2) : vec3(0.12, 0.12, 0.12);
+                }
+                """,
+        };
+        _castBars = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseCustomData = true,
+            Mesh = new QuadMesh { Size = new Vector2(0.9f, 0.08f) },
+            InstanceCount = MaxBars,
+            VisibleInstanceCount = 0,
+        };
+        parent.AddChild(new MultiMeshInstance3D
+        {
+            Multimesh = _castBars,
+            MaterialOverride = new ShaderMaterial { Shader = castShader },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            CustomAabb = new Aabb(new Vector3(-4096, -8, -4096), new Vector3(8192, 16, 8192)),
+        });
+
         _marker = Disc(parent, 0.8f, PlaceholderColors.Marker);
         _ring = Disc(parent, 1.1f, PlaceholderColors.TargetRing);
     }
@@ -264,6 +302,7 @@ public sealed class WorldPresenter
             ((IEntityVisual)entities[i].Visual!).Animate(dt, _fullRate[i], _frame, _config.ReducedAnimationDivisor);
 
         if (_barsDirty) RewriteBars();
+        SyncCasts();
         SyncMarkers();
     }
 
@@ -362,6 +401,25 @@ public sealed class WorldPresenter
             marks++;
         }
         _statusMarks.VisibleInstanceCount = marks;
+    }
+
+    /// <summary>The cast bars: every caster in view, filled by how far its cast has run on the view clock. Does nothing while nobody casts.</summary>
+    private void SyncCasts()
+    {
+        var casts = _world.Casts;
+        if (casts.Count == 0 && _castBars.VisibleInstanceCount == 0) return;
+        var now = Clocks.View();
+        var count = 0;
+        for (var i = 0; i < casts.Count && count < MaxBars; i++)
+        {
+            var cast = casts[i];
+            if (_world.Find(cast.Caster) is not { Dead: false } entity) continue;
+            _castBars.SetInstanceTransform(count, new Transform3D(Basis.Identity,
+                new Vector3((float)entity.X, _ground.At(entity.X, entity.Z) + BarHeight + CastBarAbove, (float)entity.Z)));
+            _castBars.SetInstanceCustomData(count, new Color((float)cast.Fraction(now), 0, 0, 0));
+            count++;
+        }
+        _castBars.VisibleInstanceCount = count;
     }
 
     private void SyncMarkers()

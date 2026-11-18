@@ -57,6 +57,31 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.Attack;
     }
 
+    /// <summary>
+    /// <c>use_skill</c> (T-502): cast <see cref="Skill"/> at <see cref="Level"/> (null: the learned level) on the entity <see cref="Target"/> or the ground
+    /// <see cref="Cell"/>, as the skill's target says; a friendly entity skill without a target is cast on the caster. The server walks the caster into range,
+    /// casts, and may refuse (<see cref="RejectedMessage"/> with a "Skill reasons" term). <c>{"type":"use_skill","skill":"skill.twin_strike","target":7}</c>.
+    /// </summary>
+    public sealed record UseSkillMessage(string Skill, int? Level = null, long? Target = null, GridCell? Cell = null) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.UseSkill;
+    }
+
+    /// <summary><c>learn_skill</c> (T-502): spend one skill point on <see cref="Skill"/>. <c>{"type":"learn_skill","skill":"skill.twin_strike"}</c>.</summary>
+    public sealed record LearnSkillMessage(string Skill) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.LearnSkill;
+    }
+
+    /// <summary><c>change_job</c> (T-502): change to <see cref="Job"/> when its requirements are met. <c>{"type":"change_job","job":"job.spellbinder"}</c>.</summary>
+    public sealed record ChangeJobMessage(string Job) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.ChangeJob;
+    }
+
     /// <summary><c>stop_attack</c>: stop auto-attacking (a walk goes on). <c>{"type":"stop_attack"}</c>.</summary>
     public sealed record StopAttackMessage : ClientMessage
     {
@@ -320,6 +345,12 @@ namespace Game.Shared.Protocol
     /// </summary>
     public sealed record VitalsRecord(int Hp, int MaxHp, int Sp, int MaxSp);
 
+    /// <summary>A cast that began in view (T-502): <c>[caster, skill, ms]</c>, the cast time in milliseconds (above 0). Never costs or numbers.</summary>
+    public sealed record CastRecord(long Caster, string Skill, int Ms);
+
+    /// <summary>A cast that ended in view (T-502): <c>[caster, skill, result]</c> with a "Cast results" term (<c>done</c>, <c>cancelled</c>, <c>interrupted</c>).</summary>
+    public sealed record CastEndRecord(long Caster, string Skill, string Result);
+
     /// <summary>
     /// <c>snapshot</c>: everything the client sees at <see cref="Tick"/>; it replaces the client's view. A snapshot for another
     /// <see cref="MapId"/> than before means the character changed maps (a warp): load that map first.
@@ -346,8 +377,10 @@ namespace Game.Shared.Protocol
     /// <param name="Disappeared">Ids of entities that went out of view.</param>
     /// <param name="Hits">This tick's attacks whose attacker or target is in view, in the order they were resolved; null or empty when none.</param>
     /// <param name="Vitals">The client's own HP and SP when they changed this tick, else null.</param>
+    /// <param name="Casts">Casts that began this tick whose caster is in view (cast bars); null or empty when none.</param>
+    /// <param name="CastEnds">Casts that ended this tick whose caster is in view; null or empty when none.</param>
     public sealed record DeltaMessage(long Tick, IReadOnlyList<EntityRecord> Appeared, IReadOnlyList<ChangeRecord> Changed, IReadOnlyList<long> Disappeared,
-        IReadOnlyList<HitRecord>? Hits = null, VitalsRecord? Vitals = null)
+        IReadOnlyList<HitRecord>? Hits = null, VitalsRecord? Vitals = null, IReadOnlyList<CastRecord>? Casts = null, IReadOnlyList<CastEndRecord>? CastEnds = null)
         : ServerMessage
     {
         /// <inheritdoc />
@@ -367,7 +400,8 @@ namespace Game.Shared.Protocol
     /// <param name="Entry">The inventory entry of a refused <c>use_item</c>, <c>equip</c> or <c>drop_item</c>, or the equipment entry of a refused
     /// <c>insert_card</c> or <c>refine</c>, if any.</param>
     /// <param name="Slot">The slot of a refused <c>equip</c> or <c>unequip</c>, if any.</param>
-    public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null, long? Entry = null, string? Slot = null) : ServerMessage
+    /// <param name="Skill">The skill (or, for <c>change_job</c>, the job) of a refused <c>use_skill</c>, <c>learn_skill</c> or <c>change_job</c>, if any.</param>
+    public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null, long? Entry = null, string? Slot = null, string? Skill = null) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Rejected;
@@ -497,6 +531,30 @@ namespace Game.Shared.Protocol
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.RefineResult;
+    }
+
+    /// <summary>One skill the player has learned.</summary>
+    public sealed record SkillLevelRecord(string Skill, int Level);
+
+    /// <summary>One of the player's skills on cooldown: the milliseconds left when the message was made.</summary>
+    public sealed record SkillCooldownRecord(string Skill, int Ms);
+
+    /// <summary>
+    /// <c>skills</c> (T-502, owner only): the player's job, unspent skill points, learned skills, cooldowns left, and the jobs it may change to right now.
+    /// After every snapshot and after a learn, a job change or a job level.
+    /// </summary>
+    public sealed record SkillsMessage(string Job, int Points, IReadOnlyList<SkillLevelRecord> Levels, IReadOnlyList<SkillCooldownRecord> Cooldowns, IReadOnlyList<string> Jobs)
+        : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Skills;
+    }
+
+    /// <summary><c>cooldown</c> (T-502, owner only): <see cref="Skill"/> went on cooldown for <see cref="Ms"/> milliseconds.</summary>
+    public sealed record CooldownMessage(string Skill, int Ms) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Cooldown;
     }
 
     /// <summary><c>pong</c>: answer to <see cref="PingMessage"/>. <c>{"type":"pong","seq":7}</c>.</summary>

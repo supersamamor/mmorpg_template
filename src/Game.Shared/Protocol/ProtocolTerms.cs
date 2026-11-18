@@ -57,6 +57,21 @@ namespace Game.Shared.Protocol
         /// <summary><c>refine</c> (client to server): try to raise an equipment entry's refine level by one, using its material.</summary>
         public const string Refine = "refine";
 
+        /// <summary><c>use_skill</c> (T-502).</summary>
+        public const string UseSkill = "use_skill";
+
+        /// <summary><c>learn_skill</c> (T-502).</summary>
+        public const string LearnSkill = "learn_skill";
+
+        /// <summary><c>change_job</c> (T-502).</summary>
+        public const string ChangeJob = "change_job";
+
+        /// <summary><c>skills</c> (T-502).</summary>
+        public const string Skills = "skills";
+
+        /// <summary><c>cooldown</c> (T-502).</summary>
+        public const string Cooldown = "cooldown";
+
         /// <summary><c>welcome</c> (server → client): the client's entity, map, the server tick rate and a new resume token.</summary>
         public const string Welcome = "welcome";
 
@@ -100,13 +115,29 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Cooldown, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);
+    }
+
+    /// <summary>How a cast ended, in a delta's <c>cast_ends</c> (T-502).</summary>
+    public static class CastResults
+    {
+        /// <summary><c>done</c>: the cast time ran out and the skill was requested.</summary>
+        public const string Done = "done";
+
+        /// <summary><c>cancelled</c>: the caster moved, gave a new order or stopped.</summary>
+        public const string Cancelled = "cancelled";
+
+        /// <summary><c>interrupted</c>: a stun, death, lost target or not enough SP ended it.</summary>
+        public const string Interrupted = "interrupted";
+
+        /// <summary>Every term in this category.</summary>
+        public static readonly VocabularySet All = new VocabularySet(Done, Cancelled, Interrupted);
     }
 
     /// <summary>Reasons in a <c>bye</c> message (VOCABULARY.md "Bye reasons").</summary>

@@ -7,6 +7,7 @@ using Game.Shared.Definitions;
 using Game.Shared.Effects;
 using Game.Shared.Formulas;
 using Game.Shared.Progression;
+using Game.Shared.Protocol;
 using Game.Shared.Stats;
 using Game.Shared.Vocabulary;
 using Game.Shared.World;
@@ -41,7 +42,7 @@ namespace Game.Server.World.Combat;
 /// </remarks>
 public sealed partial class CombatSystem : ITickSystem
 {
-    private static readonly IReadOnlyCollection<Type> Owned = [typeof(AttackTarget), typeof(StopAttack), typeof(Respawn)];
+    private static readonly IReadOnlyCollection<Type> Owned = [typeof(AttackTarget), typeof(StopAttack), typeof(Respawn), typeof(UseSkill), typeof(LearnSkill), typeof(ChangeJob)];
     private static readonly int AspdStat = StatIndex.IndexOf(DerivedStats.Aspd);
     private static readonly int HpRegenStat = StatIndex.IndexOf(DerivedStats.HpRegen);
     private static readonly int SpRegenStat = StatIndex.IndexOf(DerivedStats.SpRegen);
@@ -115,7 +116,7 @@ public sealed partial class CombatSystem : ITickSystem
     public long RefusedCount(string reason) => _refused.TryGetValue(reason, out var n) ? n : 0;
 
     /// <summary>The player's auto-attack target, or null when it is not attacking.</summary>
-    public EntityId? TargetOf(EntityId player) => _chaseById.TryGetValue(player.Value, out var chase) ? chase.Target : null;
+    public EntityId? TargetOf(EntityId player) => _chaseById.TryGetValue(player.Value, out var chase) && chase.Cast is null ? chase.Target : null;
 
     /// <summary>Skills resolved so far (their effects ran).</summary>
     public long SkillsUsed { get; private set; }
@@ -143,6 +144,7 @@ public sealed partial class CombatSystem : ITickSystem
             if (entity.Stats is { } stats && entity.Vitals is { } vitals)
             {
                 vitals.Sync(stats);
+                entity.Cooldowns?.Advance(_nowMs);
                 // A player carrying at least inventory.burdened_percent of its weight limit does not regenerate (ARCHITECTURE §6.8).
                 if (!entity.Dead && entity.Load == WeightStates.Normal) Regenerate(_ordered[i], vitals, stats, context.DeltaMs);
             }
@@ -246,6 +248,7 @@ public sealed partial class CombatSystem : ITickSystem
     {
         if (!_instance!.TryGetEntity(e.Entity, out var entity)) return;
         Track(entity);
+        SetUpPlayerSkills(entity);
         // Statuses timed on another map's clock end on arrival (StatusEndReasons.Warped); a same-map warp keeps them.
         if (entity.Statuses is { } set && !string.Equals(set.MapId, _instance.MapId, StringComparison.Ordinal))
         {
@@ -276,6 +279,7 @@ public sealed partial class CombatSystem : ITickSystem
         if (_instance!.TryGetEntity(e.Entity, out _)) return;
         if (_combatants.Remove(e.Entity.Value, out var combatant))
         {
+            combatant.Entity.Cooldowns?.Suspend();   // the next map has its own clock
             _ordered.RemoveAt(_ordered.BinarySearch(combatant, CombatantOrder.Instance));
             ReleaseLog(combatant);
         }
@@ -298,6 +302,9 @@ public sealed partial class CombatSystem : ITickSystem
                     if (_chaseById.TryGetValue(entity.Id.Value, out var chase)) End(context, chase, AttackReasons.Cancelled);
                     break;
                 case Respawn: Revive(context, entity); break;
+                case UseSkill use: StartSkill(context, entity, use); break;
+                case LearnSkill learn: Learn(context, entity, learn.SkillId); break;
+                case ChangeJob change: ChangeJobOf(context, entity, change.JobId); break;
             }
         }
     }
@@ -310,6 +317,7 @@ public sealed partial class CombatSystem : ITickSystem
             Refuse(context, player.Id, targetId, reason);
             return;
         }
+        if (_chaseById.TryGetValue(player.Id.Value, out var running) && running.Cast is not null) End(context, running, AttackReasons.Cancelled);   // a new order cancels a cast
         if (!_chaseById.TryGetValue(player.Id.Value, out var chase))
         {
             chase = _chasePool.Count > 0 ? _chasePool.Pop() : new Chase();
@@ -329,7 +337,7 @@ public sealed partial class CombatSystem : ITickSystem
         if (player.Kind != EntityKind.Player || !_combatants.ContainsKey(player.Id.Value)) return AttackReasons.InvalidTarget;
         if (targetId == player.Id) return AttackReasons.InvalidTarget;
         if (!_instance!.TryGetEntity(targetId, out var target)) return AttackReasons.TargetGone;
-        if (target.Kind != EntityKind.Monster || !_combatants.ContainsKey(targetId.Value)) return AttackReasons.InvalidTarget;   // no PvP in v1
+        if (target.Kind != EntityKind.Monster || target.OnPlayerSide || !_combatants.ContainsKey(targetId.Value)) return AttackReasons.InvalidTarget;   // no PvP in v1, and a player's summon is an ally
         if (target.Dead) return AttackReasons.TargetDead;
         if (InSafeZone(player.Cell)) return AttackReasons.SafeZone;
         if (player.Load == WeightStates.Overweight) return AttackReasons.Overweight;
@@ -399,6 +407,7 @@ public sealed partial class CombatSystem : ITickSystem
     private bool Pursue(TickContext context, Chase chase)
     {
         var player = chase.Player;
+        if (chase.Cast is not null) return PursueCast(context, chase);
         if (player.Dead) return End(context, chase, AttackReasons.AttackerDead);
         if (chase.EndReason is { } ended) return End(context, chase, ended);
         if (!_combatants.TryGetValue(chase.Target.Value, out var target)) return End(context, chase, AttackReasons.TargetGone);
@@ -460,6 +469,8 @@ public sealed partial class CombatSystem : ITickSystem
     /// <summary>Ends an auto-attack with <see cref="AttackStopped"/>; always returns false (for <see cref="Pursue"/>).</summary>
     private bool End(TickContext context, Chase chase, string reason)
     {
+        if (chase.Cast is not null)
+            return AbortCast(context, chase, null, reason == AttackReasons.Cancelled ? CastResults.Cancelled : CastResults.Interrupted);
         context.Publish(new AttackStopped(chase.Player.Id, chase.Target, reason));
         Drop(chase);
         return false;
@@ -753,6 +764,7 @@ public sealed partial class CombatSystem : ITickSystem
         public long MoveIssuedTick = Never;
         public long StopIssuedTick = Never;
         public long NextRepathMs;
+        public PlayerCast? Cast;           // set when this chase is a skill cast (T-502), not an auto-attack
 
         public bool MovePending(long tick) => tick - MoveIssuedTick <= 1;
 
@@ -767,6 +779,7 @@ public sealed partial class CombatSystem : ITickSystem
             MoveIssuedTick = Never;
             StopIssuedTick = Never;
             NextRepathMs = 0;
+            Cast = null;
         }
     }
 

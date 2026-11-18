@@ -70,6 +70,10 @@ public sealed class Hud
     private readonly HBoxContainer _hotbarRow = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly Control _hotbarSpacer = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private InventoryPanel? _bag;
+    private SkillPanel? _skillPanel;
+    private readonly Button _skillsButton = new() { Text = UiText.Skills, Visible = false };
+    private readonly List<ColorRect> _sweeps = new();   // one cooldown overlay per hotbar slot (T-502)
+    private string? _pendingShown;
     private readonly CenterContainer _soundCenter = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
     private readonly PanelContainer _soundPanel = new() { MouseFilter = Control.MouseFilterEnum.Stop };
     private readonly GridContainer _soundGrid = new() { Columns = 2, MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -182,6 +186,10 @@ public sealed class Hud
         // phone at 1.5x). The flash line above keeps the whole width.
         _hotbar.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter | Control.SizeFlags.Expand;
         _hotbarRow.AddChild(_hotbarSpacer);
+        _hotbarSpacer.AddChild(_skillsButton);   // the spacer keeps the hotbar centred while the button is hidden
+        _skillsButton.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        _skillsButton.SizeFlagsVertical = Control.SizeFlags.ShrinkEnd;
+        _skillsButton.Pressed += () => { Tap(); _skillPanel?.SetOpen(!_skillPanel.Open); };
         _hotbarRow.AddChild(_hotbar);
         _hotbarRow.AddChild(_bagButton);
         _bottom.AddChild(_hotbarRow);
@@ -191,12 +199,20 @@ public sealed class Hud
             var slot = new Button { ToggleMode = false, AutowrapMode = TextServer.AutowrapMode.WordSmart, ClipText = false };
             var index = i;
             slot.Pressed += () => OnSlotPressed(index, slot);
+            var sweep = new ColorRect { Color = new Color(0, 0, 0, 0.6f), MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+            sweep.SetAnchorsPreset(Control.LayoutPreset.TopWide);
+            sweep.AnchorBottom = 0;
+            sweep.OffsetLeft = sweep.OffsetTop = sweep.OffsetRight = sweep.OffsetBottom = 0;
+            slot.AddChild(sweep);
+            _sweeps.Add(sweep);
             _slots.Add(slot);
             _hotbar.AddChild(slot);
             _interactive.Add(slot);
         }
 
         if (session is not null && bundle is not null) _bag = new InventoryPanel(_safe, session, bundle, _interactive, Tap);
+        if (session is not null && bundle is not null) _skillPanel = new SkillPanel(_safe, session, bundle, _interactive, Tap);
+        _interactive.Add(_skillsButton);
 
         _infoTitle.HorizontalAlignment = HorizontalAlignment.Left;
         var infoBox = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -285,6 +301,7 @@ public sealed class Hud
         SetText(_connection, UiText.Connection(ConnectionPhase.Connecting));
         _logout.Visible = true;
         _bagButton.Visible = true;
+        _skillsButton.Visible = true;
         ShowInfo(longName, UiText.EntityKind(EntityKinds.Item, true), new Vector2((float)_metrics.CanvasWidth, (float)_metrics.CanvasHeight));
     }
 
@@ -375,6 +392,12 @@ public sealed class Hud
     /// <summary>The inventory panel, or null without a session.</summary>
     public InventoryPanel? Bag => _bag;
 
+    /// <summary>The skill tree panel (T-502; for the scripted run).</summary>
+    public SkillPanel? Skills => _skillPanel;
+
+    /// <summary>The skills button (for the scripted run).</summary>
+    public Button SkillsButton => _skillsButton;
+
     /// <summary>The button that opens the inventory panel.</summary>
     public Button BagButton => _bagButton;
 
@@ -387,6 +410,7 @@ public sealed class Hud
             _iconLoader = value;
             _statusVersion = -1;   // the status icons can load now
             if (_bag is not null) _bag.IconLoader = value;
+            if (_skillPanel is not null) _skillPanel.IconLoader = value;
         }
     }
 
@@ -528,6 +552,7 @@ public sealed class Hud
         _hotbarSpacer.CustomMinimumSize = new Vector2(bagSize.X * 1.25f, 0);   // a quarter wider than the bag: its text may need that at the smallest scale
         _hotbarRow.AddThemeConstantOverride("separation", Mathf.RoundToInt(margin));
         _bag?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
+        _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _soundGrid.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(Dp(8)));
         _soundGrid.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(Dp(8)));
         _soundCenter.Position = Vector2.Zero; // inside _safe, which is already at the safe area
@@ -594,7 +619,12 @@ public sealed class Hud
             _connection.AddThemeColorOverride("font_color", connection.Phase == ConnectionPhase.Online ? new Color(0.55f, 0.9f, 0.55f) : new Color(1f, 0.8f, 0.4f));
             _logout.Visible = connection.Phase == ConnectionPhase.Online;
             _bagButton.Visible = connection.Phase == ConnectionPhase.Online;
-            if (connection.Phase != ConnectionPhase.Online) _bag?.SetOpen(false);
+            _skillsButton.Visible = connection.Phase == ConnectionPhase.Online;
+            if (connection.Phase != ConnectionPhase.Online)
+            {
+                _bag?.SetOpen(false);
+                _skillPanel?.SetOpen(false);
+            }
         }
         if (_uiVersion != ui.Version)
         {
@@ -627,8 +657,9 @@ public sealed class Hud
         }
 
         RefreshStatuses(world);
-        if (_hotbarModel is not null && _hotbarVersion != _hotbarModel.Version) RefreshHotbar();
+        if (_hotbarModel is not null && (_hotbarVersion != _hotbarModel.Version || _pendingShown != ui.PendingSkill)) RefreshHotbar();
         _bag?.Refresh();
+        _skillPanel?.Refresh();
     }
 
     /// <summary>The own character's status icons shown now, and their texts (for the scripted run).</summary>
@@ -834,16 +865,21 @@ public sealed class Hud
     private void RefreshHotbar()
     {
         _hotbarVersion = _hotbarModel!.Version;
+        _pendingShown = _session?.Ui.PendingSkill;
         for (var i = 0; i < _slots.Count; i++)
         {
             var view = _hotbarModel.Slot(i);
             var number = (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
-            _slots[i].Text = view.IsEmpty ? number : number + "\n" + _bundle!.NameOf(view.DisplayKey);
-            _slots[i].Modulate = RestColor(view);
+            var left = view.Cooldown > 0 && _session is not null ? _session.Skills.CooldownLeft(view.DisplayKey!) : 0;
+            _slots[i].Text = view.IsEmpty ? number : number + "\n" + _bundle!.NameOf(view.DisplayKey) + (left > 0 ? "\n" + UiText.CooldownLeft(left) : string.Empty);
+            _slots[i].Modulate = !view.IsEmpty && view.DisplayKey == _pendingShown ? new Color(1f, 0.9f, 0.5f) : RestColor(view);
+            // The cooldown sweep (T-502): a dark veil over the slot, shrinking as the cooldown runs out; the anchors follow the slot's layout.
+            _sweeps[i].AnchorBottom = (float)view.Cooldown;
+            _sweeps[i].Visible = view.Cooldown > 0;
         }
     }
 
-    private static Color RestColor(HotbarSlotView view) => view.IsEmpty ? new Color(1, 1, 1, 0.6f) : view.Usable ? Colors.White : new Color(1, 1, 1, 0.4f);
+    private static Color RestColor(HotbarSlotView view) => view.IsEmpty ? new Color(1, 1, 1, 0.6f) : view.Usable ? Colors.White : new Color(1, 1, 1, 0.7f);
 
     /// <summary>A slot was pressed: the model decides what it comes to; the client sends nothing yet (T-502 binds the activator).</summary>
     private void OnSlotPressed(int index, Button slot)
@@ -854,6 +890,7 @@ public sealed class Hud
         // Feedback for every press, empty or not.
         slot.Modulate = new Color(1.6f, 1.6f, 1.6f, 1);
         slot.CreateTween().TweenProperty(slot, "modulate", RestColor(_hotbarModel.Slot(index)), 0.18);
+        _hotbarVersion = -1;   // redraw: a press may have made a skill wait for its target
     }
 
     private static void SetText(Label label, string text)
