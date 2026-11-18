@@ -348,3 +348,18 @@ When writing these prompts, copy in the decisions listed:
 | 195 | CI Godot job timeouts raised to each script's worst case plus margin (job 200 min). The job has never run on GitHub (T-221) | **Decided: accepted.** First real run → T-005 or the first push. |
 | 196 | Set `runnable=false` on the Android debug preset to stop adb polling at the source (T-221 follow-up) | **Open — user.** It disables one-click deploy from the editor; the helper already handles the hang. |
 | 197 | Report the `shutdown_adb_on_exit` headless bug to Godot (T-221 follow-up) | **Open — user.** It's a public post. |
+
+## Addendum — T-501 (2026-11-18)
+| # | Question (source) | Decision |
+|---|---|---|
+| 198 | One pure effect runner in `Game.Shared/Effects` (`EffectRunner`, `StatusSet`, `EffectLibrary`), hosted on the server by combat so effect damage shares the HP, death and EXP-share path; `stats --duel` runs the same code. An effect that can't run where it stands is a load error; `IItemEffects` and `unsupported_effect` are gone (T-501) | **Decided: accepted.** |
+| 199 | Stacking: below `max_stacks` add a stack and run `on_apply` again; at the cap only refresh; the end time never shortens; the newest applier gets tick credit. `on_tick` runs per stack per interval, the end tick included; tick damage always lands (hit result `status`) (T-501) | **Decided: accepted.** |
+| 200 | Statuses end on death and on arriving at another map (each instance has its own clock); a same-map warp keeps them (T-501) | **Decided: accepted** for v1. |
+| 201 | Area: targets sorted by distance then id, every child on one target before the next, line of sight from the center, a hostile area never hits a player in a safe zone. Summon cap = the effect's `count` per owner and monster (T-501) | **Decided: accepted.** |
+| 202 | A player's save point is the respawn point of its map, for now (T-501) | **→ T-601/T-702:** a real save point set at an NPC and stored with the character. |
+| 203 | Consumable effects apply one tick after use; leaving the map in that tick uses the item and loses the effect (T-501) | **Decided: accepted** as a rare edge case. |
+| 204 | Monster casts are server events only; sending casts to clients (cast bars) needs `Net/**` beyond the T-501 approval (T-501) | **→ T-502**, with player cast bars. |
+| 205 | A player's summon is an ordinary monster to everyone, hostile to its owner (T-501) | **→ T-502:** allied summons. |
+| 206 | Wasp with Venom Sting: wanderer L5 win rate 92.6% → 87.05%, L7 98.2% → 97.9%; T-309 golden values 0.428 → 0.433 (L5), 0.676 → 0.643 (L6), inside the 40–70% target (T-501) | **Decided: accepted.** Further tuning → T-404. |
+| 207 | Crowd peak with statuses 85 draw calls (all markers one call) (T-501) | **Decided: accepted** (row 164 limit 100). |
+| 208 | A fresh worktree can hold Git LFS pointers instead of theme models until `git lfs pull`; ThemePack tests then fail. The client measure tool once threw "Cannot access a disposed object" after sampling (T-501) | **→ T-405** (worktree LFS note and the measure tool fix go with the equipment preload work). |
