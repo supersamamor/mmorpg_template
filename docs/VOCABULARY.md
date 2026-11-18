@@ -250,6 +250,12 @@ Presentation hooks the client plays on combat events; theme data, not content. A
 whose file is missing, falls down the chain `effect.level_up` -> `effect.crit` -> `effect.hit`, `effect.death` -> `effect.hit`, then shows nothing.
 A model or animation-library entry may carry `impact_delay` (seconds from the start of the attack clip to the blow landing; the client default applies when absent).
 
+## Render roles (client)
+`toon`, `outline`, `environment` — what a theme manifest entry is for in the storybook toon look (ADR-003, T-222), named with a `"render"` field: `mat.toon` -> `toon`
+(the cel-shaded material), `mat.outline` -> `outline` (the near-only outline overlay), `scene.environment` -> `environment` (sky, ambient, haze and key light).
+Theme data, not content and not asset keys. A theme chain that leaves a role out draws that part as before T-222, with one warning. A vertex with colour alpha 0
+is a glowing part, drawn unlit by the toon material.
+
 ## Currency
 Engine id `currency`; the display name is data (`currency_name` in `balance.yaml`, default "crowns").
 The reward type is also `currency`.

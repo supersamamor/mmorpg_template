@@ -7,7 +7,8 @@ namespace Game.Client.Core.Theme;
 /// <summary>One asset key's manifest entry (ARCHITECTURE §8). Only the fields the client reads so far; the rest is left to the task that needs it.</summary>
 public sealed class ThemeAsset
 {
-    internal ThemeAsset(string key, string? file, string? rig, string? anims, string? attach, string? skinned, IReadOnlyDictionary<string, string> clips, double? impactDelay, string? effect)
+    internal ThemeAsset(string key, string? file, string? rig, string? anims, string? attach, string? skinned, IReadOnlyDictionary<string, string> clips, double? impactDelay, string? effect,
+        string? render = null)
     {
         Key = key;
         File = file;
@@ -18,6 +19,7 @@ public sealed class ThemeAsset
         Clips = clips;
         ImpactDelay = impactDelay;
         Effect = effect;
+        Render = render;
     }
 
     /// <summary>The asset key.</summary>
@@ -49,6 +51,9 @@ public sealed class ThemeAsset
 
     /// <summary>The combat effect this entry plays (an <c>EffectNames</c> term such as <c>effect.hit</c>), or null: how a theme says which scene shows a hit, a crit, a death or a level-up.</summary>
     public string? Effect { get; }
+
+    /// <summary>The render role this entry fills (a <see cref="RenderRoles"/> term such as <c>toon</c>), or null: how a theme names its toon material, outline and environment (T-222).</summary>
+    public string? Render { get; }
 }
 
 /// <summary>
@@ -59,6 +64,7 @@ public sealed class ThemeManifest
 {
     private readonly Dictionary<string, ThemeAsset> _assets = new Dictionary<string, ThemeAsset>(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _effects = new Dictionary<string, string>(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _renders = new Dictionary<string, string>(StringComparer.Ordinal);
     private readonly Dictionary<string, string> _fallbacks = new Dictionary<string, string>(StringComparer.Ordinal);
 
     private ThemeManifest(string theme) => Theme = theme;
@@ -77,6 +83,9 @@ public sealed class ThemeManifest
 
     /// <summary>The asset key of the entry that plays a combat effect (<c>EffectNames</c>), or false.</summary>
     public bool TryGetEffect(string name, out string key) => _effects.TryGetValue(name, out key!);
+
+    /// <summary>The asset key of the entry that fills a render role (<see cref="RenderRoles"/>), or false.</summary>
+    public bool TryGetRender(string role, out string key) => _renders.TryGetValue(role, out key!);
 
     /// <summary>The asset key a <c>fallbacks</c> name (an entity kind, or <c>missing</c>) points to.</summary>
     public bool TryGetFallback(string name, out string key) => _fallbacks.TryGetValue(name, out key!);
@@ -117,6 +126,7 @@ public sealed class ThemeManifest
                 var asset = ReadAsset(property.Name, property.Value);
                 result._assets[property.Name] = asset;
                 if (asset.Effect is not null) result._effects[asset.Effect] = property.Name;
+                if (asset.Render is not null) result._renders[asset.Render] = property.Name;
             }
             manifest = result;
             return true;
@@ -134,7 +144,8 @@ public sealed class ThemeManifest
         if (entry.TryGetProperty("clips", out var clipList) && clipList.ValueKind == JsonValueKind.Object)
             foreach (var clip in clipList.EnumerateObject())
                 if (clip.Value.ValueKind == JsonValueKind.String) clips[clip.Name] = clip.Value.GetString()!;
-        return new ThemeAsset(key, Text(entry, "file"), Text(entry, "rig"), Text(entry, "anims"), Text(entry, "attach"), Text(entry, "skinned"), clips, Number(entry, "impact_delay"), Text(entry, "effect"));
+        return new ThemeAsset(key, Text(entry, "file"), Text(entry, "rig"), Text(entry, "anims"), Text(entry, "attach"), Text(entry, "skinned"), clips, Number(entry, "impact_delay"), Text(entry, "effect"),
+            Text(entry, "render"));
     }
 
     private static double? Number(JsonElement entry, string name) =>

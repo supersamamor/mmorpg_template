@@ -22,14 +22,16 @@ public sealed class ThemeMapView : IMapView
     private readonly ThemeCatalog _catalog;
     private readonly PlaceholderMap _placeholder;
     private readonly HashSet<string> _warned = new(StringComparer.Ordinal);
+    private readonly ToonLook? _look;
     private Node3D? _scene;
     private int _loads;
 
     /// <summary>Works under <paramref name="parent"/>, with the theme's <paramref name="catalog"/>.</summary>
-    public ThemeMapView(Node3D parent, ThemeCatalog catalog)
+    public ThemeMapView(Node3D parent, ThemeCatalog catalog, ToonLook? look = null)
     {
         _parent = parent;
         _catalog = catalog;
+        _look = look;
         _placeholder = new PlaceholderMap(parent);
     }
 
@@ -71,6 +73,7 @@ public sealed class ThemeMapView : IMapView
         _parent.AddChild(scene);
         _scene = scene;
         Triangles = Prepare(scene);
+        _look?.ApplyTree(scene); // terrain and props in the same three-step ramp, never outlined (ADR-003 point 6)
         GD.Print($"[client] map {map.Id}: scene {map.SceneKey} in {clock.Elapsed.TotalMilliseconds:0.0} ms, {Triangles} triangles");
         _ = SampleHeightsAsync(load, scene, map);
     }

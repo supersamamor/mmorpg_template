@@ -216,10 +216,27 @@ public class ThemePackTests
             var material = glb.RootElement.GetProperty("materials")[0];
             material.GetProperty("name").GetString().ShouldBe(key);
             glb.RootElement.GetProperty("asset").GetProperty("extras").GetProperty("key").GetString().ShouldBe(key);
-            var colour = material.GetProperty("pbrMetallicRoughness").GetProperty("baseColorFactor").ToString();
+            // T-222: the colours are vertex colours from the theme's palette (the material is white), so a model's look is its set of vertex colours.
+            var colour = Colours(Path.Combine(Themes, "default", FilesOf(entry).Single()));
             colours.Values.ShouldNotContain(colour, $"{key} looks like another model");
             colours[key] = colour;
         }
+    }
+
+    /// <summary>The distinct vertex colours (RGBA bytes) of a model's first mesh, sorted, as one string, with its material's base colour.</summary>
+    private static string Colours(string path)
+    {
+        var bytes = PackFiles.ReadAllBytes(path);
+        var jsonLength = (int)BitConverter.ToUInt32(bytes, 12);
+        using var glb = JsonDocument.Parse(Encoding.UTF8.GetString(bytes, 20, jsonLength));
+        var root = glb.RootElement;
+        var bin = 20 + jsonLength + 8;
+        var accessor = root.GetProperty("accessors")[root.GetProperty("meshes")[0].GetProperty("primitives")[0].GetProperty("attributes").GetProperty("COLOR_0").GetInt32()];
+        var view = root.GetProperty("bufferViews")[accessor.GetProperty("bufferView").GetInt32()];
+        var start = bin + view.GetProperty("byteOffset").GetInt32();
+        var set = new SortedSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < accessor.GetProperty("count").GetInt32(); i++) set.Add(Convert.ToHexString(bytes, start + i * 4, 4));
+        return root.GetProperty("materials")[0].GetProperty("pbrMetallicRoughness").GetProperty("baseColorFactor") + ":" + string.Join(",", set);
     }
 
     // ---- reproducible ----
@@ -270,10 +287,7 @@ public class ThemePackTests
         after.Path.ShouldBe("themes/test/models/monster/gel_slime.glb");
         PackFiles.ReadAllBytes(Disk(after.Path!)).AsSpan().SequenceEqual(PackFiles.ReadAllBytes(Disk(before.Path!))).ShouldBeFalse("the test theme draws it differently");
 
-        using var a = ReadGlb(Disk(before.Path!));
-        using var b = ReadGlb(Disk(after.Path!));
-        a.RootElement.GetProperty("materials")[0].GetProperty("pbrMetallicRoughness").GetProperty("baseColorFactor").ToString()
-            .ShouldNotBe(b.RootElement.GetProperty("materials")[0].GetProperty("pbrMetallicRoughness").GetProperty("baseColorFactor").ToString());
+        Colours(Disk(before.Path!)).ShouldNotBe(Colours(Disk(after.Path!)), "the test theme turns every palette hue");
 
         // What the test theme leaves out still comes from the default theme, and its animation library is the default one.
         swapped.ResolveModel("model.monster.mossling", EntityKinds.Monster).Path.ShouldBe("themes/default/models/monster/mossling.glb");

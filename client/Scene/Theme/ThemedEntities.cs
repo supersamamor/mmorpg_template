@@ -25,6 +25,7 @@ public sealed class ThemedEntities : IEntityVisualSource
     private readonly ModelStore _store;
     private readonly EquipmentCatalog _equipment;
     private readonly GearMesher _mesher;
+    private readonly ToonLook? _look;
     private readonly Action<ModelVisual> _needsDressing;
     private readonly GearPreload _gearPreload;
     private readonly List<string> _gearPending = new();
@@ -34,16 +35,17 @@ public sealed class ThemedEntities : IEntityVisualSource
     private int _version;
 
     /// <summary>Creates the source; its nodes go under <paramref name="parent"/>.</summary>
-    public ThemedEntities(Node3D parent, ClientConfig config, DisplayBundle bundle, ThemeCatalog catalog)
+    public ThemedEntities(Node3D parent, ClientConfig config, DisplayBundle bundle, ThemeCatalog catalog, ToonLook? look = null)
     {
         _parent = parent;
         _config = config;
         _bundle = bundle;
         _catalog = catalog;
+        _look = look;
         var threaded = ModelLoading.Threaded(DisplayServer.GetName(), config.ThreadedLoadWithoutRenderer);
-        _store = new ModelStore(config.ModelCacheLimit, threaded, message => GD.PushWarning(message));
+        _store = new ModelStore(config.ModelCacheLimit, threaded, message => GD.PushWarning(message), config.PieceLoadAttempts);
         _equipment = new EquipmentCatalog(catalog, id => bundle.Item(id)?.Visual);
-        _mesher = new GearMesher(config.ModelCacheLimit);
+        _mesher = new GearMesher(config.ModelCacheLimit, threaded);
         _gearPreload = new GearPreload(catalog, id => bundle.Item(id)?.Visual, config.GearPreloadLimit);
         _needsDressing = visual =>
         {
@@ -57,6 +59,9 @@ public sealed class ThemedEntities : IEntityVisualSource
 
     /// <summary>Merged character meshes: cached now, and built so far (for measuring).</summary>
     public (int Cached, int Built) Merged => (_mesher.Cached, _mesher.Built);
+
+    /// <summary>Main-thread milliseconds spent on merges so far (T-222: the merge itself runs on a worker), for measuring.</summary>
+    public double MergeMainThreadMs => _mesher.MainThreadMs;
 
     /// <summary>Worn pieces resolved so far, one per visual key and rig, shared by every character wearing them (for measuring).</summary>
     public int PieceKinds => _equipment.Count;
@@ -146,7 +151,7 @@ public sealed class ThemedEntities : IEntityVisualSource
         }
         else
         {
-            visual = new ModelVisual(_store, _catalog, _equipment, _mesher, _needsDressing, resolution);
+            visual = new ModelVisual(_store, _catalog, _equipment, _mesher, _needsDressing, resolution, _look);
             _parent.AddChild(visual.Root);
         }
         visual.SetVisible(true);
@@ -179,7 +184,8 @@ public sealed class ThemedEntities : IEntityVisualSource
             // One preloaded piece per frame: the take from its scene is the main-thread work that equipping would otherwise do in the frame the player taps.
             for (var i = 0; i < _gearPending.Count; i++)
             {
-                if (!_store.TryGetPiece(_gearPending[i], out _)) continue;
+                if (!_store.TryGetPiece(_gearPending[i], out var preloaded)) continue;
+                if (preloaded is not null) _mesher.Warm(preloaded); // its arrays are read now too, so the merge on equip starts at once (T-222)
                 _gearPending.RemoveAt(i);
                 break;
             }

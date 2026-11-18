@@ -4,4 +4,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>Game.ThemeGen</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Game.Tests" />
+  </ItemGroup>
 </Project>

@@ -170,6 +170,22 @@ public sealed class ThemeCatalog
     }
 
     /// <summary>
+    /// The file for a render role (T-222, <see cref="RenderRoles"/>): the first theme layer whose manifest tags an entry with that role (<c>"render"</c>) and whose file
+    /// exists. False when no layer has a usable one; the caller (<see cref="RenderPlan"/>) warns once for all roles. A tagged key whose file is missing is warned once.
+    /// </summary>
+    public bool ResolveRender(string role, out string path)
+    {
+        for (var i = 0; i < _layers.Count; i++)
+        {
+            if (!_layers[i].TryGetRender(role, out var key)) continue;
+            if (TryFind(key, out path, out _)) return true;
+            Warn(key, Why(key));
+        }
+        path = string.Empty;
+        return false;
+    }
+
+    /// <summary>
     /// Seconds from the start of the attack clip to its impact for a model: the model's own <c>impact_delay</c>, else its animation library's (the rig's), else
     /// <paramref name="fallback"/>. Cached per model, so asking again allocates nothing.
     /// </summary>

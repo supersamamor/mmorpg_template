@@ -580,7 +580,7 @@ ids (T-401); `EntityView.LookVersion` counts their changes.
   material keeps its own surface, so real art merges into one call only with a shared atlas (§9's one material per character). A merged mesh is cached by body file,
   level of detail and the set of pieces in any order (`WornSet`), so a crowd in the same gear shares one mesh and one skin. A piece without a LOD1 mesh uses its LOD0 at both levels.
 - *Loading:* a piece's file loads through the same `ModelStore` as characters (threaded with a renderer, on the main thread headless: ADR-002 row 141); its meshes are
-  taken from the scene once and shared by every character wearing it, and the scene is let go. Making merges shares the per-frame instance budget (`instantiate_per_frame`).
+  taken from the scene once and shared by every character wearing it, and the scene is let go. Making merges shares the per-frame instance budget (`instantiate_per_frame`). Since T-222 the merge runs on a worker over arrays read once per source mesh (§7.9); the character keeps its old look until it is done.
 - *Preloading* (T-405, ADR-002 row 182): `GearPreload` (pure, `client/Core/Theme`) names the worn-visual models to load ahead of need: the pieces worn by characters on screen first,
   then the equipment in the player's own bag, each path once, at most `gear_preload_limit` (default 16; 0 turns it off). `ThemedEntities.WatchGear` re-plans when a character's look or the
   inventory changes; the models start loading through the same `ModelStore` (the row 141 rule) and, once loaded, their meshes are taken one per frame into the same piece cache that
@@ -702,6 +702,35 @@ Every sound is an **asset key** resolved by the theme (§8), so replacing a soun
   are known terms; `volume_db` is within -60 to 12; `pitch` is `[min, max]` with 0 < min ≤ max; `files` is not empty and every file ends in `.ogg`.
   The manifest is theme data and is **not** in the client bundle; the bundle carries only the content's sound keys.
 
+### 7.9 Look: storybook toon (ADR-003)
+T-222 draws ADR-003's storybook toon in the Mobile renderer. Pure parts in `client/Core/Theme/RenderLook.cs` (tested), drawing in `client/Scene/Theme/ToonLook.cs`.
+- **From the theme.** Three render roles (VOCABULARY "Render roles"): a manifest entry tagged `"render": "toon"` (`mat.toon`, a `ShaderMaterial`), `"outline"` (`mat.outline`) and
+  `"environment"` (`scene.environment`), resolved through the theme chain (`RenderPlan`). A chain without a role draws that part as before T-222, with **one** warning naming
+  what is missing. The setting `toon_shading` (default on) switches the whole look off, for measuring and as a fallback for weak phones.
+- **Toon material.** Three cel steps (shadow, mid, lit) from one directional light, in `light()` (`toon_light.gdshaderinc`, shared with the map ground so terrain uses the same
+  ramp); the shadow map folds into the steps; the flat ambient lights the shadow step; no specular. `ToonLook` gives every surface of a model, worn piece and map mesh whose
+  material is an untextured or textured opaque `BaseMaterial3D` a toon material with the same colour and texture (a surface override; identical looks share one material),
+  so a dressed character is still one surface. Unshaded, transparent and shader materials are left alone. Vertex colours always count: glTF's `COLOR_0` multiplies the
+  base colour, which Godot's importer leaves off, and the placeholders keep their palette colours there. A vertex with alpha 0 glows: drawn unlit at its full colour.
+- **Outlines.** An inverted hull: the theme's outline material as the `material_overlay` of a character, monster, NPC or ground item that is alive, within
+  `outline_distance_cells` (10) of the camera target, and among the nearest `outline_max_count` (6) of those (`OutlinePlanner`, planned with the levels of detail).
+  Never on terrain or props. Each vertex moves out along its outline direction (the `TANGENT` the generated models carry: the normal averaged over the vertices at the
+  same place, so the hull stays closed at hard edges; `GearMesher` carries it through the merge), by `width_px` pixels of a 720-pixel-high view. A dressed character
+  with its outline is one surface and one overlay: at most 2 draw calls.
+- **World.** `scene.environment` holds a sky shader (a soft gradient; at the 50° camera mostly its lower half shows past the map's edge), a flat ambient (colour, not sky),
+  depth haze from 17 to 60 units, no tone mapping, and the warm key light with the one shadow (§9: only the player casts). The shadow map is 1024² (project
+  setting, also on mobile), orthogonal, 24 units, hard edges.
+- **Placeholders** (`tools/themegen`): the humanoid's head is about a third of its height and its face sits above the head's equator, tipped toward the camera;
+  silhouettes differ by headgear (hood, crested helm, pointed hat) and shoulders. Colours come from `themes/<theme>/palette.json` (ADR-003 point 4): each job's two
+  colours, monsters two colours from the shared creature list. Rigs, bones, attach points and clip names are unchanged.
+- **Skill bar text** (ADR-002 rows 217, 220): a slot shows its number (and the whole seconds of a running cooldown) and the name below; the font is the largest step
+  from 13 dp down to 9 dp at which every word fits the slot, so a name wraps only between words (`HotbarText`). The text is set again only when the skill or a whole
+  second changes; the sweep moves every frame.
+- **Equip frame** (ADR-002 row 223): `GearMesher` merges on a worker; the main thread reads each source mesh's arrays once (worn pieces when they are preloaded) and
+  only turns the result into a mesh and a skin. **Retry** (row 225): a worn piece that failed to load is not "present"; the preload tries it again, `piece_load_attempts`
+  (3) tries in all, then it is drawn as the missing model for good.
+- *Measured:* see §9 "Toon look". None of it has run on a phone (ADR-002 row 112); the shader's cost there is on the T-803 checklist.
+
 ## 8. Theming (asset swap)
 
 `themes/<theme>/asset-manifest.json` maps asset keys to files plus metadata:
@@ -782,12 +811,27 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 | Visible triangles | ≤ 150k |
 | Character | LOD0 ≤ 5k triangles (the nearest 8 characters), LOD1 ≤ 2k triangles (everyone else); 1 material, ≤ 1024² texture. Worst case 8 × 5k + 32 × 2k = 104k, leaving ≥ 45k of the 150k for map, props and VFX (ADR-002) |
 | Animated characters on screen | 40 at full rate; further ones at reduced animation rate |
-| Real-time shadows | Player only by default; off on low settings |
+| Real-time shadows | Player only by default; off on low settings. One 1024² directional shadow map (4 MB of 32-bit depth, hard edges, 24 units; T-222): one extra draw call (the player) in the shadow pass |
 | App memory | ≤ 1 GB |
 | Initial install | ≤ 200 MB |
 | Network | ≤ 10 KB/s average per client with 50 visible entities |
 | Battery | No per-frame work while nothing changes; 30 fps cap in menus |
 | Audio | ≤ 24 simultaneous voices; ≤ 48 MB decoded sound effects in memory; music and ambience streamed (proposed — T-803 confirms) |
+
+**Toon look (T-222, §7.9), measured** on an integrated desktop GPU (AMD Radeon), 1280x720 windowed, 30 fps cap, `tools/loadtest --bots 70 --fighters 0.7 --spare-slots 3`
+and the client's `--measure 40 --fight` (crowd numbers vary with how many bots stand on screen, so each figure names it):
+- *Before* (the plain look and the T-405 placeholders): peak 88 draw calls (29 on screen), triangles peak 12.9k; fully dressed (`--measure-dress` dagger, cap, vest,
+  buckler) peak 82, triangles 23.1k; 30.0 fps, worst frame 98 ms.
+- *After* (toon, outlines within 10 cells on the nearest 6): peak **97** (37 on screen), triangles peak 57k; fully dressed peak **95** (37 on screen), triangles 83k;
+  29.9 fps, worst frame 73–75 ms. The same build with `toon_shading=0`: peak 93 (34 on screen). The new placeholders are rounder (cylinders, domes, eyes), hence
+  the triangles; still well inside 150k and the per-model budgets (the pack tests check 8 × LOD0 + 32 × LOD1).
+- *Outlines and the counter:* the engine's draw-call monitor did not rise when the scripted run turned three outlines off and on (59 both ways) nor per outlined
+  character in a crowd, so Godot's Mobile renderer does not count the overlay pass there. Counting it as one draw each, the worst case is the peak plus
+  `outline_max_count` (6): 97 + 6 = 103 at 37 on screen (over §9), 88 + 6 = 94 at the 29 on screen of the before run. That is why the default count is 6 and not 12; a phone measurement
+  (T-803) settles it.
+- *Equip frame* (`run-e2e.ps1 -Run items -Windowed`): worst frame from the press of Equip until dressed 58.9 ms before (T-405 build), 84.2 ms with the toon models
+  and the merge still on the main thread (the re-dress alone 81.9 ms), **35.1 ms** with the merge on a worker (frames 33 ms at the cap; no frame stands out).
+- None of it has run on a phone (ADR-002 row 112). The toon shader's cost there, the overlay draw count and the shadow map are on the T-803 checklist.
 
 ## 10. Networking on mobile
 

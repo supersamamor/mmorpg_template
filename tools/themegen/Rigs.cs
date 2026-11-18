@@ -7,7 +7,7 @@ internal sealed class Rig
 {
     public required string Name { get; init; }
     public required Bone[] Bones { get; init; }
-    public required Func<MeshBuilder, int, uint, Vector4, int> Body { get; init; }  // (builder, lod, hash, accent) -> unused
+    public required Action<MeshBuilder, BodyLook> Body { get; init; }
     public required Func<Rig, Clip[]> MakeClips { get; init; }
 
     public int Index(string bone) => Array.FindIndex(Bones, b => b.Name == bone);
@@ -29,6 +29,20 @@ internal sealed class Rig
         All[name] = rig;
         return rig;
     }
+}
+
+/// <summary>
+/// How one model on a rig looks (T-222, ADR-003): the level of detail, the key's hash for small variations, and its colours, all linear: the two identity colours, a
+/// trim, skin, hair, the eye ink, cheeks and the glow of unlit parts; <see cref="Look"/> is one of <see cref="Looks"/> for the humanoid.
+/// </summary>
+internal sealed record BodyLook(int Lod, uint Hash, Vector4 Primary, Vector4 Secondary, Vector4 Trim, Vector4 Skin, Vector4 Hair, Vector4 Ink, Vector4 Cheek, Vector4 Glow,
+    Vector4 Cream, string Look)
+{
+    /// <summary>Segments (or rings) at this level of detail.</summary>
+    public int Seg(int lod0, int lod1) => Lod == 0 ? lod0 : lod1;
+
+    /// <summary>A darker <see cref="Primary"/>.</summary>
+    public Vector4 Deep => Palette.Shade(Primary, 0.78f);
 }
 
 /// <summary>Builds clips from small functions of normalized time.</summary>
@@ -99,7 +113,27 @@ internal static class Rigs
 {
     private static Bone B(string name, int parent, float x, float y, float z) => new(name, parent, new Vector3(x, y, z));
 
-    private static Vector4 Mul(Vector4 a, float k) => new(a.X * k, a.Y * k, a.Z * k, 1);
+    /// <summary>Two eyes (and, at LOD0, cheeks) on an ellipsoid's front, at <paramref name="elevation"/> above its equator and <paramref name="spread"/> to each side.</summary>
+    private static void Face(MeshBuilder m, int bone, Vector3 center, Vector3 radii, BodyLook k, float elevation, float spread, Vector3 eye)
+    {
+        foreach (var x in new[] { -1f, 1f })
+        {
+            m.Ellipsoid(bone, MeshBuilder.OnSurface(center, radii, elevation, spread * x, -eye.Z * 0.4f), eye, k.Seg(8, 6), k.Seg(5, 4), k.Ink);
+            if (k.Lod == 0) m.Ellipsoid(bone, MeshBuilder.OnSurface(center, radii, elevation - 0.25f, (spread + 0.28f) * x, -0.01f), new Vector3(eye.X * 1.3f, eye.Y * 0.5f, eye.Z), 8, 4, k.Cheek);
+        }
+    }
+
+    /// <summary>The humanoid's head (T-222): its centre in model space and its radii. Faces, hair and headgear are placed from these.</summary>
+    public static readonly Vector3 HeadCenter = new(0, 1.74f, 0);
+
+    /// <summary>The humanoid head's radii: about a third of the body's height (ADR-003 point 3).</summary>
+    public static readonly Vector3 HeadRadii = new(0.33f, 0.31f, 0.32f);
+
+    /// <summary>How far above the head's equator the eyes sit (radians): the face tips up toward the camera, which looks down at 50°.</summary>
+    public const float EyeElevation = 0.26f;
+
+    /// <summary>The humanoid's head bone's rest height (the origin of head-attached pieces).</summary>
+    public const float HeadBoneY = 1.55f;
 
     // ---------------- humanoid ----------------
 
@@ -112,43 +146,77 @@ internal static class Rigs
             B("arm_l", 1, -0.3f, 0.35f, 0), B("hand_l", 3, 0, -0.55f, 0), B("arm_r", 1, 0.3f, 0.35f, 0), B("hand_r", 5, 0, -0.55f, 0),
             B("leg_l", 0, -0.12f, 0, 0), B("leg_r", 0, 0.12f, 0, 0),
         },
-        Body = (m, lod, hash, accent) =>
+        Body = (m, k) =>
         {
-            // bone indices: 0 hips, 1 spine, 2 head, 3 arm_l, 4 hand_l, 5 arm_r, 6 hand_r, 7 leg_l, 8 leg_r
-            m.Box(0, new Vector3(0, 0.92f, 0), new Vector3(0.36f, 0.2f, 0.2f), MeshBuilder.White);
-            m.Box(1, new Vector3(0, 1.3f, 0), new Vector3(0.44f, 0.5f, 0.26f), MeshBuilder.White);
-            if (lod == 0) m.Ellipsoid(2, new Vector3(0, 1.72f, 0), new Vector3(0.15f, 0.16f, 0.15f), 14, 9, MeshBuilder.Skin);
-            else m.Ellipsoid(2, new Vector3(0, 1.72f, 0), new Vector3(0.15f, 0.16f, 0.15f), 8, 5, MeshBuilder.Skin);
-            m.Box(2, new Vector3(0, 1.7f, -0.16f), new Vector3(0.06f, 0.06f, 0.1f), accent); // the nose shows which way it faces
-            m.Box(3, new Vector3(-0.34f, 1.25f, 0), new Vector3(0.1f, 0.5f, 0.1f), MeshBuilder.White);
-            m.Box(4, new Vector3(-0.3f, 0.9f, 0), new Vector3(0.11f, 0.11f, 0.11f), MeshBuilder.Skin);
-            m.Box(5, new Vector3(0.34f, 1.25f, 0), new Vector3(0.1f, 0.5f, 0.1f), MeshBuilder.White);
-            m.Box(6, new Vector3(0.3f, 0.9f, 0), new Vector3(0.11f, 0.11f, 0.11f), MeshBuilder.Skin);
-            m.Box(7, new Vector3(-0.12f, 0.45f, 0), new Vector3(0.15f, 0.9f, 0.15f), Mul(MeshBuilder.White, 0.8f));
-            m.Box(8, new Vector3(0.12f, 0.45f, 0), new Vector3(0.15f, 0.9f, 0.15f), Mul(MeshBuilder.White, 0.8f));
-            if (lod == 0)
+            // bone indices: 0 hips, 1 spine, 2 head, 3 arm_l, 4 hand_l, 5 arm_r, 6 hand_r, 7 leg_l, 8 leg_r. The bones are unchanged since T-207; only the shapes
+            // bound to them follow ADR-003: a big head (about a third of the height), short limbs, the face tipped up toward the 50° camera.
+            var s = k.Seg(16, 8);
+            var r = k.Seg(10, 5);
+            var small = k.Seg(10, 6);
+            var sr = k.Seg(6, 4);
+            var legs = Palette.Shade(k.Secondary, 0.72f);
+            var boots = Palette.Shade(k.Trim, 0.85f);
+            var robe = k.Look == Looks.Hat;
+
+            m.Cylinder(7, new Vector3(-0.11f, 0.5f, 0), 0.085f, 0.075f, 0.8f, small, legs);
+            m.Cylinder(8, new Vector3(0.11f, 0.5f, 0), 0.085f, 0.075f, 0.8f, small, legs);
+            m.Ellipsoid(7, new Vector3(-0.11f, 0.08f, -0.03f), new Vector3(0.1f, 0.08f, 0.14f), small, sr, boots);
+            m.Ellipsoid(8, new Vector3(0.11f, 0.08f, -0.03f), new Vector3(0.1f, 0.08f, 0.14f), small, sr, boots);
+
+            m.Cylinder(0, new Vector3(0, 0.95f, 0), 0.21f, 0.22f, 0.2f, s, k.Deep);
+            m.Cylinder(1, new Vector3(0, 1.2f, 0), 0.2f, 0.24f, 0.42f, s, k.Primary);
+            m.Cylinder(0, new Vector3(0, 1.03f, 0), 0.25f, 0.25f, 0.07f, s, k.Trim);
+            if (robe)
             {
-                m.Box(0, new Vector3(0, 1.07f, 0), new Vector3(0.46f, 0.07f, 0.28f), MeshBuilder.Dark); // belt
-                m.Box(7, new Vector3(-0.12f, 0.05f, -0.03f), new Vector3(0.17f, 0.1f, 0.24f), MeshBuilder.Dark); // boots
-                m.Box(8, new Vector3(0.12f, 0.05f, -0.03f), new Vector3(0.17f, 0.1f, 0.24f), MeshBuilder.Dark);
-                m.Ellipsoid(3, new Vector3(-0.3f, 1.5f, 0), new Vector3(0.09f, 0.09f, 0.09f), 8, 5, MeshBuilder.White); // shoulders
-                m.Ellipsoid(5, new Vector3(0.3f, 1.5f, 0), new Vector3(0.09f, 0.09f, 0.09f), 8, 5, MeshBuilder.White);
+                m.Cylinder(0, new Vector3(0, 0.55f, 0), 0.24f, 0.37f, 0.8f, s, k.Primary);
+                if (k.Lod == 0) m.Cylinder(0, new Vector3(0, 0.17f, 0), 0.375f, 0.38f, 0.04f, s, k.Trim); // the hem
             }
-            switch (hash % 3)
+
+            foreach (var (arm, hand, x) in new[] { (3, 4, -1f), (5, 6, 1f) })
             {
-                case 0: // hat
-                    m.Box(2, new Vector3(0, 1.93f, 0), new Vector3(0.28f, 0.12f, 0.28f), accent);
-                    m.Box(2, new Vector3(0, 1.87f, 0), new Vector3(0.4f, 0.03f, 0.4f), accent);
+                m.Cylinder(arm, new Vector3(0.31f * x, 1.25f, 0), 0.068f, 0.058f, 0.36f, small, k.Secondary);
+                if (k.Look == Looks.Helm) m.Ellipsoid(arm, new Vector3(0.31f * x, 1.47f, 0), new Vector3(0.15f, 0.1f, 0.15f), small, sr, k.Primary); // pauldrons
+                else m.Ellipsoid(arm, new Vector3(0.29f * x, 1.43f, 0), new Vector3(0.1f, 0.085f, 0.1f), small, sr, k.Primary);
+                m.Ellipsoid(hand, new Vector3(0.31f * x, 1.02f, 0), new Vector3(0.07f, 0.07f, 0.07f), small, sr, k.Skin);
+            }
+
+            var head = HeadCenter;
+            var hr = HeadRadii;
+            m.Ellipsoid(2, head, hr, s, r, k.Skin);
+            foreach (var x in new[] { -1f, 1f })
+            {
+                m.Ellipsoid(2, MeshBuilder.OnSurface(head, hr, EyeElevation, 0.36f * x, -0.012f), new Vector3(0.034f, 0.05f, 0.03f), small, sr, k.Ink);
+                if (k.Lod == 0) m.Ellipsoid(2, MeshBuilder.OnSurface(head, hr, 0.02f, 0.62f * x, -0.012f), new Vector3(0.048f, 0.028f, 0.03f), 8, 4, k.Cheek);
+            }
+
+            var hairColour = k.Look is Looks.Hood or Looks.Hat ? k.Secondary : k.Hair;
+            if (k.Look != Looks.Helm)
+                m.Dome(2, head + new Vector3(0, 0.025f, 0.015f), hr + new Vector3(0.02f), MathF.PI * 0.5f, 0.45f, s, k.Seg(6, 3), hairColour);
+            switch (k.Look)
+            {
+                case Looks.Helm:
+                    m.Dome(2, head + new Vector3(0, 0.03f, 0), hr + new Vector3(0.025f), MathF.PI * 0.42f, 0.2f, s, k.Seg(5, 3), k.Primary);
+                    m.Box(2, new Vector3(0, 2.09f, 0.03f), new Vector3(0.07f, 0.14f, 0.42f), k.Secondary); // crest
+                    m.Box(1, new Vector3(0, 1.12f, -0.245f), new Vector3(0.3f, 0.5f, 0.03f), k.Secondary); // tabard
+                    if (k.Lod == 0) m.Box(1, new Vector3(0, 1.22f, -0.262f), new Vector3(0.09f, 0.09f, 0.01f), k.Trim);
                     break;
-                case 1: // pauldrons
-                    m.Box(1, new Vector3(-0.3f, 1.52f, 0), new Vector3(0.2f, 0.1f, 0.26f), accent);
-                    m.Box(1, new Vector3(0.3f, 1.52f, 0), new Vector3(0.2f, 0.1f, 0.26f), accent);
+                case Looks.Hat:
+                    m.Box(2, new Vector3(0, 1.56f, 0.2f), new Vector3(0.44f, 0.42f, 0.1f), hairColour); // long hair
+                    m.Cylinder(2, new Vector3(0, 1.99f, 0.02f), 0.44f, 0.44f, 0.03f, s, k.Deep, 0.15f); // brim
+                    m.Cylinder(2, new Vector3(0, 2.04f, 0.02f), 0.26f, 0.265f, 0.07f, s, k.Trim, 0.15f); // band
+                    m.Cylinder(2, new Vector3(0, 2.3f, 0.07f), 0f, 0.26f, 0.5f, s, k.Primary, 0.3f); // a pointed crown, leaning back
+                    m.Ellipsoid(2, new Vector3(0, 2.05f, -0.275f), new Vector3(0.045f, 0.06f, 0.03f), small, sr, MeshBuilder.Glowing(k.Glow)); // the gem glows (unlit)
+                    if (k.Lod == 0) m.Cylinder(1, new Vector3(0, 1.41f, 0.02f), 0.25f, 0.21f, 0.1f, s, k.Deep); // collar
                     break;
-                default: // pack
-                    m.Box(1, new Vector3(0, 1.3f, 0.2f), new Vector3(0.3f, 0.35f, 0.12f), accent);
+                case Looks.Hood:
+                    m.Ellipsoid(1, new Vector3(0, 1.47f, 0.2f), new Vector3(0.27f, 0.13f, 0.14f), s, k.Seg(6, 3), k.Deep); // the hood, fallen back
+                    m.Box(1, new Vector3(0, 1.17f, 0.25f), new Vector3(0.44f, 0.5f, 0.04f), k.Deep); // cape
+                    m.Box(0, new Vector3(0.27f, 0.98f, -0.06f), new Vector3(0.12f, 0.16f, 0.17f), k.Secondary); // satchel
+                    break;
+                default:
+                    if (k.Hash % 2 == 0) m.Ellipsoid(2, head + new Vector3(0, 0.08f, 0.33f), new Vector3(0.09f, 0.09f, 0.09f), small, sr, hairColour); // a bun
                     break;
             }
-            return 0;
         },
         MakeClips = rig => new[]
         {
@@ -180,14 +248,14 @@ internal static class Rigs
     {
         Name = "blob",
         Bones = new[] { B("root", -1, 0, 0, 0), B("body", 0, 0, 0.35f, 0) },
-        Body = (m, lod, hash, accent) =>
+        Body = (m, k) =>
         {
-            if (lod == 0) m.Ellipsoid(1, new Vector3(0, 0.35f, 0), new Vector3(0.4f, 0.35f, 0.4f), 16, 10, MeshBuilder.White);
-            else m.Ellipsoid(1, new Vector3(0, 0.35f, 0), new Vector3(0.4f, 0.35f, 0.4f), 8, 5, MeshBuilder.White);
-            m.Box(1, new Vector3(-0.13f, 0.45f, -0.36f), new Vector3(0.08f, 0.1f, 0.06f), MeshBuilder.Dark);
-            m.Box(1, new Vector3(0.13f, 0.45f, -0.36f), new Vector3(0.08f, 0.1f, 0.06f), MeshBuilder.Dark);
-            if (lod == 0) m.Ellipsoid(1, new Vector3(0, 0.62f, 0.05f), new Vector3(0.12f, 0.08f, 0.12f), 8, 5, accent);
-            return 0;
+            // All head: a round body with the face high on its front, tipped up toward the camera.
+            var body = new Vector3(0, 0.36f, 0);
+            var radii = new Vector3(0.42f, 0.36f, 0.42f);
+            m.Ellipsoid(1, body, radii, k.Seg(16, 8), k.Seg(10, 5), k.Primary);
+            Face(m, 1, body, radii, k, 0.3f, 0.3f, new Vector3(0.045f, 0.065f, 0.035f));
+            m.Ellipsoid(1, new Vector3(0, 0.7f, 0.06f), new Vector3(0.12f, 0.08f, 0.12f), k.Seg(8, 6), k.Seg(5, 3), k.Secondary); // a tuft
         },
         MakeClips = rig => new[]
         {
@@ -206,16 +274,16 @@ internal static class Rigs
     {
         Name = "sprout",
         Bones = new[] { B("root", -1, 0, 0, 0), B("stem", 0, 0, 0.1f, 0), B("leaf_l", 1, -0.05f, 0.45f, 0), B("leaf_r", 1, 0.05f, 0.45f, 0) },
-        Body = (m, lod, hash, accent) =>
+        Body = (m, k) =>
         {
-            m.Box(0, new Vector3(0, 0.05f, 0), new Vector3(0.35f, 0.1f, 0.35f), MeshBuilder.Dark);
-            m.Box(1, new Vector3(0, 0.35f, 0), new Vector3(0.12f, 0.5f, 0.12f), MeshBuilder.White);
-            if (lod == 0) m.Ellipsoid(1, new Vector3(0, 0.65f, 0), new Vector3(0.2f, 0.2f, 0.2f), 14, 9, MeshBuilder.White);
-            else m.Ellipsoid(1, new Vector3(0, 0.65f, 0), new Vector3(0.2f, 0.2f, 0.2f), 8, 5, MeshBuilder.White);
-            m.Box(1, new Vector3(0, 0.66f, -0.2f), new Vector3(0.07f, 0.07f, 0.08f), accent);
-            m.Box(2, new Vector3(-0.2f, 0.55f, 0), new Vector3(0.3f, 0.04f, 0.14f), accent);
-            m.Box(3, new Vector3(0.2f, 0.55f, 0), new Vector3(0.3f, 0.04f, 0.14f), accent);
-            return 0;
+            m.Cylinder(0, new Vector3(0, 0.06f, 0), 0.17f, 0.2f, 0.12f, k.Seg(12, 6), Palette.Shade(k.Trim, 0.8f)); // the root clump
+            m.Cylinder(1, new Vector3(0, 0.3f, 0), 0.05f, 0.07f, 0.4f, k.Seg(8, 5), k.Deep);
+            var head = new Vector3(0, 0.62f, 0);
+            var radii = new Vector3(0.24f, 0.22f, 0.23f); // the head is about a third of the height
+            m.Ellipsoid(1, head, radii, k.Seg(14, 8), k.Seg(9, 5), k.Primary);
+            Face(m, 1, head, radii, k, 0.28f, 0.34f, new Vector3(0.03f, 0.045f, 0.025f));
+            m.Ellipsoid(2, new Vector3(-0.24f, 0.86f, 0), new Vector3(0.16f, 0.03f, 0.08f), k.Seg(10, 6), k.Seg(5, 3), k.Secondary);
+            m.Ellipsoid(3, new Vector3(0.24f, 0.86f, 0), new Vector3(0.16f, 0.03f, 0.08f), k.Seg(10, 6), k.Seg(5, 3), k.Secondary);
         },
         MakeClips = rig => new[]
         {
@@ -233,27 +301,28 @@ internal static class Rigs
     {
         Name = "insect",
         Bones = new[] { B("root", -1, 0, 0, 0), B("body", 0, 0, 0.35f, 0), B("wing_l", 1, -0.1f, 0.25f, 0), B("wing_r", 1, 0.1f, 0.25f, 0) },
-        Body = (m, lod, hash, accent) =>
+        Body = (m, k) =>
         {
-            var wasp = hash % 2 == 1;
-            var radii = wasp ? new Vector3(0.2f, 0.17f, 0.4f) : new Vector3(0.36f, 0.26f, 0.48f);
-            if (lod == 0) m.Ellipsoid(1, new Vector3(0, 0.35f, 0), radii, 14, 9, MeshBuilder.White);
-            else m.Ellipsoid(1, new Vector3(0, 0.35f, 0), radii, 8, 5, MeshBuilder.White);
-            m.Ellipsoid(1, new Vector3(0, 0.36f, -radii.Z - 0.08f), new Vector3(0.14f, 0.13f, 0.13f), lod == 0 ? 10 : 6, lod == 0 ? 7 : 4, MeshBuilder.Dark);
-            m.Box(1, new Vector3(0, 0.3f, -radii.Z - 0.2f), new Vector3(0.06f, 0.06f, 0.08f), accent);
-            if (wasp) m.Box(1, new Vector3(0, 0.3f, radii.Z + 0.12f), new Vector3(0.05f, 0.05f, 0.25f), accent); // stinger
-            m.Box(2, new Vector3(-0.2f, 0.62f, 0.05f), new Vector3(0.28f, 0.02f, 0.4f), accent);
-            m.Box(3, new Vector3(0.2f, 0.62f, 0.05f), new Vector3(0.28f, 0.02f, 0.4f), accent);
-            if (lod == 0)
+            var wasp = k.Hash % 2 == 1;
+            var radii = wasp ? new Vector3(0.2f, 0.17f, 0.36f) : new Vector3(0.34f, 0.25f, 0.42f);
+            m.Ellipsoid(1, new Vector3(0, 0.35f, 0.04f), radii, k.Seg(14, 8), k.Seg(9, 5), k.Primary);
+            // A big round head in front, about a third of the length, with the face tipped up.
+            var head = new Vector3(0, 0.4f, -radii.Z - 0.1f);
+            var headRadii = new Vector3(0.2f, 0.19f, 0.18f);
+            m.Ellipsoid(1, head, headRadii, k.Seg(12, 6), k.Seg(8, 4), k.Secondary);
+            Face(m, 1, head, headRadii, k, 0.3f, 0.42f, new Vector3(0.035f, 0.05f, 0.03f));
+            if (wasp) m.Cylinder(1, new Vector3(0, 0.32f, radii.Z + 0.16f), 0f, 0.05f, 0.22f, k.Seg(8, 5), k.Ink, MathF.PI / 2); // stinger
+            m.Ellipsoid(2, new Vector3(-0.22f, 0.62f, 0.08f), new Vector3(0.16f, 0.02f, 0.24f), k.Seg(10, 6), k.Seg(4, 3), k.Cream);
+            m.Ellipsoid(3, new Vector3(0.22f, 0.62f, 0.08f), new Vector3(0.16f, 0.02f, 0.24f), k.Seg(10, 6), k.Seg(4, 3), k.Cream);
+            if (k.Lod == 0)
             {
                 for (var i = 0; i < 3; i++)
                 {
-                    var z = -0.25f + i * 0.25f;
-                    m.Box(0, new Vector3(-0.3f, 0.15f, z), new Vector3(0.25f, 0.05f, 0.05f), MeshBuilder.Dark);
-                    m.Box(0, new Vector3(0.3f, 0.15f, z), new Vector3(0.25f, 0.05f, 0.05f), MeshBuilder.Dark);
+                    var z = -0.22f + i * 0.22f;
+                    m.Box(0, new Vector3(-0.3f, 0.15f, z), new Vector3(0.25f, 0.05f, 0.05f), k.Ink);
+                    m.Box(0, new Vector3(0.3f, 0.15f, z), new Vector3(0.25f, 0.05f, 0.05f), k.Ink);
                 }
             }
-            return 0;
         },
         MakeClips = rig => new[]
         {
@@ -275,22 +344,23 @@ internal static class Rigs
             B("root", -1, 0, 0, 0), B("body", 0, 0, 0.6f, 0), B("head", 1, 0, 0.05f, -0.5f),
             B("leg_fl", 1, -0.2f, -0.1f, -0.35f), B("leg_fr", 1, 0.2f, -0.1f, -0.35f), B("leg_bl", 1, -0.2f, -0.1f, 0.35f), B("leg_br", 1, 0.2f, -0.1f, 0.35f),
         },
-        Body = (m, lod, hash, accent) =>
+        Body = (m, k) =>
         {
-            m.Box(1, new Vector3(0, 0.6f, 0), new Vector3(0.5f, 0.4f, 1.0f), MeshBuilder.White);
-            if (lod == 0) m.Ellipsoid(2, new Vector3(0, 0.65f, -0.62f), new Vector3(0.17f, 0.17f, 0.2f), 12, 8, MeshBuilder.White);
-            else m.Box(2, new Vector3(0, 0.65f, -0.6f), new Vector3(0.3f, 0.3f, 0.35f), MeshBuilder.White);
-            m.Box(2, new Vector3(0, 0.62f, -0.82f), new Vector3(0.1f, 0.1f, 0.08f), accent);
+            m.Ellipsoid(1, new Vector3(0, 0.6f, 0.05f), new Vector3(0.3f, 0.25f, 0.5f), k.Seg(14, 8), k.Seg(9, 5), k.Primary);
+            // A big head, tipped up so the face reads from above.
+            var head = new Vector3(0, 0.72f, -0.6f);
+            var headRadii = new Vector3(0.25f, 0.24f, 0.25f);
+            m.Ellipsoid(2, head, headRadii, k.Seg(14, 8), k.Seg(9, 5), k.Primary);
+            Face(m, 2, head, headRadii, k, 0.32f, 0.4f, new Vector3(0.04f, 0.055f, 0.035f));
+            m.Ellipsoid(2, new Vector3(0, 0.63f, -0.84f), new Vector3(0.1f, 0.08f, 0.06f), k.Seg(10, 6), k.Seg(5, 3), Palette.Shade(k.Primary, 0.7f)); // snout
             foreach (var (bone, x, z) in new[] { (3, -0.2f, -0.35f), (4, 0.2f, -0.35f), (5, -0.2f, 0.35f), (6, 0.2f, 0.35f) })
-                m.Box(bone, new Vector3(x, 0.25f, z), new Vector3(0.12f, 0.5f, 0.12f), Mul(MeshBuilder.White, 0.8f));
-            if (lod == 0)
-            {
-                m.Box(2, new Vector3(-0.1f, 0.58f, -0.78f), new Vector3(0.03f, 0.03f, 0.14f), MeshBuilder.Skin); // tusks
-                m.Box(2, new Vector3(0.1f, 0.58f, -0.78f), new Vector3(0.03f, 0.03f, 0.14f), MeshBuilder.Skin);
-                for (var i = 0; i < 5; i++) m.Box(1, new Vector3(0, 0.85f, -0.4f + i * 0.2f), new Vector3(0.06f, 0.12f, 0.1f), accent); // back spikes
-                m.Box(1, new Vector3(0, 0.7f, 0.55f), new Vector3(0.04f, 0.04f, 0.2f), MeshBuilder.Dark); // tail
-            }
-            return 0;
+                m.Cylinder(bone, new Vector3(x, 0.24f, z), 0.07f, 0.06f, 0.48f, k.Seg(8, 5), Palette.Shade(k.Primary, 0.65f));
+            m.Cylinder(2, new Vector3(-0.13f, 0.62f, -0.86f), 0f, 0.035f, 0.18f, k.Seg(6, 4), k.Cream, -MathF.PI / 2.4f); // tusks
+            m.Cylinder(2, new Vector3(0.13f, 0.62f, -0.86f), 0f, 0.035f, 0.18f, k.Seg(6, 4), k.Cream, -MathF.PI / 2.4f);
+            var spikes = k.Lod == 0 ? 5 : 3;
+            for (var i = 0; i < spikes; i++)
+                m.Cylinder(1, new Vector3(0, 0.88f, -0.3f + i * (0.6f / (spikes - 1))), 0f, 0.06f, 0.16f, k.Seg(6, 4), k.Secondary, 0.3f); // back spikes
+            if (k.Lod == 0) m.Cylinder(1, new Vector3(0, 0.66f, 0.6f), 0.02f, 0.035f, 0.2f, 6, k.Ink, MathF.PI / 2.5f); // tail
         },
         MakeClips = rig => new[]
         {

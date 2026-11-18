@@ -1,0 +1,12 @@
+[gd_resource type="ShaderMaterial" format=3]
+
+[ext_resource type="Shader" path="toon.gdshader" id="1_toon"]
+
+[resource]
+shader = ExtResource("1_toon")
+shader_parameter/albedo = Color(1, 1, 1, 1)
+shader_parameter/use_vertex_color = true
+shader_parameter/toon_mid_from = 0.0
+shader_parameter/toon_lit_from = 0.4
+shader_parameter/toon_mid_level = 0.5
+shader_parameter/toon_edge = 0.015

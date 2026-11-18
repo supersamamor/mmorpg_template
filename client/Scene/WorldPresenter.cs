@@ -25,6 +25,7 @@ public sealed class WorldPresenter
     private readonly ClientConfig _config;
     private readonly GroundHeights _ground;
     private readonly DetailPlanner _planner;
+    private readonly Game.Client.Core.Theme.OutlinePlanner _outlines;
     private readonly MultiMesh _bars;
     private readonly MultiMesh _rings;
     private readonly MultiMesh _statusMarks;
@@ -71,6 +72,9 @@ public sealed class WorldPresenter
         }
     }
 
+    /// <summary>Entities drawn with an outline after the last plan (for measuring, T-222).</summary>
+    public int OutlinedCount { get; private set; }
+
     /// <summary>Corpses fading out after leaving view (for measuring).</summary>
     public int FadingCorpses => _corpses.Count;
 
@@ -82,6 +86,7 @@ public sealed class WorldPresenter
         _config = config;
         _ground = ground;
         _planner = new DetailPlanner(config.Lod0Count, config.FullRateAnimatedCount);
+        _outlines = new Game.Client.Core.Theme.OutlinePlanner(config.OutlineDistanceCells, config.OutlineMaxCount);
         _world = world;
         _ui = ui;
         _visuals = visuals;
@@ -231,6 +236,7 @@ public sealed class WorldPresenter
             var entity = removed[i];
             if (entity.Visual is IEntityVisual visual)
             {
+                visual.SetOutline(false); // a corpse fading out, or a visual going back to the pool, is never outlined
                 // A body that leaves view fades out instead of vanishing (§7.6); anything else goes back to the pool at once.
                 if (entity.DeadShown) _corpses.Add(new Corpse(visual, Clocks.View()));
                 else _visuals.Release(visual);
@@ -269,6 +275,7 @@ public sealed class WorldPresenter
                 var worn = _dressOverride is not null && entity.Kind == EntityKinds.Player ? _dressOverride : entity.Worn;
                 visual.SetGear(entity.Weapon, worn, unchecked(entity.LookVersion + _dressEpoch * 1_000_003));
                 entity.LookDirty = false;
+                _replan = true; // a death takes the outline off
                 _barsDirty = true;
             }
             if (entity.PoseDirty)
@@ -360,6 +367,19 @@ public sealed class WorldPresenter
             _fullRate[i] = slot < 0 || _planner.FullRate(slot);
             if (slot >= 0) ((IEntityVisual)entities[i].Visual!).SetDetail(_planner.LodOf(slot));
         }
+
+        // Outlines (T-222, ADR-003 point 2): alive characters, monsters, NPCs and ground items near the camera target, nearest first up to the count.
+        _outlines.Begin();
+        for (var i = 0; i < entities.Count; i++)
+        {
+            var entity = entities[i];
+            var dx = entity.X - ox;
+            var dz = entity.Z - oz;
+            _outlines.Add(entity.Id, entity.Kind, entity.DeadShown || entity.Dead, dx * dx + dz * dz);
+        }
+        _outlines.Plan();
+        for (var i = 0; i < entities.Count; i++) ((IEntityVisual)entities[i].Visual!).SetOutline(_outlines.Outlined(i));
+        OutlinedCount = _outlines.OutlinedCount;
     }
 
     private void RewriteBars()

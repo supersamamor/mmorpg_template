@@ -1,0 +1,56 @@
+[gd_scene format=3]
+
+[sub_resource type="Shader" id="sky_shader"]
+code = "// A soft sky gradient (ADR-003 point 6, T-222). The game camera looks down at 50 degrees, so mostly the lower half shows, past the map's edge:
+// pale near the horizon and a little deeper below, the same pale as the haze, so the play area stands out against it.
+shader_type sky;
+uniform vec3 zenith : source_color = vec3(0.56, 0.82, 0.95);
+uniform vec3 horizon : source_color = vec3(0.91, 0.96, 1.0);
+uniform vec3 below : source_color = vec3(0.70, 0.85, 0.93);
+void sky() {
+	float y = EYEDIR.y;
+	COLOR = y >= 0.0 ? mix(horizon, zenith, pow(y, 0.8)) : mix(horizon, below, pow(-y, 0.7));
+}
+"
+
+[sub_resource type="ShaderMaterial" id="sky_material"]
+shader = SubResource("sky_shader")
+
+[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("sky_material")
+radiance_size = 0
+
+[sub_resource type="Environment" id="environment"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 2
+ambient_light_color = Color(0.84, 0.86, 1, 1)
+ambient_light_energy = 0.5
+reflected_light_source = 1
+tonemap_mode = 0
+fog_enabled = true
+fog_mode = 1
+fog_light_color = Color(0.86, 0.93, 0.97, 1)
+fog_light_energy = 1.0
+fog_sun_scatter = 0.0
+fog_density = 0.45
+fog_sky_affect = 0.0
+fog_depth_curve = 1.4
+fog_depth_begin = 17.0
+fog_depth_end = 60.0
+
+[node name="Environment" type="Node3D"]
+metadata/about = "The theme's world look (ADR-003 points 1 and 6, T-222): a warm key light with the one shadow (the player's, ARCHITECTURE section 9), a flat ambient, a sky gradient and light distance haze. The client instances this scene once."
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("environment")
+
+[node name="KeyLight" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, 0.409576, -0.286788, 0, 0.573576, 0.819152, 0.5, -0.709406, 0.496732, 0, 10, 0)
+light_color = Color(1, 0.93, 0.82, 1)
+light_energy = 1.05
+shadow_enabled = true
+shadow_bias = 0.04
+shadow_normal_bias = 1.5
+directional_shadow_mode = 0
+directional_shadow_max_distance = 24.0

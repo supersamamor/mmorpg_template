@@ -350,7 +350,7 @@ public class MapSceneHashTests : IDisposable
     public void A_new_material_colour_does_not_fail()
     {
         var (content, themes) = CopyRepo();
-        Edit(Path.Combine(themes, "default", "maps", "thistle_hollow.tscn"), "albedo_color = Color(0.42, 0.38, 0.35, 1)", "albedo_color = Color(0.5, 0.38, 0.35, 1)");
+        Edit(Path.Combine(themes, "default", "maps", "thistle_hollow.tscn"), "albedo_color = Color(0.62, 0.6, 0.57, 1)", "albedo_color = Color(0.7, 0.6, 0.57, 1)");
 
         Check(content, themes).ShouldBeEmpty();
     }
