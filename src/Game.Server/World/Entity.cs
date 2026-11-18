@@ -135,6 +135,12 @@ public sealed class Entity
     /// <summary>The players' side: a player or a player's summon. Everything else is the monsters' side.</summary>
     public bool OnPlayerSide => Kind == EntityKind.Player || SummonedByPlayer;
 
+    /// <summary>
+    /// The simulated time (of its map instance) until which a player counts as in combat: it dealt or took damage within <c>regen.out_of_combat_delay_ms</c>
+    /// (T-503). Set by combat; the inventory reads it for the reset rule <c>progression.reset.refuse_in_combat</c>. 0 before any fight.
+    /// </summary>
+    public long InCombatUntilMs { get; set; }
+
     /// <summary>A player's skill cooldowns (T-502), kept by combat; null for everything else.</summary>
     public Game.Shared.Skills.SkillCooldowns? Cooldowns { get; set; }
 

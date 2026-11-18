@@ -138,6 +138,7 @@ public sealed class ClientSession : IViewSink
         _gateway.PostExp(snapshot.Observer); // a fresh view (join, resume, warp, resync) comes with the own levels and EXP
         _gateway.PostInventory(snapshot.Observer); // and the whole own inventory
         _gateway.PostSkills(snapshot.MapId, snapshot.Observer); // and the own skills, points and cooldowns
+        _gateway.PostStats(snapshot.MapId, snapshot.Observer); // and the own stats, stat points and derived stats (T-503)
         _gateway.Stats.AddSinkTime(Stopwatch.GetTimestamp() - started);
     }
 
@@ -405,6 +406,9 @@ public sealed class ClientSession : IViewSink
                 break;
             case LearnSkillMessage learn:
                 if (Entity is { } learner) _gateway.Enqueue(new LearnSkill(learner, learn.Skill));
+                break;
+            case RaiseStatMessage raise:
+                if (Entity is { } raiser) _gateway.Enqueue(new RaiseStat(raiser, raise.Stat, raise.Amount));
                 break;
             case ChangeJobMessage job:
                 if (Entity is { } changer) _gateway.Enqueue(new ChangeJob(changer, job.Job));

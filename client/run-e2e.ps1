@@ -13,12 +13,15 @@
 #   .\client\run-e2e.ps1 -Run skills                      fight monsters that cast Mana Font (a cast bar over a monster) until the EXP brings skill points and a job to change to, then through the
 #                                                         skill panel: learn a skill, change job, learn a ranged attack; press its skill bar slot, tap a monster, see the own cast bar, the hit and
 #                                                         the cooldown sweep (T-502; content copy: weak monsters worth a lot of EXP, 3 skill points a job level)
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, bye, release
+#   .\client\run-e2e.ps1 -Run stats                       spend the new character's stat points through the stats panel (the server's costs, derived stats following), use the stat reset
+#                                                         from the bag after its confirmation and see the points and stats come back; the skill reset has nothing to take back and is refused
+#                                                         (T-503; real content: new characters start with 10 stat points, a Realign Tonic and a Blank Page; below level 10 a reset keeps the item)
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, bye, release
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -312,6 +315,11 @@ function Invoke-Scenario([string] $Name) {
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-skills" @()) -EngineArgs $engineArgs
                 return (Wait-GodotClient $run 400).Code
             }
+            "stats" {
+                $server = Start-GameServer
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-stats" @()) -EngineArgs $engineArgs
+                return (Wait-GodotClient $run 180).Code
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -438,7 +446,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 $failed = @()

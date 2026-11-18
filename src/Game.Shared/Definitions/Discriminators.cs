@@ -28,7 +28,9 @@ namespace Game.Shared.Definitions
             (EffectTypes.Knockback, typeof(KnockbackEffect)),
             (EffectTypes.Teleport, typeof(TeleportEffect)),
             (EffectTypes.Summon, typeof(SummonEffect)),
-            (EffectTypes.Area, typeof(AreaEffect)));
+            (EffectTypes.Area, typeof(AreaEffect)),
+            (EffectTypes.ResetStats, typeof(ResetStatsEffect)),
+            (EffectTypes.ResetSkills, typeof(ResetSkillsEffect)));
 
         /// <summary><see cref="QuestObjectiveDef"/> subtypes by <see cref="QuestObjectiveTypes"/> value.</summary>
         public static readonly IReadOnlyDictionary<string, System.Type> QuestObjectives = Table(

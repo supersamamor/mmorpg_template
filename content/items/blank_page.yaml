@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.blank_page
+name: Blank Page
+description: A page of pale parchment that drinks the ink out of your memory. Read it to take back every skill point you have spent. Free to use below level 10.
+kind: consumable
+weight: 2
+buy_price: 500
+sell_price: 0
+max_stack: 99
+ground_asset_key: model.prop.loot_bag
+consumable:
+  cooldown_ms: 1000
+  consumed: true
+  effects:
+    - type: reset_skills

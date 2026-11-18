@@ -241,13 +241,13 @@ namespace Game.Shared.Items
 
         /// <summary>
         /// Records a use that passed <see cref="CanUse"/>: the item id goes on cooldown for <c>cooldown_ms</c> from <paramref name="nowMs"/>, and
-        /// one unit is used up when the item is <c>consumed</c>.
+        /// one unit is used up when the item is <c>consumed</c> (not when <paramref name="free"/>: a free reset, T-503).
         /// </summary>
-        public void ApplyUse(InventoryState state, InventoryEntry entry, ItemDef item, long nowMs, InventoryDelta delta)
+        public void ApplyUse(InventoryState state, InventoryEntry entry, ItemDef item, long nowMs, InventoryDelta delta, bool free = false)
         {
             var consumable = item.Consumable!;
             if (consumable.CooldownMs > 0) state.CooldownUntilMs[item.Id] = nowMs + consumable.CooldownMs;
-            if (consumable.Consumed) Take(state, entry, 1, delta);
+            if (consumable.Consumed && !free) Take(state, entry, 1, delta);
         }
 
         // ---- equip -----------------------------------------------------------------------------------------------------------------

@@ -143,6 +143,9 @@ public static class UiText
         ItemReasons.NotRefinable => "That cannot be refined.",
         ItemReasons.AtMaxRefine => "It cannot be refined any further.",
         ItemReasons.MissingMaterial => "You do not have enough material.",
+        ItemReasons.ResetInCombat => "Not while you are fighting.",
+        ItemReasons.ResetDead => "You cannot do that now.",
+        ItemReasons.NothingToReset => "There is nothing to take back.",
         _ => string.Empty,   // cancelled: the player moved on, nothing to say
     };
 
@@ -186,6 +189,54 @@ public static class UiText
 
     /// <summary>The skills button (T-502).</summary>
     public const string Skills = "Skills";
+
+    /// <summary>The button in the skill panel that opens the stats panel (T-503).</summary>
+    public const string Stats = "Stats";
+
+    /// <summary>The stats panel's title.</summary>
+    public const string StatsTitle = "Stats";
+
+    /// <summary>The button in the stats panel that goes back to the skill panel.</summary>
+    public const string BackToSkills = "Skills";
+
+    /// <summary>The label over the derived stats.</summary>
+    public const string DerivedTitle = "Derived";
+
+    /// <summary>Stat points left to spend, e.g. <c>Stat points: 4</c>.</summary>
+    public static string StatPoints(int points) => "Stat points: " + points.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>A primary stat's row, e.g. <c>STR 12</c>.</summary>
+    public static string StatLine(string stat, int value) => StatName(stat) + " " + value.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>A stat's + button with the server's cost, e.g. <c>+ (2)</c>; just <c>max</c> when it cannot be raised.</summary>
+    public static string RaiseButton(int cost) => cost > 0 ? "+ (" + cost.ToString(CultureInfo.InvariantCulture) + ")" : "max";
+
+    /// <summary>One derived stat, e.g. <c>ATK 24</c>.</summary>
+    public static string DerivedLine(string stat, int value) => StatName(stat) + " " + value.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>The short name of a primary or derived stat id.</summary>
+    public static string StatName(string stat) => stat switch
+    {
+        "str" => "STR", "agi" => "AGI", "vit" => "VIT", "int" => "INT", "dex" => "DEX", "luk" => "LUK",
+        "atk" => "ATK", "matk" => "MATK", "def" => "DEF", "mdef" => "MDEF", "hit" => "HIT", "flee" => "FLEE", "crit" => "CRIT",
+        "aspd" => "ASPD", "max_hp" => "Max HP", "max_sp" => "Max SP", _ => stat.ToUpperInvariant(),
+    };
+
+    /// <summary>The flash for a refused <c>raise_stat</c> (a "Stat reasons" term).</summary>
+    public static string StatRefused(string reason) => reason switch
+    {
+        StatReasons.NotEnoughPoints => "Not enough stat points.",
+        StatReasons.AtMaxValue => "That stat is at its highest.",
+        StatReasons.Dead => "You cannot do that now.",
+        _ => "That is not possible.",
+    };
+
+    /// <summary>The confirm button for using a reset item (T-503).</summary>
+    public const string ConfirmUse = "Use it";
+
+    /// <summary>What the bag says before a reset item is used, e.g. <c>Use Realign Tonic? This cannot be undone.</c></summary>
+    public static string UseOffer(string item, string? description) =>
+        "Use " + item + "?" + (description is { Length: > 0 } ? " " + description : string.Empty) + " Tap Use it to confirm.";
 
     /// <summary>The skill panel's title.</summary>
     public const string SkillsTitle = "Skills";

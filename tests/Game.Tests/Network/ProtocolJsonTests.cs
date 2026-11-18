@@ -42,6 +42,7 @@ public class ProtocolJsonTests
         { "use_skill on the ground at a level", new UseSkillMessage("skill.mana_font", 2, null, new GridCell(5, 6)), """{"type":"use_skill","skill":"skill.mana_font","level":2,"cell":[5,6]}""" },
         { "learn_skill", new LearnSkillMessage("skill.twin_strike"), """{"type":"learn_skill","skill":"skill.twin_strike"}""" },
         { "change_job", new ChangeJobMessage("job.spellbinder"), """{"type":"change_job","job":"job.spellbinder"}""" },
+        { "raise_stat", new RaiseStatMessage("str", 2), """{"type":"raise_stat","stat":"str","amount":2}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -106,6 +107,15 @@ public class ProtocolJsonTests
         },
         { "skills, nothing yet", new SkillsMessage("job.wanderer", 0, [], [], []), """{"type":"skills","job":"job.wanderer","points":0,"levels":[],"cooldowns":[],"jobs":[]}""" },
         { "cooldown", new CooldownMessage("skill.twin_strike", 1500), """{"type":"cooldown","skill":"skill.twin_strike","ms":1500}""" },
+        {
+            "stats", new StatsMessage(4, [new StatRecord("str", 3, 2), new StatRecord("luk", 99, 0)], [new DerivedRecord("atk", 12), new DerivedRecord("max_hp", 55)]),
+            """{"type":"stats","points":4,"stats":[["str",3,2],["luk",99,0]],"derived":[["atk",12],["max_hp",55]]}"""
+        },
+        { "stats, nothing yet", new StatsMessage(0, [], []), """{"type":"stats","points":0,"stats":[],"derived":[]}""" },
+        {
+            "rejected raise_stat", new RejectedMessage(MessageTypes.RaiseStat, StatReasons.NotEnoughPoints, null, Stat: "str"),
+            """{"type":"rejected","intent":"raise_stat","reason":"not_enough_points","stat":"str"}"""
+        },
         {
             "rejected skill intent", new RejectedMessage("use_skill", "on_cooldown", null, 7, Skill: "skill.twin_strike"),
             """{"type":"rejected","intent":"use_skill","reason":"on_cooldown","target":7,"skill":"skill.twin_strike"}"""

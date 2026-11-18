@@ -108,7 +108,7 @@ public sealed class InventoryPanel
             _interactive.Add(action);
         }
         _box.AddChild(_actions);
-        _use.Pressed += () => Act(entry => _session.UseItem(entry.Id));
+        _use.Pressed += OnUse;
         _equip.Pressed += () => Act(entry => _session.EquipItem(entry.Id));
         _unequip.Pressed += () => Act(entry => _session.UnequipSlot(entry.Slot!));
         _drop.Pressed += () => Act(entry => _session.DropItem(entry.Id, entry.Quantity));
@@ -119,6 +119,13 @@ public sealed class InventoryPanel
         {
             _tap();
             if (_samples || _session.Inventory.SelectedEntry is not { } entry) return;
+            if (_mode == Mode.UseOffer)
+            {
+                _session.UseItem(entry.Id);   // confirmed: the server checks the reset rules and keeps the item on a refusal
+                _session.Inventory.Select(null);
+                SetMode(Mode.Actions, tap: false);
+                return;
+            }
             _session.Refine(entry.Id);   // the server rolls; the selection stays, so the next step shows when the result is in
             SetMode(Mode.Actions, tap: false);
         };
@@ -235,6 +242,7 @@ public sealed class InventoryPanel
         Actions,
         CardTargets,
         RefineOffer,
+        UseOffer,
     }
 
     /// <summary>Redraws from the inventory when it changed. Nothing while closed; allocates only when something changed.</summary>
@@ -305,6 +313,8 @@ public sealed class InventoryPanel
         _choiceIds.Clear();
         if (selected is not null && _mode == Mode.CardTargets) DrawCardTargets(selected);
         else if (selected is not null && _mode == Mode.RefineOffer) DrawRefineOffer(selected);
+        else if (selected is not null && _mode == Mode.UseOffer) DrawUseOffer(selected);
+        _confirm.Text = _mode == Mode.UseOffer ? UiText.ConfirmUse : UiText.ConfirmRefine;
         for (var i = _choiceIds.Count; i < _choiceButtons.Count; i++) _choiceButtons[i].Visible = false;
     }
 
@@ -335,6 +345,25 @@ public sealed class InventoryPanel
         _offer.Text = UiText.RefineOffer(name, step.Level, step.SuccessPercent, _bundle.NameOf(step.Material), step.Quantity,
             _session.Inventory.Carried(step.Material), step.Failure);
         _confirm.Visible = true;
+    }
+
+    /// <summary>A reset item asks first (T-503): what it does, from the bundle's description, and the button that sends <c>use_item</c>.</summary>
+    private void DrawUseOffer(InventoryEntryRecord entry)
+    {
+        var item = _bundle.Item(entry.Item);
+        _offer.Text = UiText.UseOffer(_bundle.NameOf(entry.Item), item?.Description);
+        _confirm.Visible = true;
+    }
+
+    /// <summary>The Use button: an item that must be confirmed (a reset) shows its offer first; any other is used at once.</summary>
+    private void OnUse()
+    {
+        if (!_samples && _session.Inventory.SelectedEntry is { } entry && _bundle.Item(entry.Item) is { ConfirmUse: true })
+        {
+            SetMode(Mode.UseOffer);
+            return;
+        }
+        Act(e => _session.UseItem(e.Id));
     }
 
     /// <summary>What an entry is called in the panel: name and stack count, and for equipment its refine level and card slots.</summary>

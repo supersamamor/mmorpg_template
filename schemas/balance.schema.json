@@ -45,6 +45,25 @@
         "stat_point_cost": {
           "type": "string",
           "description": "Stat points needed to raise a stat by one. Variable: stat_value (the stat's current value, before the raise)."
+        },
+        "reset": {
+          "type": "object",
+          "properties": {
+            "free_below_base_level": {
+              "type": "integer",
+              "description": "A character below this base level resets for free: the item is not used up (its cooldown still runs). 0 means never free."
+            },
+            "refuse_in_combat": {
+              "type": "boolean",
+              "description": "True to refuse a reset while the character dealt or took damage within regen.out_of_combat_delay_ms."
+            },
+            "refuse_when_dead": {
+              "type": "boolean",
+              "description": "True to refuse a reset while the character is dead."
+            }
+          },
+          "additionalProperties": false,
+          "description": "When a stat or skill reset (reset_stats, reset_skills) is free or refused (T-503)."
         }
       },
       "additionalProperties": false,

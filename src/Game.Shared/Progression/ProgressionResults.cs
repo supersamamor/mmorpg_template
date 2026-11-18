@@ -9,6 +9,14 @@ namespace Game.Shared.Progression
     /// <param name="Events">One <see cref="LevelUp"/> / <see cref="JobLevelUp"/> per level reached, in order.</param>
     public sealed record ExpGainResult(int LevelsGained, int PointsAwarded, long ExpDiscarded, IReadOnlyList<IProgressionEvent> Events);
 
+    /// <summary>Outcome of a reset (T-503): the points that came back, 0 when there was nothing to reset (then nothing changed).</summary>
+    /// <param name="Refunded">Stat points (<c>reset_stats</c>) or skill points (<c>reset_skills</c>) returned to the unspent pool.</param>
+    public sealed record ResetResult(int Refunded)
+    {
+        /// <summary>True when something was reset.</summary>
+        public bool Changed => Refunded > 0;
+    }
+
     /// <summary>Why a stat or skill point spend was rejected.</summary>
     public enum SpendError
     {

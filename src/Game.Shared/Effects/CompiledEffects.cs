@@ -39,6 +39,8 @@ namespace Game.Shared.Effects
                 case KnockbackEffect k: return new CompiledPlain(k);
                 case TeleportEffect t: return new CompiledPlain(t);
                 case SummonEffect s: return new CompiledPlain(s);
+                case ResetStatsEffect r: return new CompiledPlain(r);
+                case ResetSkillsEffect r: return new CompiledPlain(r);
                 case AreaEffect a: return new CompiledArea(a, CompileList(a.Effects));
                 default: throw new ArgumentException("Effect type '" + def.Type + "' has no runner.", nameof(def));
             }

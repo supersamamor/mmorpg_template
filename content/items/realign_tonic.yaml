@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=../../schemas/item.schema.json
+id: item.realign_tonic
+name: Realign Tonic
+description: A clear, faintly humming tonic. Drink it to take back every stat point you have spent. Free to use below level 10.
+kind: consumable
+weight: 2
+buy_price: 500
+sell_price: 0
+max_stack: 99
+ground_asset_key: model.prop.loot_bag
+use_sfx: sfx.item.use.potion
+consumable:
+  cooldown_ms: 1000
+  consumed: true
+  effects:
+    - type: reset_stats

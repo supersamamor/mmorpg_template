@@ -12,5 +12,8 @@ public sealed record UseSkill(EntityId Entity, string SkillId, int Level, Entity
 /// <summary>A player asks to spend one skill point on <c>SkillId</c> (T-502). Refused with <c>SkillLearnRefused</c>.</summary>
 public sealed record LearnSkill(EntityId Entity, string SkillId) : IIntent;
 
+/// <summary>A player asks to raise primary stat <c>StatId</c> by <c>Amount</c> steps of one (T-503). Refused with <c>StatRaiseRefused</c>.</summary>
+public sealed record RaiseStat(EntityId Entity, string StatId, int Amount) : IIntent;
+
 /// <summary>A player asks to change to <c>JobId</c> (T-502). Refused with <c>JobChangeRefused</c>.</summary>
 public sealed record ChangeJob(EntityId Entity, string JobId) : IIntent;

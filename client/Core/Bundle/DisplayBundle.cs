@@ -269,6 +269,8 @@ public sealed class DisplayBundle
         {
             CardSlots = entry.TryGetProperty("card_slots", out var sockets) && sockets.ValueKind == JsonValueKind.Number ? Math.Max(0, sockets.GetInt32()) : 0,
             Refinable = entry.TryGetProperty("refinable", out var refinable) && refinable.ValueKind == JsonValueKind.True,
+            ConfirmUse = entry.TryGetProperty("confirm_use", out var confirmUse) && confirmUse.ValueKind == JsonValueKind.True,
+            Description = OptionalText(entry, "description"),
         };
     }
 
@@ -348,6 +350,12 @@ public sealed record ItemDisplay(string Id, string Name, string Kind, string? Ic
 
     /// <summary>True when the equipment can be refined.</summary>
     public bool Refinable { get; init; }
+
+    /// <summary>Using it asks for confirmation first (a stat or skill reset, T-503).</summary>
+    public bool ConfirmUse { get; init; }
+
+    /// <summary>Display text, or null.</summary>
+    public string? Description { get; init; }
 }
 
 /// <summary>One refine step as the bundle shows it (ARCHITECTURE §5.4): what a player needs to decide, never more.</summary>

@@ -33,6 +33,12 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>area</c>: Wrap child effects over an AoE shape.</summary>
         public const string Area = "area";
 
+        /// <summary><c>reset_stats</c>: Every allocated stat back to its start value, refunding the points spent (T-503).</summary>
+        public const string ResetStats = "reset_stats";
+
+        /// <summary><c>reset_skills</c>: Every learned skill back to 0, refunding the skill points spent (T-503).</summary>
+        public const string ResetSkills = "reset_skills";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             Damage,
@@ -44,6 +50,8 @@ namespace Game.Shared.Vocabulary
             Knockback,
             Teleport,
             Summon,
-            Area);
+            Area,
+            ResetStats,
+            ResetSkills);
     }
 }

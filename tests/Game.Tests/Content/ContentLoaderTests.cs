@@ -51,7 +51,7 @@ public class ContentLoaderTests
         var db = result.Database!;
         db.Jobs.Count.ShouldBe(3);
         db.Skills.Count.ShouldBe(11);
-        db.Items.Count.ShouldBe(18);
+        db.Items.Count.ShouldBe(20);
         db.Monsters.Count.ShouldBe(5);
         db.Statuses.Count.ShouldBe(4);
         db.Quests.Count.ShouldBe(4);

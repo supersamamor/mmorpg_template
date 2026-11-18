@@ -82,6 +82,16 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.ChangeJob;
     }
 
+    /// <summary>
+    /// <c>raise_stat</c> (T-503): spend stat points to raise primary stat <see cref="Stat"/> by <see cref="Amount"/> steps of one. The server prices every step
+    /// and may refuse (<see cref="RejectedMessage"/> with a "Stat reasons" term). <c>{"type":"raise_stat","stat":"str","amount":1}</c>.
+    /// </summary>
+    public sealed record RaiseStatMessage(string Stat, int Amount = 1) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.RaiseStat;
+    }
+
     /// <summary><c>stop_attack</c>: stop auto-attacking (a walk goes on). <c>{"type":"stop_attack"}</c>.</summary>
     public sealed record StopAttackMessage : ClientMessage
     {
@@ -401,7 +411,8 @@ namespace Game.Shared.Protocol
     /// <c>insert_card</c> or <c>refine</c>, if any.</param>
     /// <param name="Slot">The slot of a refused <c>equip</c> or <c>unequip</c>, if any.</param>
     /// <param name="Skill">The skill (or, for <c>change_job</c>, the job) of a refused <c>use_skill</c>, <c>learn_skill</c> or <c>change_job</c>, if any.</param>
-    public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null, long? Entry = null, string? Slot = null, string? Skill = null) : ServerMessage
+    /// <param name="Stat">The primary stat of a refused <c>raise_stat</c> (reason: a "Stat reasons" term), if any.</param>
+    public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null, long? Entry = null, string? Slot = null, string? Skill = null, string? Stat = null) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Rejected;
@@ -548,6 +559,23 @@ namespace Game.Shared.Protocol
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Skills;
+    }
+
+    /// <summary>One primary stat in a <see cref="StatsMessage"/>: its base value (allocated points included) and what raising it by one costs (0: it cannot be raised).</summary>
+    public sealed record StatRecord(string Stat, int Value, int NextCost);
+
+    /// <summary>One derived stat in a <see cref="StatsMessage"/>: its final value (floored), computed by the server.</summary>
+    public sealed record DerivedRecord(string Stat, int Value);
+
+    /// <summary>
+    /// <c>stats</c> (T-503, owner only): unspent stat points, the six primary stats with the cost of the next +1 (so the client never computes a cost), and the
+    /// derived stats the stats panel shows (<c>DerivedStats.Panel</c>). After every snapshot and after anything that changes them.
+    /// <c>{"type":"stats","points":4,"stats":[["str",3,2]],"derived":[["atk",12]]}</c>.
+    /// </summary>
+    public sealed record StatsMessage(int Points, IReadOnlyList<StatRecord> Stats, IReadOnlyList<DerivedRecord> Derived) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Stats;
     }
 
     /// <summary><c>cooldown</c> (T-502, owner only): <see cref="Skill"/> went on cooldown for <see cref="Ms"/> milliseconds.</summary>

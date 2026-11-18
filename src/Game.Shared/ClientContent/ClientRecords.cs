@@ -21,9 +21,10 @@ namespace Game.Shared.ClientContent
     /// <param name="EquipSfx">Equip sound key, or null.</param>
     /// <param name="CardSlots">How many cards the equipment holds (0 for anything else), so the bag can show its free sockets.</param>
     /// <param name="Refinable">True when the equipment can be refined, so the bag can offer it.</param>
+    /// <param name="ConfirmUse">True when using the item cannot be undone in a way the player should be warned about (T-503: a stat or skill reset), so the bag asks first.</param>
     public sealed record ClientItem(
         string Id, string Name, string? Description, string Kind, string? IconAssetKey, string? GroundAssetKey,
-        IReadOnlyList<string> Slots, string? WeaponType, string? VisualAssetKey, string? UseSfx, string? EquipSfx, int CardSlots = 0, bool Refinable = false);
+        IReadOnlyList<string> Slots, string? WeaponType, string? VisualAssetKey, string? UseSfx, string? EquipSfx, int CardSlots = 0, bool Refinable = false, bool ConfirmUse = false);
 
     /// <summary>
     /// The refine steps as far as the player needs them to decide (ARCHITECTURE §5.4, §6.8): the chance, the material and what a failure does. The whole

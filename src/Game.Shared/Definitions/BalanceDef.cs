@@ -217,6 +217,27 @@ namespace Game.Shared.Definitions
         /// <summary>Stat points needed to raise a stat by one. Variable: <c>stat_value</c> (the stat's current value, before the raise).</summary>
         [Formula]
         public string StatPointCost { get; init; } = string.Empty;
+
+        /// <summary>When a stat or skill reset (<c>reset_stats</c>, <c>reset_skills</c>) is free or refused (T-503).</summary>
+        public ResetBalanceDef Reset { get; init; } = new ResetBalanceDef();
+    }
+
+    /// <summary>
+    /// Rules for using a reset item (an item whose consumable effects include <c>reset_stats</c> or <c>reset_skills</c>). A refused use changes
+    /// nothing and uses nothing up. There is no currency yet, so a reset costs the item itself.
+    /// </summary>
+    public sealed record ResetBalanceDef
+    {
+        /// <summary>
+        /// A character below this base level resets for free: the item is not used up (its cooldown still runs). 0 means never free.
+        /// </summary>
+        public int FreeBelowBaseLevel { get; init; }
+
+        /// <summary>True to refuse a reset while the character dealt or took damage within <c>regen.out_of_combat_delay_ms</c>.</summary>
+        public bool RefuseInCombat { get; init; }
+
+        /// <summary>True to refuse a reset while the character is dead.</summary>
+        public bool RefuseWhenDead { get; init; }
     }
 
     /// <summary>

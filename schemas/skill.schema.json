@@ -355,6 +355,24 @@
             },
             "additionalProperties": false,
             "description": "area: apply child effects to every valid entity within Radius cells (Chebyshev, i.e. a square) of the effect's target."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "reset_stats"
+              }
+            },
+            "additionalProperties": false,
+            "description": "reset_stats (T-503): every allocated primary stat goes back to the start value and exactly the points spent come back as unspent stat points. Only on a consumable (or, later, a service), and only on its user."
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "reset_skills"
+              }
+            },
+            "additionalProperties": false,
+            "description": "reset_skills (T-503): every learned skill goes back to 0, exactly the skill points spent come back, passives come off and running casts are cancelled; cooldowns are kept. Only on a consumable (or, later, a service), and only on its user."
           }
         ],
         "description": "One unit of gameplay behavior (ARCHITECTURE §6.3). Skills, consumables, cards and statuses are lists of effects. In content each effect is a map whose type key selects the concrete record; the discriminator → type table is Effects. Type is computed from the concrete record, so it can never disagree with the record's shape."

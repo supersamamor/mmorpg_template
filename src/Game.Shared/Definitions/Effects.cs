@@ -172,4 +172,24 @@ namespace Game.Shared.Definitions
         /// <summary>Effects applied to each entity in the area.</summary>
         public IReadOnlyList<EffectDef> Effects { get; init; } = Empty.List<EffectDef>();
     }
+
+    /// <summary>
+    /// <c>reset_stats</c> (T-503): every allocated primary stat goes back to the start value and exactly the points spent come back as unspent stat
+    /// points. Only on a consumable (or, later, a service), and only on its user.
+    /// </summary>
+    public sealed record ResetStatsEffect : EffectDef
+    {
+        /// <inheritdoc />
+        public override string Type => EffectTypes.ResetStats;
+    }
+
+    /// <summary>
+    /// <c>reset_skills</c> (T-503): every learned skill goes back to 0, exactly the skill points spent come back, passives come off and running casts
+    /// are cancelled; cooldowns are kept. Only on a consumable (or, later, a service), and only on its user.
+    /// </summary>
+    public sealed record ResetSkillsEffect : EffectDef
+    {
+        /// <inheritdoc />
+        public override string Type => EffectTypes.ResetSkills;
+    }
 }

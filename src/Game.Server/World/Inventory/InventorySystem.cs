@@ -39,6 +39,7 @@ public sealed class InventorySystem : ITickSystem
     private readonly InventoryRules _rules;
     private readonly IInventoryStore _store;
     private readonly IClock _clock;
+    private readonly IPlayerProgressionStore? _progressions;
     private readonly Func<long> _newId;
     private readonly Dictionary<long, Holder> _holders = new();
     private readonly List<Pending> _pending = new();                    // sorted by player id
@@ -50,8 +51,9 @@ public sealed class InventorySystem : ITickSystem
     private long _nowMs;
 
     /// <summary>Creates the inventory system for one instance; <paramref name="store"/> is shared by every instance, <paramref name="clock"/> times cooldowns.</summary>
-    public InventorySystem(InventoryContent content, IInventoryStore store, IClock clock)
+    public InventorySystem(InventoryContent content, IInventoryStore store, IClock clock, IPlayerProgressionStore? progressions = null)
     {
+        _progressions = progressions;
         _content = content ?? throw new ArgumentNullException(nameof(content));
         _rules = content.Rules;
         _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -187,6 +189,8 @@ public sealed class InventorySystem : ITickSystem
         var state = holder.State;
         var reason = _rules.CanUse(state, entryId, _clock.NowMilliseconds, out var entry, out var item);
         if (reason is null && entry!.Slot is not null) reason = ItemReasons.ItemEquipped;
+        var free = false;
+        if (reason is null) reason = CheckReset(holder.Entity, item!, out free);
         if (reason is not null)
         {
             Refuse(context, holder, MessageTypes.UseItem, reason, entryId: entryId);
@@ -194,9 +198,38 @@ public sealed class InventorySystem : ITickSystem
         }
         // The effects are combat's: it runs the consumable's effects through the effect runner on its next tick, on ItemUsed (T-501).
         _delta.Clear();
-        _rules.ApplyUse(state, entry!, item!, _clock.NowMilliseconds, _delta);
-        context.Publish(new ItemUsed(holder.Entity.Id, item!.Id, item.Consumable!.Consumed));
+        _rules.ApplyUse(state, entry!, item!, _clock.NowMilliseconds, _delta, free);
+        context.Publish(new ItemUsed(holder.Entity.Id, item!.Id, item.Consumable!.Consumed && !free));
         Changed(context, holder, InventoryChanges.Used, item.Id);
+    }
+
+    /// <summary>
+    /// The reset rules (T-503, <c>progression.reset</c>) for an item whose consumable effects include <c>reset_stats</c> or <c>reset_skills</c>, checked
+    /// before anything is used up: refused while dead or in combat when the balance says so, and when it would change nothing. <paramref name="free"/>
+    /// is true below <c>free_below_base_level</c>: the reset happens and the item is kept. Null reason for any other item.
+    /// </summary>
+    private string? CheckReset(Entity player, ItemDef item, out bool free)
+    {
+        free = false;
+        var stats = false;
+        var skills = false;
+        foreach (var effect in item.Consumable!.Effects)
+        {
+            if (effect is ResetStatsEffect) stats = true;
+            else if (effect is ResetSkillsEffect) skills = true;
+        }
+        if (!stats && !skills) return null;
+        var rules = _content.Balance.Progression.Reset;
+        if (rules.RefuseWhenDead && player.Dead) return ItemReasons.ResetDead;
+        if (rules.RefuseInCombat && _nowMs < player.InCombatUntilMs) return ItemReasons.ResetInCombat;
+        if (_progressions is null || !_progressions.TryGet(player.Id, out var state)) return null;
+        var start = _content.Balance.Progression.StartingStatValue;
+        var anything = false;
+        if (stats) foreach (var value in state.Stats.Values) anything |= value > start;
+        if (skills) anything |= state.Skills.Count > 0;
+        if (!anything) return ItemReasons.NothingToReset;
+        free = state.BaseLevel < rules.FreeBelowBaseLevel;
+        return null;
     }
 
     // ---- equip ---------------------------------------------------------------------------------------------------------------------------

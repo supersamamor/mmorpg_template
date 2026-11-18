@@ -65,5 +65,8 @@ namespace Game.Shared.Vocabulary
             HpRegen,
             SpRegen,
             WeightLimit);
+
+        /// <summary>The derived stats the stats panel shows and the <c>stats</c> message carries (T-503), in display order.</summary>
+        public static readonly VocabularySet Panel = new VocabularySet(Atk, Matk, Def, Hit, Flee, Aspd, MaxHp, MaxSp);
     }
 }

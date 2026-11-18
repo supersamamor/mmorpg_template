@@ -62,6 +62,79 @@ public sealed partial class CombatSystem
         foreach (var change in events) context.Publish(new PlayerProgressed(player.Id, change));
     }
 
+    // ---- stats and resets (T-503) -----------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A <c>raise_stat</c>: <see cref="ProgressionRules.RaiseStat"/> on the player's progression, then the new base value on its sheet (the derived stats
+    /// follow in the same tick; HP and SP pools are re-synced). A dead player is refused; every refusal is a <see cref="StatReasons"/> term.
+    /// </summary>
+    private void RaiseStatOf(TickContext context, Entity player, string statId, int amount)
+    {
+        if (player.Kind != EntityKind.Player || !_progressions.TryGet(player.Id, out var state)) return;
+        string? reason = null;
+        if (player.Dead) reason = StatReasons.Dead;
+        else if (amount > StatReasons.MaxAmount) reason = StatReasons.InvalidAmount;
+        SpendResult? result = null;
+        if (reason is null)
+        {
+            result = _progression.RaiseStat(state, statId, amount);
+            if (!result.Success) reason = StatReasonFor(result.Error);
+        }
+        if (reason is not null)
+        {
+            context.Publish(new StatRaiseRefused(player.Id, statId, reason));
+            return;
+        }
+        ApplyStats(player, state);
+        context.Publish(new StatRaised(player.Id, statId, result!.NewValue, result.PointsSpent));
+    }
+
+    private static string StatReasonFor(SpendError error) => error switch
+    {
+        SpendError.UnknownStat => StatReasons.UnknownStat,
+        SpendError.AtMaxStatValue => StatReasons.AtMaxValue,
+        SpendError.NotEnoughPoints => StatReasons.NotEnoughPoints,
+        _ => StatReasons.InvalidAmount,
+    };
+
+    /// <summary>Writes the progression's primary stats to the sheet's base values and re-syncs the HP and SP pools to the new maximums.</summary>
+    private static void ApplyStats(Entity player, ProgressionState state)
+    {
+        if (player.Stats is not { } sheet) return;
+        foreach (var stat in PrimaryStats.All.Ordered)
+            if (state.Stats.TryGetValue(stat, out var value)) sheet.Base[stat] = value;
+        player.Vitals?.Sync(sheet);
+    }
+
+    /// <summary><c>reset_stats</c> on a player: allocated stats back to the start value, the points refunded, the sheet updated.</summary>
+    private void ResetStatsOf(TickContext context, Entity player)
+    {
+        if (player.Kind != EntityKind.Player || !_progressions.TryGet(player.Id, out var state)) return;
+        var result = _progression.ResetStats(state);
+        if (!result.Changed) return;
+        ApplyStats(player, state);
+        context.Publish(new StatsReset(player.Id, result.Refunded));
+    }
+
+    /// <summary>
+    /// <c>reset_skills</c> on a player: every skill to 0 with the points refunded, passives off its sheet, a running cast cancelled. Cooldowns stay
+    /// (they are timed on the clock, not on the skill), so a reset cannot be used to cast again at once.
+    /// </summary>
+    private void ResetSkillsOf(TickContext context, Entity player)
+    {
+        if (player.Kind != EntityKind.Player || !_progressions.TryGet(player.Id, out var state)) return;
+        var learned = state.Skills.Keys.ToArray();
+        var result = _progression.ResetSkills(state);
+        if (!result.Changed) return;
+        if (player.Stats is { } sheet)
+        {
+            foreach (var id in learned) sheet.Modifiers.RemoveBySource(SkillRules.PassiveSource(id));
+            player.Vitals?.Sync(sheet);
+        }
+        if (_chaseById.TryGetValue(player.Id.Value, out var chase) && chase.Cast is not null) End(context, chase, AttackReasons.Cancelled);
+        context.Publish(new SkillsReset(player.Id, result.Refunded));
+    }
+
     private void ApplyPassive(Entity player, ProgressionState state, string skillId)
     {
         if (player.Stats is not { } sheet || !_content.Progression.TryGetSkill(skillId, out var skill) || skill is null || !skill.Passive) return;

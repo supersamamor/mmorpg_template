@@ -44,7 +44,7 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 ||
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -76,6 +76,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-items") >= 0) await ItemsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-statuses") >= 0) await StatusesRunAsync();
             else if (Array.IndexOf(_args, "--e2e-skills") >= 0) await SkillsRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-stats") >= 0) await StatsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
@@ -724,6 +725,90 @@ public sealed class AutoRun
         var now = kinds.Where(h => h.Kind == kind).Average(h => h.Amount);
         Print($"items: average hit on {kind} with +{dirk.Refine} {then:0.0}, with +{dirk.Refine + 1} {now:0.0}");
         Check(now > then, "the refined weapon hits harder");
+    }
+
+    /// <summary>
+    /// T-503's run (real content: a new character starts with 10 stat points, a stat reset and a skill reset): open the stats panel through the skill panel, spend
+    /// stat points with the + buttons (the points go down by the server's costs and the derived stats follow), close it, open the bag, select the stat reset,
+    /// see the confirmation, confirm, and see the points and stats come back; then the skill reset, refused by the server because nothing was learned (it
+    /// stays in the bag). Below level 10 a reset is free, so the items stay. No stat, item or cost is named here: the stats are the rows the server sent and
+    /// the reset items the ones the bundle says to confirm.
+    /// </summary>
+    private async Task StatsRunAsync()
+    {
+        await LoginAsync();
+        var hud = _main.Hud!;
+        var book = Session.Stats;
+        await UntilAsync(() => book.Known, 10, "the own stats after the snapshot");
+        var startPoints = book.Points;
+        var startStats = book.Stats.Select(s => s.Value).ToArray();
+        var startDerived = book.Derived.Select(d => d.Value).ToArray();
+        Check(startPoints > 0 && book.Stats.Count > 0 && book.Derived.Count > 0, "a new character has stat points, stats and derived stats");
+        Check(book.Stats.All(s => s.NextCost > 0), "the server names a cost for every stat's next point");
+        Print($"stats: start {startPoints} points, stats [{string.Join(", ", book.Stats.Select(s => s.Stat + " " + s.Value + " (+" + s.NextCost + ")"))}]");
+
+        Press(hud.SkillsButton);
+        await FramesAsync(3);
+        Press(hud.Skills!.StatsButton);
+        await FramesAsync(3);
+        var panel = hud.Stats!;
+        Check(panel.Open && !hud.Skills.Open, "the Stats button closes the skills and opens the stats panel");
+        Print($"stats: panel {panel.Text}");
+        Print($"stats: layout: {panel.Layout}");
+        await ShotAsync("-stats");
+
+        var first = panel.RaiseButtons[0];
+        var cost = book.Stats[0].NextCost;
+        Press(first.Button);
+        await UntilAsync(() => book.Points == startPoints - cost, 10, "the points spent by the server's cost");
+        Check(book.Stats[0].Value == startStats[0] + 1, "the raised stat is one higher");
+        var second = panel.RaiseButtons[2];
+        var cost2 = book.Stats[2].NextCost;
+        Press(second.Button);
+        await UntilAsync(() => book.Points == startPoints - cost - cost2, 10, "the second raise");
+        var raisedDerived = book.Derived.Select(d => d.Value).ToArray();
+        Check(!raisedDerived.SequenceEqual(startDerived), "the derived stats followed the raised stats");
+        await FramesAsync(3);
+        Print($"stats: raised {panel.Text}");
+        Check(panel.Text.Contains(UiText.StatPoints(book.Points), StringComparison.Ordinal), "the panel shows the points the server sent");
+
+        // Close it; then the bag: a reset item asks first.
+        Press(panel.CloseButton);
+        await FramesAsync(3);
+        Check(!panel.Open, "Close closes the stats panel");
+
+        var bundle = _main.Bundle!;
+        var resets = Session.Inventory.Entries.Where(e => bundle.Item(e.Item) is { ConfirmUse: true }).ToList();
+        Check(resets.Count == 2, "a new character carries both reset items, found by the bundle's confirm flag");
+        Press(hud.BagButton);
+        await FramesAsync(3);
+        // Use each in turn: the stat reset changes the points; the skill reset has nothing to take back, so the server refuses it and says why.
+        var refusals = 0;
+        foreach (var entry in resets)
+        {
+            var before = book.Points;
+            var flashBefore = Session.Ui.Flash;
+            Press(hud.Bag!.ItemButtons.First(b => b.Entry == entry.Id).Button);
+            await FramesAsync(2);
+            Press(hud.Bag.Actions.Use);
+            await FramesAsync(3);
+            Check(hud.Bag.HintText.Contains(UiText.ConfirmUse, StringComparison.Ordinal), "using a reset item asks first");
+            Print($"stats: confirm: {hud.Bag.HintText}");
+            await ShotAsync("-confirm");
+            Press(hud.Bag.CardAndRefine.Confirm);
+            await FramesAsync(10);
+            await Task.Delay(500);
+            Print($"stats: used {bundle.NameOf(entry.Item)}: points {before} -> {book.Points}; flash '{Session.Ui.Flash}'");
+            Check(Session.Inventory.Find(entry.Id) is not null, "a free reset (below level 10) keeps the item, and so does a refusal");
+            if (book.Points == before) refusals += Session.Ui.Flash.Length > 0 ? 1 : 0;
+        }
+        Check(refusals == 1, "the reset with nothing to take back was refused with a reason on the flash line");
+        Check(book.Points == startPoints, "the stat reset gave exactly the spent points back");
+        Check(book.Stats.Select(s => s.Value).SequenceEqual(startStats), "every stat is back at its start value");
+        Check(book.Derived.Select(d => d.Value).SequenceEqual(startDerived), "the derived stats are back too");
+        Press(hud.BagButton);
+        await FramesAsync(2);
+        Print("stats: points back, stats back, both items kept");
     }
 
     private static void Press(Button button) => button.EmitSignal(BaseButton.SignalName.Pressed);

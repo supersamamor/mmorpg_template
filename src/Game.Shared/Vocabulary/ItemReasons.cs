@@ -70,6 +70,15 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>missing_material</c>: the carried material for the next refine level is less than its quantity.</summary>
         public const string MissingMaterial = "missing_material";
 
+        /// <summary><c>reset_in_combat</c> (T-503): a reset item is refused for <c>progression.reset.refuse_in_combat</c> while the character fought within the regeneration delay.</summary>
+        public const string ResetInCombat = "reset_in_combat";
+
+        /// <summary><c>reset_dead</c> (T-503): a reset item is refused while the character is dead.</summary>
+        public const string ResetDead = "reset_dead";
+
+        /// <summary><c>nothing_to_reset</c> (T-503): the reset item would change nothing (no stat raised, or no skill learned); it is not used up.</summary>
+        public const string NothingToReset = "nothing_to_reset";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             ItemGone,
@@ -92,7 +101,10 @@ namespace Game.Shared.Vocabulary
             NoFreeSocket,
             NotRefinable,
             AtMaxRefine,
-            MissingMaterial);
+            MissingMaterial,
+            ResetInCombat,
+            ResetDead,
+            NothingToReset);
     }
 
     /// <summary>

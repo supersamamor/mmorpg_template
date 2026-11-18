@@ -117,6 +117,7 @@ public static class ClientBundleWriter
         Opt(w, "equip_sfx", i.EquipSfx);
         if (i.CardSlots > 0) w.WriteNumber("card_slots", i.CardSlots);
         if (i.Refinable) w.WriteBoolean("refinable", true);
+        if (i.ConfirmUse) w.WriteBoolean("confirm_use", true);
     }
 
     private static void Refine(Utf8JsonWriter w, ClientRefine? refine)
