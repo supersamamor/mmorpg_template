@@ -99,6 +99,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-401 | Inventory, equip slots, weight: pick up, use, equip, unequip, drop; own-inventory messages; HUD inventory panel | Claude Code | Opus 5.5 | [T-401](../tasks/prompts/T-401.md) | T-302, T-307, T-211, T-305 | Review | Touches `Net/**` for the item messages only (approved by the user 2026-11-15); ADR-002 #160 |
 | T-402 | Cards and refining: socket cards, refine with data-driven chances and failure outcomes, bag panel | Claude Code | Sonnet 5.5 | [T-402](../tasks/prompts/T-402.md) | T-401 | Review | Touches `Net/**` for the two item messages only (approved by the user 2026-11-16) |
 | T-403 | Worn equipment on 3D characters: attach points, skinned meshes, weapon-type clips | Claude Code | Sonnet 5.5 | [T-403](../tasks/prompts/T-403.md) | T-401, T-207 | Review | ADR-002 #164, #170, #173 |
+| T-404 | Early balance with weapons, skills and stat points: Rock Beetle, Thornback Boar, Thistle Hollow, time to level 10; job-change weapon rule; reset item drops | Claude Code | Sonnet 5.5 | [T-404](../tasks/prompts/T-404.md) | T-309, T-401, T-501, T-502, T-503 | In Progress | ADR-002 #117, #175, #219, #235 |
 | T-405 | Equipment manifest validation, preloading worn visuals, placeholder weapon shapes by type, LFS pointer message | Claude Code | Sonnet 5.5 | [T-405](../tasks/prompts/T-405.md) | T-403, T-501 | Review | ADR-002 #181, #182, #208 |
 
 ## Phase 5 — Skills & statuses
@@ -108,6 +109,12 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-501 | Effect runner + statuses: every effect type, status apply/stack/tick/expire, consumables, monster skills, statuses on the wire and client | Claude Code | Opus 5.5 | [T-501](../tasks/prompts/T-501.md) | T-401, T-402, T-303, T-309 | Review | Touches `Net/**` for status fields only (approved by the user 2026-11-17); ADR-002 #118, #171 |
 | T-502 | Player skills: learning, skill trees, job change, casting, cooldowns, passives, allied summons, cast bars | Claude Code | Sonnet 5.5 | [T-502](../tasks/prompts/T-502.md) | T-501 | Review | Touches `Net/**` for skill, job and cast messages only (approved by the user 2026-11-18); ADR-002 #204, #205 |
 | T-503 | Stat allocation (raise_stat, stats panel) and respec items: reset_stats / reset_skills effects, data-driven rules | Claude Code | Sonnet 5.5 | [T-503](../tasks/prompts/T-503.md) | T-501, T-502 | Review | Touches `Net/**` for raise_stat and own stat fields only (standing approval 2026-11-18) |
+
+## Phase 6 — NPCs & quests
+
+| ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
+|----|------|-------|-------|--------|------------|--------|-------|
+| T-601 | NPCs in the world, dialogue graphs, conditions and actions, NPC services (save point, refine decision, resets) | Claude Code | Sonnet 5.5 | [T-601](../tasks/prompts/T-601.md) | T-501, T-502, T-503, T-222 | In Progress | Touches `Net/**` for talk and dialogue messages only (standing approval 2026-11-18); ADR-002 #187, #202, #234 |
 
 ## Phase 7 — Persistence & accounts
 
@@ -120,9 +127,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Phase | Task | Agent | Model | Status |
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
-| T-404 | 4 | Early balance with weapons: retune the Rock Beetle and Thornback Boar (ADR-002 #117, #175) | Claude Code | Sonnet 5.5 | Backlog |
 | T-406 | 4 | Toon pass leftovers: ARCHITECTURE §8 placeholder colours, theme-relative toon light include in map scenes, `--measure` stuck in Reconnecting, HUD canvas draw spike; stats re-post on status changes, reset item icons, stats panel in the layout check (ADR-002 #232, #233, #235, #236) | Claude Code | Sonnet 5.5 | Backlog |
-| T-601 | 6 | Dialogue graphs + NPC interaction | Claude Code | Sonnet 5.5 | Backlog |
 | T-602 | 6 | Quest state machine on event bus | Claude Code | Opus 5.5 | Backlog |
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
 | T-702 | 7 | Persistence (EF Core + Postgres), transactional inventory | Claude Code | Opus 5.5 | Backlog |
