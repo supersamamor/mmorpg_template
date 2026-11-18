@@ -23,6 +23,8 @@ namespace Game.Shared.Combat
     /// <c>max_crit_chance</c>] [crit_chance]; draw one more roll [crit_roll]; critical when roll &lt; chance.</item>
     /// <item>Magic attacks (a damage effect with <c>magic: true</c>) always land and never crit, and draw no rolls:
     /// <c>hit</c>/<c>flee</c>/<c>crit</c> are physical stats in the vocabulary.</item>
+    /// <item>Damage with <see cref="AttackContext.AlwaysHits"/> (a status tick, T-501) is not an attack either: it lands, never crits and draws
+    /// no rolls, physical or magic.</item>
     /// <item>Damage = <c>physical_damage</c> or <c>magic_damage</c> [defense] × skill multiplier [skill_multiplier] ×
     /// element multiplier [element_multiplier] × each <see cref="IDamageModifier"/> [its name] × crit multiplier
     /// [crit_multiplier] = [raw]. When recording, [base] is the damage formula with <c>t_def</c> and <c>t_mdef</c> set to 0,
@@ -80,7 +82,7 @@ namespace Game.Shared.Combat
             var magic = context.IsMagic;
             var crit = false;
 
-            if (!magic)
+            if (!magic && !context.AlwaysHits)
             {
                 var hitChance = Clamp(_rules.HitChance.Evaluate(f), balance.MinHitChance, balance.MaxHitChance);
                 var hitRoll = _random.NextDouble();

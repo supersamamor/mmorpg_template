@@ -85,6 +85,8 @@ public sealed class UiState
             if (UiText.ItemRefused(rejected.Reason) is { Length: > 0 } why) SetFlash(why, now);
             return;
         }
+        // A stun (T-501): say why the tap did nothing.
+        if (UiText.Held(rejected.Reason) is { Length: > 0 } held) SetFlash(held, now);
         if (rejected.Intent == MessageTypes.Move && Marker is { } marker && rejected.Cell is { } cell && marker.X == cell.X && marker.Y == cell.Y)
         {
             Marker = null;

@@ -135,9 +135,11 @@ public sealed class CombatRig
     public CombatRig(MapGrid grid, IEnumerable<MonsterDef> monsters, BalanceDef? balance = null, IEnumerable<DropTableDef>? drops = null,
         bool ai = false, ulong seed = 1, AiBalanceDef? aiBalance = null, int bucketSize = 4, int viewRadius = 1,
         Func<ITickSystem, ITickSystem>? wrap = null, bool aoi = false, IReadOnlyDictionary<string, (string MapId, GridCell Cell)>? respawns = null,
-        int maxVisible = int.MaxValue, int capHysteresis = 0, CapReservations reservations = default)
+        int maxVisible = int.MaxValue, int capHysteresis = 0, CapReservations reservations = default, Game.Shared.Effects.EffectLibrary? effects = null,
+        MapGrid[]? moreMaps = null)
     {
-        Catalog = TestMonsters.Catalog(monsters.ToArray());
+        _mapId = grid.MapId;
+        Catalog = effects is null ? TestMonsters.Catalog(monsters.ToArray()) : new MonsterCatalog(monsters.ToArray(), TestMonsters.Catalog().CreateStats, effects);
         Content = TestCombat.Content(Catalog, balance ?? TestCombat.Balance(), drops, respawns);
         wrap ??= s => s;
         var timings = aiBalance ?? TestMonsters.Ai;
@@ -147,11 +149,14 @@ public sealed class CombatRig
         if (ai) pipeline.Add(() => wrap(new MonsterAiSystem(Catalog, timings, bucketSize, viewRadius)));
         pipeline.Add(() => wrap(new CombatSystem(Content, Progressions)));
         if (aoi) pipeline.Add(() => new AoiSystem(bucketSize, viewRadius, maxVisible, capHysteresis, reservations));
-        World = new GameWorld([grid], pipeline, seed, new ManualClock(), Log);
+        World = new GameWorld([grid, .. moreMaps ?? []], pipeline, seed, new ManualClock(), Log);
         Instance.Events.SubscribeAll(e => Events.Add((Instance.TickNumber, e)));
     }
 
-    public MapInstance Instance => World.Instances[0];
+    private readonly string _mapId;
+
+    /// <summary>The instance of the rig's own grid (other maps, if any, are in <see cref="World"/>).</summary>
+    public MapInstance Instance => World.Instances.First(i => i.MapId == _mapId);
 
     private IEnumerable<ITickSystem> Unwrapped => Instance.Systems.Select(s => s is IWrappedSystem w ? w.Inner : s);
 

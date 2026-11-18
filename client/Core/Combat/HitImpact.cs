@@ -13,6 +13,9 @@ public enum HitKind
 
     /// <summary>The attack missed.</summary>
     Miss = 2,
+
+    /// <summary>Damage from a status tick (poison, T-501): not an attack, so the source does not swing and no hit effect plays; the number shows.</summary>
+    Status = 3,
 }
 
 /// <summary>Whose fight a hit is, from this client's point of view.</summary>
@@ -49,5 +52,6 @@ public delegate void ImpactHandler(in HitImpact impact);
 public static class HitKinds
 {
     /// <summary>The kind of a <c>HitResults</c> term; anything unknown counts as a plain hit.</summary>
-    public static HitKind Of(string result) => result == HitResults.Crit ? HitKind.Crit : result == HitResults.Miss ? HitKind.Miss : HitKind.Hit;
+    public static HitKind Of(string result) => result == HitResults.Crit ? HitKind.Crit : result == HitResults.Miss ? HitKind.Miss
+        : result == HitResults.Status ? HitKind.Status : HitKind.Hit;
 }

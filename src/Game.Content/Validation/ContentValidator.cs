@@ -25,6 +25,7 @@ public static class ContentValidator
         new AudioRule(),
         new ThemeFallbackRule(),
         new ModifierRule(),
+        new EffectRule(),
         new UnusedRule(),
     };
 

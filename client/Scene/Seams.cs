@@ -75,6 +75,12 @@ public interface IEntityVisualSource
 /// <summary>Colours of the placeholder world. Not content: T-208 replaces these with the theme's art.</summary>
 internal static class PlaceholderColors
 {
+    /// <summary>The dot above a character with a debuff (T-501).</summary>
+    public static readonly Color StatusDebuff = new(0.75f, 0.35f, 0.95f);
+
+    /// <summary>The dot above a character with only buffs (T-501).</summary>
+    public static readonly Color StatusBuff = new(0.35f, 0.85f, 0.95f);
+
     public static readonly Color GroundA = new(0.36f, 0.52f, 0.31f);
     public static readonly Color GroundB = new(0.33f, 0.48f, 0.29f);
     public static readonly Color SafeA = new(0.46f, 0.56f, 0.38f);

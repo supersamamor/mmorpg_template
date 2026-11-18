@@ -16,6 +16,7 @@ public sealed class WorldPresenter
 {
     private const int MaxBars = 256;
     private const float BarHeight = 2.05f;
+    private const float StatusMarkAbove = 0.22f;   // the status dot sits just above the HP bar
 
     private readonly WorldView _world;
     private readonly UiState _ui;
@@ -25,6 +26,7 @@ public sealed class WorldPresenter
     private readonly DetailPlanner _planner;
     private readonly MultiMesh _bars;
     private readonly MultiMesh _rings;
+    private readonly MultiMesh _statusMarks;
     private readonly MeshInstance3D _marker;
     private readonly MeshInstance3D _ring;
     private bool[] _fullRate = new bool[64];
@@ -38,6 +40,12 @@ public sealed class WorldPresenter
 
     /// <summary>A death became visible (after its killing blow landed): world x, ground height, world z. The combat effects play there.</summary>
     public event Action<float, float, float>? DeathShown;
+
+    /// <summary>A status started on an entity (T-501): status id, world x, ground height, world z, and whether it is the own character. Its vfx plays there.</summary>
+    public event Action<string, float, float, float, bool>? StatusStarted;
+
+    /// <summary>Status markers drawn above other characters this frame (for the scripted run and measuring).</summary>
+    public int StatusMarkCount => _statusMarks.VisibleInstanceCount;
 
     private IReadOnlyList<string>? _dressOverride;
     private int _dressEpoch;
@@ -121,6 +129,39 @@ public sealed class WorldPresenter
             CustomAabb = new Aabb(new Vector3(-4096, -8, -4096), new Vector3(8192, 16, 8192)),
         });
 
+        // Status markers (T-501): one small dot above every other character with a status, coloured debuff or buff. One multimesh, so one draw call for
+        // the whole crowd (ADR-002 row 164). The own character's statuses are icons in the HUD instead.
+        var dotShader = new Shader
+        {
+            Code = """
+                shader_type spatial;
+                render_mode unshaded, cull_disabled, shadows_disabled;
+                void vertex() {
+                    vec3 center = MODEL_MATRIX[3].xyz;
+                    MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], vec4(center, 1.0));
+                }
+                void fragment() {
+                    if (distance(UV, vec2(0.5)) > 0.5) discard;
+                    ALBEDO = COLOR.rgb;
+                }
+                """,
+        };
+        _statusMarks = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseColors = true,
+            Mesh = new QuadMesh { Size = new Vector2(0.22f, 0.22f) },
+            InstanceCount = MaxBars,
+            VisibleInstanceCount = 0,
+        };
+        parent.AddChild(new MultiMeshInstance3D
+        {
+            Multimesh = _statusMarks,
+            MaterialOverride = new ShaderMaterial { Shader = dotShader },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            CustomAabb = new Aabb(new Vector3(-4096, -8, -4096), new Vector3(8192, 16, 8192)),
+        });
+
         _marker = Disc(parent, 0.8f, PlaceholderColors.Marker);
         _ring = Disc(parent, 1.1f, PlaceholderColors.TargetRing);
     }
@@ -200,6 +241,12 @@ public sealed class WorldPresenter
                 if (entity.Hp.HasValue || entity.Mine) _barsDirty = true; // bars and rings follow
             }
             visual.SetMotion(entity.IsWalking, entity.AttackCount, entity.HitCount);
+            if (entity.StartedStatuses.Count > 0)
+            {
+                foreach (var status in entity.StartedStatuses)
+                    StatusStarted?.Invoke(status, (float)entity.X, _ground.At(entity.X, entity.Z), (float)entity.Z, entity.Id == ownId);
+                entity.StartedStatuses.Clear();
+            }
             if (entity.DeathFxPending)
             {
                 entity.DeathFxPending = false;
@@ -303,6 +350,18 @@ public sealed class WorldPresenter
             rings++;
         }
         _rings.VisibleInstanceCount = rings;
+
+        var marks = 0;
+        for (var i = 0; i < entities.Count && marks < MaxBars; i++)
+        {
+            var entity = entities[i];
+            if (entity.Statuses.Count == 0 || entity.Dead || entity.Id == ownId) continue;
+            _statusMarks.SetInstanceTransform(marks, new Transform3D(Basis.Identity,
+                new Vector3((float)entity.X, _ground.At(entity.X, entity.Z) + BarHeight + StatusMarkAbove, (float)entity.Z)));
+            _statusMarks.SetInstanceColor(marks, entity.HasDebuff ? PlaceholderColors.StatusDebuff : PlaceholderColors.StatusBuff);
+            marks++;
+        }
+        _statusMarks.VisibleInstanceCount = marks;
     }
 
     private void SyncMarkers()

@@ -112,6 +112,7 @@ public sealed class DisplayBundle
     private readonly SortedSet<string> _modelKeys = new SortedSet<string>(StringComparer.Ordinal);
     private readonly Dictionary<string, MapData> _maps = new Dictionary<string, MapData>(StringComparer.Ordinal);
     private readonly Dictionary<string, ItemDisplay> _items = new Dictionary<string, ItemDisplay>(StringComparer.Ordinal);
+    private readonly Dictionary<string, StatusDisplay> _statuses = new(StringComparer.Ordinal);
     private readonly List<RefineStep> _refineSteps = new List<RefineStep>();
 
     private DisplayBundle(int formatVersion, string contentHash)
@@ -160,6 +161,9 @@ public sealed class DisplayBundle
     /// <summary>What the bundle says about an item (kind, icon, slots, weapon type, worn visual), or null for an id it does not know.</summary>
     public ItemDisplay? Item(string? itemId) => itemId is not null && _items.TryGetValue(itemId, out var item) ? item : null;
 
+    /// <summary>A status's icon and vfx asset keys (T-501), or null for an id the bundle does not have.</summary>
+    public StatusDisplay? Status(string? statusId) => statusId is not null && _statuses.TryGetValue(statusId, out var status) ? status : null;
+
     /// <summary>The highest refine level (<c>refine.yaml</c>); 0 when nothing refines.</summary>
     public int RefineMaxLevel { get; private set; }
 
@@ -191,6 +195,9 @@ public sealed class DisplayBundle
                     result._names[id] = Text(entry, "name");
                     ReadSounds(result, list, id, entry);
                     if (list == "items") result._items[id] = ReadItem(id, result._names[id], entry);
+                    if (list == "statuses")
+                        result._statuses[id] = new StatusDisplay(id, result._names[id], entry.TryGetProperty("debuff", out var debuff) && debuff.ValueKind == JsonValueKind.True,
+                            OptionalText(entry, "icon"), OptionalText(entry, "vfx"));
                     if (entry.TryGetProperty(modelField, out var model) && model.ValueKind == JsonValueKind.String && model.GetString() is { Length: > 0 } key)
                     {
                         result._models[id] = key;
@@ -311,3 +318,6 @@ public sealed record ItemDisplay(string Id, string Name, string Kind, string? Ic
 /// <param name="Quantity">How many units of it.</param>
 /// <param name="Failure">A "Refine failures" term: <c>keep</c>, <c>down</c> or <c>break</c>.</param>
 public sealed record RefineStep(int Level, int SuccessPercent, string Material, int Quantity, string Failure);
+
+/// <summary>What the client shows of a status (T-501): its name, whether it is a debuff, its icon and its vfx asset keys (theme data, resolved by the theme chain, §7.7).</summary>
+public sealed record StatusDisplay(string Id, string Name, bool Debuff, string? IconKey, string? VfxKey);

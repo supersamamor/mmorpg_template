@@ -51,6 +51,12 @@ public sealed class Hud
     private readonly ProgressBar _hpBar = Bar(new Color(0.35f, 0.8f, 0.4f));
     private readonly ProgressBar _spBar = Bar(new Color(0.35f, 0.6f, 0.95f));
     private readonly ProgressBar _expBar = Bar(new Color(0.95f, 0.8f, 0.3f));
+    private readonly HFlowContainer _statusRow = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+    private readonly List<StatusSlot> _statusSlots = new();
+    private int _statusVersion = -1;
+    private int _statusSecond = -1;
+    private float _statusIconPx = 22;
+    private Func<string, Texture2D?>? _iconLoader;
     private readonly Label _banner = Wrapped(HorizontalAlignment.Center);
     private readonly PanelContainer _targetFrame = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
     private readonly Label _target = Wrapped(HorizontalAlignment.Center);
@@ -133,6 +139,7 @@ public sealed class Hud
         _left.AddChild(_spText);
         _left.AddChild(_spBar);
         _left.AddChild(_expBar);
+        _left.AddChild(_statusRow);
 
         _banner.Visible = false;
         _flash.Visible = false;
@@ -374,9 +381,11 @@ public sealed class Hud
     /// <summary>Finds an item icon texture by asset key (set once the theme is loaded).</summary>
     public Func<string, Texture2D?>? IconLoader
     {
-        get => _bag?.IconLoader;
+        get => _iconLoader;
         set
         {
+            _iconLoader = value;
+            _statusVersion = -1;   // the status icons can load now
             if (_bag is not null) _bag.IconLoader = value;
         }
     }
@@ -504,6 +513,10 @@ public sealed class Hud
         _hpBar.CustomMinimumSize = new Vector2(0, Dp(10));
         _spBar.CustomMinimumSize = new Vector2(0, Dp(8));
         _expBar.CustomMinimumSize = new Vector2(0, Dp(6));
+        _statusIconPx = Dp(22);
+        _statusRow.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(Dp(3)));
+        _statusRow.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(Dp(2)));
+        _statusVersion = -1;
         _targetBar.CustomMinimumSize = new Vector2(0, Dp(8));
 
         var buttonHeight = Target(ButtonDp);
@@ -613,8 +626,85 @@ public sealed class Hud
             }
         }
 
+        RefreshStatuses(world);
         if (_hotbarModel is not null && _hotbarVersion != _hotbarModel.Version) RefreshHotbar();
         _bag?.Refresh();
+    }
+
+    /// <summary>The own character's status icons shown now, and their texts (for the scripted run).</summary>
+    public IReadOnlyList<string> StatusTexts
+    {
+        get
+        {
+            var texts = new List<string>();
+            foreach (var slot in _statusSlots)
+                if (slot.Box.Visible) texts.Add(slot.Id + " " + slot.Text.Text + (slot.Icon.Texture is null ? " (letter)" : " (icon)"));
+            return texts;
+        }
+    }
+
+    /// <summary>
+    /// The own character's statuses under the bars (T-501): one icon each (the bundle's <c>icon</c> through the theme; without one, the first letter of
+    /// the name, §7.7), tinted by debuff or buff, with its stacks and whole seconds left counted down on the view clock. Redrawn only when the statuses
+    /// change or a second passes while some are shown, so a quiet frame costs two comparisons.
+    /// </summary>
+    private void RefreshStatuses(WorldView world)
+    {
+        var own = world.Own;
+        var statuses = own?.Statuses;
+        var count = statuses?.Count ?? 0;
+        var second = count > 0 ? (int)Math.Floor(Clocks.View()) : 0;
+        var version = own?.StatusVersion ?? -2;
+        if (version == _statusVersion && second == _statusSecond) return;
+        _statusVersion = version;
+        _statusSecond = second;
+        var now = Clocks.View();
+        for (var i = 0; i < count; i++)
+        {
+            if (i == _statusSlots.Count) _statusSlots.Add(NewStatusSlot());
+            var slot = _statusSlots[i];
+            var status = statuses![i];
+            var display = _bundle?.Status(status.Id);
+            if (slot.Id != status.Id)
+            {
+                slot.Id = status.Id;
+                var texture = display?.IconKey is { } key ? _iconLoader?.Invoke(key) : null;
+                slot.Icon.Texture = texture;
+                slot.Letter.Text = texture is null ? UiText.StatusLetter(display?.Name ?? status.Id) : string.Empty;
+            }
+            slot.Icon.CustomMinimumSize = new Vector2(_statusIconPx, _statusIconPx);
+            slot.Box.SelfModulate = status.Debuff ? new Color(1f, 0.75f, 1f) : new Color(0.8f, 1f, 1f);
+            slot.Text.Text = UiText.StatusLeft(status.Stacks, status.SecondsLeft(now));
+            slot.Box.Visible = true;
+        }
+        for (var i = count; i < _statusSlots.Count; i++) _statusSlots[i].Box.Visible = false;
+    }
+
+    private StatusSlot NewStatusSlot()
+    {
+        var box = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        var icon = new TextureRect
+        {
+            MouseFilter = Control.MouseFilterEnum.Ignore, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+        };
+        var letter = new Label { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore };
+        letter.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        icon.AddChild(letter);
+        var text = new Label { HorizontalAlignment = HorizontalAlignment.Center, MouseFilter = Control.MouseFilterEnum.Ignore };
+        text.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(_statusIconPx * 0.5f)));
+        box.AddChild(icon);
+        box.AddChild(text);
+        _statusRow.AddChild(box);
+        return new StatusSlot(box, icon, letter, text);
+    }
+
+    private sealed class StatusSlot(VBoxContainer box, TextureRect icon, Label letter, Label text)
+    {
+        public readonly VBoxContainer Box = box;
+        public readonly TextureRect Icon = icon;
+        public readonly Label Letter = letter;
+        public readonly Label Text = text;
+        public string? Id;
     }
 
     /// <summary>

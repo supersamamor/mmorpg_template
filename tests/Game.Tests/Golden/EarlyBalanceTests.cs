@@ -100,8 +100,9 @@ public class EarlyBalanceTests
     /// Rock Beetle (level 7) and Thornback Boar (level 10) are for later levels and weapons (T-401).
     /// </summary>
     [Theory]
-    [InlineData(5, 11, 0.428)]
-    [InlineData(6, 12, 0.676)]
+    // T-501: the duel now models the wasp's Venom Sting and its poison (ADR-002 row 118); before it, 0.428 and 0.676.
+    [InlineData(5, 11, 0.433)]
+    [InlineData(6, 12, 0.643)]
     public void Level_5_and_6_characters_have_an_even_fight_with_a_sting_wasp(int level, int str, double winRate)
     {
         var r = Fight(level, Build(("str", str)), "monster.sting_wasp");

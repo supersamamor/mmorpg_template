@@ -260,6 +260,40 @@ Skills, consumables, cards and statuses are lists of **effects**. Effect types a
 only place gameplay behavior lives in code (see VOCABULARY.md). New skill = new YAML.
 New *kind* of behavior = new effect type + tests.
 
+- **One runner** (T-501, `Game.Shared/Effects/EffectRunner`): pure and deterministic, so the server and `stats --duel` run the same code. It runs a compiled
+  effect list (`EffectLibrary`: every skill, consumable and status compiled once at boot) for a caster, a primary target (an entity, a ground cell, or both)
+  and a skill level, with the instance's random source and tick clock. It decides every number; an `IEffectWorld` applies the outcome and raises the
+  events. On the server that world is combat's (§6.7), because `damage` must take the auto-attack's HP, death and EXP-share path.
+- **Numbers** come from the effect's own formulas and `formulas.yaml`, with the caster as caster variables, the target as `t_` variables and `level`.
+  `damage`: `CombatResolver` with the effect's multiplier and element (a status tick always lands and never crits: no rolls). `heal` / `restore_sp`: the
+  amount, floored, never below 0, never above max. `apply_status`: `chance` (a roll only strictly between 0 and 1) then `duration_ms` (0 or less applies
+  nothing). `remove_status`: every status with a listed id or tag. `modify_stat`: in a status's `on_apply`, a modifier with the source `status:<id>` (§6.1).
+- **Order.** Effects run in list order on the primary target; one on a dead or vanished target is skipped (a killing `damage` ends the list there).
+  `area` collects its targets first, then runs all its children on one before the next: living entities within `radius` (Chebyshev) of its center (the
+  ground cell, else the target's cell, else the caster's), on the caster's side (`friendly`, the caster included) or the other side (players and monsters
+  are the two sides in v1), in line of sight of the center, never a player in a safe zone for a hostile area; ordered by distance from the center, then
+  entity id. The area's `friendly` must match its skill's `target.friendly` (load error otherwise).
+- **Moves.** `knockback` pushes the target away from the caster (in an area, from its center) along the nearest of the 8 directions, one cell at a time,
+  stopping before a cell that is not walkable or a diagonal that would cut a corner; `teleport` sends the caster to its save point (a player's: the respawn
+  point of its map, until save points exist), a cell (of another map with `map_id`) or a random walkable cell of its map. Both are warps (phase 3);
+  movement ends an interrupted walk with `warped`, and observers see a cell change (the client glides or snaps, §7). Forced moves ignore `prevents_move`.
+- **Summon** asks the spawner (`SummonRequested`): the summons are ordinary monsters with `Entity.Owner` set, created on a random walkable cell within one
+  cell of the target cell. **Cap:** an owner has at most the effect's `count` live summons of that monster (casting again tops them up). They are never
+  respawned and are despawned after `duration_ms` (or as a corpse when killed). A player's summon is still a monster to everyone in v1 (allied summons: T-502).
+- **Statuses** (`StatusSet` on `Entity.Statuses`). **Stacking:** applying a status the bearer lacks starts it (1 stack); again below `max_stacks` adds a stack
+  and runs `on_apply` once more (a stacked `modify_stat` counts per stack); at `max_stacks` it only refreshes. Either way its end becomes the later of the
+  current end and now + the new duration, its tick schedule stays, and the newest applier becomes its source. `on_tick` runs once per stack every
+  `tick_interval_ms` of simulated time, with ticks at or before the end included (8 s of 1 s poison = 8 ticks), then the status expires (`StatusExpired`),
+  all on the instance's tick clock. Tick damage is credited to the applier (kill credit; the EXP share while it is on the map). Every status ends on death
+  (`died`) and when its bearer arrives on another map (`warped`; each instance has its own tick clock and the applier stays behind); a warp within the map
+  keeps them. Removal always takes the `status:<id>` modifiers off. `prevents_move`, `prevents_attack`, `prevents_skills` are read through
+  `Entity.CannotMove` / `CannotAttack` / `CannotUseSkills` by movement (`cannot_move`), combat (`cannot_attack`; a running auto-attack pauses) and skill
+  resolution (`cannot_use_skills`).
+- **Load errors, not runtime refusals.** `EffectSupport` (validation code `effect.unsupported`) refuses an effect the runner cannot run where it stands
+  (VOCABULARY "Effect types"); a status applying itself is refused, and nesting of statuses' `on_apply` stops at `EffectRunner.MaxDepth`.
+- **Events** (hard rule 7): `DamageDealt` (result `status` for ticks), `HpRestored`, `SpRestored`, `StatusApplied`, `StatusExpired`, `StatusRemoved`,
+  `KnockedBack`, `Teleported`, `SummonRequested` → `MonsterSummoned`, `AreaApplied`; skills: `SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`.
+
 ### 6.4 Quests
 State machine per quest: `prerequisites → steps[objective] → rewards`.
 Objectives listen to the event bus (`MonsterKilled`, `ItemAcquired`, `NpcTalked`, …).
@@ -294,6 +328,13 @@ Two systems in `Game.Server/World/Monsters`, after movement in the tick (`Server
   return ──home──► idle   (ignores players and hits; after return_timeout it is put on its home cell)
   ```
   A monster back on its home cell raises `MonsterReturned`; combat then resets its damage shares and, if `ai.heal_on_return` (default true), heals it to full.
+- **Skills** (T-501). When an attack is due, the AI first looks at the monster's `ai.skills` in order and casts the first one that is off cooldown, whose target
+  is within the skill's `target.range` (a self skill always is; a ground skill aims at the target's cell) and whose `chance` roll wins; the cast takes that
+  attack's place. A cast stands the monster still for `cast_time_ms` × its `cast_time_mod` (`SkillCastStarted`), then raises `SkillRequested`, which combat
+  resolves on its next tick like an attack request (caster alive and free to cast, target alive and on the right side, range, line of sight above range 1,
+  no hostile skill on a player in a safe zone; else `SkillRefused`), running the skill's effects through the runner (§6.3). The cooldown (`cooldown_ms`)
+  starts when the cast ends. A lost target or `prevents_skills` drops a cast. A monster held by `prevents_move` sends no moves and one held by
+  `prevents_attack` requests no attacks. `stats --duel` models the same choice (ADR-002 row 118).
 - **The AI only decides.** It walks with `MoveTo` / `StopMove` intents (applied on the next tick) and follows the movement events; it asks
   combat to attack with the `AttackRequested` event (attacker, target, both cells, range, time). Combat (§6.7) re-checks and resolves the hit and
   publishes `DamageDealt` / `EntityDied`, which the AI and the spawner listen to. Nobody calls another system.
@@ -312,9 +353,14 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
   stats; fractions of a point are carried, so the total follows the rate whatever the tick length), never above max. Dealing or taking an
   attack (a miss included) pauses it for `regen.out_of_combat_delay_ms`. The dead never regenerate. A monster healed back to full by it
   forgets its damage shares, as when a hit leaves it at full HP.
-- **Per tick:** intents (`AttackTarget`, `StopAttack`, `Respawn`) → vitals clamp and regeneration → the monster `AttackRequested` events raised last tick,
+- **Effects and statuses** (T-501): combat hosts the instance's effect runner (§6.3): each tick, after regeneration, every living entity's statuses tick and
+  expire (entity id order); after the attack requests, last tick's `SkillRequested` events resolve (above, §6.6) and last tick's `ItemUsed` events run their
+  consumable's effects on the user (a user that left the map or died in between is not affected; the item stays used). A status's damage lands through the
+  same path as a hit, with the applier as source and killer. Every entity's statuses go on `Entity.StatusLook` at the end of the tick for the AOI.
+- **Per tick:** intents (`AttackTarget`, `StopAttack`, `Respawn`) → vitals clamp and regeneration → status ticks → the monster `AttackRequested` events raised last tick,
   in order, each re-checked (both alive on this map, a player target not in a `safe` zone, Chebyshev distance within the request's range,
-  and for a ranged attack (range above 1) line of sight between the two cells; otherwise `AttackRefused` with a reason) → player auto-attacks in entity id order → ground item expiry.
+  and for a ranged attack (range above 1) line of sight between the two cells, and an attacker free of `prevents_attack`; otherwise `AttackRefused` with a reason) →
+  skill requests → consumables used → player auto-attacks in entity id order → ground item expiry → status looks.
 - **Player auto-attack.** `AttackTarget` (monsters only; refused in a `safe` zone) keeps attacking until the target dies or leaves, the player
   sends `StopAttack`, a new move order (seen as a `MovementStarted` / `MovementStopped` combat did not cause), or no path leads into range.
   The player walks in with `MoveTo` (re-path at most every `combat.player_repath_interval_ms`) and attacks at its `aspd` within
@@ -361,9 +407,8 @@ derived stat `weight_limit` (`formulas.yaml`).
     it (`ItemAcquired`; the entity is despawned). A new move order or a stop cancels the walk (`cancelled`), no path ends it (`unreachable`), and an item taken
     or expired meanwhile is `item_gone`. Two players on one item in the same tick: the intent that arrived first wins.
   - *Use:* a consumable that is not worn, off its cooldown (`cooldown_ms` per item id, on the server clock so it holds across maps). Its effects go through
-    one seam, `IItemEffects`, that T-501's effect runner will own; T-401's `BasicItemEffects` runs only `heal` and `restore_sp`, each amount a formula with
-    the user's stats as the caster variables, never above max. A consumable with any other effect type is refused (`unsupported_effect`) and nothing is
-    used up: today `item.antidote` (`remove_status`) and `item.swift_elixir` (`apply_status`). `consumed: false` items stay.
+    the effect runner (T-501, §6.3): the inventory uses the item up and raises `ItemUsed`, and combat runs its effects on the user on its next tick, at level 1.
+    Every effect type runs (an effect that could not is a load error), so the antidote cures poison and the Swift Elixir applies Swift. `consumed: false` items stay.
   - *Equip:* kind `equip`; `slot` (any one of the item's `slots`; without one, the first of them that is free, else the first); `min_base_level`;
     `job_ids`, and for a weapon its type in the job's `weapon_types`. A filled slot swaps in the same operation. **Two-handed rule (data):** a weapon whose
     `weapon_type` is in `inventory.two_handed_weapon_types` (`sword_2h`, `staff`, `bow`) placed in `weapon` also takes `shield`: putting it on takes a
@@ -702,6 +747,13 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 - **Disconnects are normal.** When a socket drops or the app is backgrounded, the server keeps
   the character in the world for a grace period (`grace-period-ms`, server config, default 60 s), then saves (T-702) and logs it out.
 - **Resume** (T-210): the client reconnects with a resume token and receives a full snapshot, then deltas (lifecycle step 6 below).
+- **Statuses on the wire** (T-501). Every view record carries the entity's active statuses, `statuses: [{id, stacks, left_ms, debuff}]` (left out when none;
+  `debuff` only when true; `left_ms` = simulated ms left at the message's tick), and a delta's `changed` carries the whole list when one starts, stacks, is
+  refreshed or ends (empty when none is left). Never per tick: the client counts down itself. Never a chance, a number, an interval, tags, `prevents_*` or
+  the applier (the bundle already says buff or debuff; it is repeated so a marker needs no lookup). The client shows the own character's statuses as icons
+  under its bars (the bundle's `icon`, else the first letter of the name, §7.7), a dot above every other character with any (one multimesh: one draw call),
+  and plays the status `vfx` key once when one starts. Status damage arrives in `hits` with the result `status`: a number, no swing. A monster's cast is an
+  event on the server only (`SkillCastStarted`); cast bars are T-502.
 - **Snapshot / delta shape** (T-204, T-307, T-401): a view record is `id, kind, display_key, cell, facing, next, speed, hp, dead` (`next` and
   `speed` only while walking, `hp` only for entities that fight, `dead` only when true; a ground item adds `quantity` and `mine`; a player adds `weapon`, its
   weapon type, and `worn`, the item ids it wears that have a worn visual, left out when empty: the client finds the visuals in its bundle for T-403, and never gets stats); a delta is
@@ -777,7 +829,8 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 
   A view record is `{"id":7,"kind":"monster","display_key":"monster.x","cell":[3,4],"facing":"e","next":[4,4],"speed":3.51,"hp":0.37}`;
   a ground item is `{"id":9,"kind":"item","display_key":"item.x","cell":[4,5],"facing":"s","quantity":2,"mine":true}`; a player is
-  `{"id":42,"kind":"player","display_key":"job.wanderer","cell":[12,12],"facing":"n","hp":1,"weapon":"dagger","worn":["item.bone_dirk"]}`.
+  `{"id":42,"kind":"player","display_key":"job.wanderer","cell":[12,12],"facing":"n","hp":1,"weapon":"dagger","worn":["item.bone_dirk"]}`; a monster with a status adds
+  `"statuses":[{"id":"status.poison","stacks":1,"left_ms":7400,"debuff":true}]`.
 - **Session lifecycle:**
   1. The client connects and must send `hello` within `hello-timeout-ms`.
   2. The server checks the protocol version, then the content hash (T-209): a `content` that differs from the server's ends in `bye update_required`; a missing one is accepted in development (logged as a warning) and refused elsewhere. Then it checks the dev login. The dev login is development only; any other environment refuses it. A `hello` with `resume`

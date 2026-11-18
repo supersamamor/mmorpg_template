@@ -42,7 +42,8 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--measure") >= 0;
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 ||
+        Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
     public static async void QuitAfterShot(Main main, string[] args, string what = "the bundle")
@@ -71,6 +72,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-warp") >= 0) await WarpRunAsync();
             else if (Array.IndexOf(_args, "--e2e-hill") >= 0) await HillRunAsync();
             else if (Array.IndexOf(_args, "--e2e-items") >= 0) await ItemsRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-statuses") >= 0) await StatusesRunAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
@@ -159,6 +161,73 @@ public sealed class AutoRun
     /// T-401's run (on a content copy where every kill drops a weapon and a potion, and new characters start with nothing): kill, tap the drop to pick it up,
     /// open the bag and equip the weapon through its buttons, see the hits get stronger, and use a potion. Every step goes through the HUD and the input path.
     /// </summary>
+    /// <summary>
+    /// T-501's run (on a content copy where new characters start with a Swift Elixir and the weak slimes cast Iron Guard on themselves when they fight):
+    /// use the elixir through the bag and see Swift in the HUD, then attack a slime until it shows Iron Skin, as a status in the world view and a
+    /// marker above it. Every step goes through the HUD and the input path; the screenshot (windowed) shows both.
+    /// </summary>
+    private async Task StatusesRunAsync()
+    {
+        await LoginAsync();
+        await UntilAsync(() => Session.Inventory.Known, 10, "the own inventory after the snapshot");
+        var hud = _main.Hud!;
+        // The run's content copy starts a character with one consumable only, one that applies a status (no ids in client code: the first consumable).
+        var elixir = Session.Inventory.Entries.FirstOrDefault(e => _main.Bundle!.Item(e.Item)?.Kind == Game.Shared.Vocabulary.ItemKinds.Consumable);
+        Check(elixir is not null, "carrying the start consumable");
+        Press(hud.BagButton);
+        await FramesAsync(3);
+        Press(hud.Bag!.ItemButtons.First(b => b.Entry == elixir!.Id).Button);
+        await FramesAsync(2);
+        Check(hud.Bag.Actions.Use.Visible, "a selected elixir offers Use");
+        Press(hud.Bag.Actions.Use);
+        await UntilAsync(() => Own().Statuses.Count > 0, 10, "a status on the own character");
+        Press(hud.BagButton);
+        await FramesAsync(3);
+        var own = Own().Statuses[0];
+        Print($"statuses: own {string.Join(", ", Own().Statuses.Select(s => s.Id + " x" + s.Stacks + " " + s.SecondsLeft(Clocks.View()) + "s" + (s.Debuff ? " debuff" : "")))}; " +
+              $"HUD [{string.Join("; ", hud.StatusTexts)}]");
+        Check(hud.StatusTexts.Any(t => t.StartsWith(own.Id, StringComparison.Ordinal)), "the HUD shows the own status");
+        Check(own.SecondsLeft(Clocks.View()) > 0, "time left on the own status");
+
+        var open = NearestOpenCellOutsideSafeZones(CurrentMap(), Own().Cell);
+        await TapCellAsync(open);
+        await UntilAsync(() => !Own().IsWalking && Own().Cell.X == open.X && Own().Cell.Y == open.Y, 30, "leaving the safe zone");
+        EntityView? buffed = null;
+        var clock = Stopwatch.StartNew();
+        while (buffed is null && clock.Elapsed.TotalSeconds < 120)
+        {
+            var monster = NearestMonster();
+            if (monster is null)
+            {
+                await WalkTowardMapMiddleAsync();
+                continue;
+            }
+            if (!OnScreen(monster))
+            {
+                await TapCellAsync(StepToward(monster.Cell));
+                await SecondsAsync(1);
+                continue;
+            }
+            await TapWorldAsync(new Vector3((float)monster.X, 0.45f, (float)monster.Z));
+            var fight = Stopwatch.StartNew();
+            while (fight.Elapsed.TotalSeconds < 15 && World.Find(monster.Id) is { Dead: false } m && m.Statuses.Count == 0) await FrameAsync();
+            if (World.Find(monster.Id) is { Dead: false, Statuses.Count: > 0 } found) buffed = found;
+            else await SecondsAsync(0.5);
+        }
+        Check(buffed is not null, "a monster with a status in view");
+        // A new move order ends the auto-attack, so the slime (a tough one in this copy) stays alive for the picture.
+        var here = Own().Cell;
+        var away = new GridCell(here.X + 2, here.Y);
+        foreach (var (dx, dy) in new[] { (2, 0), (-2, 0), (0, 2), (0, -2) })
+            if (CurrentMap().IsWalkable(here.X + dx, here.Y + dy)) { away = new GridCell(here.X + dx, here.Y + dy); break; }
+        await TapCellAsync(away);
+        await SecondsAsync(1.5);
+        Print($"statuses: monster #{buffed!.Id} {_main.Bundle!.NameOf(buffed.DisplayKey)} has {string.Join(", ", buffed.Statuses.Select(s => s.Id + (s.Debuff ? " debuff" : "")))}; " +
+              $"markers drawn {_main.Presenter!.StatusMarkCount}; effects started {_main.Fx?.Totals.Effects}");
+        Check(_main.Presenter!.StatusMarkCount >= 1, "a status marker above the monster");
+        await ShotAsync();
+    }
+
     private async Task ItemsRunAsync()
     {
         await LoginAsync();
@@ -662,6 +731,7 @@ public sealed class AutoRun
         World.Combat.Impact += count;
         var droppedBefore = World.Combat.Dropped;
         int maxNumbers = 0, maxEffects = 0, maxPending = 0, calmFrames = 0, fxFrames = 0;
+        int maxStatused = 0, maxDebuffed = 0, maxMarks = 0;   // T-501
         double calmDraws = 0, fxDraws = 0, maxShown = 0;
         _main.CountAllocations = true;
         if (Array.IndexOf(_args, "--fight") >= 0) _ = HuntOneAsync(60); // the player fights too, so dealt and taken numbers show
@@ -685,6 +755,12 @@ public sealed class AutoRun
             sumDraws += draws;
             sumTriangles += triangles;
             sumOnScreen += CountOnScreen();
+            if (frames % 10 == 0)
+            {
+                maxStatused = Math.Max(maxStatused, World.Entities.Count(e => e.Statuses.Count > 0));
+                maxDebuffed = Math.Max(maxDebuffed, World.Entities.Count(e => e.HasDebuff));
+                maxMarks = Math.Max(maxMarks, _main.Presenter?.StatusMarkCount ?? 0);
+            }
             if (_main.Fx is { } fx)
             {
                 var (numbers, effects) = fx.Active;
@@ -724,6 +800,8 @@ public sealed class AutoRun
         await BreakdownAsync();
         Print($"measure: peak frame by pass: 3D {peak.Opaque}, shadow {peak.Shadow}, canvas (HUD, numbers) {peak.Canvas}; {peak.OnScreen} entities on screen, visuals at LOD0 {peak.Lod0}, LOD1 {peak.Lod1}");
         Print($"measure: draw calls avg {(calmFrames > 0 ? calmDraws / calmFrames : 0):0.0} in {calmFrames} frames with no number or effect on screen, {(fxFrames > 0 ? fxDraws / fxFrames : 0):0.0} in {fxFrames} frames with some");
+        Print($"measure: statuses (T-501): at most {maxStatused} entities in view with statuses ({maxDebuffed} with a debuff) and {maxMarks} markers at once; at the end " +
+              $"{World.Entities.Count(e => e.Statuses.Count > 0)} with statuses, own [{string.Join(", ", World.Own?.Statuses.Select(st => st.Id) ?? [])}]");
         Print($"measure: static memory {OS.GetStaticMemoryUsage() / (1024 * 1024)} MB; video {Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / (1024 * 1024):0} MB; adapter {RenderingServer.GetVideoAdapterName()}");
         if (!shot) await ShotAsync();
 

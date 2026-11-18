@@ -96,6 +96,27 @@ public static class UiText
     public static string Dropped(string item, int quantity) =>
         quantity > 1 ? "Dropped: " + item + " x" + quantity.ToString(CultureInfo.InvariantCulture) : "Dropped: " + item;
 
+    /// <summary>
+    /// The flash for a move or attack a status refused (T-501: a "Movement reasons" <c>cannot_move</c> or "Attack reasons" <c>cannot_attack</c> term);
+    /// empty for every other reason, which needs no word.
+    /// </summary>
+    public static string Held(string reason) => reason switch
+    {
+        "cannot_move" => "You cannot move right now.",
+        AttackReasons.CannotAttack => "You cannot attack right now.",
+        _ => string.Empty,
+    };
+
+    /// <summary>
+    /// Under a status icon in the HUD (T-501): its stacks when above 1 and the whole seconds left, e.g. <c>"x2 7s"</c>; a status with no time
+    /// shown yet reads just its stacks.
+    /// </summary>
+    public static string StatusLeft(int stacks, int seconds) =>
+        (stacks > 1 ? "x" + stacks.ToString(CultureInfo.InvariantCulture) + " " : string.Empty) + seconds.ToString(CultureInfo.InvariantCulture) + "s";
+
+    /// <summary>The letter drawn for a status whose icon the theme does not have (§7.7 fallback): the first letter of its name.</summary>
+    public static string StatusLetter(string name) => name.Length > 0 ? name.Substring(0, 1).ToUpperInvariant() : "?";
+
     /// <summary>The flash when something went into the bag.</summary>
     public static string PickedUp(string item) => "Picked up: " + item;
 
@@ -109,7 +130,6 @@ public static class UiText
         ItemReasons.InventoryFull => "Your bag is full.",
         ItemReasons.NotUsable => "That cannot be used.",
         ItemReasons.Cooldown => "Not yet.",
-        ItemReasons.UnsupportedEffect => "That cannot be used yet.",
         ItemReasons.NotEquipment => "That cannot be worn.",
         ItemReasons.WrongSlot => "That does not go there.",
         ItemReasons.LevelTooLow => "Your level is too low for that.",

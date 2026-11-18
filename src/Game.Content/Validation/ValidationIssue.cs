@@ -98,6 +98,8 @@ public static class ValidationCodes
     public const string AppearanceColor = "appearance.color";
     /// <summary>An appearance default points at an option that does not exist (for that gender).</summary>
     public const string AppearanceDefault = "appearance.default";
+    /// <summary>An effect the effect runner cannot run where it stands (T-501, <c>EffectSupport</c>).</summary>
+    public const string EffectUnsupported = "effect.unsupported";
     /// <summary>A rule threw; this is a validator bug, reported so it cannot pass silently.</summary>
     public const string RuleCrashed = "validator.rule_crashed";
 

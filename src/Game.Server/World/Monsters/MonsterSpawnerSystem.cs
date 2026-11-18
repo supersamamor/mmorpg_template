@@ -1,4 +1,6 @@
 using Game.Server.Events;
+using Game.Server.World.Combat;
+using Game.Server.World.Effects;
 using Game.Shared.Definitions;
 using Game.Shared.Vocabulary;
 using Game.Shared.World;
@@ -17,6 +19,11 @@ namespace Game.Server.World.Monsters;
 /// tick the death was raised in, on a fresh random cell of the same area. The dead monster itself stays in the world as a corpse for
 /// <c>death.corpse_ms</c> (so clients can play the death animation) and is despawned then; the respawn timer does not wait for it. A monster that
 /// leaves the map some other way (despawned by someone else, warped) frees its slot the same way.</para>
+/// <para><b>Summons</b> (T-501): a <see cref="SummonRequested"/> (a <c>summon</c> effect) is handled on the next tick. Its owner must still be alive on
+/// this map. The <b>cap</b>: an owner has at most the effect's <c>count</c> live summons of that monster, so casting again only tops them up. Each
+/// one is created like a spawned monster (stats from the catalog, <see cref="EntitySpawned"/> with spawn index -1, so the AI runs it from its cell as
+/// home) on a random walkable cell within one cell of the requested one, with <see cref="Entity.Owner"/> set (<see cref="MonsterSummoned"/>). It is
+/// never respawned: it is despawned when its <c>duration_ms</c> is over, or as a corpse after <c>death.corpse_ms</c> when it dies.</para>
 /// <para>Respawn timers run whether or not anyone is near; the spawner's per-tick cost is one comparison per waiting slot. Allocation after
 /// warm-up: only the entity, its stat sheet and the event when a monster (re)spawns.</para>
 /// </remarks>
@@ -29,6 +36,9 @@ public sealed class MonsterSpawnerSystem : ITickSystem
     private readonly List<EntityId> _died = new();
     private readonly List<EntityId> _left = new();
     private readonly Queue<(EntityId Id, long DueMs)> _corpses = new();   // one corpse time for all, so in despawn order
+    private readonly List<SummonRequested> _summonRequests = new();
+    private readonly Dictionary<long, Summoned> _summons = new();          // live summons by entity id
+    private readonly List<long> _expired = new();
     private readonly int _corpseMs;
     private SpawnEntry[] _entries = [];
     private MapGrid? _grid;
@@ -58,6 +68,9 @@ public sealed class MonsterSpawnerSystem : ITickSystem
     /// <summary>Live monsters this spawner owns.</summary>
     public int LiveCount => _byEntity.Count;
 
+    /// <summary>Live summoned monsters (they belong to no spawn entry).</summary>
+    public int SummonCount => _summons.Count;
+
     /// <summary>Monsters created so far, first spawns and respawns.</summary>
     public long Spawned { get; private set; }
 
@@ -79,13 +92,21 @@ public sealed class MonsterSpawnerSystem : ITickSystem
 
         foreach (var id in _died)
         {
+            if (_summons.Remove(id.Value))
+            {
+                _corpses.Enqueue((id, _lastTickMs + _corpseMs));   // a summon is never respawned
+                continue;
+            }
             if (!_byEntity.TryGetValue(id.Value, out var slot)) continue;
             Free(slot);   // the respawn timer counts from the death tick (the tick before this one)
             _corpses.Enqueue((id, _lastTickMs + _corpseMs));
         }
         _died.Clear();
         foreach (var id in _left)
+        {
+            _summons.Remove(id.Value);
             if (_byEntity.TryGetValue(id.Value, out var slot)) Free(slot);
+        }
         _left.Clear();
         while (_corpses.Count > 0 && _corpses.Peek().DueMs <= context.SimTimeMs)
         {
@@ -98,6 +119,55 @@ public sealed class MonsterSpawnerSystem : ITickSystem
         foreach (var entry in _entries)
         foreach (var slot in entry.Slots)
             if (slot.Entity is null && slot.DueMs <= now) Fill(context, entry, slot);
+        ExpireSummons(context, now);
+        for (var i = 0; i < _summonRequests.Count; i++) Summon(context, _summonRequests[i], now);
+        _summonRequests.Clear();
+    }
+
+    private void Summon(TickContext context, SummonRequested request, long now)
+    {
+        var instance = context.Instance;
+        if (!instance.TryGetEntity(request.Owner, out var owner) || owner.Dead) return;
+        if (!_catalog.TryGet(request.MonsterId, out var def))
+        {
+            context.Log.Error($"[{instance.MapId}] summon of unknown monster '{request.MonsterId}' (the validator should have caught this).");
+            return;
+        }
+        var live = 0;
+        foreach (var s in _summons.Values)
+            if (s.Owner == request.Owner && string.Equals(s.MonsterId, def.Id, StringComparison.Ordinal)) live++;
+        var expires = request.DurationMs is { } ms ? now + ms : long.MaxValue;
+        for (var n = live; n < request.Count; n++)
+        {
+            if (!DropRoller.TryPlace(instance.Grid, request.Near, 1, context.Random, out var cell)) return;
+            var facing = owner.Facing;
+            var ownerId = owner.Id;
+            var id = context.Spawn(EntityKind.Monster, cell, facing, e =>
+            {
+                e.DefinitionId = def.Id;
+                e.Stats = _catalog.CreateStats(def);
+                e.Owner = ownerId;
+            });
+            _summons.Add(id.Value, new Summoned(ownerId, def.Id, expires));
+            Spawned++;
+            context.Publish(new EntitySpawned(id, EntityKind.Monster, def.Id, cell, -1));
+            context.Publish(new MonsterSummoned(ownerId, id, def.Id, cell, expires));
+        }
+    }
+
+    /// <summary>Despawns the summons whose time is over (a living one; a dead one is a corpse on the corpse timer already).</summary>
+    private void ExpireSummons(TickContext context, long now)
+    {
+        if (_summons.Count == 0) return;
+        foreach (var (id, s) in _summons)
+            if (s.ExpiresAtMs <= now) _expired.Add(id);
+        foreach (var id in _expired)
+        {
+            _summons.Remove(id);
+            var entityId = new EntityId(id);
+            if (context.Instance.TryGetEntity(entityId, out _)) context.Despawn(entityId);
+        }
+        _expired.Clear();
     }
 
     private void Subscribe(MapInstance instance)
@@ -111,6 +181,7 @@ public sealed class MonsterSpawnerSystem : ITickSystem
         var events = instance.Events;
         _subscribed = events;
         events.Subscribe<EntityDied>(e => _died.Add(e.Entity));
+        events.Subscribe<SummonRequested>(e => _summonRequests.Add(e));
         events.Subscribe<EntityLeftMap>(e =>
         {
             // A same-map warp leaves and re-enters at once; only a monster no longer in the instance frees its slot.
@@ -189,6 +260,8 @@ public sealed class MonsterSpawnerSystem : ITickSystem
         public readonly long RespawnMs = respawnMs;
         public readonly Slot[] Slots = slots;
     }
+
+    private sealed record Summoned(EntityId Owner, string MonsterId, long ExpiresAtMs);
 
     private sealed class Slot(SpawnEntry entry)
     {

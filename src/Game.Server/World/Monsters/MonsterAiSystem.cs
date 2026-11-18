@@ -1,5 +1,8 @@
 using Game.Server.Events;
+using Game.Server.World.Effects;
 using Game.Shared.Definitions;
+using Game.Shared.Effects;
+using Game.Shared.Formulas;
 using Game.Shared.Stats;
 using Game.Shared.Vocabulary;
 using Game.Shared.World;
@@ -27,17 +30,29 @@ public readonly record struct MonsterAiView(string State, EntityId? Target, Grid
 /// <c>aoi.view_radius</c> buckets covers its bucket) does nothing: no scan, no path, no wander. Chasing, attacking and returning monsters
 /// always run, so they finish what they started. Players come from <see cref="MapInstance.Players"/>, bucketed once per tick
 /// (<see cref="PlayerGrid"/>), so the cost is O(players + awake monsters × nearby players), not O(entities).</para>
+/// <para><b>Skills</b> (T-501): when an auto-attack is due, the monster first looks at its <c>ai.skills</c> entries in order and casts the first
+/// one that is off cooldown, whose target is within the skill's <c>target.range</c> (a self skill always is; a ground skill aims at the target's
+/// cell) and whose <c>chance</c> roll succeeds (a roll is drawn only for a chance strictly between 0 and 1); that cast takes the attack's place.
+/// Casting: <see cref="SkillCastStarted"/> with the cast time (the skill's <c>cast_time_ms</c> at the entry's <c>level</c> × the monster's
+/// <c>cast_time_mod</c>, floored), the monster stands and neither attacks nor walks, and when the time is up it raises
+/// <see cref="SkillRequested"/> for combat to resolve; the cooldown (<c>cooldown_ms</c>) starts then. A cast of 0 ms requests at once. Losing the
+/// target or a <c>prevents_skills</c> status drops the cast.</para>
+/// <para><b>Statuses:</b> a monster held by <c>prevents_move</c> sends no moves (it keeps its state and retries later), one held by
+/// <c>prevents_attack</c> requests no attacks, and one held by <c>prevents_skills</c> casts nothing.</para>
 /// <para>Allocation after warm-up: only the intents and events it raises, and the per-monster state when a monster spawns.</para>
 /// </remarks>
 public sealed class MonsterAiSystem : ITickSystem
 {
     private static readonly IReadOnlyCollection<Type> Owned = [];
     private static readonly int AspdStat = StatIndex.IndexOf(DerivedStats.Aspd);
+    private static readonly int CastTimeModStat = StatIndex.IndexOf(DerivedStats.CastTimeMod);
+    private static readonly int LevelSlot = FormulaSymbols.Default.SlotOf(FormulaVariables.SkillLevel);
 
     private readonly MonsterCatalog _catalog;
     private readonly AiBalanceDef _ai;
     private readonly int _bucketSize;
     private readonly int _viewRadius;
+    private readonly FormulaContext _formula = new(FormulaSymbols.Default);
     private readonly Dictionary<long, Brain> _byId = new();
     private readonly List<Brain> _brains = new();     // sorted by entity id
     private PlayerGrid? _players;
@@ -81,6 +96,9 @@ public sealed class MonsterAiSystem : ITickSystem
 
     /// <summary>Monsters skipped as dormant in the last tick.</summary>
     public int DormantCount { get; private set; }
+
+    /// <summary>Skill casts started so far (monster <c>ai.skills</c>).</summary>
+    public long Casts { get; private set; }
 
     /// <summary>Aggro scans done so far (each looks only at the player buckets the aggro range touches).</summary>
     public long Scans { get; private set; }
@@ -208,6 +226,12 @@ public sealed class MonsterAiSystem : ITickSystem
             GiveUp(context, brain, AggroReasons.Unreachable);
             return;
         }
+        if (brain.Casting is not null)
+        {
+            entity.Facing = GridDirection.Facing(entity.Cell, target.Cell) ?? entity.Facing;
+            Cast(context, brain);
+            return;
+        }
 
         var range = Math.Max(0, brain.Def.AttackRange);
         if (GridDistance.Chebyshev(entity.Cell, target.Cell) <= range)
@@ -230,7 +254,10 @@ public sealed class MonsterAiSystem : ITickSystem
         brain.NextRepathMs = _nowMs + _ai.RepathIntervalMs;
     }
 
-    /// <summary>One <see cref="AttackRequested"/> per 1000 / aspd ms while in range; the first as soon as the last one's cooldown is over.</summary>
+    /// <summary>
+    /// One <see cref="AttackRequested"/> per 1000 / aspd ms while in range; the first as soon as the last one's cooldown is over. When one is due a
+    /// ready skill may take its place (class remarks).
+    /// </summary>
     private void Attack(TickContext context, Brain brain, Entity target, int range)
     {
         var aspd = brain.Entity.Stats?.Get(AspdStat) ?? 0;
@@ -239,7 +266,63 @@ public sealed class MonsterAiSystem : ITickSystem
         // that, it was not attacking (first attack, back in range): count from now, so no attacks are banked while away.
         var from = _nowMs - brain.NextAttackMs < TickRate.IntervalMs ? brain.NextAttackMs : _nowMs;
         brain.NextAttackMs = from + 1000.0 / aspd;
+        if (TryStartCast(context, brain, target)) return;
+        if (brain.Entity.CannotAttack) return;
         context.Publish(new AttackRequested(brain.Entity.Id, target.Id, brain.Entity.Cell, target.Cell, range, _nowMs));
+    }
+
+    /// <summary>The first <c>ai.skills</c> entry that is ready, in range and wins its chance roll starts casting. False when none does.</summary>
+    private bool TryStartCast(TickContext context, Brain brain, Entity target)
+    {
+        var entries = brain.Def.Ai.Skills;
+        if (entries.Count == 0 || brain.Entity.CannotUseSkills || brain.Entity.Stats is not { } stats) return false;
+        for (var i = 0; i < entries.Count; i++)
+        {
+            var entry = entries[i];
+            if (_nowMs < brain.SkillReadyMs[i] || !_catalog.Effects.TryGetSkill(entry.SkillId, out var skill)) continue;
+            var aim = skill.Def.Target;
+            var self = !aim.Ground && aim.Range <= 0;
+            if (!self && GridDistance.Chebyshev(brain.Entity.Cell, target.Cell) > aim.Range) continue;
+            if (!(entry.Chance > 0) || (entry.Chance < 1 && context.Random.NextDouble() >= entry.Chance)) continue;
+
+            var level = Math.Max(1, entry.Level);
+            WriteCaster(stats, level);
+            var castMs = (int)Math.Max(0, Math.Floor(skill.CastTimeMs.Evaluate(_formula) * stats.Get(CastTimeModStat) + 1e-9));
+            var cast = brain.Casting = new CastState(i, skill, level, aim.Ground || self ? null : target.Id, aim.Ground ? target.Cell : null, _nowMs + castMs);
+            Casts++;
+            if (castMs > 0)
+            {
+                if (brain.Walking || brain.MovePending(_tick)) Stop(context, brain);
+                context.Publish(new SkillCastStarted(brain.Entity.Id, skill.Id, level, cast.Target, cast.Cell, castMs));
+            }
+            Cast(context, brain);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>A cast in progress: dropped by a <c>prevents_skills</c> status, requested when its time is up (the cooldown starts then).</summary>
+    private void Cast(TickContext context, Brain brain)
+    {
+        var cast = brain.Casting!;
+        if (brain.Entity.CannotUseSkills)
+        {
+            brain.Casting = null;
+            return;
+        }
+        if (_nowMs < cast.EndsAtMs) return;
+        brain.Casting = null;
+        WriteCaster(brain.Entity.Stats!, cast.Level);
+        var cooldown = Math.Max(0, cast.Skill.CooldownMs.Evaluate(_formula));
+        brain.SkillReadyMs[cast.Entry] = _nowMs + (long)Math.Floor(cooldown + 1e-9);
+        context.Publish(new SkillRequested(brain.Entity.Id, cast.Skill.Id, cast.Level, cast.Target, cast.Cell, _nowMs));
+    }
+
+    private void WriteCaster(StatSheet stats, int level)
+    {
+        _formula.Clear();
+        stats.WriteTo(_formula);
+        _formula[LevelSlot] = level;
     }
 
     /// <summary>Return: walk home ignoring players and hits; past <c>return_timeout_ms</c>, put it back on its home cell.</summary>
@@ -279,6 +362,7 @@ public sealed class MonsterAiSystem : ITickSystem
         if (brain.Target is { } target) context.Publish(new AggroLost(brain.Entity.Id, target, reason));
         brain.Target = null;
         brain.Unreachable = false;
+        brain.Casting = null;
         brain.State = AiStates.Return;
         brain.ReturnDeadlineMs = _nowMs + _ai.ReturnTimeoutMs;
         if (Same(brain.Entity.Cell, brain.Home))
@@ -292,6 +376,7 @@ public sealed class MonsterAiSystem : ITickSystem
 
     private void Move(TickContext context, Brain brain, GridCell cell)
     {
+        if (brain.Entity.CannotMove) return;   // held by a status: it tries again on its next re-path or wander
         brain.Goal = cell;
         brain.MoveIssuedTick = _tick;
         brain.MoveIssued = true;
@@ -390,6 +475,8 @@ public sealed class MonsterAiSystem : ITickSystem
         public long NextRepathMs;
         public double NextAttackMs;
         public long ReturnDeadlineMs;
+        public readonly long[] SkillReadyMs = new long[def.Ai.Skills.Count];   // per ai.skills entry: when its cooldown is over
+        public CastState? Casting;             // the skill being cast, if any
 
         /// <summary>
         /// A move intent sent this tick or the last one has not been answered yet: it is drained on the next tick and its movement event
@@ -397,6 +484,8 @@ public sealed class MonsterAiSystem : ITickSystem
         /// </summary>
         public bool MovePending(long tick) => MoveIssued && tick - MoveIssuedTick <= 1;
     }
+
+    private sealed record CastState(int Entry, CompiledSkill Skill, int Level, EntityId? Target, GridCell? Cell, long EndsAtMs);
 
     private sealed class BrainOrder : IComparer<Brain>
     {

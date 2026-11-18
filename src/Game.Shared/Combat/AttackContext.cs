@@ -53,6 +53,12 @@ namespace Game.Shared.Combat
         /// <summary>Destination for the step-by-step breakdown, or null (default) to skip recording.</summary>
         public DamageBreakdown? Breakdown { get; set; }
 
+        /// <summary>
+        /// True for damage that is not an attack: a status's <c>on_tick</c> (poison). It always lands and never crits, so the resolver draws no
+        /// rolls for it. False (default) for auto-attacks and skill hits.
+        /// </summary>
+        public bool AlwaysHits { get; set; }
+
         /// <summary>True when the magic damage formula applies.</summary>
         public bool IsMagic => Effect != null && Effect.Magic;
 

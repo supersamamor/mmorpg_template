@@ -30,8 +30,6 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>cooldown</c>: the item's <c>cooldown_ms</c> since its last use is not over.</summary>
         public const string Cooldown = "cooldown";
 
-        /// <summary><c>unsupported_effect</c>: the consumable has an effect type the item effects cannot run yet (until T-501); nothing is used up.</summary>
-        public const string UnsupportedEffect = "unsupported_effect";
 
         /// <summary><c>not_equipment</c>: the entry is not an equipment item.</summary>
         public const string NotEquipment = "not_equipment";
@@ -82,7 +80,6 @@ namespace Game.Shared.Vocabulary
             InventoryFull,
             NotUsable,
             Cooldown,
-            UnsupportedEffect,
             NotEquipment,
             WrongSlot,
             LevelTooLow,
