@@ -26,6 +26,8 @@ public sealed class ThemedEntities : IEntityVisualSource
     private readonly EquipmentCatalog _equipment;
     private readonly GearMesher _mesher;
     private readonly Action<ModelVisual> _needsDressing;
+    private readonly GearPreload _gearPreload;
+    private readonly List<string> _gearPending = new();
     private readonly Dictionary<string, Stack<ModelVisual>> _pools = new(StringComparer.Ordinal);
     private readonly List<ModelVisual> _waiting = new();
     private readonly List<ModelVisual> _dressing = new();
@@ -42,6 +44,7 @@ public sealed class ThemedEntities : IEntityVisualSource
         _store = new ModelStore(config.ModelCacheLimit, threaded, message => GD.PushWarning(message));
         _equipment = new EquipmentCatalog(catalog, id => bundle.Item(id)?.Visual);
         _mesher = new GearMesher(config.ModelCacheLimit);
+        _gearPreload = new GearPreload(catalog, id => bundle.Item(id)?.Visual, config.GearPreloadLimit);
         _needsDressing = visual =>
         {
             if (!_dressing.Contains(visual)) _dressing.Add(visual);
@@ -57,6 +60,48 @@ public sealed class ThemedEntities : IEntityVisualSource
 
     /// <summary>Worn pieces resolved so far, one per visual key and rig, shared by every character wearing them (for measuring).</summary>
     public int PieceKinds => _equipment.Count;
+
+    /// <summary>Worn-visual models still loading ahead of need (for measuring).</summary>
+    public int GearPending => _gearPending.Count;
+
+    /// <summary>
+    /// Loads the models of worn visuals before they are needed (T-405, row 182): <paramref name="worn"/> are the items characters on screen wear, <paramref name="bag"/> the
+    /// own inventory's. Each starts loading through the shared store (a worker thread with a renderer, the main thread without one, <see cref="ModelLoading"/>), and once
+    /// loaded its meshes are taken, one per frame, so equipping later finds them in the cache. Bounded by <c>GearPreloadLimit</c>; call again whenever the lists change.
+    /// </summary>
+    public void PreloadGear(IEnumerable<string> worn, IEnumerable<string> bag)
+    {
+        if (_config.GearPreloadLimit <= 0) return;
+        _gearPending.Clear();
+        foreach (var path in _gearPreload.Select(worn, bag))
+        {
+            if (_store.HasPiece(path)) continue;
+            _store.Request(path);
+            _gearPending.Add(path);
+        }
+    }
+
+    private long _gearSignature = -1;
+    private readonly List<string> _gearWorn = new();
+    private readonly List<string> _gearBag = new();
+
+    /// <summary>
+    /// Once a frame: starts the preload (<see cref="PreloadGear"/>) when what characters on screen wear or what the own bag holds has changed since the last call. Costs a
+    /// few additions per frame when nothing changed.
+    /// </summary>
+    public void WatchGear(WorldView world, Game.Client.Core.Items.InventoryView inventory)
+    {
+        long signature = inventory.Version;
+        var entities = world.Entities;
+        for (var i = 0; i < entities.Count; i++) signature = signature * 31 + entities[i].LookVersion + entities[i].Id;
+        if (signature == _gearSignature) return;
+        _gearSignature = signature;
+        _gearWorn.Clear();
+        _gearBag.Clear();
+        for (var i = 0; i < entities.Count; i++) _gearWorn.AddRange(entities[i].Worn);
+        for (var i = 0; i < inventory.Entries.Count; i++) _gearBag.Add(inventory.Entries[i].Item);
+        PreloadGear(_gearWorn, _gearBag);
+    }
 
     /// <summary>The store (for measuring).</summary>
     public ModelStore Store => _store;
@@ -129,6 +174,16 @@ public sealed class ThemedEntities : IEntityVisualSource
     /// <inheritdoc />
     public void Update()
     {
+        if (_gearPending.Count > 0)
+        {
+            // One preloaded piece per frame: the take from its scene is the main-thread work that equipping would otherwise do in the frame the player taps.
+            for (var i = 0; i < _gearPending.Count; i++)
+            {
+                if (!_store.TryGetPiece(_gearPending[i], out _)) continue;
+                _gearPending.RemoveAt(i);
+                break;
+            }
+        }
         if (_waiting.Count == 0 && _dressing.Count == 0) return;
         var created = 0;
         for (var i = 0; i < _waiting.Count;)

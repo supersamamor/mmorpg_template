@@ -234,6 +234,9 @@ Desktop numbers are only a sanity check; §9 budgets are judged on phones.
 Not in `Game.sln`: a plain `dotnet build` at the root needs neither Godot nor this project. `client/Directory.Build.props` and `client/Directory.Packages.props` keep the
 root settings away from the Godot SDK. Godot, SDK and framework versions are those in the table at the top. **No phone has run this client yet; §8.3 lists what is unverified.**
 
+> **Fresh worktree?** Theme models, textures and sounds are Git LFS files. A new worktree or clone can hold small pointer files in their place until you run
+> `git lfs pull`; Godot then cannot load the models, and the ThemePack tests and `validate` stop with "is a Git LFS pointer, run `git lfs pull`" (T-405, ADR-002 row 208).
+
 ### 8.1 Run it on one PC
 
 ```powershell

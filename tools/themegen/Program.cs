@@ -4,11 +4,14 @@ using Game.ThemeGen;
 //   dotnet run --project tools/themegen                  write the pack (and delete files it no longer produces)
 //   dotnet run --project tools/themegen -- --check       write nothing; exit 1 if the files on disk differ from what the generator produces
 //   dotnet run --project tools/themegen -- --themes dir  use another themes directory
+//   dotnet run --project tools/themegen -- --content dir  read item weapon types (for the placeholder weapon shapes) from another content directory
 var check = args.Contains("--check");
 var themesAt = Array.IndexOf(args, "--themes");
 var themes = themesAt >= 0 && themesAt + 1 < args.Length ? args[themesAt + 1] : Path.Combine(RepoRoot(), "themes");
 
-var files = Pack.Generate(themes);
+var contentAt = Array.IndexOf(args, "--content");
+var content = contentAt >= 0 && contentAt + 1 < args.Length ? args[contentAt + 1] : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(themes))!, "content");
+var files = Pack.Generate(themes, content);
 var problems = 0;
 foreach (var (relative, bytes) in files)
 {

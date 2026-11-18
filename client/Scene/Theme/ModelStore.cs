@@ -57,6 +57,7 @@ public sealed class ModelStore
     private readonly Dictionary<string, Entry> _scenes = new(StringComparer.Ordinal);
     private readonly Dictionary<string, AnimSet?> _animations = new(StringComparer.Ordinal);
     private readonly Dictionary<string, PieceMeshes?> _pieces = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, long> _pieceUsed = new(StringComparer.Ordinal);
     private readonly HashSet<string> _requested = new(StringComparer.Ordinal);
     private readonly int _limit;
     private readonly bool _threaded;
@@ -70,6 +71,9 @@ public sealed class ModelStore
         _threaded = threaded;
         _log = log;
     }
+
+    /// <summary>Milliseconds the calling (main) thread has spent loading scenes without a worker (<see cref="Request"/> when not threaded) and taking worn pieces' meshes out of scenes; for measuring (T-405).</summary>
+    public double MainThreadMs { get; private set; }
 
     /// <summary>Scenes currently held.</summary>
     public int LoadedScenes => _scenes.Count(e => e.Value.Scene is not null);
@@ -86,12 +90,17 @@ public sealed class ModelStore
     /// </summary>
     public bool TryGetPiece(string path, out PieceMeshes? piece)
     {
-        if (_pieces.TryGetValue(path, out piece)) return true;
+        if (_pieces.TryGetValue(path, out piece))
+        {
+            _pieceUsed[path] = ++_clock;
+            return true;
+        }
         if (!TryGetScene(path, out var scene, out var failed))
         {
             if (failed) _pieces[path] = null;
             return failed;
         }
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
         var instance = scene!.Instantiate<Node3D>();
         var lod0 = instance.FindChild("Body_LOD0", true, false) as MeshInstance3D ?? instance.FindChildren("*", "MeshInstance3D", true, false).FirstOrDefault() as MeshInstance3D;
         var lod1 = instance.FindChild("Body_LOD1", true, false) as MeshInstance3D;
@@ -108,8 +117,29 @@ public sealed class ModelStore
         _scenes.Remove(path); // only the meshes are needed from now on
         _requested.Remove(path);
         _pieces[path] = piece;
+        _pieceUsed[path] = ++_clock;
+        MainThreadMs += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        TrimPieces(path);
         return true;
     }
+
+    /// <summary>Keeps at most <c>cacheLimit</c> worn-piece meshes: the least recently used go first, never <paramref name="keep"/>. Characters already dressed hold their own references, so they are unaffected.</summary>
+    private void TrimPieces(string keep)
+    {
+        while (_pieces.Count > _limit)
+        {
+            string? victim = null;
+            var oldest = long.MaxValue;
+            foreach (var (path, used) in _pieceUsed)
+                if (path != keep && used < oldest) (victim, oldest) = (path, used);
+            if (victim is null) return;
+            _pieces.Remove(victim);
+            _pieceUsed.Remove(victim);
+        }
+    }
+
+    /// <summary>True when the worn piece at <paramref name="path"/> is ready (loaded and taken from its scene) or has failed for good.</summary>
+    public bool HasPiece(string path) => _pieces.ContainsKey(path);
 
     /// <summary>A node's transform relative to an ancestor that is not in the tree.</summary>
     private static Transform3D LocalTo(Node root, Node3D node)
@@ -139,6 +169,13 @@ public sealed class ModelStore
     }
 
     private void LoadNow(string path)
+    {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        try { LoadNowInner(path); }
+        finally { MainThreadMs += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds; }
+    }
+
+    private void LoadNowInner(string path)
     {
         if (ResourceLoader.Load("res://" + path, "PackedScene") is PackedScene loaded)
         {
@@ -261,6 +298,7 @@ public sealed class ModelStore
         _scenes.Clear();
         _animations.Clear();
         _pieces.Clear();
+        _pieceUsed.Clear();
     }
 
     /// <summary>A visual started using a scene.</summary>

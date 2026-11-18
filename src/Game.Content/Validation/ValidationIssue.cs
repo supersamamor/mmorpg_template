@@ -100,6 +100,10 @@ public static class ValidationCodes
     public const string AppearanceDefault = "appearance.default";
     /// <summary>An effect the effect runner cannot run where it stands (T-501, <c>EffectSupport</c>).</summary>
     public const string EffectUnsupported = "effect.unsupported";
+    /// <summary>A theme manifest entry for worn equipment or a weapon clip is wrong, or a theme file is a Git LFS pointer (T-405, <c>ThemeCheck</c>).</summary>
+    public const string EquipManifest = "theme.equip";
+    /// <summary>An item's worn visual key has no model file in the theme chain, so the missing model is drawn (warning, T-405).</summary>
+    public const string WarnVisualFile = "warn.visual_file";
     /// <summary>A rule threw; this is a validator bug, reported so it cannot pass silently.</summary>
     public const string RuleCrashed = "validator.rule_crashed";
 

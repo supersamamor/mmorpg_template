@@ -581,6 +581,14 @@ ids (T-401); `EntityView.LookVersion` counts their changes.
   level of detail and the set of pieces in any order (`WornSet`), so a crowd in the same gear shares one mesh and one skin. A piece without a LOD1 mesh uses its LOD0 at both levels.
 - *Loading:* a piece's file loads through the same `ModelStore` as characters (threaded with a renderer, on the main thread headless: ADR-002 row 141); its meshes are
   taken from the scene once and shared by every character wearing it, and the scene is let go. Making merges shares the per-frame instance budget (`instantiate_per_frame`).
+- *Preloading* (T-405, ADR-002 row 182): `GearPreload` (pure, `client/Core/Theme`) names the worn-visual models to load ahead of need: the pieces worn by characters on screen first,
+  then the equipment in the player's own bag, each path once, at most `gear_preload_limit` (default 16; 0 turns it off). `ThemedEntities.WatchGear` re-plans when a character's look or the
+  inventory changes; the models start loading through the same `ModelStore` (the row 141 rule) and, once loaded, their meshes are taken one per frame into the same piece cache that
+  `TryDress` reads, so equipping a bag item finds them ready. Memory: preloaded pieces are the same entries worn pieces use, held at most `model_cache_limit` (48) per store (least
+  recently used go first; a dressed character keeps its own references), so the preload adds at most 16 small meshes (the placeholder gear is 1–2 KB each; §9's 200 MB install and
+  memory budgets are not touched). *Measured* (T-405, `run-e2e.ps1 -Run items -Windowed`, integrated desktop GPU, placeholder pack, 3 runs each): main-thread model work from the press of
+  Equip until the weapon is on, 1.6, 1.6 and 3.6 ms without the preload and 0.00 ms with it. The frame that merges the piece into the body mesh is unchanged (about 60–105 ms in both
+  modes, at 30 fps), which is the next thing to look at (see the T-405 follow-ups). Not run on a phone (ADR-002 row 112).
 - *Clips by weapon type (§7.6):* an animation library may map `<animation id>.<weapon type>` (e.g. `attack.staff`, `idle.staff`) besides the plain id; the weapon's
   clip wins where the library has it, else the generic one. Hit timing is unchanged: T-303's `impact_delay`.
 - *Measured* (T-403, integrated desktop GPU, 1280x720, `tools/loadtest --bots 70 --fighters 0.7 --spare-slots 3` and `--measure 40`, about 40 players on screen; the
@@ -745,6 +753,12 @@ mesh skinned to that rig in the body's own mesh space; exactly one of the two. A
 "Weapon types"), which a character holding that weapon type plays instead of the generic clip. Equipment should use an untextured or atlas-shared material so it merges
 into the character's single draw call. The placeholder pack shows both kinds: weapons, the buckler and the cap are attached, the vest is skinned; the humanoid library
 has `attack.dagger`, `idle.staff` and `attack.staff`.
+
+**Checked at build time** (T-405, `validate`, `Game.Content/Validation/ThemeCheck.cs`): each `model.equip.*` entry has exactly one of `attach` or `skinned`; an `attach` bone exists in the
+rig of every body model of `appearance.yaml` (the bones are read from the glTF skin); a `skinned` rig is one a model of the theme chain declares; every clip suffix is a weapon type;
+a theme `.glb` that is a Git LFS pointer is an error ("run `git lfs pull`"); an item's worn visual key with no model file in the theme chain is a warning that names the missing
+model the client draws instead. Each finding names the manifest file, the key and the reason. **Placeholder weapons** take their shape from the item's `weapon_type`
+(`tools/themegen/Weapons.cs`; themegen reads `content/items`, or `--content <dir>`): a dagger is a short blade, a staff stands up, and so on.
 
 | Asset | Format |
 |-------|--------|

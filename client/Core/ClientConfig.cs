@@ -95,6 +95,9 @@ public sealed class ClientConfig
     /// <summary>Most distinct models kept loaded at once; loaded models nobody is showing are dropped oldest first beyond this (bounds memory).</summary>
     public int ModelCacheLimit { get; set; } = 48;
 
+    /// <summary>Most worn-visual models loaded ahead of need (worn on screen first, then the own bag, T-405); 0 turns the preload off. Their meshes count toward <see cref="ModelCacheLimit"/>.</summary>
+    public int GearPreloadLimit { get; set; } = 16;
+
     /// <summary>Most idle instances kept per model for reuse; extra ones are freed.</summary>
     public int PoolIdleLimit { get; set; } = 12;
 
@@ -323,6 +326,7 @@ public sealed class ClientConfig
             case "full_rate_animated_count": FullRateAnimatedCount = (int)Number(value); break;
             case "reduced_animation_divisor": ReducedAnimationDivisor = Math.Max(1, (int)Number(value)); break;
             case "model_cache_limit": ModelCacheLimit = (int)Number(value); break;
+            case "gear_preload_limit": GearPreloadLimit = Math.Max(0, (int)Number(value)); break;
             case "pool_idle_limit": PoolIdleLimit = (int)Number(value); break;
             case "instantiate_per_frame": InstantiatePerFrame = Math.Max(1, (int)Number(value)); break;
             case "preload_models": PreloadModels = Number(value) != 0; break;

@@ -158,6 +158,7 @@ public partial class Main : Node3D
         var world = _session.World;
         if (_loadedMap != world.MapId) LoadMap(world.MapId);
         _presenter!.Sync(delta);
+        _entities!.WatchGear(world, _session.Inventory);
         _fx!.Update(Clocks.View(), _map!.Ground);
         if (world.Own is { } own) _camera!.Follow((float)own.X, (float)own.Z);
         _hud!.Refresh();
