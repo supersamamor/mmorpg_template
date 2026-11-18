@@ -62,14 +62,16 @@ public sealed class ModelStore
     private readonly int _limit;
     private readonly bool _threaded;
     private readonly Action<string> _log;
+    private readonly RetryBudget _retries;
     private long _clock;
 
     /// <summary>Creates a store. Without <paramref name="threaded"/> every load happens at once on the calling thread (<see cref="ModelLoading"/>).</summary>
-    public ModelStore(int cacheLimit, bool threaded, Action<string> log)
+    public ModelStore(int cacheLimit, bool threaded, Action<string> log, int pieceAttempts = 3)
     {
         _limit = Math.Max(1, cacheLimit);
         _threaded = threaded;
         _log = log;
+        _retries = new RetryBudget(pieceAttempts);
     }
 
     /// <summary>Milliseconds the calling (main) thread has spent loading scenes without a worker (<see cref="Request"/> when not threaded) and taking worn pieces' meshes out of scenes; for measuring (T-405).</summary>
@@ -97,7 +99,7 @@ public sealed class ModelStore
         }
         if (!TryGetScene(path, out var scene, out var failed))
         {
-            if (failed) _pieces[path] = null;
+            piece = null; // a failed load is not kept as a piece: the preload may try it again (ADR-002 row 225); until then it draws the missing model
             return failed;
         }
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
@@ -139,7 +141,16 @@ public sealed class ModelStore
     }
 
     /// <summary>True when the worn piece at <paramref name="path"/> is ready (loaded and taken from its scene) or has failed for good.</summary>
-    public bool HasPiece(string path) => _pieces.ContainsKey(path);
+    public bool HasPiece(string path) => _pieces.ContainsKey(path) || _retries.GaveUp(path);
+
+    /// <summary>Failed loads of <paramref name="path"/> so far (for measuring and the scripted run).</summary>
+    public int Failures(string path) => _retries.Failures(path);
+
+    private void MarkFailed(string path)
+    {
+        _scenes[path] = new Entry { Failed = true };
+        _retries.Failed(path);
+    }
 
     /// <summary>A node's transform relative to an ancestor that is not in the tree.</summary>
     private static Transform3D LocalTo(Node root, Node3D node)
@@ -153,7 +164,16 @@ public sealed class ModelStore
     /// <summary>Starts loading a project-relative path in the background if nothing has.</summary>
     public void Request(string path)
     {
-        if (_scenes.TryGetValue(path, out var entry) && (entry.Scene is not null || entry.Failed)) return;
+        if (_scenes.TryGetValue(path, out var entry))
+        {
+            if (entry.Scene is not null) return;
+            if (entry.Failed)
+            {
+                if (!_retries.MayRetry(path)) return; // every try used: the missing model for good
+                _scenes.Remove(path); // try again (T-222, ADR-002 row 225)
+                _requested.Remove(path);
+            }
+        }
         if (!_threaded)
         {
             LoadNow(path);
@@ -164,7 +184,7 @@ public sealed class ModelStore
         if (error != Error.Ok)
         {
             _log($"[theme] could not start loading {path}: {error}");
-            _scenes[path] = new Entry { Failed = true };
+            MarkFailed(path);
         }
     }
 
@@ -183,7 +203,7 @@ public sealed class ModelStore
             return;
         }
         _log($"[theme] {path} could not be loaded; drawing a fallback");
-        _scenes[path] = new Entry { Failed = true };
+        MarkFailed(path);
     }
 
     /// <summary>The scene, if loaded. False while loading; <paramref name="failed"/> says it never will.</summary>
@@ -222,7 +242,7 @@ public sealed class ModelStore
                 return false;
         }
         _log($"[theme] {path} could not be loaded; drawing a fallback");
-        _scenes[path] = new Entry { Failed = true };
+        MarkFailed(path);
         failed = true;
         return false;
     }

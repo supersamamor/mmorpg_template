@@ -43,6 +43,9 @@ public interface IEntityVisual
     /// <summary>What the entity is doing, every frame: whether it is walking, and counters that go up on each attack made and each hit taken.</summary>
     void SetMotion(bool walking, int attackCount, int hitCount);
 
+    /// <summary>Draws the theme's outline over it, or stops (T-222: only near the camera target, <c>OutlinePlanner</c>). Nothing happens when the theme has none.</summary>
+    void SetOutline(bool on);
+
     /// <summary>Fades a corpse out: 0 is whole, 1 is gone (it also sinks a little). Anything else puts it back to 0.</summary>
     void SetFade(float amount);
 

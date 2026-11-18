@@ -98,6 +98,20 @@ public sealed class ClientConfig
     /// <summary>Most worn-visual models loaded ahead of need (worn on screen first, then the own bag, T-405); 0 turns the preload off. Their meshes count toward <see cref="ModelCacheLimit"/>.</summary>
     public int GearPreloadLimit { get; set; } = 16;
 
+    /// <summary>How many times a worn piece that failed to load is tried in all before it is drawn as the missing model for good (T-222, ADR-002 row 225).</summary>
+    public int PieceLoadAttempts { get; set; } = 3;
+
+    // ---- the storybook toon look (ADR-003, T-222) ----
+
+    /// <summary>Draws with the theme's toon material, outline and environment; off draws the look from before T-222 (for measuring, and a fallback for weak phones).</summary>
+    public bool ToonShading { get; set; } = true;
+
+    /// <summary>Characters, monsters and interactable objects within this many cells of the camera target get an outline (ADR-003 point 2); 0 turns outlines off.</summary>
+    public double OutlineDistanceCells { get; set; } = 10;
+
+    /// <summary>At most this many, nearest first, get one, so a crowd stays inside the draw-call budget (§9): each outline is one more draw call.</summary>
+    public int OutlineMaxCount { get; set; } = 6;
+
     /// <summary>Most idle instances kept per model for reuse; extra ones are freed.</summary>
     public int PoolIdleLimit { get; set; } = 12;
 
@@ -327,6 +341,10 @@ public sealed class ClientConfig
             case "reduced_animation_divisor": ReducedAnimationDivisor = Math.Max(1, (int)Number(value)); break;
             case "model_cache_limit": ModelCacheLimit = (int)Number(value); break;
             case "gear_preload_limit": GearPreloadLimit = Math.Max(0, (int)Number(value)); break;
+            case "piece_load_attempts": PieceLoadAttempts = Math.Max(1, (int)Number(value)); break;
+            case "toon_shading": ToonShading = Number(value) != 0; break;
+            case "outline_distance_cells": OutlineDistanceCells = Math.Max(0, Number(value)); break;
+            case "outline_max_count": OutlineMaxCount = Math.Max(0, (int)Number(value)); break;
             case "pool_idle_limit": PoolIdleLimit = (int)Number(value); break;
             case "instantiate_per_frame": InstantiatePerFrame = Math.Max(1, (int)Number(value)); break;
             case "preload_models": PreloadModels = Number(value) != 0; break;

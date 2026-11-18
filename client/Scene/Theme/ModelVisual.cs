@@ -30,6 +30,8 @@ public sealed class ModelVisual : IEntityVisual
     private readonly GearMesher _mesher;
     private readonly Action<ModelVisual> _needsDressing;
     private readonly ModelResolution _resolution;
+    private readonly ToonLook? _toon;
+    private bool _outlined;
     private readonly AnimationDriver _driver = new();
     private readonly Wardrobe _wardrobe = new();
     private readonly List<string> _added = new();
@@ -87,7 +89,8 @@ public sealed class ModelVisual : IEntityVisual
     /// <param name="mesher">Merges the body and its pieces; shared by every visual.</param>
     /// <param name="needsDressing">Told when the gear changed, so the source calls <see cref="TryDress"/> until it is done.</param>
     /// <param name="resolution">The character's model.</param>
-    public ModelVisual(ModelStore store, ThemeCatalog catalog, EquipmentCatalog equipment, GearMesher mesher, Action<ModelVisual> needsDressing, ModelResolution resolution)
+    public ModelVisual(ModelStore store, ThemeCatalog catalog, EquipmentCatalog equipment, GearMesher mesher, Action<ModelVisual> needsDressing, ModelResolution resolution,
+        ToonLook? look = null)
     {
         _store = store;
         _catalog = catalog;
@@ -95,6 +98,7 @@ public sealed class ModelVisual : IEntityVisual
         _mesher = mesher;
         _needsDressing = needsDressing;
         _resolution = resolution;
+        _toon = look;
         Root = new Node3D { Visible = false, Name = "Entity" };
     }
 
@@ -109,6 +113,44 @@ public sealed class ModelVisual : IEntityVisual
 
     /// <inheritdoc />
     public bool Animated => _player is not null;
+
+    /// <summary>Main-thread milliseconds of the last re-dress (the swap to the merged mesh and its materials), for measuring (T-222, ADR-002 row 223).</summary>
+    public static double LastDressMs { get; private set; }
+
+    /// <summary>True while the outline is drawn (for measuring).</summary>
+    public bool Outlined => _outlined;
+
+    /// <summary>
+    /// Draws the theme's outline over this model or stops (T-222, ADR-003 point 2): the outline material becomes the overlay of the model's meshes, one more draw
+    /// call while it is on. Does nothing when the state is unchanged or the theme has no outline.
+    /// </summary>
+    public void SetOutline(bool on)
+    {
+        if (_toon?.Outline is null) on = false;
+        if (on == _outlined) return;
+        _outlined = on;
+        ApplyOutline();
+    }
+
+    private void ApplyOutline()
+    {
+        var overlay = _outlined ? _toon?.Outline : null;
+        if (_lod0 is not null) _lod0.MaterialOverlay = overlay;
+        if (_lod1 is not null) _lod1.MaterialOverlay = overlay;
+        for (var i = 0; i < _looseNodes.Count; i++)
+            if (_looseNodes[i] is GeometryInstance3D g) g.MaterialOverlay = overlay;
+    }
+
+    /// <summary>The toon material on every surface of the model and its loose pieces (after building and after every re-dress, since the mesh changes).</summary>
+    private void ApplyMaterials()
+    {
+        if (_toon is null) return;
+        if (_lod0?.Mesh is not BoxMesh) _toon.Apply(_lod0); // the built-in marker stays unshaded magenta
+        _toon.Apply(_lod1);
+        for (var i = 0; i < _looseNodes.Count; i++)
+            if (_looseNodes[i] is MeshInstance3D m) _toon.Apply(m);
+        ApplyOutline();
+    }
 
     /// <summary>Worn pieces on the character now, for measuring.</summary>
     public int PieceCount => _pieces.Count;
@@ -140,6 +182,7 @@ public sealed class ModelVisual : IEntityVisual
         Root.Visible = false;
         SetFade(0);
         _player?.Stop();
+        SetOutline(false);
         if (_using && _resolution.Path is not null) _store.Unuse(_resolution.Path);
         _using = false;
         _look = default;
@@ -216,6 +259,7 @@ public sealed class ModelVisual : IEntityVisual
     private void Ready_()
     {
         _ready = true;
+        ApplyMaterials();
         Root.Visible = _wantVisible;
         ApplyDetail();
         ApplyLook();
@@ -288,25 +332,28 @@ public sealed class ModelVisual : IEntityVisual
             else loaded = false;
         }
         if (!loaded || created >= limit) return false;
-        Dress();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (!Dress()) return false; // the merge is still running on a worker (T-222): the old look stays until it is done
+        ApplyMaterials();
+        LastDressMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         created++;
         _gearDirty = false;
         return true;
     }
 
-    /// <summary>Puts the current pieces on: merged into the body's skinned mesh, or, for a model without a skin, as plain meshes on its root.</summary>
-    private void Dress()
+    /// <summary>Puts the current pieces on: merged into the body's skinned mesh, or, for a model without a skin, as plain meshes on its root. False while the merge runs.</summary>
+    private bool Dress()
     {
-        for (var i = 0; i < _looseNodes.Count; i++) _looseNodes[i].QueueFree();
-        _looseNodes.Clear();
-        if (_lod0 is null) return;
+        if (_lod0 is null) return true;
         if (_skeleton is null || _bodyMesh0 is null || _bodySkin0 is null)
         {
+            ClearLoose();
             DressLoose();
-            return;
+            return true;
         }
         if (_pieces.Count == 0)
         {
+            ClearLoose();
             _lod0.Mesh = _bodyMesh0;
             _lod0.Skin = _bodySkin0;
             if (_lod1 is not null)
@@ -314,19 +361,31 @@ public sealed class ModelVisual : IEntityVisual
                 _lod1.Mesh = _bodyMesh1;
                 _lod1.Skin = _bodySkin1;
             }
-            return;
+            return true;
         }
         var worn = new List<WornPiece>(_pieces.Count);
         foreach (var piece in _pieces) worn.Add(piece.Worn);
-        var (mesh0, skin0) = _mesher.Get(WornSet.Key(PoolKey, 0, worn), _bodyMesh0, _bodySkin0, _skeleton, Parts(0));
-        _lod0.Mesh = mesh0;
-        _lod0.Skin = skin0;
-        if (_lod1 is not null && _bodyMesh1 is not null && _bodySkin1 is not null)
+        var key0 = WornSet.Key(PoolKey, 0, worn);
+        var ready = _mesher.TryGet(key0, _bodyMesh0, _bodySkin0, _skeleton, Parts(0), out var lod0);
+        var low = _lod1 is not null && _bodyMesh1 is not null && _bodySkin1 is not null;
+        (ArrayMesh Mesh, Skin Skin) lod1 = default;
+        if (low) ready &= _mesher.TryGet(WornSet.Key(PoolKey, 1, worn), _bodyMesh1!, _bodySkin1!, _skeleton, Parts(1), out lod1);
+        if (!ready) return false;
+        ClearLoose();
+        _lod0.Mesh = lod0.Mesh;
+        _lod0.Skin = lod0.Skin;
+        if (low)
         {
-            var (mesh1, skin1) = _mesher.Get(WornSet.Key(PoolKey, 1, worn), _bodyMesh1, _bodySkin1, _skeleton, Parts(1));
-            _lod1.Mesh = mesh1;
-            _lod1.Skin = skin1;
+            _lod1!.Mesh = lod1.Mesh;
+            _lod1.Skin = lod1.Skin;
         }
+        return true;
+    }
+
+    private void ClearLoose()
+    {
+        for (var i = 0; i < _looseNodes.Count; i++) _looseNodes[i].QueueFree();
+        _looseNodes.Clear();
     }
 
     private List<GearPart> Parts(int lod)

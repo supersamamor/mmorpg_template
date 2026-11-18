@@ -55,10 +55,11 @@ public static class WeaponShapes
         return max - min;
     }
 
-    internal static void Build(MeshBuilder m, string? weaponType)
+    internal static void Build(MeshBuilder m, string? weaponType, Vector4? metal = null, Vector4? grip = null, Vector4? gem = null)
     {
-        var white = MeshBuilder.White;
-        var dark = MeshBuilder.Dark;
+        var white = metal ?? MeshBuilder.White;
+        var dark = grip ?? MeshBuilder.Dark;
+        var orb = gem ?? white;
         switch (ShapeOf(weaponType))
         {
             case "dagger": // a short blade and a small guard
@@ -85,7 +86,7 @@ public static class WeaponShapes
                 break;
             case "staff": // a tall shaft and an orb on top
                 m.Box(-1, new Vector3(0, 0.25f, 0), new Vector3(0.05f, 1.3f, 0.05f), dark);
-                m.Ellipsoid(-1, new Vector3(0, 0.95f, 0), new Vector3(0.09f, 0.09f, 0.09f), 8, 5, white);
+                m.Ellipsoid(-1, new Vector3(0, 0.95f, 0), new Vector3(0.09f, 0.09f, 0.09f), 8, 5, orb); // the orb glows (unlit) when a gem colour is given
                 break;
             case "bow": // a bent limb from three boxes, and a string
                 m.Box(-1, new Vector3(0, 0, -0.1f), new Vector3(0.04f, 0.5f, 0.04f), dark);

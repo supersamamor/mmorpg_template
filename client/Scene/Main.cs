@@ -23,6 +23,7 @@ public partial class Main : Node3D
     private GodotSocket? _socket;
     private WorldPresenter? _presenter;
     private ThemedEntities? _entities;
+    private ToonLook? _look;
     private FollowCamera? _camera;
     private ThemeMapView? _map;
     private Hud? _hud;
@@ -52,6 +53,9 @@ public partial class Main : Node3D
 
     /// <summary>The camera.</summary>
     public FollowCamera? Camera => _camera;
+
+    /// <summary>The toon look from the theme (T-222).</summary>
+    public ToonLook? Look => _look;
 
     /// <summary>The map on screen.</summary>
     public ThemeMapView? Map => _map;
@@ -83,27 +87,10 @@ public partial class Main : Node3D
         _config.AllowCleartext = OS.IsDebugBuild(); // the only place this is set (TransportPolicy): not from settings, not from arguments
         Engine.MaxFps = _config.FpsCap;
 
-        var environment = new Godot.Environment
-        {
-            BackgroundMode = Godot.Environment.BGMode.Color,
-            BackgroundColor = PlaceholderColors.Background,
-            AmbientLightSource = Godot.Environment.AmbientSource.Color,
-            AmbientLightColor = Colors.White,
-            AmbientLightEnergy = 0.45f,
-        };
-        AddChild(new WorldEnvironment { Environment = environment });
-        AddChild(new DirectionalLight3D
-        {
-            RotationDegrees = new Vector3(-55, -30, 0),
-            LightEnergy = 0.75f,
-            ShadowEnabled = true, // only the player casts (§9)
-            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Orthogonal,
-            DirectionalShadowMaxDistance = 40f,
-        });
-
         var status = ReadBundle(args, out var formatVersion);
         if (status != BundleStatus.Ok)
         {
+            ToonLook.AddBuiltInEnvironment(this);
             _hud = new Hud(this, _config, null, null);
             _hud.ShowRefusal(status == BundleStatus.UnknownFormat ? UiText.BundleRefused(formatVersion) : UiText.BundleCorrupt);
             GD.Print($"[client] bundle refused: {status}, format {formatVersion}");
@@ -114,6 +101,7 @@ public partial class Main : Node3D
         var transport = TransportPolicy.Check(_config.ServerUrl, _config.AllowCleartext);
         if (transport != TransportVerdict.Allowed)
         {
+            ToonLook.AddBuiltInEnvironment(this);
             _hud = new Hud(this, _config, null, null);
             _hud.ShowRefusal(UiText.TransportRefused(transport));
             GD.Print($"[client] server address refused: {transport}; {(OS.IsDebugBuild() ? "debug" : "release")} build");
@@ -124,9 +112,10 @@ public partial class Main : Node3D
         _socket = new GodotSocket(_config.SocketPollMs);
         _session = new ClientSession(_config, _bundle!, _socket, new Pcg32Random((ulong)System.Random.Shared.NextInt64()));
         var catalog = ThemeLoader.Load(_config);
-        _map = new ThemeMapView(this, catalog);
+        _look = ToonLook.Mount(this, _config, catalog);
+        _map = new ThemeMapView(this, catalog, _look);
         _camera = new FollowCamera(this, _config);
-        _entities = new ThemedEntities(this, _config, _bundle!, catalog);
+        _entities = new ThemedEntities(this, _config, _bundle!, catalog, _look);
         _presenter = new WorldPresenter(this, _config, _session.World, _session.Ui, _entities, _map.Ground);
         var sounds = SoundLoader.Load(_config);
         _audio = new AudioDriver(this, _config, sounds, _bundle!, _session.World, new Pcg32Random((ulong)System.Random.Shared.NextInt64()), UserPrefsStore.Load());

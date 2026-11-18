@@ -29,6 +29,7 @@ public static class Pack
     public static SortedDictionary<string, byte[]> Generate(string themesDir, string? contentDir = null)
     {
         var weaponTypes = WeaponShapes.TypesByVisualKey(contentDir ?? Path.Combine(themesDir, "..", "content"));
+        var palette = Palette.Load(Path.Combine(themesDir, DefaultTheme, Palette.FileName));
         var files = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
         var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(themesDir, DefaultTheme, "asset-manifest.json")))!.AsObject();
 
@@ -37,14 +38,15 @@ public static class Pack
         {
             if (node is not JsonObject entry || key is "audio" or "fallbacks") continue;
             if (key.StartsWith("scene.", StringComparison.Ordinal)) continue; // map scenes are authored in the editor (T-208): the manifest's path stands, and validate checks them
-            var (path, bytes) = Make(key, entry, DefaultStyle, manifest, weaponTypes);
+            if (entry["render"] is not null) continue; // the theme's render resources (T-222: toon material, outline, environment) are authored files too
+            var (path, bytes) = Make(key, entry, DefaultStyle, manifest, weaponTypes, palette);
             SetFile(entry, path);
             files[DefaultTheme + "/" + path] = bytes;
 
             if (TestOverrides.Contains(key))
             {
                 var copy = JsonNode.Parse(entry.ToJsonString())!.AsObject();
-                var (testPath, testBytes) = Make(key, copy, TestStyle, manifest, weaponTypes);
+                var (testPath, testBytes) = Make(key, copy, TestStyle, manifest, weaponTypes, palette);
                 SetFile(copy, testPath);
                 files[TestTheme + "/" + testPath] = testBytes;
                 testManifest[key] = copy;
@@ -83,13 +85,13 @@ public static class Pack
     }
 
     /// <summary>The file for one key: its path inside the theme and its bytes.</summary>
-    private static (string Path, byte[] Bytes) Make(string key, JsonObject entry, ThemeStyle style, JsonObject manifest, IReadOnlyDictionary<string, string> weaponTypes)
+    private static (string Path, byte[] Bytes) Make(string key, JsonObject entry, ThemeStyle style, JsonObject manifest, IReadOnlyDictionary<string, string> weaponTypes, Palette palette)
     {
         var rest = key[(key.IndexOf('.') + 1)..].Replace('.', '/');
         var color = KeyColor.Of(key, style);
         var hash = KeyColor.Hash(style.Salt + key);
 
-        if (key.StartsWith("model.", StringComparison.Ordinal)) return ($"models/{rest}.glb", Model(key, entry, color, hash, weaponTypes.GetValueOrDefault(key)));
+        if (key.StartsWith("model.", StringComparison.Ordinal)) return ($"models/{rest}.glb", Model(key, entry, color, hash, weaponTypes.GetValueOrDefault(key), palette, style));
         if (key.StartsWith("anim.", StringComparison.Ordinal)) return ($"anims/{rest}.glb", AnimLibrary(key, entry));
         if (key.StartsWith("icon.", StringComparison.Ordinal)) return ($"icons/{rest}.png", Media.Png(color, hash));
         if (key.StartsWith("portrait.", StringComparison.Ordinal)) return ($"portraits/{rest}.png", Media.Png(color, hash));
@@ -106,23 +108,53 @@ public static class Pack
 
     // ---------------- models ----------------
 
-    private static byte[] Model(string key, JsonObject entry, Vector4 color, uint hash, string? weaponType)
+    /// <summary>
+    /// The colours of one model (T-222, ADR-003 point 4), linear: a model the palette names takes its identity colours and look; anything else alive picks two creature
+    /// colours by its key, and gear two gear colours. The material's base colour is white and the colours are vertex colours, so a dressed character's pieces bake
+    /// into one surface (§7.5). Without a palette file the key colour stands in, as before T-222. The test theme turns every hue, so a swap shows.
+    /// </summary>
+    internal static BodyLook LookOf(string key, uint hash, int lod, Vector4 keyColor, Palette p, ThemeStyle style, bool gear = false)
+    {
+        Vector4 primary, secondary, trim;
+        var look = Looks.Plain;
+        if (!p.Any)
+        {
+            (primary, secondary, trim) = (keyColor, Accent(keyColor), MeshBuilder.Dark);
+        }
+        else if (p.Model(key) is { } identity)
+        {
+            (primary, secondary, trim, look) = (identity.Primary, identity.Secondary, identity.Trim, identity.Look);
+        }
+        else
+        {
+            (primary, secondary) = gear ? p.Gear(hash) : p.Creature(hash);
+            trim = Palette.Shade(secondary, 0.75f);
+        }
+        Vector4 S(Vector4 c) => Palette.Shift(c, style.HueShift);
+        return new BodyLook(lod, hash, S(primary), S(secondary), S(trim), p.NamedOr("skin", MeshBuilder.Skin), S(p.Hair(hash >> 3)), p.NamedOr("ink", MeshBuilder.Dark),
+            p.NamedOr("cheek", MeshBuilder.Skin), MeshBuilder.Glowing(p.NamedOr("glow", MeshBuilder.White)), p.NamedOr("cream", MeshBuilder.White), look);
+    }
+
+    private static byte[] Model(string key, JsonObject entry, Vector4 color, uint hash, string? weaponType, Palette palette, ThemeStyle style)
     {
         var rig = entry["rig"]?.GetValue<string>();
         var attach = entry["attach"]?.GetValue<string>();
         var skinned = entry["skinned"]?.GetValue<string>();
         var hasAnims = entry["anims"] is not null;
+        // With a palette the colours are all in the vertices and the material is white; without one the key colour tints the material, as before T-222.
+        var baseColor = palette.Any ? MeshBuilder.White : color;
 
         if (rig is not null && hasAnims)
         {
             var r = Rig.Get(rig);
             var lod0 = new MeshBuilder();
             var lod1 = new MeshBuilder();
-            r.Body(lod0, 0, hash, Accent(color));
-            r.Body(lod1, 1, hash, Accent(color));
-            return GlbWriter.Write(key, Generator, color, r.Bones, new[] { ("Body_LOD0", lod0.Mesh), ("Body_LOD1", lod1.Mesh) }, Array.Empty<Clip>());
+            r.Body(lod0, LookOf(key, hash, 0, color, palette, style));
+            r.Body(lod1, LookOf(key, hash, 1, color, palette, style));
+            return GlbWriter.Write(key, Generator, baseColor, r.Bones, new[] { ("Body_LOD0", lod0.Mesh), ("Body_LOD1", lod1.Mesh) }, Array.Empty<Clip>());
         }
 
+        var look = LookOf(key, hash, 0, color, palette, style, gear: true);
         if (rig is not null || skinned is not null)
         {
             // A part that follows the shared rig: a face on the head bone or a garment on the torso. Skinned to the full rig so it moves with the body.
@@ -131,52 +163,61 @@ public static class Pack
             var bone = r.Index(skinned is not null ? "spine" : "head");
             if (skinned is not null)
             {
-                lod0.Box(bone, new Vector3(0, 1.3f, 0), new Vector3(0.48f, 0.54f, 0.3f), MeshBuilder.White);
-                lod0.Box(r.Index("hips"), new Vector3(0, 0.98f, 0), new Vector3(0.4f, 0.14f, 0.24f), MeshBuilder.Dark);
+                // A garment just outside the T-222 torso and belt.
+                lod0.Cylinder(bone, new Vector3(0, 1.21f, 0), 0.215f, 0.255f, 0.4f, 16, look.Primary);
+                lod0.Cylinder(r.Index("hips"), new Vector3(0, 1.03f, 0), 0.262f, 0.262f, 0.08f, 16, look.Secondary);
             }
             else
             {
-                lod0.Ellipsoid(bone, new Vector3(0, 1.72f, 0), new Vector3(0.155f, 0.165f, 0.155f), 12, 8, MeshBuilder.White);
-                lod0.Box(bone, new Vector3(-0.06f, 1.74f, -0.15f), new Vector3(0.04f, 0.04f, 0.03f), MeshBuilder.Dark);
-                lod0.Box(bone, new Vector3(0.06f, 1.74f, -0.15f), new Vector3(0.04f, 0.04f, 0.03f), MeshBuilder.Dark);
-                lod0.Box(bone, new Vector3(0, 1.64f, -0.15f), new Vector3(0.08f, 0.02f, 0.03f), Accent(color));
+                // A face: brows and a mouth on the T-222 head (the body draws the head and the eyes), varied by the key.
+                var head = Rigs.HeadCenter;
+                var radii = Rigs.HeadRadii;
+                var tilt = (hash % 3 - 1) * 0.12f;
+                foreach (var x in new[] { -1f, 1f })
+                    lod0.Box(bone, MeshBuilder.OnSurface(head, radii, Rigs.EyeElevation + 0.2f, 0.36f * x, 0.005f) + new Vector3(0, tilt * x * 0.1f, 0), new Vector3(0.09f, 0.022f, 0.03f), look.Ink);
+                lod0.Ellipsoid(bone, MeshBuilder.OnSurface(head, radii, -0.12f - 0.04f * (hash % 2), 0, -0.004f), new Vector3(0.05f + 0.015f * (hash % 3), 0.018f, 0.02f), 8, 4,
+                    Palette.Shade(look.Cheek, 0.7f));
             }
-            return GlbWriter.Write(key, Generator, color, r.Bones, new[] { ("Body_LOD0", lod0.Mesh) }, Array.Empty<Clip>());
+            return GlbWriter.Write(key, Generator, baseColor, r.Bones, new[] { ("Body_LOD0", lod0.Mesh) }, Array.Empty<Clip>());
         }
 
-        // Static meshes, positioned relative to their attach bone (or the ground for props).
+        // Static meshes, positioned relative to their attach bone (or the ground for props). The head bone is at HeadBoneY, so the T-222 head's centre is above it.
         var m = new MeshBuilder();
+        var headLocal = Rigs.HeadCenter - new Vector3(0, Rigs.HeadBoneY, 0);
         switch (attach)
         {
             case "head" when key.Contains(".hair", StringComparison.Ordinal):
-                m.Ellipsoid(-1, new Vector3(0, 0.2f, 0.01f), new Vector3(0.17f, 0.13f, 0.17f), 12, 7, MeshBuilder.White);
-                if (hash % 2 == 0) m.Box(-1, new Vector3(0, 0.0f, 0.14f), new Vector3(0.2f, 0.3f, 0.06f), MeshBuilder.White);
-                else m.Box(-1, new Vector3(0, 0.33f, 0), new Vector3(0.06f, 0.1f, 0.06f), MeshBuilder.White);
+                m.Dome(-1, headLocal + new Vector3(0, 0.025f, 0.015f), Rigs.HeadRadii + new Vector3(0.025f), MathF.PI * 0.52f, 0.45f, 16, 6, look.Hair);
+                if (hash % 2 == 0) m.Box(-1, headLocal + new Vector3(0, -0.14f, 0.3f), new Vector3(0.22f, 0.32f, 0.08f), look.Hair); // long at the back
+                else m.Ellipsoid(-1, headLocal + new Vector3(0, 0.36f, 0.05f), new Vector3(0.09f, 0.08f, 0.09f), 10, 6, look.Hair); // a topknot
                 break;
-            case "head":
-                m.Ellipsoid(-1, new Vector3(0, 0.2f, 0), new Vector3(0.19f, 0.12f, 0.19f), 12, 7, MeshBuilder.White);
-                m.Box(-1, new Vector3(0, 0.12f, -0.16f), new Vector3(0.2f, 0.03f, 0.1f), Accent(color));
+            case "head": // headgear: a cap with a brim at the front
+                m.Dome(-1, headLocal + new Vector3(0, 0.03f, 0), Rigs.HeadRadii + new Vector3(0.035f), MathF.PI * 0.4f, 0.2f, 16, 5, look.Primary);
+                m.Box(-1, headLocal + new Vector3(0, 0.15f, -0.36f), new Vector3(0.34f, 0.03f, 0.14f), look.Secondary);
                 break;
             case "hand_r": // a weapon: its shape follows the weapon type of the item that wears it
-                WeaponShapes.Build(m, weaponType);
+                WeaponShapes.Build(m, weaponType, palette.NamedOr("steel", MeshBuilder.White), palette.NamedOr("leather_deep", MeshBuilder.Dark),
+                    palette.Any ? look.Glow : null);
                 break;
-            case "hand_l":
-                m.Ellipsoid(-1, new Vector3(0, 0, -0.12f), new Vector3(0.2f, 0.2f, 0.04f), 12, 7, MeshBuilder.White);
+            case "hand_l": // a round shield with a metal boss
+                m.Ellipsoid(-1, new Vector3(0, 0, -0.12f), new Vector3(0.22f, 0.22f, 0.04f), 16, 7, palette.NamedOr("bark", MeshBuilder.White));
+                m.Ellipsoid(-1, new Vector3(0, 0, -0.16f), new Vector3(0.07f, 0.07f, 0.035f), 10, 5, palette.NamedOr("steel", MeshBuilder.Dark));
                 break;
-            default: // a prop on the ground
-                m.Ellipsoid(-1, new Vector3(0, 0.12f, 0), new Vector3(0.2f, 0.16f, 0.2f), 10, 6, MeshBuilder.White);
-                m.Box(-1, new Vector3(0, 0.3f, 0), new Vector3(0.08f, 0.08f, 0.08f), Accent(color));
+            default: // a prop on the ground: a sack tied at the neck
+                m.Ellipsoid(-1, new Vector3(0, 0.15f, 0), new Vector3(0.22f, 0.17f, 0.22f), 12, 7, palette.NamedOr("leather", MeshBuilder.White));
+                m.Cylinder(-1, new Vector3(0, 0.33f, 0), 0.09f, 0.06f, 0.08f, 10, palette.NamedOr("leather_deep", MeshBuilder.Dark));
+                m.Ellipsoid(-1, new Vector3(0, 0.39f, 0), new Vector3(0.06f, 0.05f, 0.06f), 8, 5, look.Primary);
                 break;
         }
         if (key == "model.missing")
         {
-            // Unmistakable: a big magenta cube with dark corners.
+            // Unmistakable: a big magenta cube with dark corners. Its colour is the material's, so it stays magenta whatever the palette says.
             m = new MeshBuilder();
             m.Box(-1, new Vector3(0, 0.4f, 0), new Vector3(0.8f, 0.8f, 0.8f), MeshBuilder.White);
             m.Box(-1, new Vector3(0, 0.4f, -0.41f), new Vector3(0.3f, 0.3f, 0.04f), MeshBuilder.Dark);
-            color = new Vector4(1f, 0f, 1f, 1f);
+            baseColor = new Vector4(1f, 0f, 1f, 1f);
         }
-        return GlbWriter.Write(key, Generator, color, Array.Empty<Bone>(), new[] { ("Body_LOD0", m.Mesh) }, Array.Empty<Clip>());
+        return GlbWriter.Write(key, Generator, baseColor, Array.Empty<Bone>(), new[] { ("Body_LOD0", m.Mesh) }, Array.Empty<Clip>());
     }
 
     private static Vector4 Accent(Vector4 color) => new(1 - color.X * 0.6f, 1 - color.Y * 0.6f, 1 - color.Z * 0.6f, 1);

@@ -229,6 +229,61 @@ public sealed class AutoRun
               $"markers drawn {_main.Presenter!.StatusMarkCount}; effects started {_main.Fx?.Totals.Effects}");
         Check(_main.Presenter!.StatusMarkCount >= 1, "a status marker above the monster");
         await ShotAsync();
+        await LookShotsAsync(buffed);
+    }
+
+    /// <summary>
+    /// T-222's readability pictures (windowed with <c>--screenshot</c> only): the fight with damage numbers and the status marker, then every job's model beside the
+    /// own character, each at the default zoom and at the closest. The gallery's visuals are drawn by this client alone (nothing is sent) and go back to the pool.
+    /// </summary>
+    private async Task LookShotsAsync(EntityView monster)
+    {
+        if (_screenshot is null || DisplayServer.GetName() == "headless") return;
+        var camera = _main.Camera!;
+        var zoom = camera.Distance;
+        await TapWorldAsync(new Vector3((float)monster.X, 0.45f, (float)monster.Z));
+        var clock = Stopwatch.StartNew();
+        while (clock.Elapsed.TotalSeconds < 10 && (_main.Fx?.Shown ?? 0) < 2) await FrameAsync();
+        await ShotAsync("-fight");
+        camera.Zoom(0.01);
+        clock.Restart();
+        while (clock.Elapsed.TotalSeconds < 6 && (_main.Fx?.Shown ?? 0) < 1) await FrameAsync();
+        await ShotAsync("-fight-close");
+        camera.Zoom(zoom / camera.Distance);
+        var away = NearestOpenCellOutsideSafeZones(CurrentMap(), Own().Cell);
+        await TapCellAsync(away); // stop fighting, so the gallery is calm
+        await SecondsAsync(1.5);
+
+        var entities = _main.Entities!;
+        var gallery = new List<ModelVisual>();
+        var jobs = _main.Bundle!.JobIds;
+        for (var i = 0; i < jobs.Count; i++)
+        {
+            if (entities.Acquire(EntityKinds.Player, jobs[i]) is not ModelVisual visual) continue;
+            var x = (float)Own().X + 1.6f * (i - (jobs.Count - 1) / 2f);
+            var z = (float)Own().Z + 1.4f;
+            visual.SetPose(x, _main.Map!.Ground.At(x, z), z, Mathf.Pi);
+            visual.SetLook(default);
+            visual.SetOutline(true);
+            gallery.Add(visual);
+        }
+        await UntilAsync(() => gallery.All(v => v.Ready), 10, "the gallery models");
+        Print($"look: gallery of {gallery.Count} jobs ({string.Join(", ", jobs.Select(j => _main.Bundle.NameOf(j)))}) beside the own character; {_main.Presenter!.OutlinedCount} outlined in the world");
+        await ShotAsync("-jobs");
+        // What an outline costs: the same frame with the gallery's outlines off, then on again.
+        OS.LowProcessorUsageMode = false;
+        await FramesAsync(5);
+        var withOutlines = Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
+        foreach (var visual in gallery) visual.SetOutline(false);
+        await FramesAsync(5);
+        var without = Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
+        foreach (var visual in gallery) visual.SetOutline(true);
+        await FramesAsync(5);
+        Print($"look: draw calls with the {gallery.Count} gallery outlines {withOutlines:0}, without {without:0}: {(withOutlines - without) / Math.Max(1, gallery.Count):0.0} per outline");
+        camera.Zoom(0.01);
+        await ShotAsync("-jobs-close");
+        camera.Zoom(zoom / camera.Distance);
+        foreach (var visual in gallery) entities.Release(visual);
     }
 
     /// <summary>
@@ -486,6 +541,7 @@ public sealed class AutoRun
         var pending = _main.Entities.GearPending;
         var lookBefore = Own().LookVersion;
         var loadMsBefore = _main.Entities.Store.MainThreadMs;
+        var mergeMsBefore = _main.Entities.MergeMainThreadMs;
         Press(hud.Bag.Actions.Equip);
         double equipWorst = 0;
         var equipFrames = 0;
@@ -501,7 +557,7 @@ public sealed class AutoRun
             equipFrames++;
         }
         Print($"items: equip frames (ms, * once the new look arrived): {string.Join(" ", frameLog)}; the 30 frames before: median {calm[calm.Count / 2]:0.0}, worst {calm[^1]:0.0}");
-        Print($"items: equip frames: worst {equipWorst:0.0} ms over {equipFrames} frames from the press until dressed; {preloaded} piece(s) preloaded and {pending} still loading at the press (gear_preload_limit {_main.Config.GearPreloadLimit}); main-thread model work from the press until dressed: {_main.Entities.Store.MainThreadMs - loadMsBefore:0.00} ms");
+        Print($"items: equip frames: worst {equipWorst:0.0} ms over {equipFrames} frames from the press until dressed; {preloaded} piece(s) preloaded and {pending} still loading at the press (gear_preload_limit {_main.Config.GearPreloadLimit}); main-thread model work from the press until dressed: {_main.Entities.Store.MainThreadMs - loadMsBefore:0.00} ms; the frame that put the merged mesh on {ModelVisual.LastDressMs:0.00} ms, merge work on the main thread {_main.Entities.MergeMainThreadMs - mergeMsBefore:0.00} ms in all");
         await UntilAsync(() => Session.Inventory.InSlot(Game.Shared.Vocabulary.EquipSlots.Weapon) is not null, 10, "the weapon in its slot");
         await UntilAsync(() => Own().Weapon != Game.Shared.Vocabulary.WeaponTypes.Unarmed, 10, "the own record shows the weapon");
         Check(equipped == 1, "one equipped change");
@@ -921,7 +977,7 @@ public sealed class AutoRun
         World.Combat.Impact += count;
         var droppedBefore = World.Combat.Dropped;
         int maxNumbers = 0, maxEffects = 0, maxPending = 0, calmFrames = 0, fxFrames = 0;
-        int maxStatused = 0, maxDebuffed = 0, maxMarks = 0, maxCastBars = 0;   // T-501, T-502
+        int maxStatused = 0, maxDebuffed = 0, maxMarks = 0, maxCastBars = 0, maxOutlined = 0;   // T-501, T-502, T-222
         var synthCasts = Array.IndexOf(_args, "--measure-casts") >= 0;   // T-502, measuring only: every entity in view is shown casting, to count the cast bars' cost
         double calmDraws = 0, fxDraws = 0, maxShown = 0;
         _main.CountAllocations = true;
@@ -952,6 +1008,7 @@ public sealed class AutoRun
                 maxDebuffed = Math.Max(maxDebuffed, World.Entities.Count(e => e.HasDebuff));
                 maxMarks = Math.Max(maxMarks, _main.Presenter?.StatusMarkCount ?? 0);
                 maxCastBars = Math.Max(maxCastBars, _main.Presenter?.CastBarCount ?? 0);
+                maxOutlined = Math.Max(maxOutlined, _main.Presenter?.OutlinedCount ?? 0);
                 if (synthCasts && frames % 20 == 0)
                 {
                     var open = World.Entities.Where(e => !e.Dead).Select(e => new CastRecord(e.Id, "measure", 1500)).ToList();
@@ -997,6 +1054,7 @@ public sealed class AutoRun
         await BreakdownAsync();
         Print($"measure: peak frame by pass: 3D {peak.Opaque}, shadow {peak.Shadow}, canvas (HUD, numbers) {peak.Canvas}; {peak.OnScreen} entities on screen, visuals at LOD0 {peak.Lod0}, LOD1 {peak.Lod1}");
         Print($"measure: draw calls avg {(calmFrames > 0 ? calmDraws / calmFrames : 0):0.0} in {calmFrames} frames with no number or effect on screen, {(fxFrames > 0 ? fxDraws / fxFrames : 0):0.0} in {fxFrames} frames with some");
+        Print($"measure: look (T-222): {(_main.Look?.Enabled == true ? "toon" : "plain")}, at most {maxOutlined} outlined at once (distance {_main.Config.OutlineDistanceCells:0.#} cells, nearest {_main.Config.OutlineMaxCount}), {_main.Look?.Materials ?? 0} toon materials");
         Print($"measure: cast bars (T-502): at most {maxCastBars} drawn at once{(synthCasts ? " (a synthetic cast on every entity in view)" : string.Empty)}");
         Print($"measure: statuses (T-501): at most {maxStatused} entities in view with statuses ({maxDebuffed} with a debuff) and {maxMarks} markers at once; at the end " +
               $"{World.Entities.Count(e => e.Statuses.Count > 0)} with statuses, own [{string.Join(", ", World.Own?.Statuses.Select(st => st.Id) ?? [])}]");
@@ -1276,6 +1334,7 @@ public sealed class AutoRun
     private void ReportCamera()
     {
         var camera = _main.Camera!;
+        var zoom = camera.Distance;
         var rect = _main.GetViewport().GetVisibleRect().Size;
         var own = new Vector2(camera.Camera.Position.X, camera.Camera.Position.Z - camera.Distance * Mathf.Cos(Mathf.DegToRad((float)_main.Config.CameraPitchDegrees)));
         Vector3 Hit(float u, float v) => camera.TryGround(new Vector2(rect.X * u, rect.Y * v), out var g) ? g : default;

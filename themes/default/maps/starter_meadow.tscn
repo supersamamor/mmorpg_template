@@ -5,8 +5,9 @@ size = Vector3(48, 1, 32)
 
 [sub_resource type="Shader" id="checker"]
 code = "shader_type spatial;
-uniform vec3 a : source_color = vec3(0.36, 0.52, 0.31);
-uniform vec3 b : source_color = vec3(0.33, 0.48, 0.29);
+#include \"res://themes/default/render/toon_light.gdshaderinc\"
+uniform vec3 a : source_color = vec3(0.5, 0.69, 0.36);
+uniform vec3 b : source_color = vec3(0.47, 0.65, 0.34);
 varying vec3 world;
 void vertex() {
 	world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -32,7 +33,7 @@ size = Vector2(48, 32)
 size = Vector3(48, 2, 1)
 
 [sub_resource type="StandardMaterial3D" id="rock_mat"]
-albedo_color = Color(0.42, 0.38, 0.35, 1)
+albedo_color = Color(0.62, 0.6, 0.57, 1)
 metallic_specular = 0.0
 
 [sub_resource type="BoxMesh" id="rocks0_mesh"]
@@ -85,7 +86,7 @@ size = Vector3(46, 2, 1)
 size = Vector3(7, 1.02, 5)
 
 [sub_resource type="StandardMaterial3D" id="water_mat"]
-albedo_color = Color(0.16, 0.27, 0.42, 1)
+albedo_color = Color(0.36, 0.62, 0.8, 1)
 metallic_specular = 0.0
 
 [sub_resource type="BoxMesh" id="water0_mesh"]
@@ -129,6 +130,7 @@ material = SubResource("water_mat")
 size = Vector2(1, 1)
 
 [sub_resource type="StandardMaterial3D" id="warp_mat"]
+shading_mode = 0
 albedo_color = Color(0.55, 0.3, 0.8, 1)
 metallic_specular = 0.0
 
@@ -137,7 +139,7 @@ material = SubResource("warp_mat")
 size = Vector2(1, 1)
 
 [sub_resource type="StandardMaterial3D" id="safe_mat"]
-albedo_color = Color(0.46, 0.56, 0.38, 1)
+albedo_color = Color(0.68, 0.75, 0.5, 1)
 metallic_specular = 0.0
 
 [sub_resource type="PlaneMesh" id="deco_mesh_3"]

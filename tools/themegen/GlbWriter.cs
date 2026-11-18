@@ -19,6 +19,28 @@ internal sealed class MeshData
 
     public int Triangles => Indices.Count / 3;
 
+    /// <summary>
+    /// Each vertex's normal averaged with every vertex at the same place (T-222): the direction an inverted-hull outline pushes the vertex out, so the hull stays closed
+    /// at hard edges (a box's corner has three normals but one outline direction). Written as the glTF <c>TANGENT</c> (w = 1); the outline shader reads it there.
+    /// </summary>
+    public List<Vector3> OutlineNormals()
+    {
+        var sums = new Dictionary<(int, int, int), Vector3>();
+        static (int, int, int) Cell(Vector3 p) => ((int)MathF.Round(p.X * 10000f), (int)MathF.Round(p.Y * 10000f), (int)MathF.Round(p.Z * 10000f));
+        for (var i = 0; i < Positions.Count; i++)
+        {
+            var cell = Cell(Positions[i]);
+            sums[cell] = sums.GetValueOrDefault(cell) + Normals[i];
+        }
+        var result = new List<Vector3>(Positions.Count);
+        for (var i = 0; i < Positions.Count; i++)
+        {
+            var sum = sums[Cell(Positions[i])];
+            result.Add(sum.LengthSquared() > 1e-8f ? Vector3.Normalize(sum) : Normals[i]);
+        }
+        return result;
+    }
+
     public void Add(Vector3 p, Vector3 n, Vector4 c, int bone)
     {
         Positions.Add(p);
@@ -101,6 +123,7 @@ internal sealed class GlbWriter
             {
                 ["POSITION"] = FloatAccessor(mesh.Positions.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList(), "VEC3", Bounds(mesh.Positions)),
                 ["NORMAL"] = FloatAccessor(mesh.Normals.SelectMany(p => new[] { p.X, p.Y, p.Z }).ToList(), "VEC3", null),
+                ["TANGENT"] = FloatAccessor(mesh.OutlineNormals().SelectMany(p => new[] { p.X, p.Y, p.Z, 1f }).ToList(), "VEC4", null),
                 ["COLOR_0"] = ByteAccessor(mesh.Colors.SelectMany(c => new[] { Q(c.X), Q(c.Y), Q(c.Z), Q(c.W) }).ToArray(), "VEC4", true),
             };
             if (skinned)

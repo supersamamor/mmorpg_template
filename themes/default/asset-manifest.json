@@ -170,6 +170,14 @@
   "icon.status.swift": {
     "file": "icons/status/swift.png"
   },
+  "mat.outline": {
+    "file": "render/outline.tres",
+    "render": "outline"
+  },
+  "mat.toon": {
+    "file": "render/toon.tres",
+    "render": "toon"
+  },
   "model.char.spellbinder": {
     "file": "models/char/spellbinder.glb",
     "rig": "humanoid",
@@ -327,6 +335,10 @@
   },
   "portrait.npc.trainer": {
     "file": "portraits/npc/trainer.png"
+  },
+  "scene.environment": {
+    "file": "render/environment.tscn",
+    "render": "environment"
   },
   "scene.map.starter_meadow": {
     "file": "maps/starter_meadow.tscn"

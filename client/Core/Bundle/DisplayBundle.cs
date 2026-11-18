@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using Game.Shared.ClientContent;
 using Game.Shared.World;
@@ -171,6 +172,9 @@ public sealed class DisplayBundle
 
     /// <summary>A job's display data and skill tree (T-502), or null for an id the bundle does not have.</summary>
     public JobDisplay? Job(string? jobId) => jobId is not null && _jobs.TryGetValue(jobId, out var job) ? job : null;
+
+    /// <summary>Every job id the bundle has, in id order (T-222: the scripted run's look gallery draws each job's model; no job id is in client code).</summary>
+    public IReadOnlyList<string> JobIds => _jobs.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
 
     /// <summary>The highest refine level (<c>refine.yaml</c>); 0 when nothing refines.</summary>
     public int RefineMaxLevel { get; private set; }

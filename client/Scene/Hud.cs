@@ -25,6 +25,8 @@ public sealed class Hud
     private const double LeftColumnDp = 150;
     private const double RightColumnDp = 104;
     private const double BodyFontDp = 16;
+    private const double SlotFontDp = 13;      // a skill bar slot's name, before fitting (T-222)
+    private const double SlotFontMinDp = 9;
     private const double ButtonDp = 48;
     private const double PanelWidthDp = 420;
     private const double InfoWidthDp = 150;
@@ -84,6 +86,9 @@ public sealed class Hud
     private readonly VBoxContainer _bottom = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly GridContainer _hotbar = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly List<Button> _slots = new();
+    private readonly HotbarTextCache _slotText = new();
+    private int _slotFontPx = 13, _slotFontMinPx = 9;
+    private float _slotPadPx = 6;
     private readonly HotbarModel? _hotbarModel;
 
     private readonly PanelContainer _info = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
@@ -312,6 +317,7 @@ public sealed class Hud
         _statsVersion = -1;
         _connectionVersion = -1;
         _hotbarVersion = -1;
+        _slotText.Clear(); // a new scale: every slot fits its font again
         _shownTarget = -1;
     }
 
@@ -520,6 +526,9 @@ public sealed class Hud
         float Target(double dp) => (float)(TouchTargetRules.TargetDp(metrics.Platform, dp, scale) * unit);
 
         _theme.DefaultFontSize = Mathf.Max(8, Mathf.RoundToInt(Dp(BodyFontDp)));
+        _slotFontPx = Mathf.Max(8, Mathf.RoundToInt(Dp(SlotFontDp)));
+        _slotFontMinPx = Mathf.Max(7, Mathf.RoundToInt(Dp(SlotFontMinDp)));
+        _slotPadPx = Dp(6);
         var safe = metrics.Safe;
         _safe.Position = new Vector2((float)safe.X, (float)safe.Y);
         _safe.Size = new Vector2((float)safe.Width, (float)safe.Height);
@@ -592,6 +601,7 @@ public sealed class Hud
 
         _info.Visible = false;
         _hotbarVersion = -1;
+        _slotText.Clear(); // a new scale: every slot fits its font again
     }
 
     /// <summary>Redraws what changed. Allocates only when something did.</summary>
@@ -869,14 +879,37 @@ public sealed class Hud
         for (var i = 0; i < _slots.Count; i++)
         {
             var view = _hotbarModel.Slot(i);
-            var number = (i + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
             var left = view.Cooldown > 0 && _session is not null ? _session.Skills.CooldownLeft(view.DisplayKey!) : 0;
-            _slots[i].Text = view.IsEmpty ? number : number + "\n" + _bundle!.NameOf(view.DisplayKey) + (left > 0 ? "\n" + UiText.CooldownLeft(left) : string.Empty);
+            // T-222 (ADR-002 row 220): the text changes only with the skill or a whole second of cooldown; the sweep below moves every frame.
+            var name = view.IsEmpty ? null : _bundle!.NameOf(view.DisplayKey);
+            var seconds = HotbarText.WholeSeconds(left);
+            if (_slotText.Changed(i, name, seconds))
+            {
+                _slots[i].Text = HotbarText.Compose(i, name, seconds);
+                if (name is not null) FitSlotFont(_slots[i], name);
+                HotbarTextWrites++;
+            }
             _slots[i].Modulate = !view.IsEmpty && view.DisplayKey == _pendingShown ? new Color(1f, 0.9f, 0.5f) : RestColor(view);
             // The cooldown sweep (T-502): a dark veil over the slot, shrinking as the cooldown runs out; the anchors follow the slot's layout.
             _sweeps[i].AnchorBottom = (float)view.Cooldown;
             _sweeps[i].Visible = view.Cooldown > 0;
         }
+    }
+
+    /// <summary>How many times a skill bar slot's text was set (for measuring: once a second during a cooldown, not once a frame).</summary>
+    public int HotbarTextWrites { get; private set; }
+
+    /// <summary>
+    /// The slot's font: the largest step from <see cref="SlotFontDp"/> down to <see cref="SlotFontMinDp"/> (times the UI scale) at which every word of the name fits the
+    /// slot's width, so a name wraps only between words (T-222, ADR-002 row 220).
+    /// </summary>
+    private void FitSlotFont(Button slot, string name)
+    {
+        var font = slot.GetThemeFont("font");
+        var inner = slot.CustomMinimumSize.X - _slotPadPx;
+        var size = HotbarText.FitFontSize(name, (word, px) => font.GetStringSize(word, HorizontalAlignment.Left, -1, px).X, inner,
+            _slotFontPx, _slotFontMinPx);
+        slot.AddThemeFontSizeOverride("font_size", size);
     }
 
     private static Color RestColor(HotbarSlotView view) => view.IsEmpty ? new Color(1, 1, 1, 0.6f) : view.Usable ? Colors.White : new Color(1, 1, 1, 0.7f);
