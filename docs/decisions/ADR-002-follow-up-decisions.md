@@ -399,3 +399,11 @@ When writing these prompts, copy in the decisions listed:
 | 230 | Body re-merge (`GearMesher`) runs on a worker and preloaded pieces are read ahead: worst equip frame 58.9 → 35 ms (closes row 223). Failed pieces retry up to `piece_load_attempts` = 3 (closes row 225). Skill slot text redraws only per whole second and shrinks to fit (closes row 220) (T-222) | **Decided: accepted.** |
 | 231 | Godot's glTF importer ignores `COLOR_0`, so `GearMesher` and `ToonLook` apply vertex colours themselves; the job palette lives in `themes/default/palette.json`, read only by themegen (T-222) | **Decided: accepted.** |
 | 232 | Leftovers: ARCHITECTURE §8 still says placeholders are coloured from the key; map scenes include the toon light by an absolute `res://themes/default/...` path; the `--measure` client sometimes stays in Reconnecting on a loaded machine (3 of 9); one run showed the HUD at 61 canvas draws (T-222) | **→ T-406** (new backlog row: client and theme leftovers after the toon pass). |
+
+## Addendum — T-503 (2026-11-18)
+| # | Question (source) | Decision |
+|---|---|---|
+| 233 | `raise_stat` intent and the own `stats` message (points, each stat's value and next cost, the panel's derived stats), posted after the snapshot, a raise, a reset, a level, a job change, a learned skill and gear changes. `Net/**` approved under the user's standing approval of 2026-11-18 (T-503) | **Decided: accepted** as within that approval. Derived stats changed by a status (buff or debuff) aren't re-posted yet; **→ T-406**. |
+| 234 | `reset_stats` and `reset_skills` effects, allowed only on consumables (a service site comes with T-601); rules in `balance.yaml` `progression.reset`: free below base level 10 (item kept), refused in combat (`reset_in_combat`) and when dead (`reset_dead`), `nothing_to_reset`; the inventory checks them before anything is used up (T-503) | **Decided: accepted.** A reset costs the item until currency exists. |
+| 235 | Reset items Realign Tonic (stats) and Blank Page (skills), one of each in `new_character.start_items`; no icons yet (T-503) | **Decided: accepted.** Icons → **T-406**; whether they also drop → **T-404**. |
+| 236 | The Stats panel opens from a button in the skill panel header; the `-Run ui` layout check doesn't cover it yet (T-503) | **→ T-406:** add the stats panel to the layout and touch-target check. |
