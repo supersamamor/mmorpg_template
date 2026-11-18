@@ -190,7 +190,7 @@ public static class ProtocolJson
                 if (delta.Changed.Count > 0)
                 {
                     w.WriteStartArray("changed");
-                    foreach (var c in delta.Changed) WriteChange(w, c.Id, c.Fields, c.Cell, c.Facing, c.Next, c.Speed, c.DisplayKey, c.Hp, c.Dead, c.Mine, c.Weapon, c.Worn);
+                    foreach (var c in delta.Changed) WriteChange(w, c.Id, c.Fields, c.Cell, c.Facing, c.Next, c.Speed, c.DisplayKey, c.Hp, c.Dead, c.Mine, c.Weapon, c.Worn, c.Statuses);
                     w.WriteEndArray();
                 }
                 if (delta.Disappeared.Count > 0)
@@ -416,10 +416,10 @@ public static class ProtocolJson
     // ---- shared pieces (also used by ViewMessageWriter) ----
 
     private static void WriteRecord(Utf8JsonWriter w, EntityRecord e) =>
-        WriteRecord(w, e.Id, e.Kind, e.DisplayKey, e.Cell, e.Facing, e.Next, e.Speed, e.Hp, e.Dead, e.Quantity, e.Mine, e.Weapon, e.Worn);
+        WriteRecord(w, e.Id, e.Kind, e.DisplayKey, e.Cell, e.Facing, e.Next, e.Speed, e.Hp, e.Dead, e.Quantity, e.Mine, e.Weapon, e.Worn, e.Statuses);
 
     internal static void WriteRecord(Utf8JsonWriter w, long id, string kind, string? displayKey, GridCell cell, string facing, GridCell? next, double speed,
-        double? hp, bool dead, int quantity, bool? mine, string? weapon = null, IReadOnlyList<string>? worn = null)
+        double? hp, bool dead, int quantity, bool? mine, string? weapon = null, IReadOnlyList<string>? worn = null, IReadOnlyList<StatusRecord>? statuses = null)
     {
         w.WriteStartObject();
         w.WriteNumber("id", id);
@@ -435,7 +435,52 @@ public static class ProtocolJson
         if (mine is { } m) w.WriteBoolean("mine", m);
         if (weapon is not null) w.WriteString("weapon", weapon);
         if (worn is { Count: > 0 }) WriteStrings(w, "worn", worn);
+        if (statuses is { Count: > 0 }) WriteStatuses(w, statuses);
         w.WriteEndObject();
+    }
+
+    /// <summary><c>"statuses":[{"id":..,"stacks":..,"left_ms":..,"debuff":true},...]</c> (T-501); <c>debuff</c> only when true.</summary>
+    internal static void WriteStatuses(Utf8JsonWriter w, IReadOnlyList<StatusRecord> statuses)
+    {
+        w.WriteStartArray("statuses");
+        for (var i = 0; i < statuses.Count; i++)
+        {
+            var s = statuses[i];
+            w.WriteStartObject();
+            w.WriteString("id", s.Id);
+            w.WriteNumber("stacks", s.Stacks);
+            w.WriteNumber("left_ms", s.LeftMs);
+            if (s.Debuff) w.WriteBoolean("debuff", true);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+    }
+
+    private static List<StatusRecord> ReadStatuses(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+        var list = new List<StatusRecord>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.StartObject)
+        {
+            string? id = null;
+            int stacks = 1, left = 0;
+            var debuff = false;
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var name = reader.GetString();
+                reader.Read();
+                switch (name)
+                {
+                    case "id": id = String(ref reader); break;
+                    case "stacks": stacks = reader.GetInt32(); break;
+                    case "left_ms": left = reader.GetInt32(); break;
+                    case "debuff": debuff = reader.GetBoolean(); break;
+                    default: reader.Skip(); break;
+                }
+            }
+            list.Add(new StatusRecord(id ?? throw Bad(), stacks, left, debuff));
+        }
+        return list;
     }
 
     private static void WriteStrings(Utf8JsonWriter w, string name, IReadOnlyList<string> values)
@@ -517,7 +562,7 @@ public static class ProtocolJson
     }
 
     internal static void WriteChange(Utf8JsonWriter w, long id, ChangedFields fields, GridCell cell, string? facing, GridCell? next, double speed, string? displayKey,
-        double hp, bool dead, bool mine, string? weapon = null, IReadOnlyList<string>? worn = null)
+        double hp, bool dead, bool mine, string? weapon = null, IReadOnlyList<string>? worn = null, IReadOnlyList<StatusRecord>? statuses = null)
     {
         w.WriteStartObject();
         w.WriteNumber("id", id);
@@ -542,6 +587,7 @@ public static class ProtocolJson
             w.WriteString("weapon", weapon);
             WriteStrings(w, "worn", worn ?? Array.Empty<string>());
         }
+        if ((fields & ChangedFields.Statuses) != 0) WriteStatuses(w, statuses ?? Array.Empty<StatusRecord>());
         w.WriteEndObject();
     }
 
@@ -572,6 +618,7 @@ public static class ProtocolJson
             bool? mine = null;
             string? weapon = null;
             List<string>? worn = null;
+            List<StatusRecord>? statuses = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var name = reader.GetString();
@@ -591,10 +638,11 @@ public static class ProtocolJson
                     case "mine": mine = reader.GetBoolean(); break;
                     case "weapon": weapon = String(ref reader); break;
                     case "worn": worn = ReadStrings(ref reader); break;
+                    case "statuses": statuses = ReadStatuses(ref reader); break;
                     default: reader.Skip(); break;
                 }
             }
-            into.Add(new EntityRecord(id, kind ?? throw Bad(), key, cell, facing ?? throw Bad(), next, speed, hp, dead, quantity, mine, weapon, worn));
+            into.Add(new EntityRecord(id, kind ?? throw Bad(), key, cell, facing ?? throw Bad(), next, speed, hp, dead, quantity, mine, weapon, worn, statuses));
         }
     }
 
@@ -612,6 +660,7 @@ public static class ProtocolJson
             bool dead = false, mine = false;
             string? weapon = null;
             List<string>? worn = null;
+            List<StatusRecord>? statuses = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var name = reader.GetString();
@@ -629,10 +678,11 @@ public static class ProtocolJson
                     case "mine": mine = reader.GetBoolean(); fields |= ChangedFields.Mine; break;
                     case "weapon": weapon = String(ref reader); fields |= ChangedFields.Look; break;
                     case "worn": worn = ReadStrings(ref reader); fields |= ChangedFields.Look; break;
+                    case "statuses": statuses = ReadStatuses(ref reader); fields |= ChangedFields.Statuses; break;
                     default: reader.Skip(); break;
                 }
             }
-            into.Add(new ChangeRecord(id, fields, cell, facing, next, speed, key, hp, dead, mine, weapon, worn));
+            into.Add(new ChangeRecord(id, fields, cell, facing, next, speed, key, hp, dead, mine, weapon, worn, statuses));
         }
     }
 

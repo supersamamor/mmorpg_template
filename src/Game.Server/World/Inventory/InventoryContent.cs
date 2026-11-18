@@ -22,7 +22,7 @@ public sealed class InventoryContent
     /// it may use; a job that is missing, or maps to an empty list, may use any. <paramref name="refine"/> is <c>refine.yaml</c> (none: nothing refines).
     /// </summary>
     public InventoryContent(IReadOnlyDictionary<string, ItemDef> items, BalanceDef balance, IReadOnlyDictionary<string, IReadOnlyList<string>>? jobWeaponTypes = null,
-        IItemEffects? effects = null, RefineDef? refine = null)
+        RefineDef? refine = null)
     {
         _items = items ?? throw new ArgumentNullException(nameof(items));
         Balance = balance ?? throw new ArgumentNullException(nameof(balance));
@@ -35,7 +35,6 @@ public sealed class InventoryContent
         Check(inventory.PickupRange >= 0, "inventory.pickup_range must not be negative.");
         Check(inventory.DroppedLifetimeMs > 0, "inventory.dropped_lifetime_ms must be above 0.");
         Rules = new InventoryRules(new ItemLookup(items), inventory, refine);
-        Effects = effects ?? new BasicItemEffects(items.Values);
         foreach (var item in items.Values) Modifiers(item);   // compile now: a bad modifier is a boot error, not a runtime one
     }
 
@@ -53,9 +52,6 @@ public sealed class InventoryContent
 
     /// <summary><c>balance.yaml</c>: <c>inventory</c>, <c>new_character</c>.</summary>
     public BalanceDef Balance { get; }
-
-    /// <summary>What using a consumable does (the seam T-501's effect runner takes over).</summary>
-    public IItemEffects Effects { get; }
 
     /// <summary>Finds an item.</summary>
     public bool TryGetItem(string id, out ItemDef item) => _items.TryGetValue(id, out item!);
@@ -127,70 +123,4 @@ public sealed class InMemoryInventoryStore : IInventoryStore
 
     /// <inheritdoc />
     public long NextEntryId() => Interlocked.Increment(ref _lastId);
-}
-
-/// <summary>
-/// What using a consumable does to its user: the one seam for item effects, which T-501's effect runner will own. Called on the instance's tick.
-/// </summary>
-public interface IItemEffects
-{
-    /// <summary>Null when every effect of <paramref name="item"/> can run, else an <c>ItemReasons</c> term (<c>unsupported_effect</c>).</summary>
-    string? CanApply(ItemDef item);
-
-    /// <summary>Applies the effects of <paramref name="item"/> to <paramref name="user"/> (only after <see cref="CanApply"/> said yes).</summary>
-    void Apply(Entity user, ItemDef item);
-}
-
-/// <summary>
-/// The item effects of T-401: <c>heal</c> and <c>restore_sp</c> only, each amount a formula evaluated like the balance formulas, with the user's
-/// stats and levels as the caster variables. A consumable with any other effect type is refused (<c>unsupported_effect</c>) and nothing is used up,
-/// until T-501. HP and SP never go above max; a negative amount counts as 0.
-/// </summary>
-public sealed class BasicItemEffects : IItemEffects
-{
-    private readonly Dictionary<string, (Formula? Heal, Formula? Sp, bool Supported)[]> _compiled = new(StringComparer.Ordinal);
-    private readonly FormulaContext _context = new();
-
-    /// <summary>Compiles the effect amounts of every consumable in <paramref name="items"/>.</summary>
-    public BasicItemEffects(IEnumerable<ItemDef> items)
-    {
-        foreach (var item in items)
-        {
-            if (item.Consumable is not { } consumable) continue;
-            _compiled[item.Id] = consumable.Effects.Select(e => e switch
-            {
-                HealEffect heal => (Formula.Compile(heal.Amount), (Formula?)null, true),
-                RestoreSpEffect sp => ((Formula?)null, Formula.Compile(sp.Amount), true),
-                _ => ((Formula?)null, (Formula?)null, false),
-            }).ToArray();
-        }
-    }
-
-    /// <inheritdoc />
-    public string? CanApply(ItemDef item)
-    {
-        if (!_compiled.TryGetValue(item.Id, out var effects)) return Shared.Vocabulary.ItemReasons.UnsupportedEffect;
-        foreach (var effect in effects)
-            if (!effect.Supported) return Shared.Vocabulary.ItemReasons.UnsupportedEffect;
-        return null;
-    }
-
-    /// <inheritdoc />
-    public void Apply(Entity user, ItemDef item)
-    {
-        if (!_compiled.TryGetValue(item.Id, out var effects) || user.Vitals is not { } vitals) return;
-        _context.Clear();
-        user.Stats?.WriteTo(_context);
-        foreach (var (heal, sp, _) in effects)
-        {
-            if (heal is not null) vitals.Hp = (int)Math.Min(vitals.MaxHp, vitals.Hp + Amount(heal));
-            if (sp is not null) vitals.Sp = (int)Math.Min(vitals.MaxSp, vitals.Sp + Amount(sp));
-        }
-    }
-
-    private long Amount(Formula formula)
-    {
-        var value = formula.Evaluate(_context);
-        return double.IsFinite(value) && value > 0 ? (long)Math.Floor(value + 1e-9) : 0;
-    }
 }

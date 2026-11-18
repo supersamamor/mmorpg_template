@@ -1,5 +1,6 @@
 using Game.Content.Registry;
 using Game.Shared.Combat;
+using Game.Shared.Effects;
 using Game.Shared.Definitions;
 using Game.Shared.Formulas;
 using Game.Shared.Progression;
@@ -41,6 +42,11 @@ public sealed class BalanceSimulator
     public ProgressionRules Progression { get; }
 
     public CombatRules Combat { get; }
+
+    private EffectLibrary? _effects;
+
+    /// <summary>The content's skills, consumables and statuses compiled for the <see cref="EffectRunner"/> (T-501), built on first use.</summary>
+    public EffectLibrary Effects => _effects ??= new EffectLibrary(Db.Skills.All, Db.Items.All, Db.Statuses.All);
 
     /// <summary>Job level paired with a base level: the same number, capped at the job's own maximum.</summary>
     public int JobLevelFor(string jobId, int baseLevel) =>

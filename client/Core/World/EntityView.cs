@@ -66,6 +66,23 @@ public sealed class EntityView
     /// <summary>Counts changes to <see cref="Weapon"/> and <see cref="Worn"/>, so a visual re-dresses only when they changed (T-403).</summary>
     public int LookVersion { get; private set; }
 
+    /// <summary>
+    /// Its statuses (T-501), in application order, each with the view-clock time it ends: the server sends the time left only when a status starts,
+    /// stacks, is refreshed or ends, and the client counts down itself.
+    /// </summary>
+    public IReadOnlyList<ShownStatus> Statuses => _statuses;
+
+    /// <summary>Moves whenever <see cref="Statuses"/> changed (the HUD and the markers redraw only then).</summary>
+    public int StatusVersion { get; private set; }
+
+    /// <summary>True while some status is a debuff (the marker's colour).</summary>
+    public bool HasDebuff { get; private set; }
+
+    /// <summary>Status ids that started on it since the presenter last looked (their vfx plays once); cleared by the presenter.</summary>
+    public List<string> StartedStatuses { get; } = new();
+
+    private readonly List<ShownStatus> _statuses = new();
+
     /// <summary>Drawn position on the X axis, in world units (cell <c>x</c> is centred at <c>x + 0.5</c>).</summary>
     public double X { get; private set; }
 
@@ -113,6 +130,8 @@ public sealed class EntityView
         Weapon = record.Weapon;
         Worn = record.Worn ?? Array.Empty<string>();
         LookVersion++;
+        StartedStatuses.Clear();
+        SetStatuses(record.Statuses, now, announce: false);
         X = Center(record.Cell.X);
         Z = Center(record.Cell.Y);
         Yaw = _targetYaw = YawOf(record.Facing, 0);
@@ -154,6 +173,7 @@ public sealed class EntityView
             LookVersion++;
             LookDirty = true;
         }
+        if ((fields & ChangedFields.Statuses) != 0) SetStatuses(change.Statuses, now, announce: true);
         if ((fields & ChangedFields.Speed) != 0) Speed = change.Speed;
 
         var moved = (fields & (ChangedFields.Cell | ChangedFields.Next)) != 0;
@@ -167,6 +187,31 @@ public sealed class EntityView
     }
 
     /// <summary>The attack swing starts on screen (<c>CombatTimeline</c> decides when).</summary>
+    private void SetStatuses(IReadOnlyList<StatusRecord>? records, double now, bool announce)
+    {
+        if (announce && records is not null)
+        {
+            foreach (var record in records)
+            {
+                var known = false;
+                foreach (var shown in _statuses) known |= shown.Id == record.Id;
+                if (!known) StartedStatuses.Add(record.Id);
+            }
+        }
+        _statuses.Clear();
+        HasDebuff = false;
+        if (records is not null)
+        {
+            foreach (var record in records)
+            {
+                _statuses.Add(new ShownStatus(record.Id, record.Stacks, now + record.LeftMs / 1000.0, record.Debuff));
+                HasDebuff |= record.Debuff;
+            }
+        }
+        StatusVersion++;
+        LookDirty = true;
+    }
+
     internal void MarkAttack() => AttackCount++;
 
     /// <summary>A hit lands on this entity on screen.</summary>
@@ -344,4 +389,11 @@ public sealed class EntityView
 
         public double End => Start + Duration;
     }
+}
+
+/// <summary>One status as the client shows it: id (name, icon and vfx come from the bundle), stacks, when it ends on the view clock, debuff or buff.</summary>
+public readonly record struct ShownStatus(string Id, int Stacks, double EndsAt, bool Debuff)
+{
+    /// <summary>Whole seconds left at <paramref name="now"/>, rounded up, never below 0.</summary>
+    public int SecondsLeft(double now) => (int)Math.Max(0, Math.Ceiling(EndsAt - now - 1e-9));
 }

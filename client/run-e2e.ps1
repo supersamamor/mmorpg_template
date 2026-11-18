@@ -8,12 +8,14 @@
 #   .\client\run-e2e.ps1 -Run items                       kill, pick up the drop, equip it through the bag, see the hits get stronger, use a potion (content copy: weak monsters
 #                                                         that always drop a dagger, a potion, a vest, a card and a temper shard; new characters start with nothing) (T-401),
 #                                                         then wear the vest, socket the card (max HP up), refine the dagger once (hits up) (T-402)
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, bye, release
+#   .\client\run-e2e.ps1 -Run statuses                    use a Swift Elixir (Swift in the HUD), fight a slime until it casts Iron Guard (Iron Skin marker above it) (T-501;
+#                                                         content copy: weak but tough slimes that cast Iron Guard, new characters start with a Swift Elixir)
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, bye, release
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -47,6 +49,7 @@ Import-GodotProject $godot $client -Force -TimeoutSeconds $ImportTimeoutSeconds
 
 $script:temp = $null
 $script:itemsTemp = $null
+$script:statusesTemp = $null
 # Every process this script starts (servers, the server exe under `dotnet run`, Godot and its game exe). Start-Process with redirection makes children
 # inherit this script's handles, so anything left running keeps the caller's output pipe open and the caller waiting after the script has ended
 # (ADR-002 row 190). The final cleanup stops whatever is still running and says so (T-221).
@@ -89,10 +92,29 @@ function Get-ItemsContent {
     return (Join-Path $script:itemsTemp "content")
 }
 
-function Start-GameServer([switch] $Easy, [switch] $Items, [string[]] $Extra = @()) {
+# The statuses run's copy (T-501): the weak monsters, but slimes with 400 HP that cast Iron Guard on themselves whenever their attack is due and it is ready
+# (a status on a monster), and new characters start with one Swift Elixir only (a status on the own character, through the bag). Monster AI and
+# start items are server-only data: the bundle hash does not change.
+function Get-StatusesContent {
+    if ($script:statusesTemp) { return (Join-Path $script:statusesTemp "content") }
+    $script:statusesTemp = Join-Path ([IO.Path]::GetTempPath()) ("t501-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $script:statusesTemp | Out-Null
+    Copy-Item (Get-EasyContent) (Join-Path $script:statusesTemp "content") -Recurse
+    Copy-Item (Join-Path $root "themes") (Join-Path $script:statusesTemp "themes") -Recurse
+    $slime = Join-Path $script:statusesTemp "content/monsters/gel_slime.yaml"
+    $text = [IO.File]::ReadAllText($slime) -replace 'max_hp: \d+', 'max_hp: 400' -replace '(?m)^  chase_range: (\d+)', "  chase_range: `$1`n  skills:`n    - { skill_id: skill.iron_guard, level: 1, chance: 1 }"
+    [IO.File]::WriteAllText($slime, $text)
+    $balance = Join-Path $script:statusesTemp "content/balance.yaml"
+    $text = [IO.File]::ReadAllText($balance) -replace '(?ms)^  start_items:\r?\n(    - .*?\r?\n)+', "  start_items:`n    - { item_id: item.swift_elixir, quantity: 1 }`n"
+    [IO.File]::WriteAllText($balance, $text)
+    return (Join-Path $script:statusesTemp "content")
+}
+
+function Start-GameServer([switch] $Easy, [switch] $Items, [switch] $Statuses, [string[]] $Extra = @()) {
     $log = [IO.Path]::GetTempFileName()
     $arguments = @("run", "--no-build", "--project", "src/Game.Server", "--")
     if ($Items) { $arguments += (Get-ItemsContent) }
+    elseif ($Statuses) { $arguments += (Get-StatusesContent) }
     elseif ($Easy) { $arguments += (Get-EasyContent) }
     $arguments += @("--seed", "$Seed", "--net-port", "$Port") + $Extra
     $process = Start-Process dotnet -PassThru -NoNewWindow -WorkingDirectory $root -RedirectStandardOutput $log -RedirectStandardError "$log.err" -ArgumentList $arguments
@@ -253,6 +275,11 @@ function Invoke-Scenario([string] $Name) {
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-items" @()) -EngineArgs $engineArgs
                 return (Wait-GodotClient $run 600).Code
             }
+            "statuses" {
+                $server = Start-GameServer -Statuses
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-statuses" @()) -EngineArgs $engineArgs
+                return (Wait-GodotClient $run 300).Code
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -379,7 +406,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 $failed = @()
@@ -405,6 +432,7 @@ finally {
     }
     if ($script:temp) { Remove-Item $script:temp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:itemsTemp) { Remove-Item $script:itemsTemp -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($script:statusesTemp) { Remove-Item $script:statusesTemp -Recurse -Force -ErrorAction SilentlyContinue }
 }
 if ($failed.Count -gt 0) { Write-Host "[run-e2e] FAILED: $($failed -join ', ')"; exit 1 }
 Write-Host "[run-e2e] all passed: $($runs -join ', ')"

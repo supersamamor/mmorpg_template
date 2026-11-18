@@ -95,10 +95,21 @@ public sealed partial class CombatFx
     /// <summary>A hit landed: show its effect. (The number is started by the session, from the same event.)</summary>
     private void OnImpact(in HitImpact impact)
     {
-        if (impact.Kind == HitKind.Miss) return;
+        if (impact.Kind is HitKind.Miss or HitKind.Status) return;   // a status tick: its vfx played when the status started
         // Fights this client is not in only take half the effect pool, so a crowd cannot crowd out the player's own hits (and the draw calls stay down).
         if (impact.Side == HitSide.Other && _active.Count >= _config.MaxEffects / 2) return;
         Spawn(impact.Kind == HitKind.Crit ? EffectNames.Crit : EffectNames.Hit, impact.X, impact.Z, impact.At, _config.EffectSeconds, 1f);
+    }
+
+    /// <summary>
+    /// A status started on an entity (T-501): play its <c>vfx</c> asset key from the bundle once there, resolved through the theme chain (§7.7). A key no
+    /// theme has plays nothing (the catalog warns once). Fights this client is not in take only half the effect pool, as hits do.
+    /// </summary>
+    public void OnStatusStarted(string? vfxKey, float x, float y, float z, bool own)
+    {
+        if (vfxKey is null || !_catalog.TryFind(vfxKey, out var path, out _)) return;
+        if (!own && _active.Count >= _config.MaxEffects / 2) return;
+        SpawnPath(path, x, z, Clocks.View(), _config.LongEffectSeconds, 1.2f, y);
     }
 
     /// <summary>A death became visible: play the death effect where the body lies.</summary>
@@ -219,8 +230,13 @@ public sealed partial class CombatFx
 
     private void Spawn(string key, double x, double z, double now, double seconds, float scale, float? groundY = null)
     {
-        var pooledKey = _catalog.ResolveEffect(key, out var resolved) ? resolved : null;
-        if (pooledKey is null) return;
+        if (!_catalog.ResolveEffect(key, out var resolved)) return;
+        SpawnPath(resolved, x, z, now, seconds, scale, groundY);
+    }
+
+    /// <summary>Plays the effect scene at <paramref name="pooledKey"/> (a theme file path; the pool is per path).</summary>
+    private void SpawnPath(string pooledKey, double x, double z, double now, double seconds, float scale, float? groundY = null)
+    {
         if (_active.Count >= _config.MaxEffects) Retire(0); // the oldest ends early
         if (!_free.TryGetValue(pooledKey, out var free)) _free[pooledKey] = free = new Stack<Fx>();
         Fx fx;
@@ -230,7 +246,7 @@ public sealed partial class CombatFx
         }
         else
         {
-            var scene = SceneOf(key);
+            var scene = SceneAt(pooledKey);
             if (scene is null) return;
             var node = scene.Instantiate<Node3D>();
             _parent.AddChild(node);
@@ -244,6 +260,14 @@ public sealed partial class CombatFx
         _active.Add(fx);
         _started++;
         Apply(fx, 0f);
+    }
+
+    private PackedScene? SceneAt(string path)
+    {
+        if (_scenes.TryGetValue(path, out var cached)) return cached;
+        var scene = ResourceLoader.Exists("res://" + path) ? ResourceLoader.Load<PackedScene>("res://" + path) : null;
+        _scenes[path] = scene;
+        return scene;
     }
 
     private PackedScene? SceneOf(string key)

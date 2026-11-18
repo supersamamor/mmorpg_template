@@ -1,7 +1,10 @@
 using Game.Server.Events;
+using Game.Server.World.Effects;
+using Game.Server.World.Inventory;
 using Game.Server.World.Monsters;
 using Game.Shared.Combat;
 using Game.Shared.Definitions;
+using Game.Shared.Effects;
 using Game.Shared.Formulas;
 using Game.Shared.Progression;
 using Game.Shared.Stats;
@@ -25,10 +28,18 @@ namespace Game.Server.World.Combat;
 /// <see cref="StopMove"/> and follows the movement events; learns about entities from <see cref="EntityEnteredMap"/> /
 /// <see cref="EntityLeftMap"/> and about monster attacks from <see cref="AttackRequested"/>. The spawner despawns dead monsters; movement
 /// stops dead walkers (<c>MovementStopped</c> <c>died</c>).</para>
+/// <para><b>Effects and statuses</b> (T-501): combat hosts the instance's <see cref="EffectRunner"/>, because a <c>damage</c> effect must take the
+/// same HP, death and EXP-share path as an auto-attack. It runs consumables (on <see cref="ItemUsed"/>, the tick after the use), skills (on
+/// <see cref="SkillRequested"/>, the tick after the request, re-checked like an attack request) and every entity's statuses (each tick, in entity id
+/// order: due <c>on_tick</c> effects, then expiry). Status damage is credited to the status's applier while it is on the map, and its
+/// <see cref="DamageDealt"/> result is <c>status</c>. Every status ends on death (<c>died</c>) and when its bearer arrives from another map
+/// (<c>warped</c>: statuses are timed by one instance's tick clock). <c>prevents_attack</c> refuses <see cref="AttackTarget"/> and monster requests
+/// (<c>cannot_attack</c>) and pauses a running auto-attack; <c>prevents_move</c> pauses its walking; <c>prevents_skills</c> refuses skills.
+/// What observers see of the statuses goes on <see cref="Entity.StatusLook"/> at the end of the tick.</para>
 /// <para><b>Allocation</b> after warm-up: none per resolved hit (one reused <see cref="AttackContext"/>, pooled damage logs); only the events
 /// it raises, the chase <see cref="MoveTo"/> intents, and on a kill the progression results and the ground item entities.</para>
 /// </remarks>
-public sealed class CombatSystem : ITickSystem
+public sealed partial class CombatSystem : ITickSystem
 {
     private static readonly IReadOnlyCollection<Type> Owned = [typeof(AttackTarget), typeof(StopAttack), typeof(Respawn)];
     private static readonly int AspdStat = StatIndex.IndexOf(DerivedStats.Aspd);
@@ -57,6 +68,14 @@ public sealed class CombatSystem : ITickSystem
     private long[] _jobShares = new long[8];
     private List<AttackRequested> _requests = new();
     private List<AttackRequested> _resolving = new();
+    private List<SkillRequested> _skillRequests = new();
+    private List<SkillRequested> _skillResolving = new();
+    private List<ItemUsed> _itemUses = new();
+    private List<ItemUsed> _itemResolving = new();
+    private readonly List<(int Distance, long Id)> _area = new();
+    private EffectRunner? _runner;
+    private EffectHost? _host;
+    private TickContext? _context;
     private CombatResolver? _resolver;
     private MapInstance? _instance;
     private bool[] _safe = [];
@@ -98,6 +117,9 @@ public sealed class CombatSystem : ITickSystem
     /// <summary>The player's auto-attack target, or null when it is not attacking.</summary>
     public EntityId? TargetOf(EntityId player) => _chaseById.TryGetValue(player.Value, out var chase) ? chase.Target : null;
 
+    /// <summary>Skills resolved so far (their effects ran).</summary>
+    public long SkillsUsed { get; private set; }
+
     /// <summary>The players who damaged a monster since its last full-HP moment and how much HP each took, in first-hit order.</summary>
     public IReadOnlyList<(EntityId Attacker, long Damage)> DamageLog(EntityId monster)
     {
@@ -112,6 +134,7 @@ public sealed class CombatSystem : ITickSystem
         if (!ReferenceEquals(_instance, instance)) Setup(context);
         _tick = context.TickNumber;
         _nowMs = context.SimTimeMs;
+        _context = context;
 
         HandleIntents(context);
         for (var i = 0; i < _ordered.Count; i++)
@@ -124,9 +147,13 @@ public sealed class CombatSystem : ITickSystem
                 if (!entity.Dead && entity.Load == WeightStates.Normal) Regenerate(_ordered[i], vitals, stats, context.DeltaMs);
             }
         }
+        TickStatuses();
         ResolveRequests(context);
+        ResolveSkills(context);
+        UseItems();
         RunChases(context);
         ExpireItems(context);
+        RefreshStatusLooks();
     }
 
     // ---- regeneration -------------------------------------------------------------------------------------------------------------------
@@ -179,6 +206,8 @@ public sealed class CombatSystem : ITickSystem
         var instance = context.Instance;
         _instance = instance;
         _resolver = new CombatResolver(_content.Rules, context.Random);
+        _host = new EffectHost(this);
+        _runner = new EffectRunner(_content.Rules, _content.Effects, _host, context.Random);
         var grid = instance.Grid;
         _safe = new bool[grid.Width * grid.Height];
         foreach (var zone in grid.Zones)
@@ -197,6 +226,8 @@ public sealed class CombatSystem : ITickSystem
         events.Subscribe<MovementStopped>(OnMovementStopped);
         events.Subscribe<MoveRejected>(OnMoveRejected);
         events.Subscribe<MonsterReturned>(OnReturned);
+        events.Subscribe<SkillRequested>(e => _skillRequests.Add(e));
+        events.Subscribe<ItemUsed>(e => _itemUses.Add(e));
 
         // Entities that were there before combat first ran (tests, a system added late) join now.
         foreach (var entity in instance.Entities) Track(entity);
@@ -213,7 +244,15 @@ public sealed class CombatSystem : ITickSystem
 
     private void OnEntered(EntityEnteredMap e)
     {
-        if (_instance!.TryGetEntity(e.Entity, out var entity)) Track(entity);
+        if (!_instance!.TryGetEntity(e.Entity, out var entity)) return;
+        Track(entity);
+        // Statuses timed on another map's clock end on arrival (StatusEndReasons.Warped); a same-map warp keeps them.
+        if (entity.Statuses is { } set && !string.Equals(set.MapId, _instance.MapId, StringComparison.Ordinal))
+        {
+            if (!set.IsEmpty && _combatants.ContainsKey(entity.Id.Value)) _runner!.EndAll(entity.Id.Value, StatusEndReasons.Warped);
+            set.MapId = _instance.MapId;
+            RefreshLook(entity);
+        }
     }
 
     /// <summary>Starts tracking a player or monster with stats: vitals full if it has none yet (they travel with it across warps).</summary>
@@ -294,6 +333,7 @@ public sealed class CombatSystem : ITickSystem
         if (target.Dead) return AttackReasons.TargetDead;
         if (InSafeZone(player.Cell)) return AttackReasons.SafeZone;
         if (player.Load == WeightStates.Overweight) return AttackReasons.Overweight;
+        if (player.CannotAttack) return AttackReasons.CannotAttack;
         return null;
     }
 
@@ -333,6 +373,7 @@ public sealed class CombatSystem : ITickSystem
     {
         target = null;
         if (!_combatants.TryGetValue(request.Attacker.Value, out attacker) || attacker.Entity.Dead) return AttackReasons.AttackerDead;
+        if (attacker.Entity.CannotAttack) return AttackReasons.CannotAttack;
         if (!_combatants.TryGetValue(request.Target.Value, out target)) return AttackReasons.TargetGone;
         if (target.Entity.Dead) return AttackReasons.TargetDead;
         if (target.Entity == attacker.Entity) return AttackReasons.InvalidTarget;
@@ -364,6 +405,8 @@ public sealed class CombatSystem : ITickSystem
         if (target.Entity.Dead) return End(context, chase, AttackReasons.TargetDead);
         if (!_combatants.TryGetValue(player.Id.Value, out var self)) return End(context, chase, AttackReasons.AttackerDead);
         if (player.Load == WeightStates.Overweight) return End(context, chase, AttackReasons.Overweight);
+        // A stun pauses the auto-attack (it keeps its target): no swing while prevents_attack holds, no walking while prevents_move does.
+        if (player.CannotAttack) return true;
 
         // An equipped weapon brings its own range; unarmed is combat.player_attack_range.
         var range = player.Weapon?.AttackRange ?? _content.Balance.Combat.PlayerAttackRange;
@@ -377,7 +420,7 @@ public sealed class CombatSystem : ITickSystem
             return true;
         }
 
-        if (_nowMs < chase.NextRepathMs) return true;
+        if (_nowMs < chase.NextRepathMs || player.CannotMove) return true;
         var walkingThere = chase.Goal is { } goal && Same(goal, target.Entity.Cell) && (chase.Walking || chase.MovePending(_tick));
         if (walkingThere) return true;
         Move(context, chase, target.Entity.Cell);
@@ -457,6 +500,12 @@ public sealed class CombatSystem : ITickSystem
     /// <summary>Resolves one auto-attack through the resolver and applies it. Allocates nothing but the event.</summary>
     private void Strike(TickContext context, Combatant attacker, Combatant target)
     {
+        var result = Resolve(attacker, target);
+        Land(context, attacker.Entity.Id, attacker, target, result, fromStatus: false);
+    }
+
+    private AttackResult Resolve(Combatant attacker, Combatant target)
+    {
         var a = _attack;
         a.Attacker = attacker.Entity.Stats!;
         a.Defender = target.Entity.Stats!;
@@ -469,11 +518,20 @@ public sealed class CombatSystem : ITickSystem
         a.DefenderElement = ElementOf(target.Def);
         a.DefenderRace = target.Def is { Race.Length: > 0 } race ? race.Race : null;
         a.DefenderSize = target.Def is { Size.Length: > 0 } size ? size.Size : null;
-        var result = _resolver!.Resolve(a);
-        Resolved++;
+        a.AlwaysHits = false;
+        return _resolver!.Resolve(a);
+    }
 
+    /// <summary>
+    /// Applies a resolved hit (an auto-attack or a <c>damage</c> effect) to <paramref name="target"/>: the one HP, <see cref="DamageDealt"/>, death and
+    /// EXP-share path. <paramref name="attacker"/> is null when the source is no longer on this map (a status ticking after its applier left): the
+    /// hit still lands, with <paramref name="attackerId"/> as the source and killer, but earns no EXP share.
+    /// </summary>
+    private void Land(TickContext context, EntityId attackerId, Combatant? attacker, Combatant target, AttackResult result, bool fromStatus)
+    {
+        Resolved++;
         var resume = _nowMs + _content.Balance.Regen.OutOfCombatDelayMs;   // any resolved attack, a miss too, is combat for both
-        attacker.RegenResumeMs = resume;
+        if (attacker is not null && !fromStatus) attacker.RegenResumeMs = resume;
         target.RegenResumeMs = resume;
         var vitals = target.Entity.Vitals!;
         var before = vitals.Hp;
@@ -481,11 +539,11 @@ public sealed class CombatSystem : ITickSystem
         if (target.Entity.Kind == EntityKind.Monster)
         {
             if (vitals.Hp >= vitals.MaxHp) ReleaseLog(target);                                    // back to full: the damage race restarts
-            else if (attacker.Entity.Kind == EntityKind.Player && before > vitals.Hp) Credit(target, attacker.Entity.Id, before - vitals.Hp);
+            else if (attacker?.Entity.Kind == EntityKind.Player && before > vitals.Hp) Credit(target, attackerId, before - vitals.Hp);
         }
-        var outcome = !result.Hit ? HitResults.Miss : result.Crit ? HitResults.Crit : HitResults.Hit;
-        context.Publish(new DamageDealt(attacker.Entity.Id, target.Entity.Id, result.Damage, outcome, vitals.Hp));
-        if (vitals.Hp == 0) Die(context, target, attacker.Entity.Id);
+        var outcome = fromStatus ? HitResults.Status : !result.Hit ? HitResults.Miss : result.Crit ? HitResults.Crit : HitResults.Hit;
+        context.Publish(new DamageDealt(attackerId, target.Entity.Id, result.Damage, outcome, vitals.Hp));
+        if (vitals.Hp == 0 && !target.Entity.Dead) Die(context, target, attackerId);
     }
 
     private static string? ElementOf(MonsterDef? def) => def is { Element.Length: > 0 } ? def.Element : null;
@@ -514,6 +572,7 @@ public sealed class CombatSystem : ITickSystem
     {
         var entity = dead.Entity;
         entity.Dead = true;   // movement stops it (MovementStopped "died"); the AI and the router ignore it from now on
+        _runner!.EndAll(entity.Id.Value, StatusEndReasons.Died);   // every status ends on death, its modifiers with it
         context.Publish(new EntityDied(entity.Id, killer, entity.Kind, entity.Kind == EntityKind.Player ? null : entity.DefinitionId, entity.Cell));
         if (entity.Kind == EntityKind.Player)
         {

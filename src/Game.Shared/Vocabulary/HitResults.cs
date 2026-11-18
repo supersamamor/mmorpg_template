@@ -12,10 +12,14 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>miss</c>: the attack missed; the amount is 0.</summary>
         public const string Miss = "miss";
 
+        /// <summary><c>status</c>: damage from a status's <c>on_tick</c> (poison): not an attack, so no swing is shown; it always lands (T-501).</summary>
+        public const string Status = "status";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             Hit,
             Crit,
-            Miss);
+            Miss,
+            Status);
     }
 }

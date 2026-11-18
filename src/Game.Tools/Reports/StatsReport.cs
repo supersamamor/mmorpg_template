@@ -60,7 +60,11 @@ internal static class StatsReport
             .Add("sim_fights", r.Fights)
             .Add("sim_win_rate_pct", r.WinRate * 100)
             .Add("sim_mean_swings_on_win", r.MeanSwingsOnWin)
-            .Add("sim_mean_hp_left_pct_on_win", r.MeanHpLeftFractionOnWin * 100);
+            .Add("sim_mean_hp_left_pct_on_win", r.MeanHpLeftFractionOnWin * 100)
+            .Add("sim_monster_skill_casts", r.MeanSkillCasts)
+            .Add("sim_monster_skill_damage", r.MeanSkillDamage)
+            .Add("sim_status_damage", r.MeanStatusDamage)
+            .Add("sim_statuses_applied", r.MeanStatusesApplied);
         return new[] { table };
     }
 

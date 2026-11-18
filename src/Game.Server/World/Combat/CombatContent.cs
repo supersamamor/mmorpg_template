@@ -76,6 +76,9 @@ public sealed class CombatContent
     /// <summary>Monster definitions (element, race, size, EXP, drop tables) by id.</summary>
     public MonsterCatalog Monsters { get; }
 
+    /// <summary>The compiled effects combat's effect runner runs (skills, consumables, statuses): the catalog's.</summary>
+    public Game.Shared.Effects.EffectLibrary Effects => Monsters.Effects;
+
     /// <summary><c>balance.yaml</c>: <c>combat</c>, <c>death</c>, <c>loot</c>, <c>progression</c>, <c>new_character</c>.</summary>
     public BalanceDef Balance { get; }
 

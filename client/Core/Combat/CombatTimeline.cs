@@ -63,14 +63,16 @@ public sealed class CombatTimeline
                 _pending.RemoveAt(0);
                 Dropped++;
             }
+            var kind = HitKinds.Of(hit.Result);
             var delay = attacker is not null && ImpactDelay is { } source ? source(attacker) : _config.ImpactDelaySeconds;
             delay = Math.Max(0, Math.Min(_config.MaxImpactDelaySeconds, double.IsNaN(delay) ? _config.ImpactDelaySeconds : delay));
+            if (kind == HitKind.Status) delay = 0;   // no swing to wait for
             _pending.Add(new Pending
             {
                 Attacker = hit.Attacker,
                 Target = hit.Target,
                 Amount = hit.Amount,
-                Kind = HitKinds.Of(hit.Result),
+                Kind = kind,
                 SwingAt = swingAt,
                 ImpactAt = swingAt + delay,
                 X = target?.X ?? attacker!.X,
@@ -108,7 +110,7 @@ public sealed class CombatTimeline
             {
                 pending.Swung = true;
                 _pending[i] = pending;
-                if (now - pending.SwingAt <= stale) _world.Find(pending.Attacker)?.MarkAttack();
+                if (now - pending.SwingAt <= stale && pending.Kind != HitKind.Status) _world.Find(pending.Attacker)?.MarkAttack();
             }
             if (now < pending.ImpactAt) continue;
 
@@ -131,7 +133,7 @@ public sealed class CombatTimeline
         {
             x = target.X;
             z = target.Z;
-            if (pending.Kind != HitKind.Miss) target.MarkHit();
+            if (pending.Kind is HitKind.Hit or HitKind.Crit) target.MarkHit();
         }
         var side = pending.Attacker == _world.OwnId ? HitSide.Dealt : pending.Target == _world.OwnId ? HitSide.Taken : HitSide.Other;
         var impact = new HitImpact(pending.Attacker, pending.Target, pending.Amount, pending.Kind, side, x, z, now);

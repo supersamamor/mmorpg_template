@@ -115,6 +115,28 @@ public sealed class Entity
     /// Set by the inventory, read by combat. <c>normal</c> for everything else.
     /// </summary>
     public string Load { get; set; } = WeightStates.Normal;
+
+    /// <summary>
+    /// The entity's active statuses (T-501), or null before its first one. Changed only by the effect runner's host (combat) on the instance's tick;
+    /// movement, the AI and combat read its <c>prevents_*</c> flags through <see cref="CannotMove"/>, <see cref="CannotAttack"/> and
+    /// <see cref="CannotUseSkills"/>.
+    /// </summary>
+    public Game.Shared.Effects.StatusSet? Statuses { get; set; }
+
+    /// <summary>What observers see of <see cref="Statuses"/> (set by combat when they change, read by the AOI); null when it never had one.</summary>
+    public Effects.StatusLook? StatusLook { get; set; }
+
+    /// <summary>The entity that summoned this monster (a <c>summon</c> effect), or null for everything else. Set by the spawner.</summary>
+    public EntityId? Owner { get; set; }
+
+    /// <summary>A status with <c>prevents_move</c> holds it (only statuses timed on its current map count: see <see cref="Game.Shared.Effects.StatusSet.MapId"/>).</summary>
+    public bool CannotMove => Statuses is { PreventsMove: true } s && string.Equals(s.MapId, MapId, StringComparison.Ordinal);
+
+    /// <summary>A status with <c>prevents_attack</c> holds it.</summary>
+    public bool CannotAttack => Statuses is { PreventsAttack: true } s && string.Equals(s.MapId, MapId, StringComparison.Ordinal);
+
+    /// <summary>A status with <c>prevents_skills</c> holds it.</summary>
+    public bool CannotUseSkills => Statuses is { PreventsSkills: true } s && string.Equals(s.MapId, MapId, StringComparison.Ordinal);
 }
 
 /// <summary>Thread-safe, monotonically increasing id source shared by every instance of one <see cref="GameWorld"/>.</summary>

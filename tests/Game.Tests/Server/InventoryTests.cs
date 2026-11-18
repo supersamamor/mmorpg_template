@@ -238,20 +238,18 @@ public class InventoryTests
         var player = rig.AddPlayer(Start);
         rig.Ticks();
         var potion = rig.Give(player, "item.healing_draught", 2);
-        var antidote = rig.Give(player, "item.antidote");
         var glob = rig.Give(player, "item.gel_glob");
         var blade = rig.Give(player, "item.iron_blade");
         rig.Get(player).Vitals!.Hp = 1;
         rig.Clock.NowMilliseconds = 10_000;
         rig.Send(new UseItem(player, potion));   // works, starts the cooldown
-        rig.Ticks();
+        rig.Ticks(2);                            // and heals on the next tick (combat's effect runner)
         var before = InventoryRig.Describe(rig.State(player));
         var hp = rig.Get(player).Vitals!.Hp;
         var modifiers = rig.Get(player).Stats!.Modifiers.Count;
         rig.Events.Clear();
 
         rig.Send(new UseItem(player, potion));                       // cooldown
-        rig.Send(new UseItem(player, antidote));                     // remove_status: until T-501
         rig.Send(new UseItem(player, glob));                         // a material
         rig.Send(new UseItem(player, 999));                          // no such entry
         rig.Send(new Equip(player, glob, null));                     // not equipment
@@ -263,7 +261,7 @@ public class InventoryTests
         rig.Ticks();
 
         rig.Of<ItemRefused>().Select(r => r.Reason).ShouldBe([
-            ItemReasons.Cooldown, ItemReasons.UnsupportedEffect, ItemReasons.NotUsable, ItemReasons.ItemGone, ItemReasons.NotEquipment,
+            ItemReasons.Cooldown, ItemReasons.NotUsable, ItemReasons.ItemGone, ItemReasons.NotEquipment,
             ItemReasons.LevelTooLow, ItemReasons.WrongSlot, ItemReasons.NotEquipped, ItemReasons.InvalidQuantity, ItemReasons.ItemGone,
         ]);
         InventoryRig.Describe(rig.State(player)).ShouldBe(before);
@@ -291,7 +289,7 @@ public class InventoryTests
     }
 
     [Fact]
-    public void Healing_draught_heals_through_the_effect_seam_and_is_used_up_with_a_cooldown()
+    public void Healing_draught_heals_through_the_effect_runner_and_is_used_up_with_a_cooldown()
     {
         var rig = new InventoryRig();
         var player = rig.AddPlayer(Start, TestCombat.PlayerSheet(maxHp: 200, hpRegen: 0));
@@ -303,7 +301,7 @@ public class InventoryTests
         vitals.Sp = 0;
         rig.Send(new UseItem(player, potion));
         rig.Send(new UseItem(player, tonic));
-        rig.Ticks();
+        rig.Ticks(2);   // used on the first tick; combat's effect runner runs the effects on the next (T-501)
         vitals.Hp.ShouldBe(130);   // heal "80"
         vitals.Sp.ShouldBe(Math.Min(40, vitals.MaxSp));   // restore_sp "40"
         rig.State(player).Find(potion)!.Quantity.ShouldBe(1);
@@ -317,7 +315,7 @@ public class InventoryTests
         rig.Of<ItemRefused>().Single().Reason.ShouldBe(ItemReasons.Cooldown);
         rig.Clock.Advance(1);
         rig.Send(new UseItem(player, potion));
-        rig.Ticks();
+        rig.Ticks(2);
         vitals.Hp.ShouldBe(200);   // never above max
         rig.State(player).Find(potion).ShouldBeNull();
     }

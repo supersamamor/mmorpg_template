@@ -40,7 +40,10 @@ public static class TestMonsters
 
     private static readonly Lazy<BalanceSimulator> Simulator = new(() => new BalanceSimulator(TestGrids.SampleContent));
 
-    public static MonsterCatalog Catalog(params MonsterDef[] defs) => new(defs, Simulator.Value.Monster);
+    /// <summary>The sample content's skills, consumables and statuses, compiled once (T-501): every test catalog runs them.</summary>
+    public static readonly Lazy<Game.Shared.Effects.EffectLibrary> Effects = new(() => Simulator.Value.Effects);
+
+    public static MonsterCatalog Catalog(params MonsterDef[] defs) => new(defs, Simulator.Value.Monster, Effects.Value);
 
     public static GridSpawn Spawn(MonsterDef def, int x, int y, int w = 1, int h = 1, int count = 1, double respawnSeconds = 5) =>
         new() { MonsterId = def.Id, Area = new GridRect(x, y, w, h), Count = count, RespawnSeconds = respawnSeconds };

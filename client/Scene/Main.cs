@@ -138,6 +138,7 @@ public partial class Main : Node3D
         _session.World.Combat.ImpactDelay = _entities.ImpactDelayOf;
         _fx = new CombatFx(this, _config, _session, _camera, _hud, catalog);
         _presenter.DeathShown += _fx.OnDeath;
+        _presenter.StatusStarted += (status, x, y, z, own) => _fx.OnStatusStarted(_bundle?.Status(status)?.VfxKey, x, y, z, own);
         _input = new InputRouter(_config, _session, _bundle!, _camera, _hud, () => _mapData, _map.Ground);
 
         GD.Print($"[client] bundle format {_bundle!.FormatVersion}, hash {_bundle.ContentHash}; server {_config.ServerUrl}; {(OS.IsDebugBuild() ? "debug" : "release")} build, cleartext {(_config.AllowCleartext ? "allowed" : "refused")}; renderer {RenderingServer.GetCurrentRenderingMethod()}");

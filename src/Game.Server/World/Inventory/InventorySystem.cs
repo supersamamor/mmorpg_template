@@ -187,13 +187,12 @@ public sealed class InventorySystem : ITickSystem
         var state = holder.State;
         var reason = _rules.CanUse(state, entryId, _clock.NowMilliseconds, out var entry, out var item);
         if (reason is null && entry!.Slot is not null) reason = ItemReasons.ItemEquipped;
-        reason ??= _content.Effects.CanApply(item!);
         if (reason is not null)
         {
             Refuse(context, holder, MessageTypes.UseItem, reason, entryId: entryId);
             return;
         }
-        _content.Effects.Apply(holder.Entity, item!);
+        // The effects are combat's: it runs the consumable's effects through the effect runner on its next tick, on ItemUsed (T-501).
         _delta.Clear();
         _rules.ApplyUse(state, entry!, item!, _clock.NowMilliseconds, _delta);
         context.Publish(new ItemUsed(holder.Entity.Id, item!.Id, item.Consumable!.Consumed));

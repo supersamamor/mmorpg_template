@@ -39,6 +39,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>overweight</c>: the attacking player carries at least <c>inventory.overweight_percent</c> of its weight limit.</summary>
         public const string Overweight = "overweight";
 
+        /// <summary><c>cannot_attack</c>: the attacker has a status with <c>prevents_attack</c> (a stun).</summary>
+        public const string CannotAttack = "cannot_attack";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             AttackerDead,
@@ -50,6 +53,7 @@ namespace Game.Shared.Vocabulary
             InvalidTarget,
             Unreachable,
             Cancelled,
-            Overweight);
+            Overweight,
+            CannotAttack);
     }
 }

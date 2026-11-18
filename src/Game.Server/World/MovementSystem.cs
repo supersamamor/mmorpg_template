@@ -49,6 +49,9 @@ public static class MovementReasons
 
     /// <summary>Stopped: the entity became dead.</summary>
     public const string Died = "died";
+
+    /// <summary>Rejected, or stopped: a status with <c>prevents_move</c> holds the entity (a stun, T-501). Forced moves (knockback, teleport) still happen.</summary>
+    public const string CannotMove = "cannot_move";
 }
 
 /// <summary>
@@ -75,6 +78,7 @@ public sealed class MovementSystem : ITickSystem
     private readonly Dictionary<EntityId, int> _lastIntent = new();
     private readonly Dictionary<int, GridWarp> _warps = new();
     private MapGrid? _warpsOf;
+    private MapInstance? _subscribed;
 
     /// <summary>Creates a movement system with the given search limits (positive numbers).</summary>
     public MovementSystem(PathLimits limits)
@@ -102,9 +106,25 @@ public sealed class MovementSystem : ITickSystem
     {
         var grid = context.Instance.Grid;
         if (!ReferenceEquals(grid, _warpsOf)) IndexWarps(grid);
+        if (!ReferenceEquals(_subscribed, context.Instance)) Subscribe(context.Instance);
 
         HandleIntents(context, grid);
         Advance(context);
+    }
+
+    /// <summary>
+    /// A same-map warp (a knockback, a teleport, the AI's return timeout) puts a walker on another cell: its walk ends there (<c>warped</c>), so the
+    /// mover never steps on from the old cell. Raised from the handler, so the event is dispatched in the next tick.
+    /// </summary>
+    private void Subscribe(MapInstance instance)
+    {
+        _subscribed = instance;
+        instance.Events.Subscribe<EntityEnteredMap>(e =>
+        {
+            if (e.Reason != MapChangeReason.Warp || !_states.TryGetValue(e.Entity, out var state) || state.Done) return;
+            instance.Events.Publish(new MovementStopped(e.Entity, e.Cell, MovementReasons.Warped));
+            Discard(state);   // Advance returns it to the pool on the next tick
+        });
     }
 
     private void IndexWarps(MapGrid grid)
@@ -139,6 +159,12 @@ public sealed class MovementSystem : ITickSystem
         if (goal.X == entity.Cell.X && goal.Y == entity.Cell.Y)
         {
             if (state != null) Stop(context, state, MovementReasons.Cancelled);   // idle: nothing to do
+            return;
+        }
+
+        if (entity.CannotMove)
+        {
+            Reject(context, entity, goal, MovementReasons.CannotMove);   // a stun: refused, not queued for later
             return;
         }
 
@@ -201,6 +227,11 @@ public sealed class MovementSystem : ITickSystem
         if (!context.Instance.TryGetEntity(entity.Id, out var current) || !ReferenceEquals(current, entity))
         {
             Discard(state);   // despawned or warped away by someone else: nobody to tell
+            return;
+        }
+        if (entity.CannotMove)
+        {
+            Stop(context, state, MovementReasons.CannotMove);   // stunned mid-walk: it stays on the last cell it reached
             return;
         }
 

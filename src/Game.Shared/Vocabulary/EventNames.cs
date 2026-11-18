@@ -132,6 +132,42 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>ItemRefined</c>: a player tried to refine an equipment entry (success, or a failure that kept, lowered or broke it).</summary>
         public const string ItemRefined = "ItemRefined";
 
+        /// <summary><c>StatusRemoved</c>: a status ended before its time (reason: a <c>StatusEndReasons</c> term).</summary>
+        public const string StatusRemoved = "StatusRemoved";
+
+        /// <summary><c>HpRestored</c>: a <c>heal</c> effect restored HP.</summary>
+        public const string HpRestored = "HpRestored";
+
+        /// <summary><c>SpRestored</c>: a <c>restore_sp</c> effect restored SP.</summary>
+        public const string SpRestored = "SpRestored";
+
+        /// <summary><c>KnockedBack</c>: a <c>knockback</c> effect pushed an entity (a same-map warp follows in phase 3).</summary>
+        public const string KnockedBack = "KnockedBack";
+
+        /// <summary><c>Teleported</c>: a <c>teleport</c> effect sent its caster somewhere (a warp follows in phase 3).</summary>
+        public const string Teleported = "Teleported";
+
+        /// <summary><c>SummonRequested</c>: a <c>summon</c> effect asks the spawner for monsters owned by its caster.</summary>
+        public const string SummonRequested = "SummonRequested";
+
+        /// <summary><c>MonsterSummoned</c>: the spawner created a summoned monster for its owner.</summary>
+        public const string MonsterSummoned = "MonsterSummoned";
+
+        /// <summary><c>AreaApplied</c>: an <c>area</c> effect ran its children on the entities in its square.</summary>
+        public const string AreaApplied = "AreaApplied";
+
+        /// <summary><c>SkillCastStarted</c>: a caster began casting a skill (cast time above 0).</summary>
+        public const string SkillCastStarted = "SkillCastStarted";
+
+        /// <summary><c>SkillRequested</c>: a caster finished casting (or has no cast time); combat resolves the skill.</summary>
+        public const string SkillRequested = "SkillRequested";
+
+        /// <summary><c>SkillUsed</c>: a skill resolved and its effects ran.</summary>
+        public const string SkillUsed = "SkillUsed";
+
+        /// <summary><c>SkillRefused</c>: a skill request was dropped (reason: a <c>SkillReasons</c> term).</summary>
+        public const string SkillRefused = "SkillRefused";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -176,6 +212,18 @@ namespace Game.Shared.Vocabulary
             ItemRefused,
             InventoryChanged,
             CardInserted,
-            ItemRefined);
+            ItemRefined,
+            StatusRemoved,
+            HpRestored,
+            SpRestored,
+            KnockedBack,
+            Teleported,
+            SummonRequested,
+            MonsterSummoned,
+            AreaApplied,
+            SkillCastStarted,
+            SkillRequested,
+            SkillUsed,
+            SkillRefused);
     }
 }

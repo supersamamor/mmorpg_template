@@ -1,6 +1,7 @@
 using Game.Content.Registry;
 using Game.Content.Simulation;
 using Game.Shared.Definitions;
+using Game.Shared.Effects;
 using Game.Shared.Stats;
 
 namespace Game.Server.World.Monsters;
@@ -14,13 +15,23 @@ public sealed class MonsterCatalog
     private readonly Dictionary<string, MonsterDef> _byId;
     private readonly Func<MonsterDef, StatSheet> _stats;
 
-    /// <summary>A catalog of <paramref name="monsters"/>; <paramref name="stats"/> builds one monster's sheet (it must be thread-safe).</summary>
-    public MonsterCatalog(IEnumerable<MonsterDef> monsters, Func<MonsterDef, StatSheet> stats)
+    /// <summary>
+    /// A catalog of <paramref name="monsters"/>; <paramref name="stats"/> builds one monster's sheet (it must be thread-safe). <paramref name="effects"/>
+    /// is the compiled content the monsters' skills (and every other effect) come from; none means no skills.
+    /// </summary>
+    public MonsterCatalog(IEnumerable<MonsterDef> monsters, Func<MonsterDef, StatSheet> stats, EffectLibrary? effects = null)
     {
         ArgumentNullException.ThrowIfNull(monsters);
         _byId = monsters.ToDictionary(m => m.Id, StringComparer.Ordinal);
         _stats = stats ?? throw new ArgumentNullException(nameof(stats));
+        Effects = effects ?? EffectLibrary.Empty;
     }
+
+    /// <summary>
+    /// Every effect list of the content, compiled once (skills, consumables, statuses; T-501): the AI reads its monsters' skills here, and combat runs
+    /// all of them through its effect runner. Immutable, so shared by every instance.
+    /// </summary>
+    public EffectLibrary Effects { get; }
 
     /// <summary>
     /// The content's monsters, with sheets from the stats pipeline (<see cref="BalanceSimulator.Monster"/>: primary stats as base values,
@@ -30,7 +41,14 @@ public sealed class MonsterCatalog
     {
         ArgumentNullException.ThrowIfNull(content);
         var simulator = new BalanceSimulator(content);
-        return new MonsterCatalog(content.Monsters.All, simulator.Monster);
+        return new MonsterCatalog(content.Monsters.All, simulator.Monster, CompileEffects(content));
+    }
+
+    /// <summary>The content's skills, consumables and statuses compiled into one <see cref="EffectLibrary"/>.</summary>
+    public static EffectLibrary CompileEffects(ContentDatabase content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        return new EffectLibrary(content.Skills.All, content.Items.All, content.Statuses.All);
     }
 
     /// <summary>Finds a monster definition.</summary>

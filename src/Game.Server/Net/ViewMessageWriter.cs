@@ -16,6 +16,7 @@ public sealed class ViewMessageWriter
 {
     private readonly ArrayBufferWriter<byte> _buffer = new(1024);
     private readonly Utf8JsonWriter _writer;
+    private readonly List<StatusRecord> _statuses = new();   // reused: the statuses of the record being written
 
     /// <summary>Creates a writer with its own buffer.</summary>
     public ViewMessageWriter() => _writer = new Utf8JsonWriter(_buffer, ProtocolJson.WriterOptions);
@@ -46,7 +47,7 @@ public sealed class ViewMessageWriter
         w.WriteStartArray("entities");
         var entities = snapshot.Entities;
         var observer = snapshot.Observer;
-        for (var i = 0; i < entities.Count; i++) Record(entities[i], observer);
+        for (var i = 0; i < entities.Count; i++) Record(entities[i], observer, snapshot.Tick);
         w.WriteEndArray();
         if (snapshot.Vitals is { } own) ProtocolJson.WriteVitals(w, own.Hp, own.MaxHp, own.Sp, own.MaxSp);
         w.WriteEndObject();
@@ -66,7 +67,7 @@ public sealed class ViewMessageWriter
         if (appeared.Count > 0)
         {
             w.WriteStartArray("appeared");
-            for (var i = 0; i < appeared.Count; i++) Record(appeared[i], observer);
+            for (var i = 0; i < appeared.Count; i++) Record(appeared[i], observer, delta.Tick);
             w.WriteEndArray();
         }
         var changed = delta.Changed;
@@ -78,7 +79,7 @@ public sealed class ViewMessageWriter
                 var c = changed[i];
                 var v = c.View;
                 ProtocolJson.WriteChange(w, v.Id.Value, FieldsOf(c.Fields), v.Cell, v.Facing, v.Next, v.Speed, v.DisplayKey, HpFraction(v) ?? 0, v.Dead,
-                    Mine(v, observer) ?? false, v.Look?.WeaponType, v.Look?.Worn);
+                    Mine(v, observer) ?? false, v.Look?.WeaponType, v.Look?.Worn, Statuses(v, delta.Tick));
             }
             w.WriteEndArray();
         }
@@ -115,9 +116,23 @@ public sealed class ViewMessageWriter
     public static bool? Mine(in EntityView v, EntityId observer) =>
         v.Kind == EntityKind.Item ? v.LootOwner is not { } owner || owner == observer : null;
 
-    private void Record(in EntityView v, EntityId observer) =>
+    private void Record(in EntityView v, EntityId observer, long tick) =>
         ProtocolJson.WriteRecord(_writer, v.Id.Value, KindTerm(v.Kind), v.DisplayKey, v.Cell, v.Facing, v.Next, v.Speed, HpFraction(v), v.Dead, v.Quantity,
-            Mine(v, observer), v.Look?.WeaponType, v.Look?.Worn);
+            Mine(v, observer), v.Look?.WeaponType, v.Look?.Worn, Statuses(v, tick));
+
+    /// <summary>
+    /// The view's statuses as wire records (T-501), with the time each has left at <paramref name="tick"/>; the list is reused, so it is only valid
+    /// until the next call. Never the chance, the numbers or the applier.
+    /// </summary>
+    private List<StatusRecord> Statuses(in EntityView v, long tick)
+    {
+        _statuses.Clear();
+        if (v.Statuses is not { } look) return _statuses;
+        var nowMs = tick * TickRate.IntervalMs;
+        foreach (var icon in look.Icons)
+            _statuses.Add(new StatusRecord(icon.Id, icon.Stacks, (int)Math.Clamp(icon.EndsAtMs - nowMs, 0, int.MaxValue), icon.Debuff));
+        return _statuses;
+    }
 
     private void Begin()
     {

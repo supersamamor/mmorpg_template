@@ -209,8 +209,42 @@ namespace Game.Shared.Protocol
     /// <param name="Weapon">A player: the "Weapon types" term of what it holds (<c>unarmed</c> for nothing); null for every other kind.</param>
     /// <param name="Worn">A player: the item ids it wears that have a worn visual, in "Equipment slots" order (the client finds each visual in its
     /// bundle); null or empty when none. Never stats.</param>
+    /// <param name="Statuses">Its active statuses (T-501), in application order; null or empty when none. Left out of the JSON when empty.</param>
     public sealed record EntityRecord(long Id, string Kind, string? DisplayKey, GridCell Cell, string Facing, GridCell? Next, double Speed,
-        double? Hp = null, bool Dead = false, int Quantity = 0, bool? Mine = null, string? Weapon = null, IReadOnlyList<string>? Worn = null);
+        double? Hp = null, bool Dead = false, int Quantity = 0, bool? Mine = null, string? Weapon = null, IReadOnlyList<string>? Worn = null,
+        IReadOnlyList<StatusRecord>? Statuses = null);
+
+    /// <summary>
+    /// One status on an entity, as every observer is told (ARCHITECTURE §10, T-501): <c>{"id":"status.poison","stacks":1,"left_ms":7400,"debuff":true}</c>.
+    /// <c>left_ms</c> is the simulated time it has left at the message's tick (the client counts it down itself; a change is sent only when the
+    /// status starts, stacks, is refreshed or ends); <c>debuff</c> only when true. Never its chance, its numbers or who applied it.
+    /// </summary>
+    public readonly struct StatusRecord
+    {
+        /// <summary>Creates a record.</summary>
+        public StatusRecord(string id, int stacks, int leftMs, bool debuff)
+        {
+            Id = id;
+            Stacks = stacks;
+            LeftMs = leftMs;
+            Debuff = debuff;
+        }
+
+        /// <summary>The status id (<c>status.*</c>); the client finds its name, icon and vfx in its bundle.</summary>
+        public string Id { get; }
+
+        /// <summary>Stacks, at least 1.</summary>
+        public int Stacks { get; }
+
+        /// <summary>Milliseconds left at the message's tick, at least 0.</summary>
+        public int LeftMs { get; }
+
+        /// <summary>True for a debuff.</summary>
+        public bool Debuff { get; }
+
+        /// <inheritdoc />
+        public override string ToString() => Id + " x" + Stacks + " " + LeftMs + "ms" + (Debuff ? " debuff" : "");
+    }
 
     /// <summary>The fields of a <see cref="ChangeRecord"/> that are present (VOCABULARY.md "View fields").</summary>
     [Flags]
@@ -245,6 +279,9 @@ namespace Game.Shared.Protocol
 
         /// <summary><c>weapon</c> and <c>worn</c> (a player put something on or took it off).</summary>
         Look = 256,
+
+        /// <summary><c>statuses</c> (one started, stacked, was refreshed or ended; the whole list is sent, empty when none is left).</summary>
+        Statuses = 512,
     }
 
     /// <summary>
@@ -263,8 +300,10 @@ namespace Game.Shared.Protocol
     /// <param name="Mine">New pick-up flag, when <see cref="ChangedFields.Mine"/>.</param>
     /// <param name="Weapon">New weapon type, when <see cref="ChangedFields.Look"/>.</param>
     /// <param name="Worn">New worn item ids, when <see cref="ChangedFields.Look"/> (empty: nothing visible).</param>
+    /// <param name="Statuses">All its statuses now, when <see cref="ChangedFields.Statuses"/> (empty: none left).</param>
     public sealed record ChangeRecord(long Id, ChangedFields Fields, GridCell Cell, string? Facing, GridCell? Next, double Speed, string? DisplayKey,
-        double Hp = 0, bool Dead = false, bool Mine = false, string? Weapon = null, IReadOnlyList<string>? Worn = null);
+        double Hp = 0, bool Dead = false, bool Mine = false, string? Weapon = null, IReadOnlyList<string>? Worn = null,
+        IReadOnlyList<StatusRecord>? Statuses = null);
 
     /// <summary>
     /// One attack seen in a tick, in a delta's <c>hits</c> as a compact array <c>[attacker, target, amount, result]</c>, e.g. <c>[42,7,13,"crit"]</c>.
