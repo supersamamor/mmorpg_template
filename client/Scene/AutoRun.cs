@@ -311,7 +311,38 @@ public sealed class AutoRun
         await FramesAsync(2);
         Check(hud.Bag.Actions.Equip.Visible, "a selected weapon offers Equip");
         await ShotAsync("-bag");
+        // T-405: the frame times from the press of Equip until the weapon is on the character. The bag item's model was loaded ahead of time (gear_preload_limit above 0),
+        // so no frame in this window should be the one that loads and merges it; run with --set gear_preload_limit=0 for the "before" figure.
+        var calm = new List<double>();
+        var calmLast = Time.GetTicksUsec();
+        for (var i = 0; i < 30; i++)
+        {
+            await FrameAsync();
+            var t = Time.GetTicksUsec();
+            calm.Add((t - calmLast) / 1000.0);
+            calmLast = t;
+        }
+        calm.Sort();
+        var preloaded = _main.Entities!.Store.LoadedPieces;
+        var pending = _main.Entities.GearPending;
+        var lookBefore = Own().LookVersion;
+        var loadMsBefore = _main.Entities.Store.MainThreadMs;
         Press(hud.Bag.Actions.Equip);
+        double equipWorst = 0;
+        var equipFrames = 0;
+        var frameLog = new List<string>();
+        var equipLast = Time.GetTicksUsec();
+        while (equipFrames < 600 && !(Session.Inventory.InSlot(Game.Shared.Vocabulary.EquipSlots.Weapon) is not null && Own().Visual is ModelVisual { PieceCount: > 0 } && _main.Entities.Dressing == 0))
+        {
+            await FrameAsync();
+            var now = Time.GetTicksUsec();
+            equipWorst = Math.Max(equipWorst, (now - equipLast) / 1000.0);
+            frameLog.Add($"{(now - equipLast) / 1000.0:0.0}{(Own().LookVersion != lookBefore ? "*" : "")}");
+            equipLast = now;
+            equipFrames++;
+        }
+        Print($"items: equip frames (ms, * once the new look arrived): {string.Join(" ", frameLog)}; the 30 frames before: median {calm[calm.Count / 2]:0.0}, worst {calm[^1]:0.0}");
+        Print($"items: equip frames: worst {equipWorst:0.0} ms over {equipFrames} frames from the press until dressed; {preloaded} piece(s) preloaded and {pending} still loading at the press (gear_preload_limit {_main.Config.GearPreloadLimit}); main-thread model work from the press until dressed: {_main.Entities.Store.MainThreadMs - loadMsBefore:0.00} ms");
         await UntilAsync(() => Session.Inventory.InSlot(Game.Shared.Vocabulary.EquipSlots.Weapon) is not null, 10, "the weapon in its slot");
         await UntilAsync(() => Own().Weapon != Game.Shared.Vocabulary.WeaponTypes.Unarmed, 10, "the own record shows the weapon");
         Check(equipped == 1, "one equipped change");
@@ -625,10 +656,10 @@ public sealed class AutoRun
             }
         }
         foreach (var (shape, count) in shapes) Print($"measure: {count} visuals draw several meshes: {shape}");
-        await Without($"entity visuals ({entities.Count} shown, {meshes} visible meshes, {surfaces} surfaces)", on => { foreach (var n in entities) n.Visible = on; });
-        await Without("HUD", on => _main.Hud!.SetVisible(on));
-        if (_main.FindChild("DamageNumbers", true, false) is CanvasLayer numbers) await Without($"damage numbers ({_main.Fx?.Shown} drawn)", on => numbers.Visible = on);
-        if (_main.Map?.Scene is { } scene) await Without("map scene", on => scene.Visible = on);
+        await Without($"entity visuals ({entities.Count} shown, {meshes} visible meshes, {surfaces} surfaces)", on => { foreach (var n in entities) if (GodotObject.IsInstanceValid(n)) n.Visible = on; }); // a visual can be freed while the frames are sampled (T-405, ADR-002 row 208)
+        await Without("HUD", on => { if (GodotObject.IsInstanceValid(_main)) _main.Hud!.SetVisible(on); });
+        if (_main.FindChild("DamageNumbers", true, false) is CanvasLayer numbers) await Without($"damage numbers ({_main.Fx?.Shown} drawn)", on => { if (GodotObject.IsInstanceValid(numbers)) numbers.Visible = on; });
+        if (_main.Map?.Scene is { } scene) await Without("map scene", on => { if (GodotObject.IsInstanceValid(scene)) scene.Visible = on; });
     }
 
     /// <summary>What the players on screen wear (T-403): pieces per player, weapon types, and how many kinds of piece are loaded and shared.</summary>

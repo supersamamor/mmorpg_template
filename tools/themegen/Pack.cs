@@ -26,8 +26,9 @@ public static class Pack
     private static readonly ThemeStyle TestStyle = new("test:", 0.5f);
 
     /// <summary>Every file of every theme, keyed by path relative to the themes directory (forward slashes), with the manifests rewritten.</summary>
-    public static SortedDictionary<string, byte[]> Generate(string themesDir)
+    public static SortedDictionary<string, byte[]> Generate(string themesDir, string? contentDir = null)
     {
+        var weaponTypes = WeaponShapes.TypesByVisualKey(contentDir ?? Path.Combine(themesDir, "..", "content"));
         var files = new SortedDictionary<string, byte[]>(StringComparer.Ordinal);
         var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(themesDir, DefaultTheme, "asset-manifest.json")))!.AsObject();
 
@@ -36,14 +37,14 @@ public static class Pack
         {
             if (node is not JsonObject entry || key is "audio" or "fallbacks") continue;
             if (key.StartsWith("scene.", StringComparison.Ordinal)) continue; // map scenes are authored in the editor (T-208): the manifest's path stands, and validate checks them
-            var (path, bytes) = Make(key, entry, DefaultStyle, manifest);
+            var (path, bytes) = Make(key, entry, DefaultStyle, manifest, weaponTypes);
             SetFile(entry, path);
             files[DefaultTheme + "/" + path] = bytes;
 
             if (TestOverrides.Contains(key))
             {
                 var copy = JsonNode.Parse(entry.ToJsonString())!.AsObject();
-                var (testPath, testBytes) = Make(key, copy, TestStyle, manifest);
+                var (testPath, testBytes) = Make(key, copy, TestStyle, manifest, weaponTypes);
                 SetFile(copy, testPath);
                 files[TestTheme + "/" + testPath] = testBytes;
                 testManifest[key] = copy;
@@ -82,13 +83,13 @@ public static class Pack
     }
 
     /// <summary>The file for one key: its path inside the theme and its bytes.</summary>
-    private static (string Path, byte[] Bytes) Make(string key, JsonObject entry, ThemeStyle style, JsonObject manifest)
+    private static (string Path, byte[] Bytes) Make(string key, JsonObject entry, ThemeStyle style, JsonObject manifest, IReadOnlyDictionary<string, string> weaponTypes)
     {
         var rest = key[(key.IndexOf('.') + 1)..].Replace('.', '/');
         var color = KeyColor.Of(key, style);
         var hash = KeyColor.Hash(style.Salt + key);
 
-        if (key.StartsWith("model.", StringComparison.Ordinal)) return ($"models/{rest}.glb", Model(key, entry, color, hash));
+        if (key.StartsWith("model.", StringComparison.Ordinal)) return ($"models/{rest}.glb", Model(key, entry, color, hash, weaponTypes.GetValueOrDefault(key)));
         if (key.StartsWith("anim.", StringComparison.Ordinal)) return ($"anims/{rest}.glb", AnimLibrary(key, entry));
         if (key.StartsWith("icon.", StringComparison.Ordinal)) return ($"icons/{rest}.png", Media.Png(color, hash));
         if (key.StartsWith("portrait.", StringComparison.Ordinal)) return ($"portraits/{rest}.png", Media.Png(color, hash));
@@ -105,7 +106,7 @@ public static class Pack
 
     // ---------------- models ----------------
 
-    private static byte[] Model(string key, JsonObject entry, Vector4 color, uint hash)
+    private static byte[] Model(string key, JsonObject entry, Vector4 color, uint hash, string? weaponType)
     {
         var rig = entry["rig"]?.GetValue<string>();
         var attach = entry["attach"]?.GetValue<string>();
@@ -156,17 +157,8 @@ public static class Pack
                 m.Ellipsoid(-1, new Vector3(0, 0.2f, 0), new Vector3(0.19f, 0.12f, 0.19f), 12, 7, MeshBuilder.White);
                 m.Box(-1, new Vector3(0, 0.12f, -0.16f), new Vector3(0.2f, 0.03f, 0.1f), Accent(color));
                 break;
-            case "hand_r":
-                if (hash % 2 == 0)
-                {
-                    m.Box(-1, new Vector3(0, 0, -0.1f), new Vector3(0.06f, 0.06f, 0.2f), MeshBuilder.Dark); // grip, blade
-                    m.Box(-1, new Vector3(0, 0, -0.5f), new Vector3(0.05f, 0.1f, 0.6f), MeshBuilder.White);
-                }
-                else
-                {
-                    m.Box(-1, new Vector3(0, 0.25f, 0), new Vector3(0.05f, 1.3f, 0.05f), MeshBuilder.Dark); // staff
-                    m.Ellipsoid(-1, new Vector3(0, 0.95f, 0), new Vector3(0.09f, 0.09f, 0.09f), 8, 5, MeshBuilder.White);
-                }
+            case "hand_r": // a weapon: its shape follows the weapon type of the item that wears it
+                WeaponShapes.Build(m, weaponType);
                 break;
             case "hand_l":
                 m.Ellipsoid(-1, new Vector3(0, 0, -0.12f), new Vector3(0.2f, 0.2f, 0.04f), 12, 7, MeshBuilder.White);

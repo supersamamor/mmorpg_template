@@ -109,7 +109,7 @@ public class ThemePackTests
 
     private static JsonDocument ReadGlb(string path)
     {
-        var bytes = File.ReadAllBytes(path);
+        var bytes = PackFiles.ReadAllBytes(path);
         BitConverter.ToUInt32(bytes, 0).ShouldBe(0x46546C67u, path + " is not a glb");
         var length = (int)BitConverter.ToUInt32(bytes, 12);
         return JsonDocument.Parse(Encoding.UTF8.GetString(bytes, 20, length));
@@ -164,7 +164,7 @@ public class ThemePackTests
     {
         foreach (var file in Directory.EnumerateFiles(Themes, "*.png", SearchOption.AllDirectories))
         {
-            var bytes = File.ReadAllBytes(file);
+            var bytes = PackFiles.ReadAllBytes(file);
             var width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
             var height = (bytes[20] << 24) | (bytes[21] << 16) | (bytes[22] << 8) | bytes[23];
             width.ShouldBeInRange(1, 1024, file);
@@ -232,7 +232,7 @@ public class ThemePackTests
         {
             var path = Path.Combine(Themes, relative.Replace('/', Path.DirectorySeparatorChar));
             File.Exists(path).ShouldBeTrue(relative + " is missing; run: dotnet run --project tools/themegen");
-            File.ReadAllBytes(path).AsSpan().SequenceEqual(bytes).ShouldBeTrue(relative + " differs from the generator's output; run: dotnet run --project tools/themegen");
+            PackFiles.ReadAllBytes(path).AsSpan().SequenceEqual(bytes).ShouldBeTrue(relative + " differs from the generator's output; run: dotnet run --project tools/themegen");
         }
         foreach (var theme in new[] { Pack.DefaultTheme, Pack.TestTheme })
             foreach (var folder in Pack.OwnedFolders.Select(f => Path.Combine(Themes, theme, f)).Where(Directory.Exists))
@@ -268,7 +268,7 @@ public class ThemePackTests
         var after = swapped.ResolveModel("model.monster.gel_slime", EntityKinds.Monster);
         before.Path.ShouldBe("themes/default/models/monster/gel_slime.glb");
         after.Path.ShouldBe("themes/test/models/monster/gel_slime.glb");
-        File.ReadAllBytes(Disk(after.Path!)).AsSpan().SequenceEqual(File.ReadAllBytes(Disk(before.Path!))).ShouldBeFalse("the test theme draws it differently");
+        PackFiles.ReadAllBytes(Disk(after.Path!)).AsSpan().SequenceEqual(PackFiles.ReadAllBytes(Disk(before.Path!))).ShouldBeFalse("the test theme draws it differently");
 
         using var a = ReadGlb(Disk(before.Path!));
         using var b = ReadGlb(Disk(after.Path!));

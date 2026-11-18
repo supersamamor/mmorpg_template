@@ -42,6 +42,7 @@ internal static class ValidateCommand
         var issues = boot.Issues.ToList();
         issues.AddRange(SchemaCheck.Check(Path.GetFullPath(content), schemas));
         issues.AddRange(MapSceneCheck.Check(boot.Database, Path.GetFullPath(content), Path.GetFullPath(Path.Combine(content, "..", "themes")), theme));
+        issues.AddRange(ThemeCheck.Check(boot.Database, Path.GetFullPath(Path.Combine(content, "..", "themes")), theme));
         return issues;
     }
 
