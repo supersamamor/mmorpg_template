@@ -77,6 +77,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-219 | Phase 2 leftovers: terrain-aware tap picking, theme-chain key checks, `MapGridFile` comment, `export-maps -Check` in CI | Claude Code | Sonnet 5.5 | [T-219](../tasks/prompts/T-219.md) | T-208, T-218 | Review | ADR-002 #142, #143, #145, #146 |
 | T-220 | Phase 3 leftovers: crowd draw calls under 100, release-export guard in `run-e2e.ps1`, scripted hill tap, audio key chain | Claude Code | Opus 5.5 | [T-220](../tasks/prompts/T-220.md) | T-219, T-303, T-305 | Review | ADR-002 #148, #149, #155, #163 |
 | T-221 | Godot tooling hangs: one bounded, retried helper for import and export, bounded harness waits, root cause of the import and export-exit hangs | Claude Code | Opus 5.5 | [T-221](../tasks/prompts/T-221.md) | T-218, T-220 | Review | ADR-002 #163, #176, #190 |
+| T-222 | Storybook toon rendering (ADR-003): toon material, near-only outlines, lighting and haze, toon placeholders | Claude Code | Opus 5.5 | [T-222](../tasks/prompts/T-222.md) | T-403, T-405, T-501, T-502 | Ready | Starts when T-502 and T-405 are merged (shared client and themegen files); ADR-003 |
 
 ## Phase 3 — Combat loop
 
@@ -127,7 +128,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-703 | 7 | Store compliance: account deletion, Sign in with Apple, privacy disclosures | Claude Code | Sonnet 5.5 | Backlog |
 | T-705 | 7 | Appearance on the server: checked at creation, stored with the character, sent in snapshots (needs T-701, T-702, T-704) | Claude Code | Sonnet 5.5 | Backlog |
 | T-706 | 7 | Character creation screen with rotating 3D preview (needs T-206, T-207, T-705) | Claude Code | Sonnet 5.5 | Backlog |
-| T-707 | 7 | Appearance art: 2 genders, skin tones, faces, hairstyles in the chosen art style (needs an art direction decision) | Human / artist | — | Backlog |
+| T-707 | 7 | Appearance art: 2 genders, skin tones, faces, hairstyles in the chosen art style (art direction: ADR-003, storybook toon) | Human / artist | — | Backlog |
 | T-801 | 8 | Content hot-reload + simple editor | Claude Code | Sonnet 5.5 | Backlog |
 | T-802 | 8 | Mobile build pipeline (Android AAB, iOS on macOS CI, TestFlight / Play internal) | Claude Code | Sonnet 5.5 | Backlog |
 | T-803 | 8 | On-device performance capture vs ARCHITECTURE §9 budgets | Claude Code | Sonnet 5.5 | Backlog |
