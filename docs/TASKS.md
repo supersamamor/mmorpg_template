@@ -107,6 +107,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 |----|------|-------|-------|--------|------------|--------|-------|
 | T-501 | Effect runner + statuses: every effect type, status apply/stack/tick/expire, consumables, monster skills, statuses on the wire and client | Claude Code | Opus 5.5 | [T-501](../tasks/prompts/T-501.md) | T-401, T-402, T-303, T-309 | Review | Touches `Net/**` for status fields only (approved by the user 2026-11-17); ADR-002 #118, #171 |
 | T-502 | Player skills: learning, skill trees, job change, casting, cooldowns, passives, allied summons, cast bars | Claude Code | Sonnet 5.5 | [T-502](../tasks/prompts/T-502.md) | T-501 | Review | Touches `Net/**` for skill, job and cast messages only (approved by the user 2026-11-18); ADR-002 #204, #205 |
+| T-503 | Stat allocation (raise_stat, stats panel) and respec items: reset_stats / reset_skills effects, data-driven rules | Claude Code | Sonnet 5.5 | [T-503](../tasks/prompts/T-503.md) | T-501, T-502 | In Progress | Touches `Net/**` for raise_stat and own stat fields only (standing approval 2026-11-18) |
 
 ## Phase 7 — Persistence & accounts
 
@@ -120,7 +121,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
 | T-404 | 4 | Early balance with weapons: retune the Rock Beetle and Thornback Boar (ADR-002 #117, #175) | Claude Code | Sonnet 5.5 | Backlog |
-| T-503 | 5 | Stat and skill reset (respec) as an item or NPC service, data-driven cost | Claude Code | Sonnet 5.5 | Backlog |
 | T-601 | 6 | Dialogue graphs + NPC interaction | Claude Code | Sonnet 5.5 | Backlog |
 | T-602 | 6 | Quest state machine on event bus | Claude Code | Opus 5.5 | Backlog |
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
