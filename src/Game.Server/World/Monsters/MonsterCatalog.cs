@@ -44,11 +44,11 @@ public sealed class MonsterCatalog
         return new MonsterCatalog(content.Monsters.All, simulator.Monster, CompileEffects(content));
     }
 
-    /// <summary>The content's skills, consumables and statuses compiled into one <see cref="EffectLibrary"/>.</summary>
+    /// <summary>The content's skills, consumables, statuses and dialogue effects compiled into one <see cref="EffectLibrary"/>.</summary>
     public static EffectLibrary CompileEffects(ContentDatabase content)
     {
         ArgumentNullException.ThrowIfNull(content);
-        return new EffectLibrary(content.Skills.All, content.Items.All, content.Statuses.All);
+        return new EffectLibrary(content.Skills.All, content.Items.All, content.Statuses.All, content.Dialogue.All);
     }
 
     /// <summary>Finds a monster definition.</summary>

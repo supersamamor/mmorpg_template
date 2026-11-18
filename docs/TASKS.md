@@ -114,7 +114,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
-| T-601 | NPCs in the world, dialogue graphs, conditions and actions, NPC services (save point, refine decision, resets) | Claude Code | Sonnet 5.5 | [T-601](../tasks/prompts/T-601.md) | T-501, T-502, T-503, T-222 | In Progress | Touches `Net/**` for talk and dialogue messages only (standing approval 2026-11-18); ADR-002 #187, #202, #234 |
+| T-601 | NPCs in the world, dialogue graphs, conditions and actions, NPC services (save point, refine decision, resets) | Claude Code | Sonnet 5.5 | [T-601](../tasks/prompts/T-601.md) | T-501, T-502, T-503, T-222 | Review | Touches `Net/**` for talk and dialogue messages only (standing approval 2026-11-18); ADR-002 #187, #202, #234 |
 
 ## Phase 7 — Persistence & accounts
 

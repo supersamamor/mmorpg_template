@@ -23,6 +23,8 @@ internal static class YamlSetup
             o.AddKeyValueTypeDiscriminator<EffectDef>(Discriminators.PropertyName, ToMap(Discriminators.Effects));
             o.AddKeyValueTypeDiscriminator<QuestObjectiveDef>(Discriminators.PropertyName, ToMap(Discriminators.QuestObjectives));
             o.AddKeyValueTypeDiscriminator<RewardDef>(Discriminators.PropertyName, ToMap(Discriminators.Rewards));
+            o.AddKeyValueTypeDiscriminator<DialogueConditionDef>(Discriminators.PropertyName, ToMap(Discriminators.DialogueConditions));
+            o.AddKeyValueTypeDiscriminator<DialogueActionDef>(Discriminators.PropertyName, ToMap(Discriminators.DialogueActions));
         })
         .Build();
 

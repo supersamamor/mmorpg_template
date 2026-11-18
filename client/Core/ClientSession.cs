@@ -1,5 +1,6 @@
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Combat;
+using Game.Client.Core.Dialogue;
 using Game.Client.Core.Items;
 using Game.Client.Core.Net;
 using Game.Client.Core.Skills;
@@ -47,6 +48,12 @@ public sealed class ClientSession
     /// <summary>Raised for each inventory change applied (after <see cref="Inventory"/> took it): the audio hooks listen here.</summary>
     public event Action<InventoryChangedMessage>? InventoryChanged;
 
+    /// <summary>The dialogue the server runs with the player and the NPC service it opened (T-601). The server decides every step; this only holds what it sent.</summary>
+    public DialogueView Dialogue { get; } = new DialogueView();
+
+    /// <summary>Raised for each <c>service_opened</c> (after <see cref="Dialogue"/> took it): the HUD opens the service's panel.</summary>
+    public event Action<ServiceOpenedMessage>? ServiceOpened;
+
     /// <summary>The floating damage numbers, started at each hit's impact moment.</summary>
     public DamageNumberPool Numbers { get; }
 
@@ -77,6 +84,7 @@ public sealed class ClientSession
         World.Reset();
         Ui.Reset();
         Inventory.Reset();
+        Dialogue.Reset();
         Skills.Reset();
         Stats.Reset();
         Numbers.Clear();
@@ -139,6 +147,19 @@ public sealed class ClientSession
         Send(new PickUpMessage(id));
         Ui.OnPickUpSent();
     }
+
+    /// <summary>An NPC tap (T-601): ask to walk up and talk. The server checks range, view and that it has something to say; the client checks nothing.</summary>
+    public void TapNpc(long id)
+    {
+        if (Connection.Phase != ConnectionPhase.Online || Ui.Dead) return;
+        Send(new TalkMessage(id));
+    }
+
+    /// <summary>A dialogue choice button: <paramref name="index"/> is the index the server showed (0 at a node without choices). The server decides where it leads.</summary>
+    public void ChooseDialogue(int index) => SendItem(new DialogueChoiceMessage(index));
+
+    /// <summary>The dialogue panel's Close button: end the dialogue and any service it opened. The panel closes when the server says it ended.</summary>
+    public void CloseDialogue() => SendItem(new DialogueCloseMessage());
 
     /// <summary>The panel's Use button.</summary>
     /// <summary>
@@ -303,7 +324,18 @@ public sealed class ClientSession
                 Ui.OnRefineResult(refined, viewNow);
                 RefineResultReceived?.Invoke(refined);
                 break;
+            case DialogueMessage dialogue:
+                Dialogue.Apply(dialogue);
+                break;
+            case DialogueEndedMessage ended:
+                Dialogue.Ended(ended.Reason);
+                break;
+            case ServiceOpenedMessage service:
+                Dialogue.ServiceOpened(service.Service);
+                ServiceOpened?.Invoke(service);
+                break;
             case RejectedMessage rejected:
+                if (rejected.Intent == MessageTypes.Refine && rejected.Reason == Game.Shared.Vocabulary.ItemReasons.ServiceRequired) Dialogue.ServiceClosed();
                 Ui.OnRejected(rejected, viewNow);
                 break;
             case AttackStoppedMessage stopped:

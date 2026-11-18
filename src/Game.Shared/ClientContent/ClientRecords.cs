@@ -119,32 +119,9 @@ namespace Game.Shared.ClientContent
     /// <param name="Id">NPC id.</param>
     /// <param name="Name">Display name.</param>
     /// <param name="Title">Title under the name, or null.</param>
-    /// <param name="DialogueId">Dialogue started on talk, or null.</param>
     /// <param name="ModelAssetKey">Model key, or null.</param>
     /// <param name="PortraitAssetKey">Portrait key, or null.</param>
-    public sealed record ClientNpc(string Id, string Name, string? Title, string? DialogueId, string? ModelAssetKey, string? PortraitAssetKey);
-
-    /// <summary>A dialogue choice.</summary>
-    /// <param name="Text">Display text.</param>
-    /// <param name="Next">Next node key, or null to end.</param>
-    /// <param name="StartQuestId">Quest offered when chosen, or null.</param>
-    public sealed record ClientDialogueChoice(string Text, string? Next, string? StartQuestId);
-
-    /// <summary>A dialogue node.</summary>
-    /// <param name="Key">Local node id.</param>
-    /// <param name="SpeakerNpcId">Speaking NPC, or null for the one talked to.</param>
-    /// <param name="PortraitAssetKey">Portrait override, or null.</param>
-    /// <param name="Text">Display text.</param>
-    /// <param name="Next">Next node key when there are no choices, or null.</param>
-    /// <param name="Choices">Player choices.</param>
-    public sealed record ClientDialogueNode(
-        string Key, string? SpeakerNpcId, string? PortraitAssetKey, string Text, string? Next, IReadOnlyList<ClientDialogueChoice> Choices);
-
-    /// <summary>A dialogue graph. Nodes are ordered by key.</summary>
-    /// <param name="Id">Dialogue id.</param>
-    /// <param name="Start">Key of the first node.</param>
-    /// <param name="Nodes">The nodes.</param>
-    public sealed record ClientDialogue(string Id, string Start, IReadOnlyList<ClientDialogueNode> Nodes);
+    public sealed record ClientNpc(string Id, string Name, string? Title, string? ModelAssetKey, string? PortraitAssetKey);
 
     /// <summary>A quest's display text. Objectives, prerequisites and rewards are server-only.</summary>
     /// <param name="Id">Quest id.</param>
@@ -231,7 +208,6 @@ namespace Game.Shared.ClientContent
     /// <param name="Statuses">Statuses, by id.</param>
     /// <param name="Monsters">Monsters, by id.</param>
     /// <param name="Npcs">NPCs, by id.</param>
-    /// <param name="Dialogues">Dialogues, by id.</param>
     /// <param name="Quests">Quests, by id.</param>
     /// <param name="Maps">Maps, by id.</param>
     /// <param name="Appearance">Character-creation options.</param>
@@ -239,10 +215,10 @@ namespace Game.Shared.ClientContent
     public sealed record ClientBundle(
         int FormatVersion, IReadOnlyList<string> Elements, IReadOnlyList<string> Stats, IReadOnlyList<ClientItem> Items,
         IReadOnlyList<ClientSkill> Skills, IReadOnlyList<ClientJob> Jobs, IReadOnlyList<ClientStatus> Statuses,
-        IReadOnlyList<ClientMonster> Monsters, IReadOnlyList<ClientNpc> Npcs, IReadOnlyList<ClientDialogue> Dialogues,
+        IReadOnlyList<ClientMonster> Monsters, IReadOnlyList<ClientNpc> Npcs,
         IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps, ClientAppearance Appearance, ClientRefine? Refine = null)
     {
-        /// <summary>The format this build writes and reads (4: item card slots and refinable, and the refine steps, T-402).</summary>
-        public const int CurrentFormatVersion = 4;
+        /// <summary>The format this build writes and reads (5: no dialogue graphs, they are server-run since T-601; 4: item card slots and refinable, and the refine steps, T-402).</summary>
+        public const int CurrentFormatVersion = 5;
     }
 }

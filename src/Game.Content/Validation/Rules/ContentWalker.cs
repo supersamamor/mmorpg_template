@@ -37,6 +37,12 @@ internal static class ContentWalker
             foreach (var e in Flatten(status.Id, "on_apply", status.OnApply)) yield return e;
             foreach (var e in Flatten(status.Id, "on_tick", status.OnTick)) yield return e;
         }
+        foreach (var d in db.Dialogue.All)
+            foreach (var (key, node) in d.Nodes.OrderBy(n => n.Key, StringComparer.Ordinal))
+                for (var c = 0; c < node.Choices.Count; c++)
+                    for (var a = 0; a < node.Choices[c].Actions.Count; a++)
+                        if (node.Choices[c].Actions[a] is RunEffectsAction run)
+                            foreach (var e in Flatten(d.Id, $"nodes.{key}.choices[{c}].actions[{a}].effects", run.Effects)) yield return e;
     }
 
     private static IEnumerable<EffectRef> Flatten(string owner, string path, IReadOnlyList<EffectDef> effects)
@@ -160,8 +166,25 @@ internal static class ContentWalker
             {
                 if (!string.IsNullOrEmpty(node.SpeakerNpcId)) yield return new(d.Id, $"nodes.{key}.speaker_npc_id", node.SpeakerNpcId!, RefKind.Npc);
                 for (var i = 0; i < node.Choices.Count; i++)
-                    if (!string.IsNullOrEmpty(node.Choices[i].StartQuestId))
-                        yield return new(d.Id, $"nodes.{key}.choices[{i}].start_quest_id", node.Choices[i].StartQuestId!, RefKind.Quest);
+                {
+                    var choice = node.Choices[i];
+                    var p = $"nodes.{key}.choices[{i}]";
+                    for (var c = 0; c < choice.Conditions.Count; c++)
+                        switch (choice.Conditions[c])
+                        {
+                            case JobIsCondition j: yield return new(d.Id, $"{p}.conditions[{c}].job_id", j.JobId, RefKind.Job); break;
+                            case JobIsNotCondition j: yield return new(d.Id, $"{p}.conditions[{c}].job_id", j.JobId, RefKind.Job); break;
+                            case HasItemCondition it: yield return new(d.Id, $"{p}.conditions[{c}].item_id", it.ItemId, RefKind.Item); break;
+                            case HasStatusCondition st: yield return new(d.Id, $"{p}.conditions[{c}].status_id", st.StatusId, RefKind.Status); break;
+                        }
+                    for (var a = 0; a < choice.Actions.Count; a++)
+                        switch (choice.Actions[a])
+                        {
+                            case StartQuestAction q: yield return new(d.Id, $"{p}.actions[{a}].quest_id", q.QuestId, RefKind.Quest); break;
+                            case TakeItemAction t: yield return new(d.Id, $"{p}.actions[{a}].item_id", t.ItemId, RefKind.Item); break;
+                            case GiveItemAction g: yield return new(d.Id, $"{p}.actions[{a}].item_id", g.ItemId, RefKind.Item); break;
+                        }
+                }
             }
     }
 

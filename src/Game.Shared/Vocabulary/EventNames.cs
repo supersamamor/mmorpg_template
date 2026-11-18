@@ -192,6 +192,33 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>SkillsReset</c> (T-503): a reset_skills effect dropped every learned skill and refunded the points.</summary>
         public const string SkillsReset = "SkillsReset";
 
+        /// <summary><c>DialogueShown</c> (T-601): a player's dialogue is at a node (the server sends it to the player).</summary>
+        public const string DialogueShown = "DialogueShown";
+
+        /// <summary><c>DialogueEnded</c> (T-601): a dialogue (and any service it opened) ended, for a <c>DialogueEndReasons</c> term.</summary>
+        public const string DialogueEnded = "DialogueEnded";
+
+        /// <summary><c>DialogueRefused</c> (T-601): a talk or dialogue_choice was refused, for a <c>DialogueReasons</c> term.</summary>
+        public const string DialogueRefused = "DialogueRefused";
+
+        /// <summary><c>ServiceOpened</c> (T-601): an <c>open_service</c> action opened an NPC service for a player.</summary>
+        public const string ServiceOpened = "ServiceOpened";
+
+        /// <summary><c>QuestStartRequested</c> (T-601): a <c>start_quest</c> action asked for a quest to start. Nobody handles it until T-602.</summary>
+        public const string QuestStartRequested = "QuestStartRequested";
+
+        /// <summary><c>SavePointSet</c> (T-601): a <c>set_save_point</c> action moved a player's save point.</summary>
+        public const string SavePointSet = "SavePointSet";
+
+        /// <summary><c>DialogueEffectsRequested</c> (T-601): a <c>run_effects</c> action asks combat to run an effect list on a player.</summary>
+        public const string DialogueEffectsRequested = "DialogueEffectsRequested";
+
+        /// <summary><c>DialogueItemsRequested</c> (T-601): a choice's <c>take_item</c> / <c>give_item</c> actions ask the inventory to apply them as one transaction.</summary>
+        public const string DialogueItemsRequested = "DialogueItemsRequested";
+
+        /// <summary><c>DialogueItemsResolved</c> (T-601): the inventory applied or refused a <c>DialogueItemsRequested</c>.</summary>
+        public const string DialogueItemsResolved = "DialogueItemsResolved";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -256,6 +283,15 @@ namespace Game.Shared.Vocabulary
             StatRaised,
             StatRaiseRefused,
             StatsReset,
-            SkillsReset);
+            SkillsReset,
+            DialogueShown,
+            DialogueEnded,
+            DialogueRefused,
+            ServiceOpened,
+            QuestStartRequested,
+            SavePointSet,
+            DialogueEffectsRequested,
+            DialogueItemsRequested,
+            DialogueItemsResolved);
     }
 }

@@ -355,6 +355,21 @@
       },
       "additionalProperties": false,
       "description": "A character's inventory: entry count, weight thresholds, pick-up range, dropped items and two-handed weapons (ARCHITECTURE §6.8)."
+    },
+    "dialogue": {
+      "type": "object",
+      "properties": {
+        "talk_range": {
+          "type": "integer",
+          "description": "How close (Chebyshev, in cells) a player must be to start or keep a dialogue with an NPC. A talk from farther walks the player in first; walking farther than this from the NPC ends the dialogue and any service it opened. At least 1."
+        },
+        "refine_needs_service": {
+          "type": "boolean",
+          "description": "When true the refine intent works only while an NPC's refine service is open (an open_service action) and in reach."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Talking to NPCs and the services they open (T-601, ARCHITECTURE §6.4)."
     }
   },
   "additionalProperties": false,

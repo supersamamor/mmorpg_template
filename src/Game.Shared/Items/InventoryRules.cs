@@ -222,6 +222,58 @@ namespace Game.Shared.Items
             state.Weight = WeightOf(state);
         }
 
+        // ---- exchange (a dialogue's item actions) ----------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Applies a dialogue choice's item actions as one transaction (T-601, hard rule 10): first every take (from carried stacks, lowest id first; worn
+        /// pieces do not count), then every give. All or nothing: a refusal puts everything back and leaves <paramref name="delta"/> empty. Refusal terms are
+        /// <c>DialogueReasons</c>: <c>missing_item</c> (a take finds less than it asks for), <c>inventory_full</c>, <c>too_heavy</c>; an unknown or
+        /// non-positive give is <c>invalid_choice</c> (validated content has none).
+        /// </summary>
+        public string? TryExchange(InventoryState state, IReadOnlyList<KeyValuePair<string, int>> takes, IReadOnlyList<KeyValuePair<string, int>> gives,
+            int weightLimit, Func<long> newId, InventoryDelta delta)
+        {
+            var before = state.Snapshot();
+            delta.Clear();
+            string? reason = null;
+            for (var t = 0; t < takes.Count && reason == null; t++)
+            {
+                var carried = 0L;
+                foreach (var entry in state.Entries)
+                    if (entry.Slot == null && string.Equals(entry.ItemId, takes[t].Key, StringComparison.Ordinal)) carried += entry.Quantity;
+                if (takes[t].Value < 1 || carried < takes[t].Value)
+                {
+                    reason = DialogueReasons.MissingItem;
+                    break;
+                }
+                var left = takes[t].Value;
+                var snapshot = state.Snapshot();
+                foreach (var entry in snapshot)
+                {
+                    if (left == 0) break;
+                    if (entry.Slot != null || !string.Equals(entry.ItemId, takes[t].Key, StringComparison.Ordinal)) continue;
+                    var part = Math.Min(left, entry.Quantity);
+                    Take(state, entry, part, delta);
+                    left -= part;
+                }
+            }
+            for (var g = 0; g < gives.Count && reason == null; g++)
+            {
+                var added = TryAdd(state, gives[g].Key, gives[g].Value, weightLimit, newId, delta);
+                if (added == null) continue;
+                reason = added == ItemReasons.TooHeavy ? DialogueReasons.TooHeavy
+                    : added == ItemReasons.InventoryFull ? DialogueReasons.InventoryFull
+                    : DialogueReasons.InvalidChoice;
+            }
+            if (reason != null)
+            {
+                state.Restore(before);
+                state.Weight = WeightOf(state);
+                delta.Clear();
+            }
+            return reason;
+        }
+
         // ---- use -------------------------------------------------------------------------------------------------------------------
 
         /// <summary>

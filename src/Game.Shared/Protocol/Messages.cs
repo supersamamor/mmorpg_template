@@ -92,6 +92,34 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.RaiseStat;
     }
 
+
+    /// <summary>
+    /// <c>talk</c> (T-601): walk up to the NPC <see cref="Target"/> (an entity the client sees) and start its dialogue. May come back
+    /// <see cref="RejectedMessage"/> with a "Dialogue reasons" term. <c>{"type":"talk","target":12}</c>.
+    /// </summary>
+    public sealed record TalkMessage(long Target) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Talk;
+    }
+
+    /// <summary>
+    /// <c>dialogue_choice</c> (T-601): pick the shown choice <see cref="Index"/> of the current node (the index the <c>dialogue</c> message gave), or, at a
+    /// node without choices, continue with index 0. The server decides where it leads. <c>{"type":"dialogue_choice","index":1}</c>.
+    /// </summary>
+    public sealed record DialogueChoiceMessage(int Index) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.DialogueChoice;
+    }
+
+    /// <summary><c>dialogue_close</c> (T-601): end the dialogue and any NPC service it opened. <c>{"type":"dialogue_close"}</c>.</summary>
+    public sealed record DialogueCloseMessage : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.DialogueClose;
+    }
+
     /// <summary><c>stop_attack</c>: stop auto-attacking (a walk goes on). <c>{"type":"stop_attack"}</c>.</summary>
     public sealed record StopAttackMessage : ClientMessage
     {
@@ -576,6 +604,38 @@ namespace Game.Shared.Protocol
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Stats;
+    }
+
+    /// <summary>One choice shown at a dialogue node: <see cref="Index"/> is what <c>dialogue_choice</c> sends back.</summary>
+    public sealed record DialogueChoiceRecord(int Index, string Text);
+
+    /// <summary>
+    /// <c>dialogue</c> (T-601, owner only): the dialogue is at a node. <c>{"type":"dialogue","npc":12,"speaker":"npc.guide","text":"...","choices":[{"index":0,"text":"..."}]}</c>.
+    /// </summary>
+    /// <param name="Npc">The NPC entity being talked to.</param>
+    /// <param name="Speaker">The speaking NPC's id (<c>npc.*</c>); the client looks up its name, title and portrait in the display bundle.</param>
+    /// <param name="Portrait">A portrait asset key that overrides the speaker's, or null.</param>
+    /// <param name="Text">The line.</param>
+    /// <param name="Choices">The choices shown (those whose conditions hold), each with its original index. Empty: a single "continue".</param>
+    /// <param name="More">With no choices: true when the dialogue goes on after this node (continue), false when it ends there (done).</param>
+    public sealed record DialogueMessage(long Npc, string Speaker, string? Portrait, string Text, IReadOnlyList<DialogueChoiceRecord> Choices, bool More) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Dialogue;
+    }
+
+    /// <summary><c>dialogue_ended</c> (T-601, owner only): the dialogue, and every service it opened, ended for a "Dialogue end reasons" term.</summary>
+    public sealed record DialogueEndedMessage(string Reason) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.DialogueEnded;
+    }
+
+    /// <summary><c>service_opened</c> (T-601, owner only): the NPC <see cref="Npc"/> opened <see cref="Service"/> (a "Service ids" term) for the character; the client opens its panel.</summary>
+    public sealed record ServiceOpenedMessage(string Service, long Npc) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.ServiceOpened;
     }
 
     /// <summary><c>cooldown</c> (T-502, owner only): <see cref="Skill"/> went on cooldown for <see cref="Ms"/> milliseconds.</summary>

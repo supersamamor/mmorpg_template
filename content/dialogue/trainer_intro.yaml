@@ -9,10 +9,14 @@ nodes:
     choices:
       - text: I'm ready for the trial.
         next: trial
-        start_quest_id: quest.warden_trial
+        actions:
+          - type: start_quest
+            quest_id: quest.warden_trial
       - text: I have taken the Warden's path.
         next: oath
-        start_quest_id: quest.warden_oath
+        actions:
+          - type: start_quest
+            quest_id: quest.warden_oath
       - text: Maybe later.
         next: null
   trial:

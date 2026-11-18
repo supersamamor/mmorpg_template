@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=../../schemas/dialogue.schema.json
+id: dialogue.smith_intro
+name: Smith introduction
+start: greet
+nodes:
+  greet:
+    speaker_npc_id: npc.smith
+    text: Steel remembers every blow. Bring me a piece of gear and a temper shard, and I will see how far it will go.
+    choices:
+      - text: Refine my equipment.
+        next: forge
+        actions:
+          - type: open_service
+            service: refine
+      - text: Not today.
+        next: null
+  forge:
+    text: The forge is hot. Open your bag, pick a piece and the shard does the rest. Mind that it may not hold.
+    next: null

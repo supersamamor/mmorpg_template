@@ -146,6 +146,7 @@ public static class UiText
         ItemReasons.ResetInCombat => "Not while you are fighting.",
         ItemReasons.ResetDead => "You cannot do that now.",
         ItemReasons.NothingToReset => "There is nothing to take back.",
+        ItemReasons.ServiceRequired => "Find a smith to refine your gear.",
         _ => string.Empty,   // cancelled: the player moved on, nothing to say
     };
 
@@ -420,6 +421,30 @@ public static class UiText
 
     /// <summary>Closes the sound settings.</summary>
     public const string Close = "Close";
+
+    /// <summary>The button of a dialogue node without choices that goes on (T-601).</summary>
+    public const string DialogueContinue = "Continue";
+
+    /// <summary>The button of a dialogue's last node, which ends it.</summary>
+    public const string DialogueDone = "Goodbye";
+
+    /// <summary>What an NPC without a name in the bundle is called (a speaker the display bundle does not know).</summary>
+    public const string DialogueUnknownSpeaker = "Someone";
+
+    /// <summary>The flash for a refused talk or dialogue choice (a "Dialogue reasons" term); empty for one that needs no word.</summary>
+    public static string DialogueRefused(string reason) => reason switch
+    {
+        DialogueReasons.TargetGone => "They are not here.",
+        DialogueReasons.InvalidTarget => "There is nobody to talk to.",
+        DialogueReasons.NoDialogue => "They have nothing to say.",
+        DialogueReasons.Unreachable => "You cannot get there.",
+        DialogueReasons.InvalidChoice => "That is no longer possible.",
+        DialogueReasons.Busy => "One moment.",
+        DialogueReasons.MissingItem => "You do not have what that needs.",
+        DialogueReasons.InventoryFull => "Your bag is full.",
+        DialogueReasons.TooHeavy => "Too heavy to carry.",
+        _ => string.Empty,   // dead, cancelled: nothing to say
+    };
 
     /// <summary>A bus volume button, e.g. <c>Music 70%</c>.</summary>
     public static string BusVolume(string name, double volume) => name + " " + Math.Round(volume * 100).ToString(CultureInfo.InvariantCulture) + "%";

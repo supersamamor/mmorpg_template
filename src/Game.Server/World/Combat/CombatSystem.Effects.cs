@@ -96,6 +96,24 @@ public sealed partial class CombatSystem
             if (_content.Effects.TryGetItem(use.ItemId, out var effects)) _runner!.Run(effects, ActorOf(user), user.Entity.Id.Value, null, 1);
         }
         _itemResolving.Clear();
+        UseDialogueEffects();
+    }
+
+    /// <summary>
+    /// The <c>run_effects</c> actions of dialogues raised last tick (T-601): each one's compiled effects on the talking player, who is caster and target as for a
+    /// consumable. A player who left the map or died in the tick between is not affected.
+    /// </summary>
+    private void UseDialogueEffects()
+    {
+        if (_dialogueEffects.Count == 0) return;
+        (_dialogueEffects, _dialogueEffectsRunning) = (_dialogueEffectsRunning, _dialogueEffects);
+        for (var i = 0; i < _dialogueEffectsRunning.Count; i++)
+        {
+            var request = _dialogueEffectsRunning[i];
+            if (!_combatants.TryGetValue(request.Player.Value, out var user) || user.Entity.Dead) continue;
+            if (_content.Effects.TryGetDialogue(request.Key, out var effects)) _runner!.Run(effects, ActorOf(user), user.Entity.Id.Value, null, 1);
+        }
+        _dialogueEffectsRunning.Clear();
     }
 
     /// <summary>Puts a new <see cref="Entity.StatusLook"/> on every entity whose statuses changed this tick, for the AOI.</summary>
@@ -231,7 +249,7 @@ public sealed partial class CombatSystem
         }
 
         /// <summary>
-        /// The caster moves: to its save point (a player's is the respawn point of the map it is on until save points exist; a monster has none, so
+        /// The caster moves: to its save point (a player's is the one an NPC set, else the respawn point of the map it is on; a monster has none, so
         /// nothing happens), to a cell of a map, or to a random walkable cell of this map.
         /// </summary>
         public void Teleport(long caster, TeleportEffect effect)
@@ -243,7 +261,7 @@ public sealed partial class CombatSystem
             if (effect.ToSavePoint)
             {
                 if (c.Entity.Kind != EntityKind.Player) return;
-                (mapId, cell) = combat._content.RespawnPointFor(instance.MapId);
+                (mapId, cell) = combat.SavePointOf(c.Entity);
             }
             else if (effect.X is { } x && effect.Y is { } y)
             {

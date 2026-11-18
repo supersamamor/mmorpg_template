@@ -32,6 +32,7 @@ public static class TestCombat
         {
             Combat = sample.Combat with { PlayerAttackRange = attackRange, PlayerRepathIntervalMs = 300 },
             Death = new DeathBalanceDef { RespawnHpPercent = 50, ExpPenaltyPercent = penaltyPercent, CorpseMs = corpseMs },
+            Dialogue = sample.Dialogue with { RefineNeedsService = false },   // the refine service gate has its own tests
             Regen = new RegenBalanceDef { OutOfCombatDelayMs = regenDelayMs ?? sample.Regen.OutOfCombatDelayMs },
             Ai = sample.Ai with { HealOnReturn = healOnReturn },
             Loot = new LootBalanceDef { PriorityMs = priorityMs, LifetimeMs = lifetimeMs, SpreadRadius = spreadRadius },

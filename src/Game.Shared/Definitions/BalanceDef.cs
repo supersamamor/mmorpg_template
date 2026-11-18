@@ -45,6 +45,9 @@ namespace Game.Shared.Definitions
 
         /// <summary>A character's inventory: entry count, weight thresholds, pick-up range, dropped items and two-handed weapons (ARCHITECTURE §6.8).</summary>
         public InventoryBalanceDef Inventory { get; init; } = new InventoryBalanceDef();
+
+        /// <summary>Talking to NPCs and the services they open (T-601, ARCHITECTURE §6.4).</summary>
+        public DialogueBalanceDef Dialogue { get; init; } = new DialogueBalanceDef();
     }
 
     /// <summary>Player death and respawn. Percentages are whole-number percents (50 means half).</summary>

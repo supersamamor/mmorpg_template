@@ -3,6 +3,7 @@ using System.Net.WebSockets;
 using Game.Server.World;
 using Game.Server.World.Aoi;
 using Game.Server.World.Combat;
+using Game.Server.World.Dialogue;
 using Game.Server.World.Inventory;
 using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
@@ -401,6 +402,15 @@ public sealed class ClientSession : IViewSink
             case RefineMessage refine:
                 if (Entity is { } refiner) _gateway.Enqueue(new RefineItem(refiner, refine.Entry));
                 break;
+            case TalkMessage talk:
+                RequestTalk(talk);
+                break;
+            case DialogueChoiceMessage choice:
+                if (Entity is { } chooser) _gateway.Enqueue(new DialogueChoose(chooser, choice.Index));
+                break;
+            case DialogueCloseMessage:
+                if (Entity is { } closer) _gateway.Enqueue(new DialogueClose(closer));
+                break;
             case UseSkillMessage cast:
                 RequestSkill(cast);
                 break;
@@ -506,6 +516,26 @@ public sealed class ClientSession : IViewSink
             return;
         }
         _gateway.Enqueue(new AttackTarget(id, new EntityId(attack.Target)));
+    }
+
+    /// <summary>
+    /// The target must be an NPC in the client's view (else <c>target_gone</c> for one it does not see, <c>invalid_target</c> for anything but an NPC). The auto-attack
+    /// stops first, so combat's walk does not cancel the walk to the NPC; the dialogue system checks the rest (range, a dialogue to run) on the tick.
+    /// </summary>
+    private void RequestTalk(TalkMessage talk)
+    {
+        if (Entity is not { } id) return;
+        EntityKind kind;
+        bool seen;
+        lock (_visible) seen = _visible.TryGetValue(talk.Target, out kind);
+        string? reason = !seen ? DialogueReasons.TargetGone : kind != EntityKind.Npc ? DialogueReasons.InvalidTarget : null;
+        if (reason is not null)
+        {
+            Post(new RejectedMessage(MessageTypes.Talk, reason, null, talk.Target));
+            return;
+        }
+        _gateway.Enqueue(new StopAttack(id));
+        _gateway.Enqueue(new TalkTo(id, new EntityId(talk.Target)));
     }
 
     /// <summary>

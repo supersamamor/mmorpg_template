@@ -1,5 +1,6 @@
 using Game.Server.Events;
 using Game.Server.World.Combat;
+using Game.Server.World.Dialogue;
 using Game.Shared.Definitions;
 using Game.Shared.Formulas;
 using Game.Shared.Items;
@@ -44,6 +45,8 @@ public sealed class InventorySystem : ITickSystem
     private readonly Dictionary<long, Holder> _holders = new();
     private readonly List<Pending> _pending = new();                    // sorted by player id
     private readonly Queue<(EntityId Id, GroundItem Item)> _dropped = new();
+    private List<DialogueItemsRequested> _dialogueItems = new();   // a choice's item actions, applied next tick (T-601)
+    private List<DialogueItemsRequested> _dialogueItemsRunning = new();
     private readonly InventoryDelta _delta = new();
     private readonly FormulaContext _equipContext = new();
     private MapInstance? _instance;
@@ -102,6 +105,7 @@ public sealed class InventorySystem : ITickSystem
                 case RefineItem refine: TryRefine(context, holder, refine.EntryId); break;
             }
         }
+        RunDialogueItems(context);
         RunPickups(context);
         foreach (var holder in _holders.Values) SyncLimit(context, holder, publish: true);
         ExpireDropped(context);
@@ -122,6 +126,7 @@ public sealed class InventorySystem : ITickSystem
         events.Subscribe<MovementStarted>(OnMovementStarted);
         events.Subscribe<MovementStopped>(OnMovementStopped);
         events.Subscribe<MoveRejected>(OnMoveRejected);
+        events.Subscribe<DialogueItemsRequested>(e => _dialogueItems.Add(e));
         foreach (var entity in _instance.Entities) Track(entity);
     }
 
@@ -320,6 +325,11 @@ public sealed class InventorySystem : ITickSystem
     private void TryRefine(TickContext context, Holder holder, long entryId)
     {
         var state = holder.State;
+        if (_content.Balance.Dialogue.RefineNeedsService && !string.Equals(holder.Entity.OpenService, ServiceIds.Refine, StringComparison.Ordinal))
+        {
+            Refuse(context, holder, MessageTypes.Refine, ItemReasons.ServiceRequired, entryId: entryId);
+            return;
+        }
         var reason = _rules.PlanRefine(state, entryId, out var plan);
         if (reason is not null)
         {
@@ -404,6 +414,26 @@ public sealed class InventorySystem : ITickSystem
     }
 
     // ---- pick up -------------------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The item actions of dialogue choices raised last tick (T-601): each is one all-or-nothing exchange (<see cref="InventoryRules.TryExchange"/>), answered with
+    /// <see cref="DialogueItemsResolved"/>. A player who left meanwhile gets nothing and no answer.
+    /// </summary>
+    private void RunDialogueItems(TickContext context)
+    {
+        if (_dialogueItems.Count == 0) return;
+        (_dialogueItems, _dialogueItemsRunning) = (_dialogueItemsRunning, _dialogueItems);
+        foreach (var request in _dialogueItemsRunning)
+        {
+            if (!_holders.TryGetValue(request.Player.Value, out var holder)) continue;
+            var takes = request.Takes.Select(t => new KeyValuePair<string, int>(t.ItemId, t.Quantity)).ToList();
+            var gives = request.Gives.Select(g => new KeyValuePair<string, int>(g.ItemId, g.Quantity)).ToList();
+            var reason = _rules.TryExchange(holder.State, takes, gives, holder.State.WeightLimit, _newId, _delta);
+            if (reason is null) Changed(context, holder, InventoryChanges.Exchanged, null);
+            context.Publish(new DialogueItemsResolved(request.Player, request.Token, reason));
+        }
+        _dialogueItemsRunning.Clear();
+    }
 
     private void StartPickup(TickContext context, Holder holder, EntityId targetId)
     {

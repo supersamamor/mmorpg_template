@@ -59,6 +59,8 @@ public static class ValidationCodes
     public const string JobCycle = "job.parent_cycle";
     /// <summary>A dialogue's start or next points at a node that does not exist.</summary>
     public const string DialogueDangling = "dialogue.dangling";
+    /// <summary>A dialogue condition or action with unusable values (T-601).</summary>
+    public const string DialogueInvalid = "dialogue.invalid";
     /// <summary>A number in <c>balance.yaml</c> is out of range or inconsistent with another.</summary>
     public const string BalanceRange = "balance.range";
     /// <summary>A number in <c>refine.yaml</c> is out of range, a level is missing or out of order, or a material is not a material item.</summary>

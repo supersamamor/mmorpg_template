@@ -201,9 +201,10 @@ namespace Game.Shared.Effects
         private readonly Dictionary<string, CompiledSkill> _skills = new Dictionary<string, CompiledSkill>(StringComparer.Ordinal);
         private readonly Dictionary<string, IReadOnlyList<CompiledEffect>> _items = new Dictionary<string, IReadOnlyList<CompiledEffect>>(StringComparer.Ordinal);
         private readonly Dictionary<string, CompiledStatus> _statuses = new Dictionary<string, CompiledStatus>(StringComparer.Ordinal);
+        private readonly Dictionary<string, IReadOnlyList<CompiledEffect>> _dialogues = new Dictionary<string, IReadOnlyList<CompiledEffect>>(StringComparer.Ordinal);
 
         /// <summary>Compiles the effects of every skill, consumable and status given.</summary>
-        public EffectLibrary(IEnumerable<SkillDef> skills, IEnumerable<ItemDef> items, IEnumerable<StatusDef> statuses)
+        public EffectLibrary(IEnumerable<SkillDef> skills, IEnumerable<ItemDef> items, IEnumerable<StatusDef> statuses, IEnumerable<DialogueDef>? dialogues = null)
         {
             if (skills == null) throw new ArgumentNullException(nameof(skills));
             if (items == null) throw new ArgumentNullException(nameof(items));
@@ -212,17 +213,30 @@ namespace Game.Shared.Effects
             foreach (var item in items)
                 if (item.Consumable != null) _items[item.Id] = CompiledEffect.CompileList(item.Consumable.Effects);
             foreach (var status in statuses) _statuses[status.Id] = new CompiledStatus(status);
+            if (dialogues != null) foreach (var dialogue in dialogues) CompileDialogue(dialogue);
         }
 
         /// <summary>An empty library (tests that need no effects).</summary>
         public static EffectLibrary Empty { get; } =
             new EffectLibrary(Array.Empty<SkillDef>(), Array.Empty<ItemDef>(), Array.Empty<StatusDef>());
 
+        private void CompileDialogue(DialogueDef dialogue)
+        {
+            foreach (var node in dialogue.Nodes)
+            for (var c = 0; c < node.Value.Choices.Count; c++)
+            for (var a = 0; a < node.Value.Choices[c].Actions.Count; a++)
+                if (node.Value.Choices[c].Actions[a] is RunEffectsAction run)
+                    _dialogues[Dialogue.DialogueActionKeys.Of(dialogue.Id, node.Key, c, a)] = CompiledEffect.CompileList(run.Effects);
+        }
+
         /// <summary>A compiled skill.</summary>
         public bool TryGetSkill(string id, out CompiledSkill skill) => _skills.TryGetValue(id, out skill!);
 
         /// <summary>A consumable's compiled effects (false for an item without <c>consumable</c>).</summary>
         public bool TryGetItem(string id, out IReadOnlyList<CompiledEffect> effects) => _items.TryGetValue(id, out effects!);
+
+        /// <summary>The compiled effects of a dialogue <c>run_effects</c> action, by <c>DialogueActionKeys.Of</c> (T-601).</summary>
+        public bool TryGetDialogue(string key, out IReadOnlyList<CompiledEffect> effects) => _dialogues.TryGetValue(key, out effects!);
 
         /// <summary>A compiled status.</summary>
         public bool TryGetStatus(string id, out CompiledStatus status) => _statuses.TryGetValue(id, out status!);

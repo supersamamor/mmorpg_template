@@ -9,12 +9,18 @@ nodes:
     choices:
       - text: Sure, I'll hunt some slimes.
         next: accepted
-        start_quest_id: quest.first_hunt
+        actions:
+          - type: start_quest
+            quest_id: quest.first_hunt
       - text: I've finished the hunt.
         next: report
       - text: Anything else I can do?
         next: more_work
-        start_quest_id: quest.gear_up
+        actions:
+          - type: start_quest
+            quest_id: quest.gear_up
+      - text: I could use a hand with something else.
+        next: services
       - text: Not right now.
         next: null
   accepted:
@@ -25,4 +31,43 @@ nodes:
     next: null
   more_work:
     text: Equip a leather cap, drink a healing draught, then walk to the old stone circle in the north of the meadow.
+    next: null
+  services:
+    text: I can mark this meadow as your home, so you wake up here after a fall. And while you are still new to the Vale, I can help you rethink how you built yourself.
+    choices:
+      - text: Make the meadow my home.
+        next: home_set
+        actions:
+          - type: set_save_point
+            x: 12
+            y: 12
+      # Free below base level 10, like the reset items (balance.yaml progression.reset.free_below_base_level).
+      - text: Take back my stat points.
+        next: stats_reset
+        conditions:
+          - type: base_level
+            max: 9
+        actions:
+          - type: run_effects
+            effects:
+              - type: reset_stats
+      - text: Let me forget my skills.
+        next: skills_reset
+        conditions:
+          - type: base_level
+            max: 9
+        actions:
+          - type: run_effects
+            effects:
+              - type: reset_skills
+      - text: Never mind.
+        next: null
+  home_set:
+    text: Done. The meadow is your home now. If you fall, you will wake up beside me.
+    next: null
+  stats_reset:
+    text: Every point you spent is yours to spend again.
+    next: null
+  skills_reset:
+    text: Your skills are forgotten, and every skill point is back in your pocket.
     next: null
