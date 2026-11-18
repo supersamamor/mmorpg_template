@@ -7,8 +7,8 @@ size: small
 element: earth
 stats: { str: 6, agi: 3, vit: 5, int: 2, dex: 4, luk: 2, max_hp: 32, atk: 7, def: 2, mdef: 1, move_speed: 2 }
 attack_range: 1
-base_exp: 12
-job_exp: 8
+base_exp: 55
+job_exp: 35
 drop_table_ids: [drop.mossling, drop.tier1_supplies]
 ai:
   aggressive: false

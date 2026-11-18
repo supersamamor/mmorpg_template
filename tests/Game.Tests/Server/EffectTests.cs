@@ -458,7 +458,7 @@ public class EffectTests
         var sting1 = world.Hits[0];
         if (sting1.Hit) sting1.Damage.ShouldBe((int)Math.Floor(physical * 1.2 * poisonVsNeutral + 1e-9));
         sting1.Hit.ShouldBeTrue();
-        sting1.Damage.ShouldBe(12);   // golden: the wasp's atk vs a new character's def, × 1.2, poison vs neutral
+        sting1.Damage.ShouldBe(15);   // golden: the wasp's atk (13 since T-404, was 10 → 12) vs a new character's def, × 1.2, poison vs neutral
 
         // One poison tick on a poisoned new character (DEF −25% while poisoned), always landing.
         catalog.Effects.TryGetStatus("status.poison", out var poison).ShouldBeTrue();

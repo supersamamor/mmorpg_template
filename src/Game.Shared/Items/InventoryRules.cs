@@ -314,6 +314,17 @@ namespace Game.Shared.Items
             delta.Upsert(on);
         }
 
+        /// <summary>
+        /// True when <paramref name="item"/> is equipment the wearer's <i>job</i> may not use: its <c>job_ids</c> list lacks the job, or its weapon type is not one
+        /// of the job's. The level is not checked (a job change never lowers it). Used to take such items off after a job change (ADR-002 row 219).
+        /// </summary>
+        public bool JobCannotUse(ItemDef item, Wearer wearer)
+        {
+            if (item.Equip is not { } equip) return false;
+            if (equip.JobIds.Count > 0 && !Contains(equip.JobIds, wearer.JobId)) return true;
+            return equip.WeaponType != null && wearer.JobWeaponTypes != null && !Contains(wearer.JobWeaponTypes, equip.WeaponType);
+        }
+
         /// <summary>Takes off what is worn in <paramref name="slot"/>. Refused with <c>not_equipped</c> when the slot is empty or unknown.</summary>
         public string? TryUnequip(InventoryState state, string slot, InventoryDelta delta)
         {

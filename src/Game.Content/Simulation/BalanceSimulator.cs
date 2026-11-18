@@ -18,8 +18,14 @@ namespace Game.Content.Simulation;
 /// <param name="Weapon">The equipped weapon, or null.</param>
 /// <param name="Refine">Weapon refine level.</param>
 /// <param name="Sheet">Stats with job bonuses and weapon modifiers applied.</param>
+/// <param name="Gear">Worn equipment other than the weapon (armour, shield, headgear), each with its refine level (T-404).</param>
+/// <param name="Skills">Learned skills and their levels (T-404): passives are on <paramref name="Sheet"/>; the duel casts the active ones.</param>
 public sealed record SimCharacter(string JobId, int BaseLevel, int JobLevel, IReadOnlyDictionary<string, int> Primary,
-    int PointsLeft, ItemDef? Weapon, int Refine, StatSheet Sheet);
+    int PointsLeft, ItemDef? Weapon, int Refine, StatSheet Sheet, IReadOnlyList<GearPiece>? Gear = null,
+    IReadOnlyDictionary<string, int>? Skills = null);
+
+/// <summary>One worn item and its refine level.</summary>
+public sealed record GearPiece(ItemDef Item, int Refine);
 
 /// <summary>
 /// Host-side helpers that turn content into stat sheets: players (job + level + stat build + equipment) and monsters.
@@ -128,7 +134,7 @@ public sealed class BalanceSimulator
 
     /// <summary>A player sheet: primary stats as base, the job's stat bonuses, and the weapon's modifiers at <paramref name="refine"/>.</summary>
     public SimCharacter Player(string jobId, int baseLevel, int jobLevel, IReadOnlyDictionary<string, int> primary,
-        int pointsLeft, ItemDef? weapon, int refine = 0)
+        int pointsLeft, ItemDef? weapon, int refine = 0, IReadOnlyList<GearPiece>? gear = null, IReadOnlyDictionary<string, int>? skills = null)
     {
         var sheet = new StatSheet(_formulas);
         sheet.Base.BaseLevel = baseLevel;
@@ -146,7 +152,19 @@ public sealed class BalanceSimulator
             foreach (var def in weapon.Equip.Modifiers)
                 sheet.Modifiers.Add("equip:" + weapon.Id, CompiledModifier.Compile(def), equipContext);
         }
-        return new SimCharacter(jobId, baseLevel, jobLevel, primary, pointsLeft, weapon, refine, sheet);
+        foreach (var piece in gear ?? [])
+        {
+            if (piece.Item.Equip == null) continue;
+            var equipContext = new FormulaContext();
+            equipContext[FormulaVariables.Refine] = piece.Refine;
+            foreach (var def in piece.Item.Equip.Modifiers)
+                sheet.Modifiers.Add("equip:" + piece.Item.Id, CompiledModifier.Compile(def), equipContext);
+        }
+        var scratch = new FormulaContext();
+        foreach (var pair in skills ?? new Dictionary<string, int>())
+            if (Db.Skills.Contains(pair.Key) && Db.Skills.Get(pair.Key).Passive)
+                Game.Shared.Skills.SkillRules.ApplyPassive(sheet, Db.Skills.Get(pair.Key), pair.Value, scratch);
+        return new SimCharacter(jobId, baseLevel, jobLevel, primary, pointsLeft, weapon, refine, sheet, gear, skills);
     }
 
     /// <summary>
@@ -155,14 +173,15 @@ public sealed class BalanceSimulator
     /// weapon from <see cref="PickWeapon"/> unless <paramref name="weaponId"/> names one (or <paramref name="unarmed"/> is set).
     /// </summary>
     public SimCharacter Character(string jobId, int baseLevel, IReadOnlyDictionary<string, int>? exact = null,
-        IReadOnlyDictionary<string, int>? weights = null, string? weaponId = null, int refine = 0, bool unarmed = false)
+        IReadOnlyDictionary<string, int>? weights = null, string? weaponId = null, int refine = 0, bool unarmed = false,
+        IReadOnlyList<GearPiece>? gear = null, IReadOnlyDictionary<string, int>? skills = null, int? jobLevel = null)
     {
         if (!Db.Jobs.Contains(jobId)) throw new ArgumentException("Unknown job '" + jobId + "'.");
         var (stats, left) = exact != null
             ? SpendExact(jobId, baseLevel, exact)
             : SpendByWeight(jobId, baseLevel, weights ?? PrimaryStats.All.Ordered.ToDictionary(s => s, _ => 1, StringComparer.Ordinal));
         var weapon = unarmed ? null : weaponId != null ? Db.Items.Get(weaponId) : PickWeapon(jobId, baseLevel);
-        return Player(jobId, baseLevel, JobLevelFor(jobId, baseLevel), stats, left, weapon, refine);
+        return Player(jobId, baseLevel, jobLevel ?? JobLevelFor(jobId, baseLevel), stats, left, weapon, refine, gear, skills);
     }
 
     /// <summary>A monster: primary stats as base values, listed derived stats as overrides (see <see cref="MonsterDef.Stats"/>).</summary>

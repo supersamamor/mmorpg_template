@@ -42,6 +42,7 @@ public sealed class InventorySystem : ITickSystem
     private readonly IPlayerProgressionStore? _progressions;
     private readonly Func<long> _newId;
     private readonly Dictionary<long, Holder> _holders = new();
+    private readonly List<long> _jobChanged = new();   // players whose job changed since the last tick: worn gear their new job cannot use comes off (row 219)
     private readonly List<Pending> _pending = new();                    // sorted by player id
     private readonly Queue<(EntityId Id, GroundItem Item)> _dropped = new();
     private readonly InventoryDelta _delta = new();
@@ -102,6 +103,7 @@ public sealed class InventorySystem : ITickSystem
                 case RefineItem refine: TryRefine(context, holder, refine.EntryId); break;
             }
         }
+        UnequipForNewJob(context);
         RunPickups(context);
         foreach (var holder in _holders.Values) SyncLimit(context, holder, publish: true);
         ExpireDropped(context);
@@ -119,6 +121,10 @@ public sealed class InventorySystem : ITickSystem
             if (_instance.TryGetEntity(e.Entity, out var entity)) Track(entity);
         });
         events.Subscribe<EntityLeftMap>(OnLeft);
+        events.Subscribe<PlayerProgressed>(e =>
+        {
+            if (e.Change is Game.Shared.Progression.JobChanged && !_jobChanged.Contains(e.Player.Value)) _jobChanged.Add(e.Player.Value);
+        });
         events.Subscribe<MovementStarted>(OnMovementStarted);
         events.Subscribe<MovementStopped>(OnMovementStopped);
         events.Subscribe<MoveRejected>(OnMoveRejected);
@@ -171,6 +177,23 @@ public sealed class InventorySystem : ITickSystem
             }
         }
         _delta.Clear();
+    }
+
+    /// <summary>
+    /// ADR-002 row 219: after a job change, every worn item the new job cannot use (a weapon type it lacks, a <c>job_ids</c> list without it) goes back to the bag,
+    /// like a player taking it off (the usual <see cref="ItemUnequipped"/> and inventory update). The level is not rechecked: a job change never lowers it.
+    /// </summary>
+    private void UnequipForNewJob(TickContext context)
+    {
+        if (_jobChanged.Count == 0) return;
+        for (var i = 0; i < _jobChanged.Count; i++)
+        {
+            if (!_holders.TryGetValue(_jobChanged[i], out var holder)) continue;
+            var wearer = WearerOf(holder.Entity);
+            foreach (var entry in holder.State.Entries.Where(e => e.Slot is not null).ToArray())
+                if (_content.TryGetItem(entry.ItemId, out var item) && _rules.JobCannotUse(item, wearer)) TakeOff(context, holder, entry.Slot!);
+        }
+        _jobChanged.Clear();
     }
 
     private void OnLeft(EntityLeftMap e)

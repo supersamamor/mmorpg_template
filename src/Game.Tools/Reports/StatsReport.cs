@@ -44,7 +44,9 @@ internal static class StatsReport
     public static IReadOnlyList<ReportTable> ForDuel(SimCharacter ch, MonsterDef monster, DuelResult r)
     {
         var table = new ReportTable("duel", "field", "value")
-            .Add("player", ch.JobId + " L" + ch.BaseLevel + (ch.Weapon == null ? " unarmed" : " " + ch.Weapon.Id) + ", " + ch.PointsLeft + " points unspent")
+            .Add("player", ch.JobId + " L" + ch.BaseLevel + (ch.Weapon == null ? " unarmed" : " " + ch.Weapon.Id) + ", " + ch.PointsLeft + " points unspent"
+                + (ch.Gear is { Count: > 0 } ? ", " + string.Join(" ", ch.Gear.Select(g => g.Item.Id + "+" + g.Refine)) : "")
+                + (ch.Weapon != null && ch.Refine > 0 ? ", weapon +" + ch.Refine : ""))
             .Add("monster", monster.Id)
             .Add("player_hp", r.PlayerHp)
             .Add("monster_hp", r.MonsterHp)
@@ -65,6 +67,7 @@ internal static class StatsReport
             .Add("sim_monster_skill_damage", r.MeanSkillDamage)
             .Add("sim_status_damage", r.MeanStatusDamage)
             .Add("sim_statuses_applied", r.MeanStatusesApplied);
+        if (ch.Skills is { Count: > 0 }) table.Add("sim_player_skill_casts", r.MeanPlayerSkillCasts);
         return new[] { table };
     }
 

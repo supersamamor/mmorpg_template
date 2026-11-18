@@ -19,6 +19,7 @@ internal sealed class DuelWorld : IEffectWorld
     private readonly EffectActor[] _actors = new EffectActor[3];
     private readonly StatusSet[] _statuses = [new(), new(), new()];
     private readonly int[] _hp = new int[3];
+    private readonly int[] _maxHp = new int[3];
 
     public DuelWorld(StatSheet player, int weaponAtk, int refine, string? weaponElement, StatSheet monster, MonsterDef def)
     {
@@ -46,8 +47,8 @@ internal sealed class DuelWorld : IEffectWorld
     /// <summary>Starts a fight: full HP, no statuses (the caller ends the last fight's statuses first, which removes their modifiers).</summary>
     public void Reset(int playerHp, int monsterHp)
     {
-        _hp[PlayerId] = playerHp;
-        _hp[MonsterId] = monsterHp;
+        _hp[PlayerId] = _maxHp[PlayerId] = playerHp;
+        _hp[MonsterId] = _maxHp[MonsterId] = monsterHp;
         NowMs = 0;
         SkillDamage = 0;
         StatusDamage = 0;
@@ -96,6 +97,7 @@ internal sealed class DuelWorld : IEffectWorld
 
     public void Heal(long caster, long target, int amount)
     {
+        if (_hp[target] > 0) _hp[target] = Math.Min(_maxHp[target], _hp[target] + amount);
     }
 
     public void RestoreSp(long caster, long target, int amount)

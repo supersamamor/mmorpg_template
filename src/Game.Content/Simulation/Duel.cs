@@ -28,10 +28,13 @@ namespace Game.Content.Simulation;
 /// <param name="MeanSkillDamage">Mean HP the player lost to monster skill hits per fight.</param>
 /// <param name="MeanStatusDamage">Mean HP the player lost to status ticks (poison) per fight.</param>
 /// <param name="MeanStatusesApplied">Mean statuses the player received (started, stacked or refreshed) per fight.</param>
+/// <param name="MeanPlayerSkillCasts">Mean player skill casts per simulated fight (T-404).</param>
+/// <param name="MeanSecondsOnWin">Mean fight length in seconds in the won fights (T-404; 0 when none).</param>
 public sealed record DuelResult(int PlayerHp, int MonsterHp, double PlayerAspd, double MonsterAspd, double PlayerHitChance,
     double PlayerAvgHit, double MonsterHitChance, double MonsterAvgHit, double ExpectedSwings, double ExpectedSeconds,
     double ExpectedHpLeftFraction, int Fights, double WinRate, double MeanSwingsOnWin, double MeanHpLeftFractionOnWin,
-    double MeanSkillCasts = 0, double MeanSkillDamage = 0, double MeanStatusDamage = 0, double MeanStatusesApplied = 0);
+    double MeanSkillCasts = 0, double MeanSkillDamage = 0, double MeanStatusDamage = 0, double MeanStatusesApplied = 0,
+    double MeanPlayerSkillCasts = 0, double MeanSecondsOnWin = 0);
 
 /// <summary>
 /// One player against one monster, no player skills: both sides auto-attack at their <c>aspd</c> (the server's Ready() cadence, ignoring tick
@@ -72,28 +75,68 @@ public static class Duel
         var skills = MonsterSkills(sim.Effects, monster, monsterSheet);
         var ready = new double[skills.Length];
         const long P = DuelWorld.PlayerId, M = DuelWorld.MonsterId;
+        var pSkills = PlayerSkills(sim, player, world, monster, playerHp);
+        var pReady = new double[pSkills.Length];
+        var maxSp = player.Sheet.GetInt("max_sp");
         var wins = 0;
+        long playerCasts = 0;
+        double winSeconds = 0;
         long winSwings = 0, casts = 0, skillDamage = 0, statusDamage = 0, statuses = 0;
         double winHp = 0;
         for (var i = 0; i < fights; i++)
         {
             world.Reset(playerHp, monsterHp);
             Array.Clear(ready);
+            Array.Clear(pReady);
+            var sp = maxSp;
+            var pCasting = -1;
+            var pCastEnd = double.PositiveInfinity;
             var pNext = 0.0;
             var mNext = 0.0;
             var castEnd = double.PositiveInfinity;
             var casting = -1;
             var pSwings = 0;
+            var endT = 0.0;
             while (world.Hp(P) > 0 && world.Hp(M) > 0)
             {
                 var statusMs = Math.Min(world.NextStatusEvent(P), world.NextStatusEvent(M));
                 var statusAt = statusMs == long.MaxValue ? double.PositiveInfinity : statusMs / 1000.0;
-                var t = Math.Min(Math.Min(pNext, castEnd), Math.Min(casting < 0 ? mNext : double.PositiveInfinity, statusAt));
+                var t = Math.Min(Math.Min(Math.Min(pNext, pCastEnd), castEnd), Math.Min(casting < 0 ? mNext : double.PositiveInfinity, statusAt));
                 world.NowMs = (long)Math.Floor(t * 1000 + Epsilon);
+                endT = t;
                 if (statusAt <= t)
                 {
                     runner.TickStatuses(P);
                     runner.TickStatuses(M);
+                }
+                else if (pCastEnd <= t && pNext > t)
+                {
+                    var ps = pSkills[pCasting];
+                    runner.Run(ps.Skill.Effects, world.Actor(P), ps.Self ? P : M, null, ps.Level);
+                    pReady[pCasting] = t + ps.CooldownS;
+                    sp -= ps.SpCost;
+                    pCasting = -1;
+                    pCastEnd = double.PositiveInfinity;
+                    pNext = t + 1.0 / pAspd;
+                }
+                else if (pNext <= t && PickPlayerSkill(pSkills, pReady, t, sp, world.Hp(P), playerHp) is var pick and >= 0)
+                {
+                    pSwings++;
+                    playerCasts++;
+                    var ps = pSkills[pick];
+                    if (ps.CastS > 0)
+                    {
+                        pCasting = pick;
+                        pCastEnd = t + ps.CastS;
+                        pNext = double.PositiveInfinity;
+                    }
+                    else
+                    {
+                        runner.Run(ps.Skill.Effects, world.Actor(P), ps.Self ? P : M, null, ps.Level);
+                        pReady[pick] = t + ps.CooldownS;
+                        sp -= ps.SpCost;
+                        pNext = t + 1.0 / pAspd;
+                    }
                 }
                 else if (pNext <= t)
                 {
@@ -130,6 +173,7 @@ public static class Duel
             {
                 wins++;
                 winSwings += pSwings;
+                winSeconds += endT;
                 winHp += world.Hp(P) / (double)playerHp;
             }
             skillDamage += world.SkillDamage;
@@ -143,7 +187,79 @@ public static class Duel
         return new DuelResult(playerHp, monsterHp, pAspd, mAspd, playerAttack.Hit, playerAttack.Avg, monsterAttack.Hit, monsterAttack.Avg,
             swings, seconds, hpLeft, fights, fights > 0 ? wins / (double)fights : 0,
             wins > 0 ? winSwings / (double)wins : 0, wins > 0 ? winHp / wins : 0,
-            PerFight(casts), PerFight(skillDamage), PerFight(statusDamage), PerFight(statuses));
+            PerFight(casts), PerFight(skillDamage), PerFight(statusDamage), PerFight(statuses), PerFight(playerCasts), wins > 0 ? winSeconds / wins : 0);
+    }
+
+    private sealed record PlayerSkill(CompiledSkill Skill, int Level, double CastS, double CooldownS, int SpCost, bool Self, bool Heal, double Estimate);
+
+    /// <summary>
+    /// The player's usable active skills, in the order the rotation tries them: attack skills by estimated damage per cast, highest first (the
+    /// estimate is the mean of 200 real casts at a huge-HP dummy of the monster's sheet), then heals. A skill is usable when its weapon type is worn.
+    /// </summary>
+    private static PlayerSkill[] PlayerSkills(BalanceSimulator sim, SimCharacter player, DuelWorld world, MonsterDef monster, int playerHp)
+    {
+        var list = new List<PlayerSkill>();
+        if (player.Skills == null) return [];
+        var f = new FormulaContext();
+        var weaponType = player.Weapon?.Equip?.WeaponType ?? WeaponTypes.Unarmed;
+        foreach (var pair in player.Skills.OrderBy(k => k.Key, StringComparer.Ordinal))
+        {
+            if (pair.Value < 1 || !sim.Effects.TryGetSkill(pair.Key, out var skill) || skill.Def.Passive) continue;
+            if (!Game.Shared.Skills.SkillRules.WeaponAllowed(skill.Def, weaponType)) continue;
+            var damaging = HasEffect(skill.Effects, "damage");
+            var heals = HasEffect(skill.Effects, "heal");
+            if (!damaging && !heals) continue;
+            f.Clear();
+            player.Sheet.WriteTo(f);
+            f[FormulaVariables.SkillLevel] = pair.Value;
+            var cast = Math.Max(0, Math.Floor(skill.CastTimeMs.Evaluate(f) * player.Sheet.Get(DerivedStats.CastTimeMod) + Epsilon));
+            var cooldown = Math.Max(0, Math.Floor(skill.CooldownMs.Evaluate(f) + Epsilon));
+            var cost = (int)Math.Max(0, Math.Floor(skill.SpCost.Evaluate(f) + Epsilon));
+            var self = (!skill.Def.Target.Ground && skill.Def.Target.Range <= 0) || skill.Def.Target.Friendly;
+            var estimate = 0.0;
+            if (damaging)
+            {
+                const int Samples = 200;
+                const int Huge = int.MaxValue / 2;
+                var dry = new Pcg32Random(12345);
+                var dryRunner = new EffectRunner(sim.Combat, sim.Effects, world, dry);
+                long total = 0;
+                for (var i = 0; i < Samples; i++)
+                {
+                    world.Reset(playerHp, Huge);
+                    dryRunner.Run(skill.Effects, world.Actor(DuelWorld.PlayerId), self ? DuelWorld.PlayerId : DuelWorld.MonsterId, null, pair.Value);
+                    total += Huge - world.Hp(DuelWorld.MonsterId);
+                    dryRunner.EndAll(DuelWorld.PlayerId, StatusEndReasons.Died);
+                    dryRunner.EndAll(DuelWorld.MonsterId, StatusEndReasons.Died);
+                }
+                estimate = total / (double)Samples;
+            }
+            list.Add(new PlayerSkill(skill, pair.Value, cast / 1000, cooldown / 1000, cost, self, !damaging, estimate));
+        }
+        return list.OrderBy(s => s.Heal).ThenByDescending(s => s.Estimate).ToArray();
+    }
+
+    private static bool HasEffect(IReadOnlyList<CompiledEffect> effects, string type)
+    {
+        foreach (var e in effects)
+        {
+            if (e.Type == type) return true;
+            if (e is CompiledArea area && HasEffect(area.Children, type)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>The rotation: the first attack skill that is off cooldown and affordable; a heal only below half HP; else -1 (auto-attack).</summary>
+    private static int PickPlayerSkill(PlayerSkill[] skills, double[] ready, double t, int sp, int hp, int maxHp)
+    {
+        for (var i = 0; i < skills.Length; i++)
+        {
+            var s = skills[i];
+            if (t + Epsilon < ready[i] || s.SpCost > sp) continue;
+            if (s.Heal && hp * 2 >= maxHp) continue;
+            return i;
+        }
+        return -1;
     }
 
     private sealed record DuelSkill(CompiledSkill Skill, int Level, double Chance, double CastS, double CooldownS, bool Self);
