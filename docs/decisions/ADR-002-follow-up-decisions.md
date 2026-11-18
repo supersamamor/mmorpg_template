@@ -376,3 +376,15 @@ When writing these prompts, copy in the decisions listed:
 | 215 | Wire for skills (T-502) | **Decided** (Net/** approval 2026-11-18): `use_skill`, `learn_skill`, `change_job` (C→S); the owner's `skills` (after every snapshot, a learn, a job change, a level) and `cooldown`; a delta's `casts` and `cast_ends` for any caster in view (never costs or numbers); skill refusals as `rejected` with `skill`. No bundle change (skills and job trees were already in it). Protocol version stays 1. |
 | 216 | Friendly skills on other players (T-502) | **Decided: not in v1:** a friendly entity skill is cast on the caster (the server accepts a friendly ally target; the client has no way to aim at one yet). **→ T-6xx** with party or player targeting. |
 | 217 | Skill bar cooldown redraw (T-502) | **Decided:** the skill book's version moves every frame while any cooldown runs, so the bar redraws its text each frame during a cooldown (a few short strings); nothing moves while idle. |
+
+## Addendum — T-405 and lead review of T-502 (2026-11-18)
+| # | Question (source) | Decision |
+|---|---|---|
+| 218 | Rows 209–217 were written by the T-502 session (T-502) | **Accepted by the lead** on review. The skills message goes with full snapshots, learns, job changes and level-ups, never every tick. |
+| 219 | A weapon the new job can't use stays worn after a job change (T-502) | **→ T-404:** decide (unequip on job change, or keep it worn but unusable for skills) with the balance pass. |
+| 220 | Skill names wrap badly in a 56 dp skill slot, and the bar redraws text every frame while a cooldown runs (T-502) | **→ T-222:** fix with the HUD's look in the toon pass if it fits; otherwise a UI art task. |
+| 221 | Theme checks (`ThemeCheck`) run inside `validate`: `attach` xor `skinned`, the attach bone in every body rig from `appearance.yaml`, weapon-type clip suffixes, item visual keys with no model file (a warning naming the fallback), and LFS pointer `.glb` files (an error saying `git lfs pull`) (T-405) | **Decided: accepted.** Not run at server boot, since the server never loads models. |
+| 222 | Preload up to `gear_preload_limit` (16) worn and bag pieces, in the piece cache, now LRU-bounded by `model_cache_limit` (48). Model work on the equip frame went from 1.6–3.6 ms to 0 ms (T-405) | **Decided: accepted.** |
+| 223 | Equipping still has one 60–105 ms frame: the body re-merge in `GearMesher.Dress` (T-405) | **→ T-222** if the toon material work touches `GearMesher`; otherwise **→ Backlog:** build the merge ahead of time or spread it over frames. |
+| 224 | `themegen` reads each weapon's type from `content/items/*.yaml` (`--content` to override) to pick its placeholder shape (T-405) | **Decided: accepted.** Placeholder generation may read content; the game client still reads only the bundle. |
+| 225 | `ModelStore.HasPiece` is true for a piece that failed to load, so a failed preload isn't retried (T-405) | **→ T-222** (same files). |
