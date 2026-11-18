@@ -420,3 +420,15 @@ When writing these prompts, copy in the decisions listed:
 | 243 | Refine (row 187) moves behind an NPC: with `dialogue.refine_needs_service` (on) the `refine` intent needs an open `refine` service, opened by the new smith Tamsin (`npc.smith`, placed in the meadow's safe zone, using existing art keys). `insert_card` stays free; card removal and any currency cost wait (T-601) | **Decided: accepted.** A service stays open past the finished graph until the player leaves talk range, warps, dies or closes. |
 | 244 | Resets (row 234): Odalys offers a free stat reset and skill reset below base level 10 through `run_effects` (a new `EffectSite.Service`); the reset items stay. The NPC reset skips `progression.reset.refuse_in_combat` (T-601) | **Decided: accepted.** If combat-refusal should apply there too, it needs a generic dialogue condition (e.g. out of combat) → follow-up. |
 | 245 | `dialogue.talk_range` is 2 cells (Chebyshev); a `talk` from farther walks the player in like an auto-attack, and walking beyond the range ends the dialogue and its services. Device behaviour of the panel is unverified (row 112) (T-601) | **Decided: accepted.** |
+
+## Addendum — T-404 and lead review of T-601 (2026-11-19)
+| # | Question (source) | Decision |
+|---|---|---|
+| 246 | Rows 237–245 were written by the T-601 session (T-601) | **Accepted by the lead** on review. `dialogue_close` as a third intent is within the user's standing approval (delivery of the dialogue messages). |
+| 247 | Retune with weapons: wasp HP 66→90, atk 10→13; beetle HP 320→160, atk 30→17, def 12→9; boar HP 620→240, atk 48→26, def 16→10; base EXP slime 14, mossling 55, wasp 200, beetle 450, boar 900; boar's Iron Blade and Oak Staff 1%→10%, beetle's Padded Vest 1.5%→8%, mossling's Leather Cap 2%→5% (T-404) | **Decided: accepted.** Wasp L5/L6 46.4% / 67.9%; beetle L7 62.3%; boar L10 56.2%; level 10 in about 65 minutes. Method and arithmetic in `docs/BALANCING.md` §5. |
+| 248 | With the Bone Dirk, the slime and mossling are very easy (94% and about 80% HP left) (T-404) | **Decided: keep.** The first fights teach the controls; danger starts at the wasp. |
+| 249 | Thistle Hollow spawns only Gel Slimes, so its 50–80% target can't be met (T-404) | **→ T-407** (new): 2–3 Thistle Hollow monsters, with placeholders and a tune through `stats --duel`. |
+| 250 | Row 219: a worn item the new job can't use is taken off at the job change and kept in the bag (T-404) | **Decided: accepted.** |
+| 251 | Row 235: the reset items don't drop; every character gets one of each, resets are free below level 10, and more comes from a shop once currency exists (T-404) | **Decided: accepted.** |
+| 252 | `GatewayTests.A_reader_that_stays_behind_is_disconnected` failed once under heavy machine load in both the T-404 and T-601 sessions (T-404, T-601) | **→ T-406:** make the test independent of machine load (an injected clock or a wider margin), since it times a real socket. |
+| 253 | The NPC free resets skip `progression.reset.refuse_in_combat`; enforcing it needs an "out of combat" dialogue condition (T-601) | **→ T-602**, with the quest condition on the same seam. |

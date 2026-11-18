@@ -115,6 +115,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
 | T-601 | NPCs in the world, dialogue graphs, conditions and actions, NPC services (save point, refine decision, resets) | Claude Code | Sonnet 5.5 | [T-601](../tasks/prompts/T-601.md) | T-501, T-502, T-503, T-222 | Review | Touches `Net/**` for talk and dialogue messages only (standing approval 2026-11-18); ADR-002 #187, #202, #234 |
+| T-602 | Quest state machine on the event bus: objectives, turn-in, atomic rewards, currency balance, quest conditions in dialogue, quest log and tracker, the Warden path | Claude Code | Opus 5.5 | [T-602](../tasks/prompts/T-602.md) | T-601, T-404 | In Progress | Touches `Net/**` for quest messages and the currency field only (standing approval 2026-11-18); ADR-002 #211, #212, #253 |
 
 ## Phase 7 — Persistence & accounts
 
@@ -127,8 +128,8 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Phase | Task | Agent | Model | Status |
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
-| T-406 | 4 | Toon pass leftovers: ARCHITECTURE §8 placeholder colours, theme-relative toon light include in map scenes, `--measure` stuck in Reconnecting, HUD canvas draw spike; stats re-post on status changes, reset item icons, stats panel in the layout check (ADR-002 #232, #233, #235, #236) | Claude Code | Sonnet 5.5 | Backlog |
-| T-602 | 6 | Quest state machine on event bus | Claude Code | Opus 5.5 | Backlog |
+| T-406 | 4 | Toon pass leftovers: ARCHITECTURE §8 placeholder colours, theme-relative toon light include in map scenes, `--measure` stuck in Reconnecting, HUD canvas draw spike; stats re-post on status changes, reset item icons, stats panel in the layout check ; the load-sensitive gateway reader test (ADR-002 #232, #233, #235, #236, #252) | Claude Code | Sonnet 5.5 | Backlog |
+| T-407 | 4 | Thistle Hollow monsters: 2–3 new original monsters with placeholders, spawns in the authoring scene, tuned to 50–80% with `stats --duel` (ADR-002 #249) | Claude Code | Sonnet 5.5 | Backlog |
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
 | T-702 | 7 | Persistence (EF Core + Postgres), transactional inventory | Claude Code | Opus 5.5 | Backlog |
 | T-703 | 7 | Store compliance: account deletion, Sign in with Apple, privacy disclosures | Claude Code | Sonnet 5.5 | Backlog |
