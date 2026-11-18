@@ -5,10 +5,10 @@ level: 7
 race: insect
 size: medium
 element: earth
-stats: { str: 16, agi: 5, vit: 18, int: 2, dex: 9, luk: 3, max_hp: 320, atk: 30, def: 12, mdef: 3, move_speed: 2 }
+stats: { str: 16, agi: 5, vit: 18, int: 2, dex: 9, luk: 3, max_hp: 160, atk: 17, def: 9, mdef: 3, move_speed: 2 }
 attack_range: 1
-base_exp: 70
-job_exp: 45
+base_exp: 450
+job_exp: 290
 drop_table_ids: [drop.rock_beetle, drop.tier2_supplies]
 ai:
   aggressive: false

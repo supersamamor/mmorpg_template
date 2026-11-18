@@ -288,6 +288,38 @@ public class InventoryTests
         rig.State(player).InSlot(EquipSlots.Weapon)!.Id.ShouldBe(dirk);
     }
 
+    /// <summary>
+    /// T-404, ADR-002 row 219: a job change takes off every worn item the new job cannot use (a Wanderer's Wooden Buckler is for Wardens and Wanderers only),
+    /// puts it back in the bag with the usual unequip event and keeps what the new job may still wear (the dagger).
+    /// </summary>
+    [Fact]
+    public void A_job_change_takes_off_worn_gear_the_new_job_cannot_use()
+    {
+        var rig = new InventoryRig();
+        var player = rig.AddPlayer(Start, TestCombat.PlayerSheet());
+        rig.Ticks();
+        var dirk = rig.Give(player, "item.bone_dirk");
+        var buckler = rig.Give(player, "item.wooden_buckler");
+        rig.Send(new Equip(player, dirk, null));
+        rig.Send(new Equip(player, buckler, null));
+        rig.Ticks();
+        rig.State(player).InSlot(EquipSlots.Shield)!.Id.ShouldBe(buckler);
+        rig.Progressions.TryGet(player, out var progress).ShouldBeTrue();
+        progress.BaseLevel = 5;
+        progress.JobLevel = 5;
+
+        rig.Send(new ChangeJob(player, "job.spellbinder"));
+        rig.Ticks(3);
+
+        rig.Get(player).DefinitionId.ShouldBe("job.spellbinder");
+        rig.State(player).InSlot(EquipSlots.Shield).ShouldBeNull();
+        rig.State(player).Find(buckler)!.Slot.ShouldBeNull();   // still carried
+        rig.State(player).InSlot(EquipSlots.Weapon)!.Id.ShouldBe(dirk);
+        rig.Of<ItemUnequipped>().Select(e => e.ItemId).ShouldBe(["item.wooden_buckler"]);
+        rig.Get(player).Stats!.Modifiers.HasSource(InventorySystem.SourceOf(buckler)).ShouldBeFalse();
+        rig.Get(player).Stats!.Modifiers.HasSource(InventorySystem.SourceOf(dirk)).ShouldBeTrue();
+    }
+
     [Fact]
     public void Healing_draught_heals_through_the_effect_runner_and_is_used_up_with_a_cooldown()
     {

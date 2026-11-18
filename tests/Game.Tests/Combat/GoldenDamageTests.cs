@@ -45,7 +45,7 @@ public class GoldenDamageTests
         rng.Remaining.ShouldBe(0);
     }
 
-    /// <summary>Warden + item.iron_blade +0, skill.twin_strike level 3 on monster.rock_beetle (level 7, earth, def 12, agi 5, luk 3).</summary>
+    /// <summary>Warden + item.iron_blade +0, skill.twin_strike level 3 on monster.rock_beetle (level 7, earth, def 9 since T-404 (was 12), agi 5, luk 3).</summary>
     [Fact]
     public void Warden_twin_strike_on_rock_beetle()
     {
@@ -59,17 +59,17 @@ public class GoldenDamageTests
         // hit_chance: beetle flee = 7 + 5 + 10 = 22; (40 − 22 + 80) / 100 = 0.98 → 0.95. Roll 0.9 hits.
         // crit_chance: (2.2 − 3×0.2) / 100 = 0.016. Roll 0.9: no crit.
         // base (t_def 0): floor((26 + 38) × 100 / 100) = 64.
-        // physical: floor(64 × 100 / (100 + 12×3)) = floor(6400 / 136) = floor(47.06) = 47.
+        // physical: floor(64 × 100 / (100 + 9×3)) = floor(6400 / 127) = floor(50.39) = 50.
         // skill: 0.9 + 3×0.1 = 1.2. Element neutral vs earth = 1.
-        // raw = 47 × 1.2 × 1 = 56.4 → 56. (hits: 2 splits the total visually only.)
+        // raw = 50 × 1.2 × 1 = 60.0 → 60. (hits: 2 splits the total visually only.)
         r.Hit.ShouldBeTrue();
         r.Crit.ShouldBeFalse();
-        r.Damage.ShouldBe(56);
+        r.Damage.ShouldBe(60);
         Step(ctx, BreakdownSteps.CritChance).ShouldBe(0.016, Tolerance);
         Step(ctx, BreakdownSteps.Base).ShouldBe(64);
-        Step(ctx, BreakdownSteps.Defense).ShouldBe(47);
+        Step(ctx, BreakdownSteps.Defense).ShouldBe(50);
         Step(ctx, BreakdownSteps.Skill).ShouldBe(1.2, Tolerance);
-        Step(ctx, BreakdownSteps.Raw).ShouldBe(56.4, Tolerance);
+        Step(ctx, BreakdownSteps.Raw).ShouldBe(60.0, Tolerance);
     }
 
     /// <summary>

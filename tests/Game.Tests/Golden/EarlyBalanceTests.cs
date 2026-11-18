@@ -4,10 +4,10 @@ using Game.Content.Simulation;
 namespace Game.Tests.Golden;
 
 /// <summary>
-/// T-309: the first fights of a new character are winnable without a guide, and danger stays real. Each test pins one target from
-/// tasks/prompts/T-309.md with the real /content: the expected-value model (<see cref="Duel"/>) and a seeded simulation whose every swing
-/// goes through the real CombatResolver. Characters are Wanderers without a weapon (the server gives none until T-401) and spend their
-/// points by a simple rule: everything into str, or a str/vit split. Monster skills (the wasp's venom sting) are not modelled.
+/// T-309, re-pinned by T-404: the first fights of a new character are winnable without a guide, and danger stays real. Each test pins one target from
+/// tasks/prompts/T-309.md with the real /content: the expected-value model (<see cref="Duel"/>) and a seeded simulation whose every swing goes through
+/// the real CombatResolver. Characters are Wanderers wearing the Bone Dirk (<c>new_character.start_items</c> since T-401; T-309 itself measured them unarmed)
+/// and spend their points by a simple rule: everything into str, or a str/vit split. The wasp's Venom Sting is modelled (T-501).
 /// </summary>
 public class EarlyBalanceTests
 {
@@ -28,15 +28,16 @@ public class EarlyBalanceTests
     private static DuelResult Fight(int level, IReadOnlyDictionary<string, int> build, string monsterId)
     {
         var sim = Content.Value;
-        var player = sim.Character(Wanderer, level, build, unarmed: true);
+        var player = sim.Character(Wanderer, level, build);
+        player.Weapon!.Id.ShouldBe("item.bone_dirk");   // what a new character wears
         return Duel.Run(sim, player, sim.Db.Monsters.Get(monsterId), Fights, Seed);
     }
 
     private static Dictionary<string, int> Build(params (string Stat, int Value)[] stats) => stats.ToDictionary(s => s.Stat, s => s.Value);
 
     /// <summary>
-    /// All stats 1, 10 points unspent: atk 1 → 1 damage per hit, so the slime has 9 HP (9 hits at 80% → 11.25 swings, under the target of 12)
-    /// and hits for 3 (≈ 3 × 0.81 per swing leaves 42.7% of the 48 HP, over the target of 30%).
+    /// All stats 1, 10 points unspent. The Bone Dirk (weapon atk 12, +5% aspd) makes the 9 HP slime a one-hit kill (13 damage a landed hit):
+    /// 1 / 0.8 = 1.25 swings (target ≤ 12) and 93.9% HP left (target ≥ 30%). Before the dirk: 11.25 swings, 42.7%.
     /// </summary>
     [Fact]
     public void New_character_with_no_points_spent_beats_a_gel_slime()
@@ -46,30 +47,29 @@ public class EarlyBalanceTests
         r.PlayerHp.ShouldBe(48);
         r.MonsterHp.ShouldBe(9);
         r.ExpectedSwings.ShouldBeLessThanOrEqualTo(12);
-        r.ExpectedSwings.ShouldBe(11.25, 1e-6);
+        r.ExpectedSwings.ShouldBe(1.25, 1e-6);
         r.ExpectedHpLeftFraction.ShouldBeGreaterThanOrEqualTo(0.30);
-        r.ExpectedHpLeftFraction.ShouldBe(0.427251, 1e-4);
+        r.ExpectedHpLeftFraction.ShouldBe(0.939392, 1e-4);
     }
 
-    /// <summary>The same fight through the real CombatResolver, 1,000 fights with seed 1: the player all but always wins (the slime can only win by a very long streak of misses).</summary>
+    /// <summary>The same fight through the real CombatResolver, 1,000 fights with seed 1: the player always wins.</summary>
     [Fact]
     public void Seeded_simulation_of_the_first_fight_agrees_with_the_model()
     {
         var r = Fight(1, Build(), "monster.gel_slime");
 
         r.Fights.ShouldBe(1000);
-        r.WinRate.ShouldBeGreaterThanOrEqualTo(0.99);
-        r.WinRate.ShouldBe(0.998, 1e-9);
+        r.WinRate.ShouldBe(1.0, 1e-9);
         r.MeanSwingsOnWin.ShouldBeLessThanOrEqualTo(12);
-        r.MeanSwingsOnWin.ShouldBe(11.2886, 1e-4);
+        r.MeanSwingsOnWin.ShouldBe(1.239, 1e-4);
         r.MeanHpLeftFractionOnWin.ShouldBeGreaterThanOrEqualTo(0.30);
-        r.MeanHpLeftFractionOnWin.ShouldBe(0.425539, 1e-4);
+        r.MeanHpLeftFractionOnWin.ShouldBe(0.987437, 1e-4);
     }
 
-    /// <summary>Points spent (str 6 = 5 raises of 2 points, or str 4 + vit 3): 2 or 3.75 swings, over 87% HP left. Targets: ≤ 5 swings, ≥ 60%.</summary>
+    /// <summary>Points spent (str 6, or str 4 + vit 3): the dirk already one-shots the slime, so the points change only the HP (48 or 49). Targets: ≤ 5 swings, ≥ 60% HP.</summary>
     [Theory]
-    [InlineData(6, 1, 2.5, 0.872722)]   // all str: 6 damage per hit, 9 HP → 2 hits
-    [InlineData(4, 3, 3.75, 0.875092)]  // str 4 / vit 3: 4 damage per hit, 3 hits, a little more HP
+    [InlineData(6, 1, 1.25, 0.939392)]
+    [InlineData(4, 3, 1.25, 0.960347)]
     public void New_character_with_points_spent_beats_a_gel_slime_quickly(int str, int vit, double swings, double hpLeft)
     {
         var r = Fight(1, Build(("str", str), ("vit", vit)), "monster.gel_slime");
@@ -81,10 +81,10 @@ public class EarlyBalanceTests
         r.WinRate.ShouldBe(1.0, 1e-9);
     }
 
-    /// <summary>Level 3 has 16 points. Mossling (32 HP, atk 7): all str (9) leaves 52% HP, the str 6 / vit 4 split 30%. Target: ≥ 20%.</summary>
+    /// <summary>Level 3 has 16 points. Mossling (32 HP, atk 7): all str (9) leaves 77% HP, the str 6 / vit 4 split 81%. Target: ≥ 20%.</summary>
     [Theory]
-    [InlineData(9, 1, 0.519629)]
-    [InlineData(6, 4, 0.300585)]
+    [InlineData(9, 1, 0.771252)]
+    [InlineData(6, 4, 0.809683)]
     public void Level_3_character_beats_a_mossling(int str, int vit, double hpLeft)
     {
         var r = Fight(3, Build(("str", str), ("vit", vit)), "monster.mossling");
@@ -95,14 +95,12 @@ public class EarlyBalanceTests
     }
 
     /// <summary>
-    /// Level 5 (22 points, str 11) and level 6 (25 points, str 12) against the Sting Wasp (66 HP, atk 10, dodgy, fast): the seeded win rate is
-    /// 42.8% and 67.6%, inside the 40–70% band. The wasp is the toughest monster a level 5–6 unarmed character is meant to face; the
-    /// Rock Beetle (level 7) and Thornback Boar (level 10) are for later levels and weapons (T-401).
+    /// Level 5 (str 11) and level 6 (str 12) with the Bone Dirk against the Sting Wasp (T-404: 90 HP, atk 13; was 66 HP, atk 10, which the dirk beat 98% of
+    /// the time): the seeded win rate is 46.4% and 67.9%, inside the 40–70% band. The wasp is still the toughest monster a level 5–6 character meets.
     /// </summary>
     [Theory]
-    // T-501: the duel now models the wasp's Venom Sting and its poison (ADR-002 row 118); before it, 0.428 and 0.676.
-    [InlineData(5, 11, 0.433)]
-    [InlineData(6, 12, 0.643)]
+    [InlineData(5, 11, 0.464)]
+    [InlineData(6, 12, 0.679)]
     public void Level_5_and_6_characters_have_an_even_fight_with_a_sting_wasp(int level, int str, double winRate)
     {
         var r = Fight(level, Build(("str", str)), "monster.sting_wasp");
@@ -111,7 +109,7 @@ public class EarlyBalanceTests
         r.WinRate.ShouldBe(winRate, 1e-9);
     }
 
-    /// <summary>The unarmed duel is deterministic: the same seed gives the same result twice.</summary>
+    /// <summary>The duel is deterministic: the same seed gives the same result twice.</summary>
     [Fact]
     public void Duel_is_deterministic()
     {

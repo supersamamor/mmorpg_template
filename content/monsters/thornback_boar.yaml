@@ -5,10 +5,10 @@ level: 10
 race: beast
 size: large
 element: neutral
-stats: { str: 26, agi: 9, vit: 24, int: 3, dex: 14, luk: 6, max_hp: 620, atk: 48, def: 16, mdef: 4, move_speed: 3 }
+stats: { str: 26, agi: 9, vit: 24, int: 3, dex: 14, luk: 6, max_hp: 240, atk: 26, def: 10, mdef: 4, move_speed: 3 }
 attack_range: 1
-base_exp: 140
-job_exp: 90
+base_exp: 900
+job_exp: 580
 drop_table_ids: [drop.thornback_boar, drop.tier3_supplies]
 ai:
   aggressive: true
