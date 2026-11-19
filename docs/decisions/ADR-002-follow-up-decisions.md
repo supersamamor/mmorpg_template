@@ -447,3 +447,12 @@ When writing these prompts, copy in the decisions listed:
 | 262 | Quest step numbering (T-602) | **Decided:** `quest_step.step` in dialogue YAML counts from 1; the wire's `step` is the 0-based index into the bundle's step texts. |
 | 263 | The quest log button (T-602) | **Decided:** no new HUD button: the tracker under the bars is the button (it reads "Quests" when nothing is active). |
 | 264 | A turn-in asked on one map while the player warps (T-602) | **Open (→ T-702):** the inventory answers only on the map it was asked on; a player who warps in that tick has the turn-in asked again on arrival. In the one-tick window where the first was applied and the answer is lost, the second is refused (`missing_item`) and the quest stays held. Real transactions (T-702) should carry the quest step with the items. |
+
+## Addendum — lead review of T-602 (2026-11-19)
+| # | Question (source) | Decision |
+|---|---|---|
+| 265 | Rows 254–264 were written by the T-602 agent (T-602) | **Accepted by the lead** on review. `Net/**` stayed within the standing approval: `abandon_quest`, `quest` and `quest_log` messages, the `quest` field on `rejected`, `currency` on the inventory messages. |
+| 266 | `CombatBudgetTests.Regenerating_a_crowd_allocates_nothing_per_tick` and `TickWaiterTests.The_precise_waiter_never_returns_early...` each failed once while Godot ran in parallel (T-602) | **→ T-406**, with row 252: make the load-sensitive tests independent of machine load. |
+| 267 | The quest log panel and a long tracker text aren't in the `-Run ui` layout and touch-target check (T-602) | **→ T-406**, with the stats panel (row 236). |
+| 268 | Currency can be earned but not spent (T-602) | **→ T-603** (new backlog row): a shop NPC service that spends currency in the same inventory transaction as the items. |
+| 269 | The lead's own check of the T-602 merge saw `GatewayTests.A_reader_that_stays_behind_is_disconnected` fail in 1 of 3 full runs (the other two and 5 of 5 runs alone passed); it's from T-214 and has now failed under load in three separate checks (lead) | **Decided:** merge T-602; **T-406 first:** fix this test before any other T-406 item, since a flaky test hides real failures. |

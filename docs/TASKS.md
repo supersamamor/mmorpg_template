@@ -128,8 +128,9 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Phase | Task | Agent | Model | Status |
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
-| T-406 | 4 | Toon pass leftovers: ARCHITECTURE §8 placeholder colours, theme-relative toon light include in map scenes, `--measure` stuck in Reconnecting, HUD canvas draw spike; stats re-post on status changes, reset item icons, stats panel in the layout check ; the load-sensitive gateway reader test (ADR-002 #232, #233, #235, #236, #252) | Claude Code | Sonnet 5.5 | Backlog |
+| T-406 | 4 | Toon pass leftovers: ARCHITECTURE §8 placeholder colours, theme-relative toon light include in map scenes, `--measure` stuck in Reconnecting, HUD canvas draw spike; stats re-post on status changes, reset item icons, stats panel in the layout check ; the load-sensitive gateway reader test ; the quest panel in the layout check; CombatBudget and TickWaiter load flakes (ADR-002 #232, #233, #235, #236, #252, #266, #267) | Claude Code | Sonnet 5.5 | Backlog |
 | T-407 | 4 | Thistle Hollow monsters: 2–3 new original monsters with placeholders, spawns in the authoring scene, tuned to 50–80% with `stats --duel` (ADR-002 #249) | Claude Code | Sonnet 5.5 | Backlog |
+| T-603 | 6 | Shop NPC service: buy and sell for currency in one inventory transaction, prices as data, shop dialogue action (ADR-002 #268) | Claude Code | Sonnet 5.5 | Backlog |
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
 | T-702 | 7 | Persistence (EF Core + Postgres), transactional inventory | Claude Code | Opus 5.5 | Backlog |
 | T-703 | 7 | Store compliance: account deletion, Sign in with Apple, privacy disclosures | Claude Code | Sonnet 5.5 | Backlog |
