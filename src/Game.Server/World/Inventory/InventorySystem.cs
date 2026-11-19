@@ -1,6 +1,7 @@
 using Game.Server.Events;
 using Game.Server.World.Combat;
 using Game.Server.World.Dialogue;
+using Game.Server.World.Quests;
 using Game.Shared.Definitions;
 using Game.Shared.Formulas;
 using Game.Shared.Items;
@@ -48,6 +49,8 @@ public sealed class InventorySystem : ITickSystem
     private readonly Queue<(EntityId Id, GroundItem Item)> _dropped = new();
     private List<DialogueItemsRequested> _dialogueItems = new();   // a choice's item actions, applied next tick (T-601)
     private List<DialogueItemsRequested> _dialogueItemsRunning = new();
+    private List<QuestItemsRequested> _questItems = new();          // a quest step's turn-in, applied next tick (T-602)
+    private List<QuestItemsRequested> _questItemsRunning = new();
     private readonly InventoryDelta _delta = new();
     private readonly FormulaContext _equipContext = new();
     private MapInstance? _instance;
@@ -108,6 +111,7 @@ public sealed class InventorySystem : ITickSystem
         }
         UnequipForNewJob(context);
         RunDialogueItems(context);
+        RunQuestItems(context);
         RunPickups(context);
         foreach (var holder in _holders.Values) SyncLimit(context, holder, publish: true);
         ExpireDropped(context);
@@ -133,6 +137,7 @@ public sealed class InventorySystem : ITickSystem
         events.Subscribe<MovementStopped>(OnMovementStopped);
         events.Subscribe<MoveRejected>(OnMoveRejected);
         events.Subscribe<DialogueItemsRequested>(e => _dialogueItems.Add(e));
+        events.Subscribe<QuestItemsRequested>(e => _questItems.Add(e));
         foreach (var entity in _instance.Entities) Track(entity);
     }
 
@@ -458,6 +463,31 @@ public sealed class InventorySystem : ITickSystem
         _dialogueItemsRunning.Clear();
     }
 
+    /// <summary>
+    /// Quest turn-ins raised last tick (T-602): each takes the step's consumed items, gives the item rewards and adds the currency as one all-or-nothing transaction
+    /// (<see cref="InventoryRules.TryExchange"/>, then the currency, which cannot fail), answered with <see cref="QuestItemsResolved"/>. Refused (<c>missing_item</c>,
+    /// <c>inventory_full</c>, <c>too_heavy</c>): nothing changed and the quest waits. A player who left meanwhile gets no answer (its quests ask again on arrival).
+    /// </summary>
+    private void RunQuestItems(TickContext context)
+    {
+        if (_questItems.Count == 0) return;
+        (_questItems, _questItemsRunning) = (_questItemsRunning, _questItems);
+        foreach (var request in _questItemsRunning)
+        {
+            if (!_holders.TryGetValue(request.Player.Value, out var holder)) continue;
+            var takes = request.Takes.Select(t => new KeyValuePair<string, int>(t.ItemId, t.Quantity)).ToList();
+            var gives = request.Gives.Select(g => new KeyValuePair<string, int>(g.ItemId, g.Quantity)).ToList();
+            var reason = _rules.TryExchange(holder.State, takes, gives, holder.State.WeightLimit, _newId, _delta);
+            if (reason is null)
+            {
+                if (request.Currency > 0) holder.State.Currency = long.MaxValue - holder.State.Currency < request.Currency ? long.MaxValue : holder.State.Currency + request.Currency;
+                Changed(context, holder, InventoryChanges.Quest, null);
+            }
+            context.Publish(new QuestItemsResolved(request.Player, request.Token, reason));
+        }
+        _questItemsRunning.Clear();
+    }
+
     private void StartPickup(TickContext context, Holder holder, EntityId targetId)
     {
         var player = holder.Entity;
@@ -625,7 +655,7 @@ public sealed class InventorySystem : ITickSystem
         holder.ToldLimit = state.WeightLimit;
         state.Revision++;
         context.Publish(new InventoryChanged(holder.Entity.Id, state.Revision, cause, itemId, _delta.Upserted.ToArray(), _delta.Removed.ToArray(),
-            state.Weight, state.WeightLimit, state.Load));
+            state.Weight, state.WeightLimit, state.Load, state.Currency));
         _delta.Clear();
     }
 

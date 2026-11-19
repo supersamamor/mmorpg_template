@@ -181,17 +181,45 @@ Two-handed (`balance.yaml` `inventory.two_handed_weapon_types`): `sword_2h`, `st
 ## Quest objective types
 `kill`, `collect`, `talk`, `reach`, `level`, `job`, `use_item`, `equip`
 
+How each counts (T-602, ARCHITECTURE §6.4), only while its step is current: `kill` (`MonsterKilled` for each player with **kill credit**: every player with a damage
+share in the monster who is still on the map, the same players who share its EXP), `collect` (the bag's carried quantity, live; `consume: true` takes the items when the
+step is turned in), `talk` (`NpcTalked` with the NPC, counted only when every other objective of its step is met: talking is the turn-in), `reach` (standing within
+`radius` cells, Chebyshev, of the cell on the map; latched), `level` (the base level; met at once if already reached), `job` (the current job), `use_item` (`ItemUsed`),
+`equip` (`ItemEquipped`, or worn when the step starts; latched).
+
 ## Reward types
 `exp`, `item`, `currency`, `skill_point`, `stat_point`, `unlock_job`, `status`
 
+Paid when the last step is turned in (T-602). `item` and `currency` go into the bag in the same inventory transaction as the step's consumed items (all or nothing);
+when they do not fit (`inventory_full`, `too_heavy`) **the quest waits**: nothing changed, the step stays met and *held*, and it is tried again whenever the bag changes.
+Then `exp` (through `ProgressionRules`), `skill_point`, `stat_point`, `unlock_job` (`UnlockedJobs`, a job change's `requires_unlock`) and `status` are paid by the
+progression host; none of them can fail.
+
+## Quest states
+The `state` of a `quest_state` dialogue condition (T-602): `not_started` (neither active nor completed; an abandoned quest is not started), `available` (a start would be
+accepted now: prerequisites met, not active, not completed unless `repeatable`, below `quests.max_active`), `active`, `completed` (finished and not active again).
+
+## Quest reasons
+In `QuestRefused` and on the wire as `rejected` (`intent` `dialogue_choice` for a start, `abandon_quest` for an abandon, with `quest`); nothing changed. Checked in
+this order for a start: `unknown_quest`, `already_active`, `already_completed`, `base_level_too_low`, `wrong_job`, `quest_not_completed` (a prerequisite quest),
+`too_many_active`. An abandon: `not_active`. A met step whose turn-in waits says why in its `held` field: `inventory_full`, `too_heavy`, `missing_item`.
+
+## Quest changes
+The `change` of a `quest` message (T-602): `accepted`, `progress` (a counter moved, or the turn-in is held or no longer held), `step_done`, `completed`, `abandoned`.
+
+## Quest markers
+What the client shows over an NPC for the player (T-602; in `quest_log` `offer` and `turn_in`): `offer` (the NPC gives a quest that is `available`), `turn_in`
+(talking to it would complete the current step of an active quest: every other objective of the step is met).
+
 ## Dialogue condition types
-The `type` of a choice's `conditions` entry (T-601); a choice is shown only when every condition holds (ARCHITECTURE §6.4). Quest-state conditions join in T-602.
+The `type` of a choice's `conditions` entry (T-601); a choice is shown only when every condition holds (ARCHITECTURE §6.4).
 `base_level` (`min`, `max`: either may be left out), `job_level` (`min`, `max`), `job_is` (`job_id`), `job_is_not` (`job_id`), `has_item` (`item_id`, `quantity`, default 1; the bag, worn pieces excluded),
-`has_status` (`status_id`)
+`has_status` (`status_id`), `quest_state` (`quest_id`, `state`: a "Quest states" term, T-602), `quest_step` (`quest_id`, `step`: the quest is active at this step, 1 being the first, T-602),
+`out_of_combat` (no hit dealt or taken within `regen.out_of_combat_delay_ms`, T-602)
 
 ## Dialogue action types
 The `type` of a choice's `actions` entry (T-601); they run in order when the choice is picked:
-`start_quest` (`quest_id`: raises `QuestStartRequested`, which nothing handles until T-602), `set_save_point` (`x`, `y`: a cell of the NPC's map), `run_effects` (`effects`: run on the player as a consumable would, resets allowed),
+`start_quest` (`quest_id`: raises `QuestStartRequested`, which the quest system handles, T-602), `set_save_point` (`x`, `y`: a cell of the NPC's map), `run_effects` (`effects`: run on the player as a consumable would, resets allowed),
 `take_item` / `give_item` (`item_id`, `quantity`, default 1: a choice's item actions are one all-or-nothing transaction), `open_service` (`service`: a service id)
 
 ## Service ids
@@ -217,7 +245,8 @@ Any reason other than `finished` ends the services the dialogue opened too.
 `CardInserted`, `ItemRefined`, `StatusRemoved`, `HpRestored`, `SpRestored`, `KnockedBack`, `Teleported`, `SummonRequested`, `MonsterSummoned`, `AreaApplied`,
 `SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`, `SkillCastEnded`, `SkillCooldownStarted`, `SkillLearnRefused`, `JobChangeRefused`,
 `StatRaised`, `StatRaiseRefused`, `StatsReset`, `SkillsReset`,
-`DialogueShown`, `DialogueEnded`, `DialogueRefused`, `ServiceOpened`, `QuestStartRequested`, `SavePointSet`, `DialogueEffectsRequested`, `DialogueItemsRequested`, `DialogueItemsResolved`
+`DialogueShown`, `DialogueEnded`, `DialogueRefused`, `ServiceOpened`, `QuestStartRequested`, `SavePointSet`, `DialogueEffectsRequested`, `DialogueItemsRequested`, `DialogueItemsResolved`,
+`QuestProgressed`, `QuestAbandoned`, `QuestRefused`, `QuestItemsRequested`, `QuestItemsResolved`, `QuestRewardsRequested`, `QuestRewarded`, `QuestMarkersChanged`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -272,7 +301,8 @@ In `inventory` and `inventory_changed` (`load`).
 
 ## Inventory changes
 In `inventory_changed` `cause`: `picked_up`, `used`, `equipped`, `unequipped`, `dropped`, `weight` (only the weight limit or state changed),
-`card_inserted`, `refined` (any refine attempt: the material is used up whatever the result), `exchanged` (a dialogue's `take_item` / `give_item` actions, T-601).
+`card_inserted`, `refined` (any refine attempt: the material is used up whatever the result), `exchanged` (a dialogue's `take_item` / `give_item` actions, T-601),
+`quest` (a quest step's turn-in: its consumed items taken and its item and currency rewards given, one transaction, T-602).
 
 ## Refine failures
 What a failed refine does, per step of `refine.yaml` (`failure`): `keep` (the level stays), `down` (one level down, not below 0), `break` (the item is gone, with its cards).
@@ -297,8 +327,9 @@ Theme data, not content and not asset keys. A theme chain that leaves a role out
 is a glowing part, drawn unlit by the toon material.
 
 ## Currency
-Engine id `currency`; the display name is data (`currency_name` in `balance.yaml`, default "crowns").
-The reward type is also `currency`.
+Engine id `currency`; the display name is data (`currency_name` in `balance.yaml`, default "crowns"; in the display bundle since format 6).
+The reward type is also `currency`. Per character, kept with the bag (`InventoryState.Currency`, in memory until T-702) and sent as `currency` in `inventory` and
+`inventory_changed` (T-602). Earned from quests; nothing spends it yet (shops are later).
 
 ## Formula variables (whitelist)
 Caster: `base_level`, `job_level`, all primary & derived stat ids, `weapon_atk`, `refine`
@@ -309,9 +340,9 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `pong`, `bye`
-Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`.
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `quest_log`, `quest`, `pong`, `bye`
+Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `quest_log`, `quest`.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,

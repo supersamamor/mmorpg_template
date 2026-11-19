@@ -212,13 +212,17 @@ namespace Game.Shared.ClientContent
     /// <param name="Maps">Maps, by id.</param>
     /// <param name="Appearance">Character-creation options.</param>
     /// <param name="Refine">The refine steps (chance, material, failure outcome); null is written as no levels.</param>
+    /// <param name="CurrencyName">The currency's display name (<c>balance.yaml</c> <c>currency_name</c>, T-602): the bag shows the balance with it.</param>
     public sealed record ClientBundle(
         int FormatVersion, IReadOnlyList<string> Elements, IReadOnlyList<string> Stats, IReadOnlyList<ClientItem> Items,
         IReadOnlyList<ClientSkill> Skills, IReadOnlyList<ClientJob> Jobs, IReadOnlyList<ClientStatus> Statuses,
         IReadOnlyList<ClientMonster> Monsters, IReadOnlyList<ClientNpc> Npcs,
-        IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps, ClientAppearance Appearance, ClientRefine? Refine = null)
+        IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps, ClientAppearance Appearance, ClientRefine? Refine = null, string CurrencyName = "")
     {
-        /// <summary>The format this build writes and reads (5: no dialogue graphs, they are server-run since T-601; 4: item card slots and refinable, and the refine steps, T-402).</summary>
-        public const int CurrentFormatVersion = 5;
+        /// <summary>
+        /// The format this build writes and reads (6: the currency's display name, T-602; 5: no dialogue graphs, they are server-run since T-601; 4: item card slots and
+        /// refinable, and the refine steps, T-402).
+        /// </summary>
+        public const int CurrentFormatVersion = 6;
     }
 }

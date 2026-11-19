@@ -21,8 +21,10 @@ public class GatewayDialogueTests
         first.Npc.ShouldBe(guide);
         first.Speaker.ShouldBe("npc.guide");
         first.Text.ShouldNotBeEmpty();
-        first.Choices.Count.ShouldBeGreaterThan(2);
-        first.Choices.Select(c => c.Index).ShouldBe(Enumerable.Range(0, first.Choices.Count));   // nothing is hidden on the first node
+        // T-602: the quest choices follow the quest log. A new character sees the hunt's offer, the services and goodbye; tracking, thanks and Gear Up are hidden.
+        first.Choices.Count.ShouldBe(3);
+        first.Choices[0].Text.ShouldContain("help with");
+        first.Choices.Select(c => c.Index).ShouldBe([0, 5, 6]);   // the original indices: what dialogue_choice sends back
 
         var more = first.Choices.Single(c => c.Text.Contains("something else", StringComparison.Ordinal));
         await client.SendAsync(new DialogueChoiceMessage(more.Index));
@@ -46,11 +48,17 @@ public class GatewayDialogueTests
 
         await client.SendAsync(new TalkMessage(guide));
         var first = await client.WaitForAsync<DialogueMessage>();
-        var accept = first.Choices.Single(c => c.Text.Contains("hunt some slimes", StringComparison.Ordinal));
+        await client.SendAsync(new DialogueChoiceMessage(first.Choices.Single(c => c.Text.Contains("help with", StringComparison.Ordinal)).Index));
+        var offer = await client.WaitForAsync<DialogueMessage>(m => m.Text != first.Text);
+        var accept = offer.Choices.Single(c => c.Text.Contains("hunt some slimes", StringComparison.Ordinal));
         await client.SendAsync(new DialogueChoiceMessage(accept.Index));
-        var accepted = await client.WaitForAsync<DialogueMessage>(m => m.Text != first.Text);
+        var accepted = await client.WaitForAsync<DialogueMessage>(m => m.Text.StartsWith("Good luck", StringComparison.Ordinal));
         accepted.Choices.ShouldBeEmpty();
         accepted.More.ShouldBeFalse();
+        // T-602: the start_quest action started First Hunt; its owner is told with the step's objectives.
+        var quest = await client.WaitForAsync<QuestMessage>(m => m.Change == QuestChanges.Accepted);
+        quest.Quest.ShouldBe("quest.first_hunt");
+        quest.Entry!.Objectives.Select(o => o.Type).ShouldBe([QuestObjectiveTypes.Kill, QuestObjectiveTypes.Collect, QuestObjectiveTypes.Talk]);
 
         await client.SendAsync(new DialogueChoiceMessage(0));
         (await client.WaitForAsync<DialogueEndedMessage>()).Reason.ShouldBe(DialogueEndReasons.Finished);

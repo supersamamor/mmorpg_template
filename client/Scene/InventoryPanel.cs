@@ -258,7 +258,7 @@ public sealed class InventoryPanel
             return;
         }
 
-        _count.Text = UiText.EntryCount(inventory.Entries.Count, inventory.Slots);
+        _count.Text = UiText.BagHeader(inventory.Entries.Count, inventory.Slots, _bundle.CurrencyName, inventory.Currency);
         _weight.Text = UiText.Weight(inventory.Weight, inventory.WeightLimit, inventory.Load);
         _weightBar.Value = inventory.WeightFraction;
         _weightBar.Modulate = inventory.Load switch
@@ -429,7 +429,7 @@ public sealed class InventoryPanel
 
     private void DrawSamples()
     {
-        _count.Text = UiText.EntryCount(100, 100);
+        _count.Text = UiText.BagHeader(100, 100, _bundle.CurrencyName, 9_999_999_999);
         _weight.Text = UiText.Weight(99999, 99999, WeightStates.Overweight);
         _weightBar.Value = 1;
         foreach (var (slot, button) in _slotButtons) button.Text = UiText.SlotButton(slot, _sampleName);

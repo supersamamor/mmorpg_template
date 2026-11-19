@@ -24,7 +24,7 @@ public class ClientBundleTests
     // ---- shape ----
 
     private static readonly Shared.ClientContent.ClientBundle Fixture = new(
-        5, ["fire"], ["str"],
+        6, ["fire"], ["str"],
         [new ClientItem("item.a", "A \"quoted\" é", null, "equip", "icon.a", null, ["weapon"], "dagger", "model.a", "sfx.use", null, 2, true)],
         [new ClientSkill("skill.a", "Bolt", "Hits.", 3, false, 6, true, false, ClientAreaShapes.Square, 2, 500, "cast", "icon.s", null, null)],
         [new ClientJob("job.a", "Jobber", null, null, [], null, null, [new ClientJobSkill("skill.a", null, [new ClientSkillRequirement("skill.b", 2)])])],
@@ -37,12 +37,13 @@ public class ClientBundleTests
         new ClientAppearance(
             [new ClientGender("male", "Male", "model.b", [new ClientAppearanceOption("face.a", "Calm", "model.f")], [new ClientAppearanceOption("hair.a", "Crop", "model.h")], "face.a", "hair.a")],
             [new ClientColorOption("skin.a", "Fair", "#F6D9C4")], "skin.a", [new ClientColorOption("haircolor.a", "Raven", "#1E1B1D")], "haircolor.a"),
-        new ClientRefine(1, [new ClientRefineLevel(1, 90, "item.m", 2, "break")]));
+        new ClientRefine(1, [new ClientRefineLevel(1, 90, "item.m", 2, "break")]), "crowns");
 
     private static readonly string FixtureBody =
         """
-        {"format_version":5,
+        {"format_version":6,
         HASH
+        "currency_name":"crowns",
         "elements":["fire"],"stats":["str"],
         "items":[{"id":"item.a","name":"A @U0022quoted@U0022 @U00E9","kind":"equip","icon":"icon.a","slots":["weapon"],"weapon_type":"dagger","visual":"model.a","use_sfx":"sfx.use","card_slots":2,"refinable":true}],
         "skills":[{"id":"skill.a","name":"Bolt","description":"Hits.","max_level":3,"passive":false,"range":6,"ground":true,"friendly":false,"area_shape":"square","area_radius":2,"cast_time_ms":500,"animation":"cast","icon":"icon.s"}],
@@ -88,7 +89,7 @@ public class ClientBundleTests
         [
             "ClientAppearance: Genders,SkinTones,DefaultSkinToneId,HairColors,DefaultHairColorId",
             "ClientAppearanceOption: Id,Name,ModelAssetKey",
-            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Quests,Maps,Appearance,Refine",
+            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Quests,Maps,Appearance,Refine,CurrencyName",
             "ClientColorOption: Id,Name,Color",
             "ClientGender: Gender,Name,BodyModelAssetKey,Faces,Hairstyles,DefaultFaceId,DefaultHairstyleId",
             "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey,UseSfx,EquipSfx,CardSlots,Refinable,ConfirmUse",
@@ -115,7 +116,8 @@ public class ClientBundleTests
     {
         using var doc = JsonDocument.Parse(Export(Content).FileBytes);
         var root = doc.RootElement;
-        root.GetProperty("format_version").GetInt32().ShouldBe(5);
+        root.GetProperty("format_version").GetInt32().ShouldBe(6);
+        root.GetProperty("currency_name").GetString().ShouldBe(Content.Balance.CurrencyName);   // T-602: the bag shows the balance with it
         // T-402: card slots and refinable on equipment, and the refine steps as far as a player needs them to decide (chance, material, outcome).
         var vest = root.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("id").GetString() == "item.padded_vest");
         vest.GetProperty("card_slots").GetInt32().ShouldBe(1);

@@ -55,6 +55,23 @@ namespace Game.Shared.Progression
             _statCost = Formula.Compile(_balance.StatPointCost, FormulaSymbols.StatValueOnly);
         }
 
+        /// <summary>
+        /// Quest rewards (T-602): adds unspent stat and skill points (negative amounts count as 0). Never fails.
+        /// </summary>
+        public void AwardPoints(ProgressionState state, int statPoints, int skillPoints)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            if (statPoints > 0) state.StatPoints += statPoints;
+            if (skillPoints > 0) state.SkillPoints += skillPoints;
+        }
+
+        /// <summary>An <c>unlock_job</c> reward (T-602): the job's <c>requires_unlock</c> is met from now on. False when it already was.</summary>
+        public bool UnlockJob(ProgressionState state, string jobId)
+        {
+            if (state == null) throw new ArgumentNullException(nameof(state));
+            return state.UnlockedJobs.Add(jobId);
+        }
+
         /// <summary>Highest base level: base EXP table length + 1.</summary>
         public int MaxBaseLevel => _baseTable.Exp.Count + 1;
 

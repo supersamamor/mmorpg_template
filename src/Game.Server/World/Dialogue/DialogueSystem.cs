@@ -1,6 +1,7 @@
 using Game.Server.Events;
 using Game.Server.World.Combat;
 using Game.Server.World.Inventory;
+using Game.Server.World.Quests;
 using Game.Shared.Definitions;
 using Game.Shared.Dialogue;
 using Game.Shared.Protocol;
@@ -45,7 +46,8 @@ public sealed class DialogueSystem : ITickSystem
     private List<DialogueItemsResolved> _resolved = new();
     private List<DialogueItemsResolved> _resolving = new();
     private readonly List<Session> _scratch = new();
-    private readonly PlayerView _view = new();
+    private readonly PlayerView _view;
+    private readonly SortedSet<long> _stale = new();   // players whose quest standing or levels changed: their open node's choices are checked again
     private MapInstance? _instance;
     private TickContext? _context;
     private long _nextToken = 1;
@@ -60,6 +62,7 @@ public sealed class DialogueSystem : ITickSystem
         _savePoints = savePoints ?? throw new ArgumentNullException(nameof(savePoints));
         _progressions = progressions;
         _inventories = inventories;
+        _view = new PlayerView(new Game.Shared.Quests.QuestRules(content.Quests, content.QuestBalance.MaxActive));
     }
 
     /// <inheritdoc />
@@ -101,6 +104,7 @@ public sealed class DialogueSystem : ITickSystem
 
         RunWalks();
         CheckSessions();
+        RefreshStale();
     }
 
     // ---- setup ---------------------------------------------------------------------------------------------------------------------------
@@ -114,6 +118,12 @@ public sealed class DialogueSystem : ITickSystem
         events.Subscribe<MovementStopped>(OnMovementStopped);
         events.Subscribe<MoveRejected>(OnMoveRejected);
         events.Subscribe<DialogueItemsResolved>(e => _resolved.Add(e));
+        // The choices on screen follow the quest log (T-602): a talk that turned a quest in, a start, an abandon, a level or a job change shows the node again.
+        events.Subscribe<QuestStarted>(e => _stale.Add(e.Player.Value));
+        events.Subscribe<QuestStepCompleted>(e => _stale.Add(e.Player.Value));
+        events.Subscribe<QuestCompleted>(e => _stale.Add(e.Player.Value));
+        events.Subscribe<QuestAbandoned>(e => _stale.Add(e.Player.Value));
+        events.Subscribe<PlayerProgressed>(e => _stale.Add(e.Player.Value));
 
         // A placement of an NPC the content does not have is a boot error (hard rule 5); the validator reports it first.
         foreach (var placement in _instance.Grid.Npcs)
@@ -212,10 +222,11 @@ public sealed class DialogueSystem : ITickSystem
     {
         session.NodeKey = nodeKey;
         var node = session.Dialogue.Nodes[nodeKey];
-        _view.Set(session.Player, _progressions, _inventories);
+        SetView(session.Player);
         var shown = new List<DialogueChoiceRecord>(node.Choices.Count);
         for (var i = 0; i < node.Choices.Count; i++)
             if (DialogueRules.Matches(node.Choices[i].Conditions, _view)) shown.Add(new DialogueChoiceRecord(i, node.Choices[i].Text));
+        session.Shown = shown.Select(c => c.Index).ToArray();
         _context!.Publish(new DialogueShown(session.Player.Id, session.Npc, session.Dialogue.Id, nodeKey, node.SpeakerNpcId ?? session.NpcDef.Id,
             node.PortraitAssetKey, node.Text, shown, More: node.Next is not null));
     }
@@ -234,7 +245,7 @@ public sealed class DialogueSystem : ITickSystem
         }
 
         var node = session.Dialogue.Nodes[session.NodeKey];
-        _view.Set(player, _progressions, _inventories);
+        SetView(player);
         var anyShown = false;
         for (var i = 0; i < node.Choices.Count && !anyShown; i++) anyShown = DialogueRules.Matches(node.Choices[i].Conditions, _view);
         if (!anyShown)
@@ -332,6 +343,29 @@ public sealed class DialogueSystem : ITickSystem
         _context!.Publish(new DialogueEnded(session.Player.Id, session.Npc, DialogueEndReasons.Finished));
     }
 
+    /// <summary>
+    /// T-602: a player whose quest log or levels changed sees its open node again when the choices it shows changed (a turn-in by talking completes a step a tick or two after
+    /// the node was first shown). A choice that was on screen and no longer holds is refused <c>invalid_choice</c> as before.
+    /// </summary>
+    private void RefreshStale()
+    {
+        if (_stale.Count == 0) return;
+        foreach (var id in _stale)
+        {
+            if (!_sessions.TryGetValue(id, out var session) || session.NodeKey is null || session.Token != 0) continue;
+            var node = session.Dialogue.Nodes[session.NodeKey];
+            SetView(session.Player);
+            var shown = new List<int>(node.Choices.Count);
+            for (var i = 0; i < node.Choices.Count; i++)
+                if (DialogueRules.Matches(node.Choices[i].Conditions, _view)) shown.Add(i);
+            if (session.Shown is { } before && before.SequenceEqual(shown)) continue;
+            Show(session, session.NodeKey);
+        }
+        _stale.Clear();
+    }
+
+    private void SetView(Entity player) => _view.Set(player, _progressions, _inventories, _context?.SimTimeMs ?? 0);
+
     private void Close(Entity player)
     {
         _walks.Remove(player.Id.Value);
@@ -412,6 +446,7 @@ public sealed class DialogueSystem : ITickSystem
         public string? Service;
         public long Token;            // the item transaction being waited for, or 0
         public int ChoiceIndex;
+        public int[]? Shown;          // the choice indices last sent for the current node (T-602: shown again when they change)
     }
 
     private sealed class Walk(Entity player, EntityId npc, GridCell goal, long issuedTick)
@@ -424,19 +459,29 @@ public sealed class DialogueSystem : ITickSystem
         public string? EndReason;
     }
 
-    /// <summary>The talking player as the conditions see it: progression and bag from the shared stores, statuses from the entity.</summary>
-    private sealed class PlayerView : IDialoguePlayer
+    /// <summary>
+    /// The talking player as the conditions see it: progression, quests and bag from the shared stores, statuses and the combat window from the entity (on the instance's
+    /// simulated clock, the clock combat sets <see cref="Entity.InCombatUntilMs"/> with).
+    /// </summary>
+    private sealed class PlayerView(Game.Shared.Quests.QuestRules quests) : IDialoguePlayer
     {
         private Entity? _entity;
         private Game.Shared.Progression.ProgressionState? _progression;
         private Game.Shared.Items.InventoryState? _bag;
+        private long _nowMs;
 
-        public void Set(Entity player, IPlayerProgressionStore? progressions, IInventoryStore? inventories)
+        public void Set(Entity player, IPlayerProgressionStore? progressions, IInventoryStore? inventories, long nowMs)
         {
             _entity = player;
             _progression = progressions is not null && progressions.TryGet(player.Id, out var p) ? p : null;
             _bag = inventories is not null && inventories.TryGet(player.Id, out var b) ? b : null;
+            _nowMs = nowMs;
         }
+
+        public Game.Shared.Quests.QuestStanding Quest(string questId) =>
+            _progression is null ? new Game.Shared.Quests.QuestStanding(QuestStates.NotStarted, 0, false) : quests.Standing(_progression, questId);
+
+        public bool InCombat => _entity is not null && _entity.InCombatUntilMs > _nowMs;
 
         public int BaseLevel => _progression?.BaseLevel ?? 1;
 

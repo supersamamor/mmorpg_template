@@ -8,6 +8,7 @@ using Game.Server.World.Combat;
 using Game.Server.World.Dialogue;
 using Game.Server.World.Effects;
 using Game.Server.World.Inventory;
+using Game.Server.World.Quests;
 using Game.Shared.Progression;
 using Game.Shared.Protocol;
 using Game.Shared.Time;
@@ -175,6 +176,21 @@ public sealed class Gateway
             events.Subscribe<DialogueEnded>(e => Owner(e.Player)?.Post(new DialogueEndedMessage(e.Reason)));
             events.Subscribe<ServiceOpened>(e => Owner(e.Player)?.Post(new ServiceOpenedMessage(e.Service, e.Npc.Value)));
             events.Subscribe<DialogueRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(e.Intent, e.Reason, null, e.Target)));
+            // Quests (T-602), owner only: each change of one quest, a refused start or abandon as rejected, the whole log when the NPC markers change, and the
+            // levels, points and skills a completed quest's rewards changed.
+            events.Subscribe<QuestStarted>(e => Owner(e.Player)?.Post(new QuestMessage(Game.Shared.Vocabulary.QuestChanges.Accepted, e.QuestId, e.Entry)));
+            events.Subscribe<QuestProgressed>(e => Owner(e.Player)?.Post(new QuestMessage(Game.Shared.Vocabulary.QuestChanges.Progress, e.QuestId, e.Entry)));
+            events.Subscribe<QuestStepCompleted>(e => Owner(e.Player)?.Post(new QuestMessage(Game.Shared.Vocabulary.QuestChanges.StepDone, e.QuestId, e.Entry)));
+            events.Subscribe<QuestCompleted>(e => Owner(e.Player)?.Post(new QuestMessage(Game.Shared.Vocabulary.QuestChanges.Completed, e.QuestId, null)));
+            events.Subscribe<QuestAbandoned>(e => Owner(e.Player)?.Post(new QuestMessage(Game.Shared.Vocabulary.QuestChanges.Abandoned, e.QuestId, null)));
+            events.Subscribe<QuestRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(e.Intent, e.Reason, null, Quest: e.QuestId)));
+            events.Subscribe<QuestMarkersChanged>(e => PostQuests(e.Player));
+            events.Subscribe<QuestRewarded>(e =>
+            {
+                PostExp(e.Player);
+                PostSkills(instance.MapId, e.Player);   // skill points, and a job the unlock opened
+                PostStats(instance.MapId, e.Player);    // stat points
+            });
         }
     }
 
@@ -494,6 +510,12 @@ public sealed class Gateway
     internal void PostInventory(EntityId player)
     {
         if (Inventory?.For(player) is { } inventory) Owner(player)?.Post(inventory);
+    }
+
+    /// <summary>Tick thread of the player's instance (the only thread that touches its quests).</summary>
+    internal void PostQuests(EntityId player)
+    {
+        if (Progress?.QuestsFor(player) is { } quests) Owner(player)?.Post(quests);
     }
 
     /// <summary>Tick thread of the player's instance (the only thread that touches its skills and cooldowns).</summary>

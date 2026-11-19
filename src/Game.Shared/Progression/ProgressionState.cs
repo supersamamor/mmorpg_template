@@ -38,10 +38,16 @@ namespace Game.Shared.Progression
         /// <summary>Skill id → learned level (&gt; 0).</summary>
         public Dictionary<string, int> Skills { get; } = new Dictionary<string, int>(StringComparer.Ordinal);
 
-        /// <summary>Quest ids the character has completed; mirrored in by the host from the quest system (progression never calls it).</summary>
+        /// <summary>Quest ids the character has completed; written by the quest system (T-602, <c>QuestRules</c>), read by job changes.</summary>
         public HashSet<string> CompletedQuests { get; } = new HashSet<string>(StringComparer.Ordinal);
 
-        /// <summary>Job ids unlocked by an <c>unlock_job</c> reward; mirrored in by the host.</summary>
+        /// <summary>
+        /// Active quests by id: <c>{questId, stepIndex, counters}</c> (ARCHITECTURE §6.4). Written only by <c>Game.Shared.Quests.QuestRules</c> (T-602); kept here so the quest
+        /// log travels with the rest of the character (in memory until T-702).
+        /// </summary>
+        public Dictionary<string, Quests.QuestProgress> ActiveQuests { get; } = new Dictionary<string, Quests.QuestProgress>(StringComparer.Ordinal);
+
+        /// <summary>Job ids unlocked by an <c>unlock_job</c> reward (T-602: applied by the progression host from a completed quest).</summary>
         public HashSet<string> UnlockedJobs { get; } = new HashSet<string>(StringComparer.Ordinal);
 
         /// <summary>Learned level of a skill, 0 if not learned.</summary>

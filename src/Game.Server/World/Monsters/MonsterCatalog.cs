@@ -48,7 +48,7 @@ public sealed class MonsterCatalog
     public static EffectLibrary CompileEffects(ContentDatabase content)
     {
         ArgumentNullException.ThrowIfNull(content);
-        return new EffectLibrary(content.Skills.All, content.Items.All, content.Statuses.All, content.Dialogue.All);
+        return new EffectLibrary(content.Skills.All, content.Items.All, content.Statuses.All, content.Dialogue.All, content.Quests.All);
     }
 
     /// <summary>Finds a monster definition.</summary>

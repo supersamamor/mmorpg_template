@@ -18,12 +18,15 @@
 #                                                         (T-503; real content: new characters start with 10 stat points, a Realign Tonic and a Blank Page; below level 10 a reset keeps the item)
 #   .\client\run-e2e.ps1 -Run dialogue                    tap the guide (the server walks the character up), see the dialogue panel, pick choices through two nodes to the save point,
 #                                                         finish, talk again and close it (T-601; real content)
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, bye, release
+#   .\client\run-e2e.ps1 -Run quests                      First Hunt end to end: the guide's marker, accept in the dialogue, kill slimes and pick up their globs until the tracker
+#                                                         counts 5/5 and 3/3, open the quest log, talk to turn it in, see the globs go and the draughts and currency arrive
+#                                                         (T-602; content copy: weak monsters, every slime drops a glob; quests and drops are server-only, the bundle hash is unchanged)
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, bye, release
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -142,10 +145,26 @@ function Get-SkillsContent {
     return (Join-Path $script:skillsTemp "content")
 }
 
-function Start-GameServer([switch] $Easy, [switch] $Items, [switch] $Statuses, [switch] $Skills, [string[]] $Extra = @()) {
+# The quests run's copy (T-602): the weak monsters, and every Gel Slime drops one or two Gel Globs, so First Hunt's kill-and-collect takes a few minutes at
+# most. Drops are server-only data: the bundle hash does not change.
+$script:questsTemp = $null
+function Get-QuestsContent {
+    if ($script:questsTemp) { return (Join-Path $script:questsTemp "content") }
+    $script:questsTemp = Join-Path ([IO.Path]::GetTempPath()) ("t602-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $script:questsTemp | Out-Null
+    Copy-Item (Get-EasyContent) (Join-Path $script:questsTemp "content") -Recurse
+    Copy-Item (Join-Path $root "themes") (Join-Path $script:questsTemp "themes") -Recurse
+    $drops = Join-Path $script:questsTemp "content/drops/gel_slime.yaml"
+    $text = [IO.File]::ReadAllText($drops) -replace '\{ item_id: item.gel_glob, chance: [0-9.]+', '{ item_id: item.gel_glob, chance: 1'
+    [IO.File]::WriteAllText($drops, $text)
+    return (Join-Path $script:questsTemp "content")
+}
+
+function Start-GameServer([switch] $Easy, [switch] $Items, [switch] $Statuses, [switch] $Skills, [switch] $Quests, [string[]] $Extra = @()) {
     $log = [IO.Path]::GetTempFileName()
     $arguments = @("run", "--no-build", "--project", "src/Game.Server", "--")
-    if ($Items) { $arguments += (Get-ItemsContent) }
+    if ($Quests) { $arguments += (Get-QuestsContent) }
+    elseif ($Items) { $arguments += (Get-ItemsContent) }
     elseif ($Statuses) { $arguments += (Get-StatusesContent) }
     elseif ($Skills) { $arguments += (Get-SkillsContent) }
     elseif ($Easy) { $arguments += (Get-EasyContent) }
@@ -328,6 +347,12 @@ function Invoke-Scenario([string] $Name) {
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-dialogue" @()) -EngineArgs $engineArgs
                 return (Wait-GodotClient $run 180).Code
             }
+            "quests" {
+                $server = Start-GameServer -Quests
+                $extra = @(); if (-not $Monster) { $extra += @("--e2e-monster", "monster.gel_slime") }   # the hunt counts gel slimes only
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-quests" $extra) -EngineArgs $engineArgs
+                return (Wait-GodotClient $run 600).Code
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -454,7 +479,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 $failed = @()
@@ -482,6 +507,7 @@ finally {
     if ($script:itemsTemp) { Remove-Item $script:itemsTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:skillsTemp) { Remove-Item $script:skillsTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:statusesTemp) { Remove-Item $script:statusesTemp -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($script:questsTemp) { Remove-Item $script:questsTemp -Recurse -Force -ErrorAction SilentlyContinue }
 }
 if ($failed.Count -gt 0) { Write-Host "[run-e2e] FAILED: $($failed -join ', ')"; exit 1 }
 Write-Host "[run-e2e] all passed: $($runs -join ', ')"

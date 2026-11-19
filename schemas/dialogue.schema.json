@@ -189,9 +189,61 @@
                         "required": [
                           "status_id"
                         ]
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "quest_state"
+                          },
+                          "quest_id": {
+                            "type": "string",
+                            "pattern": "^quest\\.[a-z0-9_]+$",
+                            "description": "Quest id (quest.*)."
+                          },
+                          "state": {
+                            "type": "string",
+                            "description": "A QuestStates term: not_started, available (it would start now), active or completed."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "quest_state (T-602): the character stands with the quest as State says (a QuestStates term).",
+                        "required": [
+                          "quest_id",
+                          "state"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "quest_step"
+                          },
+                          "quest_id": {
+                            "type": "string",
+                            "pattern": "^quest\\.[a-z0-9_]+$",
+                            "description": "Quest id (quest.*)."
+                          },
+                          "step": {
+                            "type": "integer",
+                            "description": "The step, counted from 1. At least 1 and at most the quest's step count (validated at load)."
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "quest_step (T-602): the quest is active and its current step is Step (1 is the first step).",
+                        "required": [
+                          "quest_id"
+                        ]
+                      },
+                      {
+                        "properties": {
+                          "type": {
+                            "const": "out_of_combat"
+                          }
+                        },
+                        "additionalProperties": false,
+                        "description": "out_of_combat (T-602, ADR-002 row 253): the character has neither dealt nor taken a hit within regen.out_of_combat_delay_ms (the same window as progression.reset.refuse_in_combat)."
                       }
                     ],
-                    "description": "A test on the talking player that decides whether a choice is shown. In content each condition is a map whose type key selects the concrete record (DialogueConditions). Quest-state conditions join this family in T-602."
+                    "description": "A test on the talking player that decides whether a choice is shown. In content each condition is a map whose type key selects the concrete record (DialogueConditions). T-602 added the quest conditions and out_of_combat."
                   },
                   "description": "The choice is shown only when every condition holds (all of them; none means always)."
                 },

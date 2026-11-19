@@ -81,6 +81,12 @@ internal static class PlaceholderColors
     /// <summary>The dot above a character with a debuff (T-501).</summary>
     public static readonly Color StatusDebuff = new(0.75f, 0.35f, 0.95f);
 
+    /// <summary>The "!" above an NPC with a quest to offer (T-602).</summary>
+    public static readonly Color QuestOffer = new(1.00f, 0.82f, 0.15f);
+
+    /// <summary>The "!" above an NPC that a talk would turn a quest step in to (T-602).</summary>
+    public static readonly Color QuestTurnIn = new(0.35f, 0.95f, 0.45f);
+
     /// <summary>The dot above a character with only buffs (T-501).</summary>
     public static readonly Color StatusBuff = new(0.35f, 0.85f, 0.95f);
 

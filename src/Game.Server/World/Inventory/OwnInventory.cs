@@ -26,7 +26,7 @@ public sealed class OwnInventory
         if (!_store.TryGet(player, out var state)) return null;
         var entries = new InventoryEntryRecord[state.Entries.Count];
         for (var i = 0; i < entries.Length; i++) entries[i] = Record(state.Entries[i]);
-        return new InventoryMessage(state.Revision, _balance.MaxEntries, state.Weight, state.WeightLimit, state.Load, entries);
+        return new InventoryMessage(state.Revision, _balance.MaxEntries, state.Weight, state.WeightLimit, state.Load, entries, state.Currency);
     }
 
     /// <summary>The owner's <c>inventory_changed</c> for one change.</summary>
@@ -34,7 +34,7 @@ public sealed class OwnInventory
     {
         var entries = new InventoryEntryRecord[e.Upserted.Count];
         for (var i = 0; i < entries.Length; i++) entries[i] = Record(e.Upserted[i]);
-        return new InventoryChangedMessage(e.Revision, e.Cause, e.ItemId, e.Weight, e.WeightLimit, e.Load, entries, e.Removed);
+        return new InventoryChangedMessage(e.Revision, e.Cause, e.ItemId, e.Weight, e.WeightLimit, e.Load, entries, e.Removed, e.Currency);
     }
 
     /// <summary>One entry as its owner sees it, cards and refine level included (only the owner ever gets these).</summary>

@@ -5,6 +5,7 @@ using Game.Server.World.Aoi;
 using Game.Server.World.Combat;
 using Game.Server.World.Dialogue;
 using Game.Server.World.Inventory;
+using Game.Server.World.Quests;
 using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
 
@@ -140,6 +141,7 @@ public sealed class ClientSession : IViewSink
         _gateway.PostInventory(snapshot.Observer); // and the whole own inventory
         _gateway.PostSkills(snapshot.MapId, snapshot.Observer); // and the own skills, points and cooldowns
         _gateway.PostStats(snapshot.MapId, snapshot.Observer); // and the own stats, stat points and derived stats (T-503)
+        _gateway.PostQuests(snapshot.Observer); // and the own quest log and NPC markers (T-602)
         _gateway.Stats.AddSinkTime(Stopwatch.GetTimestamp() - started);
     }
 
@@ -410,6 +412,9 @@ public sealed class ClientSession : IViewSink
                 break;
             case DialogueCloseMessage:
                 if (Entity is { } closer) _gateway.Enqueue(new DialogueClose(closer));
+                break;
+            case AbandonQuestMessage abandon:
+                if (Entity is { } quitter) _gateway.Enqueue(new AbandonQuest(quitter, abandon.Quest));
                 break;
             case UseSkillMessage cast:
                 RequestSkill(cast);

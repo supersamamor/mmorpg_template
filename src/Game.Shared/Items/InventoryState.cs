@@ -57,6 +57,12 @@ namespace Game.Shared.Items
         /// <summary>Counts every change the owner was told about (the <c>rev</c> of the wire messages).</summary>
         public long Revision { get; set; }
 
+        /// <summary>
+        /// The character's currency (T-602; engine id <c>currency</c>, never negative). Kept with the bag so one inventory transaction can take items and pay or spend
+        /// currency together (rule 10). Earned from quest rewards; nothing spends it yet (shops are later).
+        /// </summary>
+        public long Currency { get; set; }
+
         /// <summary>Carried weight: the sum of <c>weight × quantity</c> of every entry. Kept by <see cref="InventoryRules"/>.</summary>
         public int Weight { get; internal set; }
 

@@ -219,6 +219,30 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>DialogueItemsResolved</c> (T-601): the inventory applied or refused a <c>DialogueItemsRequested</c>.</summary>
         public const string DialogueItemsResolved = "DialogueItemsResolved";
 
+        /// <summary><c>QuestProgressed</c> (T-602): an objective counter of a player's active quest moved, or its turn-in is held (a full bag) or no longer held.</summary>
+        public const string QuestProgressed = "QuestProgressed";
+
+        /// <summary><c>QuestAbandoned</c> (T-602): a player dropped an active quest (<c>abandon_quest</c>); its progress is gone and nothing came back.</summary>
+        public const string QuestAbandoned = "QuestAbandoned";
+
+        /// <summary><c>QuestRefused</c> (T-602): a quest start or abandon was refused, for a <c>QuestReasons</c> term; nothing changed.</summary>
+        public const string QuestRefused = "QuestRefused";
+
+        /// <summary><c>QuestItemsRequested</c> (T-602): a step's turn-in asks the inventory to take its consumed items and give the item and currency rewards as one transaction.</summary>
+        public const string QuestItemsRequested = "QuestItemsRequested";
+
+        /// <summary><c>QuestItemsResolved</c> (T-602): the inventory applied or refused a <c>QuestItemsRequested</c>.</summary>
+        public const string QuestItemsResolved = "QuestItemsResolved";
+
+        /// <summary><c>QuestRewardsRequested</c> (T-602): a completed quest's EXP, points, job unlocks and statuses, for combat (the progression host) to apply.</summary>
+        public const string QuestRewardsRequested = "QuestRewardsRequested";
+
+        /// <summary><c>QuestRewarded</c> (T-602): combat paid a completed quest's EXP, points and job unlocks (and statuses).</summary>
+        public const string QuestRewarded = "QuestRewarded";
+
+        /// <summary><c>QuestMarkersChanged</c> (T-602): the NPCs with a quest to offer or turn in changed for a player.</summary>
+        public const string QuestMarkersChanged = "QuestMarkersChanged";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -292,6 +316,14 @@ namespace Game.Shared.Vocabulary
             SavePointSet,
             DialogueEffectsRequested,
             DialogueItemsRequested,
-            DialogueItemsResolved);
+            DialogueItemsResolved,
+            QuestProgressed,
+            QuestAbandoned,
+            QuestRefused,
+            QuestItemsRequested,
+            QuestItemsResolved,
+            QuestRewardsRequested,
+            QuestRewarded,
+            QuestMarkersChanged);
     }
 }

@@ -21,7 +21,16 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>has_status</c>: the character has this status active.</summary>
         public const string HasStatus = "has_status";
 
+        /// <summary><c>quest_state</c> (T-602): the quest is in <c>state</c>, a "Quest states" term.</summary>
+        public const string QuestState = "quest_state";
+
+        /// <summary><c>quest_step</c> (T-602): the quest is active at step <c>step</c> (1 is the first step).</summary>
+        public const string QuestStep = "quest_step";
+
+        /// <summary><c>out_of_combat</c> (T-602): no hit dealt or taken within <c>regen.out_of_combat_delay_ms</c>.</summary>
+        public const string OutOfCombat = "out_of_combat";
+
         /// <summary>Every term in this category, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(BaseLevel, JobLevel, JobIs, JobIsNot, HasItem, HasStatus);
+        public static readonly VocabularySet All = new VocabularySet(BaseLevel, JobLevel, JobIs, JobIsNot, HasItem, HasStatus, QuestState, QuestStep, OutOfCombat);
     }
 }

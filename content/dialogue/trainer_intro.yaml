@@ -2,6 +2,8 @@
 id: dialogue.trainer_intro
 name: Warden trainer introduction
 start: greet
+# The Warden path (T-602): the trial is offered to a Wanderer of base level 5 or more; reporting back (a talk) completes it and unlocks the Warden; the
+# oath is offered once the trial is done and completes when the character is a Warden (at once if it already is).
 nodes:
   greet:
     speaker_npc_id: npc.trainer
@@ -9,19 +11,47 @@ nodes:
     choices:
       - text: I'm ready for the trial.
         next: trial
+        conditions:
+          - type: quest_state
+            quest_id: quest.warden_trial
+            state: available
         actions:
           - type: start_quest
             quest_id: quest.warden_trial
-      - text: I have taken the Warden's path.
+      - text: What does it take to join the Wardens?
+        next: requirements
+        conditions:
+          - type: quest_state
+            quest_id: quest.warden_trial
+            state: not_started
+          - type: base_level
+            max: 4
+      - text: About the trial...
+        next: trial_progress
+        conditions:
+          - type: quest_state
+            quest_id: quest.warden_trial
+            state: active
+      - text: I will take the Warden's oath.
         next: oath
+        conditions:
+          - type: quest_state
+            quest_id: quest.warden_oath
+            state: available
         actions:
           - type: start_quest
             quest_id: quest.warden_oath
       - text: Maybe later.
         next: null
+  requirements:
+    text: Grow a little first, wanderer. Come back when you have seen your fifth level.
+    next: null
   trial:
-    text: Reach level ten and cull three sting wasps. Then I will vouch for you.
+    text: Reach level ten and cull three sting wasps. Then come back and report to me.
+    next: null
+  trial_progress:
+    text: Level ten, then three sting wasps. Report to me when both are done.
     next: null
   oath:
-    text: Then swear the oath and wear the token with pride.
+    text: Then take up the Warden's path, and the oath is sworn the moment you do. Wear the token with pride.
     next: null

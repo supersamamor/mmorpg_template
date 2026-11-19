@@ -176,6 +176,8 @@ internal static class ContentWalker
                             case JobIsNotCondition j: yield return new(d.Id, $"{p}.conditions[{c}].job_id", j.JobId, RefKind.Job); break;
                             case HasItemCondition it: yield return new(d.Id, $"{p}.conditions[{c}].item_id", it.ItemId, RefKind.Item); break;
                             case HasStatusCondition st: yield return new(d.Id, $"{p}.conditions[{c}].status_id", st.StatusId, RefKind.Status); break;
+                            case QuestStateCondition qs: yield return new(d.Id, $"{p}.conditions[{c}].quest_id", qs.QuestId, RefKind.Quest); break;
+                            case QuestStepCondition qp: yield return new(d.Id, $"{p}.conditions[{c}].quest_id", qp.QuestId, RefKind.Quest); break;
                         }
                     for (var a = 0; a < choice.Actions.Count; a++)
                         switch (choice.Actions[a])

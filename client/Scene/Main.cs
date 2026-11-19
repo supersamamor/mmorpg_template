@@ -116,7 +116,7 @@ public partial class Main : Node3D
         _map = new ThemeMapView(this, catalog, _look);
         _camera = new FollowCamera(this, _config);
         _entities = new ThemedEntities(this, _config, _bundle!, catalog, _look);
-        _presenter = new WorldPresenter(this, _config, _session.World, _session.Ui, _entities, _map.Ground);
+        _presenter = new WorldPresenter(this, _config, _session.World, _session.Ui, _entities, _map.Ground) { Quests = _session.Quests };
         var sounds = SoundLoader.Load(_config);
         _audio = new AudioDriver(this, _config, sounds, _bundle!, _session.World, new Pcg32Random((ulong)System.Random.Shared.NextInt64()), UserPrefsStore.Load());
         _session.LevelUpReceived += _audio.OnLevelUp;

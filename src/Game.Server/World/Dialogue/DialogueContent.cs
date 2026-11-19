@@ -10,9 +10,15 @@ public sealed class DialogueContent
     private readonly Dictionary<string, NpcDef> _npcs;
     private readonly Dictionary<string, DialogueDef> _dialogues;
 
-    /// <summary>Creates content from definitions. Throws <see cref="ArgumentOutOfRangeException"/> for a talk range below 1.</summary>
-    public DialogueContent(IEnumerable<NpcDef> npcs, IEnumerable<DialogueDef> dialogues, DialogueBalanceDef balance)
+    /// <summary>
+    /// Creates content from definitions. Throws <see cref="ArgumentOutOfRangeException"/> for a talk range below 1. <paramref name="quests"/> and
+    /// <paramref name="questBalance"/> answer the quest conditions (T-602); without them every quest is unknown (never available, never active).
+    /// </summary>
+    public DialogueContent(IEnumerable<NpcDef> npcs, IEnumerable<DialogueDef> dialogues, DialogueBalanceDef balance, IEnumerable<QuestDef>? quests = null,
+        QuestBalanceDef? questBalance = null)
     {
+        Quests = (quests ?? []).ToList();
+        QuestBalance = questBalance ?? new QuestBalanceDef();
         ArgumentNullException.ThrowIfNull(npcs);
         ArgumentNullException.ThrowIfNull(dialogues);
         Balance = balance ?? throw new ArgumentNullException(nameof(balance));
@@ -25,8 +31,14 @@ public sealed class DialogueContent
     public static DialogueContent From(ContentDatabase content)
     {
         ArgumentNullException.ThrowIfNull(content);
-        return new DialogueContent(content.Npcs.All, content.Dialogue.All, content.Balance.Dialogue);
+        return new DialogueContent(content.Npcs.All, content.Dialogue.All, content.Balance.Dialogue, content.Quests.All, content.Balance.Quests);
     }
+
+    /// <summary>The quests the quest conditions read (T-602).</summary>
+    public IReadOnlyList<QuestDef> Quests { get; }
+
+    /// <summary>The <c>quests</c> section of <c>balance.yaml</c> (the <c>available</c> state counts <c>max_active</c>).</summary>
+    public QuestBalanceDef QuestBalance { get; }
 
     /// <summary>The <c>dialogue</c> section of <c>balance.yaml</c>.</summary>
     public DialogueBalanceDef Balance { get; }

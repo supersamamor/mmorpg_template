@@ -17,6 +17,9 @@ steps:
   - description: Walk to the old stone circle.
     objectives:
       - { type: reach, map_id: map.starter_meadow, x: 40, y: 12, radius: 2 }
+  - description: Tell Odalys what you saw at the stone circle.
+    objectives:
+      - { type: talk, npc_id: npc.guide }
 rewards:
   - { type: item, item_id: item.swift_elixir, count: 2 }
   - { type: skill_point, amount: 1 }

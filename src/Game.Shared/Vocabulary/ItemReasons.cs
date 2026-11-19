@@ -160,8 +160,11 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>exchanged</c> (T-601): a dialogue's <c>take_item</c> / <c>give_item</c> actions changed the bag.</summary>
         public const string Exchanged = "exchanged";
 
+        /// <summary><c>quest</c> (T-602): a quest step's turn-in took its consumed items and gave its item and currency rewards (one transaction).</summary>
+        public const string Quest = "quest";
+
         /// <summary>Every term in this category, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined, Exchanged);
+        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined, Exchanged, Quest);
     }
 
     /// <summary>What a failed refine does to the equipment, per level of <c>refine.yaml</c> (<c>failure</c>; ARCHITECTURE §6.8). VOCABULARY.md: "Refine failures".</summary>

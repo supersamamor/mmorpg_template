@@ -5,6 +5,7 @@ using Game.Server.World.Combat;
 using Game.Server.World.Dialogue;
 using Game.Server.World.Inventory;
 using Game.Server.World.Monsters;
+using Game.Server.World.Quests;
 
 namespace Game.Server.Hosting;
 
@@ -108,7 +109,8 @@ public static class ServerPipeline
     /// previous tick (events are dispatched in phase 4, so this tick's arrive for the next one) and this tick's player attacks against the
     /// positions movement just produced, and a death it causes is seen by the spawner and the AI in phase 4 of the same tick. The dialogue system (NPCs and their talk) runs after the AI and before combat, and the inventory comes
     /// after combat: a drop combat makes this tick is added in phase 3 and can be picked up from the next, and a weapon put on counts from the next
-    /// swing. The AOI does
+    /// swing. The quest system (T-602) comes after the inventory: it reacts to the previous tick's events (kills, uses, talks, bag changes) and its turn-ins go to the
+    /// inventory and combat as events, applied on their next tick. The AOI does
     /// its work in phase 5 (outbound), after every system, so its place in the list only orders its intents; it is last.
     /// </summary>
     /// <remarks>Player progression and inventories live in in-memory stores shared by every instance (persistence is T-702); pass them in to read
@@ -128,6 +130,7 @@ public static class ServerPipeline
         clock ??= new SystemClock();
         savePoints ??= new InMemorySavePointStore();
         var dialogue = DialogueContent.From(content);   // and the NPCs (a placement of an unknown NPC fails at the first tick)
+        var quests = QuestContent.From(content);         // and the quest numbers
         return new SystemPipeline()
             .Add(() => MovementSystem.Create(balance))
             .Add(() => new MonsterSpawnerSystem(monsters, balance.Death.CorpseMs))
@@ -135,6 +138,7 @@ public static class ServerPipeline
             .Add(() => new DialogueSystem(dialogue, savePoints, progressions, inventories))
             .Add(() => new CombatSystem(combat, progressions, savePoints))
             .Add(() => new InventorySystem(items, inventories, clock, progressions))
+            .Add(() => new QuestSystem(quests, progressions, inventories))
             .Add(() => AoiSystem.Create(balance));
     }
 }

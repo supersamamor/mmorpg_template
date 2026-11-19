@@ -27,10 +27,16 @@ namespace Game.Shared.Dialogue
 
         /// <summary>True when the status is active on the player.</summary>
         bool HasStatus(string statusId);
+
+        /// <summary>How the player stands with a quest (T-602): its state, its current step and whether it could start now.</summary>
+        Quests.QuestStanding Quest(string questId);
+
+        /// <summary>True while the player dealt or took a hit within <c>regen.out_of_combat_delay_ms</c> (T-602).</summary>
+        bool InCombat { get; }
     }
 
     /// <summary>
-    /// Evaluates dialogue conditions (ARCHITECTURE §6.4). The seam for new condition families (quest state, T-602): add a record to
+    /// Evaluates dialogue conditions (ARCHITECTURE §6.4). The seam for new condition families (T-602 added the quest state and step and out of combat): add a record to
     /// <see cref="Discriminators.DialogueConditions"/>, a term to <c>DialogueConditionTypes</c>, a member to <see cref="IDialoguePlayer"/> and a case here.
     /// A condition type this build does not know fails (hides the choice) rather than passing.
     /// </summary>
@@ -55,6 +61,11 @@ namespace Game.Shared.Dialogue
                 case JobIsNotCondition jobIsNot: return !string.Equals(player.JobId, jobIsNot.JobId, System.StringComparison.Ordinal);
                 case HasItemCondition item: return player.ItemCount(item.ItemId) >= System.Math.Max(1, item.Quantity);
                 case HasStatusCondition status: return player.HasStatus(status.StatusId);
+                case QuestStateCondition quest: return Quests.QuestRules.IsInState(player.Quest(quest.QuestId), quest.State);
+                case QuestStepCondition step:
+                    var standing = player.Quest(step.QuestId);
+                    return standing.State == Vocabulary.QuestStates.Active && standing.Step == step.Step;
+                case OutOfCombatCondition _: return !player.InCombat;
                 default: return false;
             }
         }

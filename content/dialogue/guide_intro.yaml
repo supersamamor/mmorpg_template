@@ -2,35 +2,77 @@
 id: dialogue.guide_intro
 name: Guide introduction
 start: greet
+# Quest choices follow the quest log (T-602): each one shows only in the state it is for, so Odalys offers, tracks and thanks for her quests. Talking to her
+# with a step's other objectives done turns the step in; the server then shows this node again with the choices of the new state.
 nodes:
   greet:
     speaker_npc_id: npc.guide
-    text: Welcome to the Lumen Vale, traveller. The meadow is crawling with slimes. Care to help thin them out?
+    text: Welcome to the Lumen Vale, traveller. What can I do for you?
+    choices:
+      - text: Is there anything I can help with?
+        next: offer_hunt
+        conditions:
+          - type: quest_state
+            quest_id: quest.first_hunt
+            state: available
+      - text: About the slime hunt...
+        next: hunt_progress
+        conditions:
+          - type: quest_state
+            quest_id: quest.first_hunt
+            state: active
+      - text: I've finished the hunt.
+        next: report
+        conditions:
+          - type: quest_state
+            quest_id: quest.first_hunt
+            state: completed
+          - type: quest_state
+            quest_id: quest.gear_up
+            state: not_started
+      - text: Anything else I can do?
+        next: more_work
+        conditions:
+          - type: quest_state
+            quest_id: quest.gear_up
+            state: available
+        actions:
+          - type: start_quest
+            quest_id: quest.gear_up
+      - text: About my errands...
+        next: errands_progress
+        conditions:
+          - type: quest_state
+            quest_id: quest.gear_up
+            state: active
+      - text: I could use a hand with something else.
+        next: services
+      - text: Not right now.
+        next: null
+  offer_hunt:
+    text: The meadow is crawling with gel slimes. Defeat five of them and bring me three globs of gel as proof.
     choices:
       - text: Sure, I'll hunt some slimes.
         next: accepted
         actions:
           - type: start_quest
             quest_id: quest.first_hunt
-      - text: I've finished the hunt.
-        next: report
-      - text: Anything else I can do?
-        next: more_work
-        actions:
-          - type: start_quest
-            quest_id: quest.gear_up
-      - text: I could use a hand with something else.
-        next: services
-      - text: Not right now.
+      - text: Maybe later.
         next: null
   accepted:
-    text: Bring me five slimes' worth of trouble, and three globs of gel as proof. Then come talk to me again.
+    text: Good luck. Your quest log keeps count; come and talk to me once you have the globs.
+    next: null
+  hunt_progress:
+    text: Five slimes and three globs of gel. Talk to me again when you have them both.
     next: null
   report:
-    text: Excellent work! Take this as thanks for keeping the meadow safe.
+    text: Excellent work! The meadow is safer for it. Come back when you have grown a little; I will have more for you.
     next: null
   more_work:
-    text: Equip a leather cap, drink a healing draught, then walk to the old stone circle in the north of the meadow.
+    text: Equip a leather cap, drink a healing draught, then walk to the old stone circle in the north of the meadow and tell me what you saw.
+    next: null
+  errands_progress:
+    text: A leather cap, a healing draught, then the old stone circle in the north. Come back to me when you have seen it.
     next: null
   services:
     text: I can mark this meadow as your home, so you wake up here after a fall. And while you are still new to the Vale, I can help you rethink how you built yourself.
@@ -41,12 +83,14 @@ nodes:
           - type: set_save_point
             x: 12
             y: 12
-      # Free below base level 10, like the reset items (balance.yaml progression.reset.free_below_base_level).
+      # Free below base level 10, like the reset items (balance.yaml progression.reset.free_below_base_level), and out of combat like them
+      # (progression.reset.refuse_in_combat; ADR-002 row 253).
       - text: Take back my stat points.
         next: stats_reset
         conditions:
           - type: base_level
             max: 9
+          - type: out_of_combat
         actions:
           - type: run_effects
             effects:
@@ -56,6 +100,7 @@ nodes:
         conditions:
           - type: base_level
             max: 9
+          - type: out_of_combat
         actions:
           - type: run_effects
             effects:

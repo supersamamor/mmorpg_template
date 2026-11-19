@@ -46,6 +46,7 @@ public class ProtocolJsonTests
         { "talk", new TalkMessage(12), """{"type":"talk","target":12}""" },
         { "dialogue_choice", new DialogueChoiceMessage(2), """{"type":"dialogue_choice","index":2}""" },
         { "dialogue_close", new DialogueCloseMessage(), """{"type":"dialogue_close"}""" },
+        { "abandon_quest", new AbandonQuestMessage("quest.first_hunt"), """{"type":"abandon_quest","quest":"quest.first_hunt"}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -164,28 +165,28 @@ public class ProtocolJsonTests
         },
         {
             "inventory", new InventoryMessage(4, 100, 45, 2040, "normal", [new InventoryEntryRecord(1, "item.bone_dirk", 1, "weapon"), new InventoryEntryRecord(2, "item.healing_draught", 3)]),
-            """{"type":"inventory","rev":4,"slots":100,"weight":45,"weight_limit":2040,"load":"normal","entries":[""" +
+            """{"type":"inventory","rev":4,"slots":100,"weight":45,"weight_limit":2040,"load":"normal","currency":0,"entries":[""" +
             """{"id":1,"item":"item.bone_dirk","quantity":1,"slot":"weapon"},{"id":2,"item":"item.healing_draught","quantity":3}]}"""
         },
         {
             "inventory_changed", new InventoryChangedMessage(5, "used", "item.healing_draught", 40, 2040, "normal", [new InventoryEntryRecord(2, "item.healing_draught", 2)], [7]),
-            """{"type":"inventory_changed","rev":5,"cause":"used","item":"item.healing_draught","weight":40,"weight_limit":2040,"load":"normal",""" +
+            """{"type":"inventory_changed","rev":5,"cause":"used","item":"item.healing_draught","weight":40,"weight_limit":2040,"load":"normal","currency":0,""" +
             "\"entries\":[{\"id\":2,\"item\":\"item.healing_draught\",\"quantity\":2}],\"removed\":[7]}"
         },
         {
             "inventory_changed, weight only", new InventoryChangedMessage(6, "weight", null, 40, 2070, "normal", [], []),
-            """{"type":"inventory_changed","rev":6,"cause":"weight","weight":40,"weight_limit":2070,"load":"normal"}"""
+            """{"type":"inventory_changed","rev":6,"cause":"weight","weight":40,"weight_limit":2070,"load":"normal","currency":0}"""
         },
         {
             "inventory with a socketed, refined weapon (owner only)",
             new InventoryMessage(8, 100, 45, 2040, "normal", [new InventoryEntryRecord(1, "item.iron_blade", 1, "weapon", ["item.gelcap_card"], 3)]),
-            """{"type":"inventory","rev":8,"slots":100,"weight":45,"weight_limit":2040,"load":"normal","entries":[""" +
+            """{"type":"inventory","rev":8,"slots":100,"weight":45,"weight_limit":2040,"load":"normal","currency":0,"entries":[""" +
             """{"id":1,"item":"item.iron_blade","quantity":1,"slot":"weapon","cards":["item.gelcap_card"],"refine":3}]}"""
         },
         {
             "inventory_changed after a refine", new InventoryChangedMessage(9, "refined", "item.padded_vest", 43, 2040, "normal",
                 [new InventoryEntryRecord(3, "item.padded_vest", 1, null, null, 2)], [5]),
-            """{"type":"inventory_changed","rev":9,"cause":"refined","item":"item.padded_vest","weight":43,"weight_limit":2040,"load":"normal",""" +
+            """{"type":"inventory_changed","rev":9,"cause":"refined","item":"item.padded_vest","weight":43,"weight_limit":2040,"load":"normal","currency":0,""" +
             "\"entries\":[{\"id\":3,\"item\":\"item.padded_vest\",\"quantity\":1,\"refine\":2}],\"removed\":[5]}"
         },
         {
@@ -195,6 +196,35 @@ public class ProtocolJsonTests
         {
             "rejected insert_card", new RejectedMessage("insert_card", "card_does_not_fit", null, null, 3),
             """{"type":"rejected","intent":"insert_card","reason":"card_does_not_fit","entry":3}"""
+        },
+        {
+            "inventory_changed after a quest turn-in, with currency (T-602)", new InventoryChangedMessage(10, "quest", null, 52, 2040, "normal",
+                [new InventoryEntryRecord(4, "item.healing_draught", 5)], [6], 150),
+            """{"type":"inventory_changed","rev":10,"cause":"quest","weight":52,"weight_limit":2040,"load":"normal","currency":150,""" +
+            "\"entries\":[{\"id\":4,\"item\":\"item.healing_draught\",\"quantity\":5}],\"removed\":[6]}"
+        },
+        {
+            "quest_log (T-602)",
+            new QuestLogMessage([new QuestEntryRecord("quest.first_hunt", 0,
+                [new QuestObjectiveRecord("kill", "monster.gel_slime", 3, 5), new QuestObjectiveRecord("collect", "item.gel_glob", 3, 3), new QuestObjectiveRecord("talk", "npc.guide", 0, 1)]),
+                new QuestEntryRecord("quest.warden_trial", 0, [new QuestObjectiveRecord("level", null, 6, 10)])],
+                ["quest.gear_up"], ["npc.trainer"], ["npc.guide"]),
+            """{"type":"quest_log","active":[{"quest":"quest.first_hunt","step":0,"objectives":[{"type":"kill","target":"monster.gel_slime","have":3,"need":5},""" +
+            """{"type":"collect","target":"item.gel_glob","have":3,"need":3},{"type":"talk","target":"npc.guide","have":0,"need":1}]},""" +
+            """{"quest":"quest.warden_trial","step":0,"objectives":[{"type":"level","have":6,"need":10}]}]""" +
+            ""","completed":["quest.gear_up"],"offer":["npc.trainer"],"turn_in":["npc.guide"]}"""
+        },
+        { "quest_log, empty", new QuestLogMessage([], [], [], []), """{"type":"quest_log","active":[],"completed":[],"offer":[],"turn_in":[]}""" },
+        {
+            "quest progress, held for a full bag",
+            new QuestMessage("progress", "quest.first_hunt", new QuestEntryRecord("quest.first_hunt", 0, [new QuestObjectiveRecord("talk", "npc.guide", 1, 1)], "inventory_full")),
+            """{"type":"quest","change":"progress","quest":"quest.first_hunt","state":{"quest":"quest.first_hunt","step":0""" +
+            ""","objectives":[{"type":"talk","target":"npc.guide","have":1,"need":1}],"held":"inventory_full"}}"""
+        },
+        { "quest completed", new QuestMessage("completed", "quest.first_hunt", null), """{"type":"quest","change":"completed","quest":"quest.first_hunt"}""" },
+        {
+            "rejected quest start", new RejectedMessage("dialogue_choice", "base_level_too_low", null, Quest: "quest.gear_up"),
+            """{"type":"rejected","intent":"dialogue_choice","reason":"base_level_too_low","quest":"quest.gear_up"}"""
         },
         { "pong", new PongMessage(7), """{"type":"pong","seq":7}""" },
         { "bye", new ByeMessage("timeout"), """{"type":"bye","reason":"timeout"}""" },
@@ -257,6 +287,8 @@ public class ProtocolJsonTests
     [InlineData("""{"type":"insert_card","card":12}""", ByeReasons.Malformed)]            // no equipment
     [InlineData("""{"type":"insert_card","entry":7,"card":"12"}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"refine"}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"abandon_quest"}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"abandon_quest","quest":7}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"refine","entry":1.5}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"refine_result","entry":1,"item":"item.x","result":"success","refine":1}""", ByeReasons.UnknownType)]
     public void Bad_client_messages_name_their_reason(string json, string reason)

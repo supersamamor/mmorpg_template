@@ -80,6 +80,8 @@ public sealed class BalanceRule : IValidationRule
         NewCharacter(context, balance.NewCharacter);
         Inventory(context, balance.Inventory);
         Dialogue(context, balance.Dialogue);
+        if (balance.Quests.MaxActive < 1)
+            Range(context, "quests.max_active", "must be at least 1.");
         StartItems(context, balance.NewCharacter);
     }
 

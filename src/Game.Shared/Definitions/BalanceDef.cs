@@ -48,6 +48,16 @@ namespace Game.Shared.Definitions
 
         /// <summary>Talking to NPCs and the services they open (T-601, ARCHITECTURE §6.4).</summary>
         public DialogueBalanceDef Dialogue { get; init; } = new DialogueBalanceDef();
+
+        /// <summary>Quests (T-602, ARCHITECTURE §6.4).</summary>
+        public QuestBalanceDef Quests { get; init; } = new QuestBalanceDef();
+    }
+
+    /// <summary>Quests (T-602): the <c>quests</c> section of <c>balance.yaml</c>.</summary>
+    public sealed record QuestBalanceDef
+    {
+        /// <summary>Most quests a character may have active at once; a start beyond it is refused <c>too_many_active</c>. At least 1.</summary>
+        public int MaxActive { get; init; } = 10;
     }
 
     /// <summary>Player death and respawn. Percentages are whole-number percents (50 means half).</summary>

@@ -117,6 +117,7 @@ public sealed class DisplayBundle
     private readonly Dictionary<string, SkillDisplay> _skills = new(StringComparer.Ordinal);
     private readonly Dictionary<string, JobDisplay> _jobs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, NpcDisplay> _npcs = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, QuestDisplay> _quests = new(StringComparer.Ordinal);
     private readonly List<RefineStep> _refineSteps = new List<RefineStep>();
 
     private DisplayBundle(int formatVersion, string contentHash)
@@ -130,6 +131,12 @@ public sealed class DisplayBundle
 
     /// <summary>The content hash, sent as <c>content</c> in <c>hello</c>.</summary>
     public string ContentHash { get; }
+
+    /// <summary>The currency's display name (T-602, <c>balance.yaml</c> <c>currency_name</c>).</summary>
+    public string CurrencyName { get; private set; } = string.Empty;
+
+    /// <summary>A quest's name, description, giver and step texts (T-602), or null for an id the bundle does not have.</summary>
+    public QuestDisplay? Quest(string? questId) => questId is not null && _quests.TryGetValue(questId, out var quest) ? quest : null;
 
     /// <summary>The display name of a content id; the id itself if the bundle has none (never empty for a real key).</summary>
     public string NameOf(string? displayKey)
@@ -214,6 +221,7 @@ public sealed class DisplayBundle
                     if (list == "jobs") result._jobs[id] = ReadJob(id, result._names[id], entry);
                     if (list == "items") result._items[id] = ReadItem(id, result._names[id], entry);
                     if (list == "npcs") result._npcs[id] = new NpcDisplay(id, result._names[id], OptionalText(entry, "title"), OptionalText(entry, "portrait"));
+                    if (list == "quests") result._quests[id] = ReadQuest(id, result._names[id], entry);
                     if (list == "statuses")
                         result._statuses[id] = new StatusDisplay(id, result._names[id], entry.TryGetProperty("debuff", out var debuff) && debuff.ValueKind == JsonValueKind.True,
                             OptionalText(entry, "icon"), OptionalText(entry, "vfx"));
@@ -233,6 +241,7 @@ public sealed class DisplayBundle
                 result._names[data.Id] = data.Name;
             }
             ReadRefine(result, root);
+            result.CurrencyName = OptionalText(root, "currency_name") ?? string.Empty;
             bundle = result;
             return BundleStatus.Ok;
         }
@@ -240,6 +249,14 @@ public sealed class DisplayBundle
         {
             return BundleStatus.Corrupt;
         }
+    }
+
+    private static QuestDisplay ReadQuest(string id, string name, JsonElement entry)
+    {
+        var steps = new List<string>();
+        if (entry.TryGetProperty("steps", out var list) && list.ValueKind == JsonValueKind.Array)
+            foreach (var step in list.EnumerateArray()) steps.Add(step.GetString() ?? string.Empty);
+        return new QuestDisplay(id, name, OptionalText(entry, "description"), OptionalText(entry, "giver"), steps);
     }
 
     private static void ReadSounds(DisplayBundle bundle, string list, string id, JsonElement entry)
@@ -374,6 +391,13 @@ public sealed record RefineStep(int Level, int SuccessPercent, string Material, 
 /// <summary>What the client shows of a status (T-501): its name, whether it is a debuff, its icon and its vfx asset keys (theme data, resolved by the theme chain, §7.7).</summary>
 /// <summary>An NPC for the dialogue panel: name, title under it, and the portrait asset key (the panel falls back to a letter when the theme has none).</summary>
 public sealed record NpcDisplay(string Id, string Name, string? Title, string? Portrait);
+
+/// <summary>A quest as the quest log shows it (T-602): name, description, the giver NPC id and each step's text. Objectives, counts and rewards are server-only.</summary>
+public sealed record QuestDisplay(string Id, string Name, string? Description, string? Giver, IReadOnlyList<string> Steps)
+{
+    /// <summary>Step <paramref name="index"/>'s text (0-based), or empty.</summary>
+    public string Step(int index) => index >= 0 && index < Steps.Count ? Steps[index] : string.Empty;
+}
 
 public sealed record StatusDisplay(string Id, string Name, bool Debuff, string? IconKey, string? VfxKey);
 

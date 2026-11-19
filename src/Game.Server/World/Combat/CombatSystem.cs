@@ -3,6 +3,7 @@ using Game.Server.World.Dialogue;
 using Game.Server.World.Effects;
 using Game.Server.World.Inventory;
 using Game.Server.World.Monsters;
+using Game.Server.World.Quests;
 using Game.Shared.Combat;
 using Game.Shared.Definitions;
 using Game.Shared.Effects;
@@ -77,6 +78,8 @@ public sealed partial class CombatSystem : ITickSystem
     private List<ItemUsed> _itemResolving = new();
     private List<DialogueEffectsRequested> _dialogueEffects = new();
     private List<DialogueEffectsRequested> _dialogueEffectsRunning = new();
+    private List<QuestRewardsRequested> _questRewards = new();
+    private List<QuestRewardsRequested> _questRewardsRunning = new();
     private readonly List<(int Distance, long Id)> _area = new();
     private EffectRunner? _runner;
     private EffectHost? _host;
@@ -239,6 +242,7 @@ public sealed partial class CombatSystem : ITickSystem
         events.Subscribe<SkillRequested>(e => _skillRequests.Add(e));
         events.Subscribe<ItemUsed>(e => _itemUses.Add(e));
         events.Subscribe<DialogueEffectsRequested>(e => _dialogueEffects.Add(e));
+        events.Subscribe<QuestRewardsRequested>(e => _questRewards.Add(e));
 
         // Entities that were there before combat first ran (tests, a system added late) join now.
         foreach (var entity in instance.Entities) Track(entity);
@@ -648,6 +652,8 @@ public sealed partial class CombatSystem : ITickSystem
         }
 
         EntityId? owner = null;
+        // Kill credit (T-602, ARCHITECTURE §6.7): every player with a damage share who is still on the map, the same players who share the EXP.
+        if (def.Id is { Length: > 0 }) context.Publish(new MonsterKilled(monster.Entity.Id, def.Id, monster.Entity.Cell, _eligible.Select(p => p.Id).ToArray()));
         if (count > 0)
         {
             var damage = _damage.AsSpan(0, count);
