@@ -101,6 +101,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-403 | Worn equipment on 3D characters: attach points, skinned meshes, weapon-type clips | Claude Code | Sonnet 5.5 | [T-403](../tasks/prompts/T-403.md) | T-401, T-207 | Review | ADR-002 #164, #170, #173 |
 | T-404 | Early balance with weapons, skills and stat points: Rock Beetle, Thornback Boar, Thistle Hollow, time to level 10; job-change weapon rule; reset item drops | Claude Code | Sonnet 5.5 | [T-404](../tasks/prompts/T-404.md) | T-309, T-401, T-501, T-502, T-503 | Review | ADR-002 #117, #175, #219, #235 |
 | T-405 | Equipment manifest validation, preloading worn visuals, placeholder weapon shapes by type, LFS pointer message | Claude Code | Sonnet 5.5 | [T-405](../tasks/prompts/T-405.md) | T-403, T-501 | Review | ADR-002 #181, #182, #208 |
+| T-406 | Load-proof tests (gateway reader first), stats re-post on status changes, reset item icons, stats and quest panels in the layout check, toon leftovers | Claude Code | Sonnet 5.5 | [T-406](../tasks/prompts/T-406.md) | T-222, T-503, T-602 | In Progress | Restricted `Net/**`: test seam and stats re-post only (standing approval 2026-11-18); ADR-002 #232–236, #252, #266, #267, #269 |
 
 ## Phase 5 — Skills & statuses
 
@@ -128,7 +129,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Phase | Task | Agent | Model | Status |
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
-| T-406 | 4 | Toon pass leftovers: ARCHITECTURE §8 placeholder colours, theme-relative toon light include in map scenes, `--measure` stuck in Reconnecting, HUD canvas draw spike; stats re-post on status changes, reset item icons, stats panel in the layout check ; the load-sensitive gateway reader test ; the quest panel in the layout check; CombatBudget and TickWaiter load flakes (ADR-002 #232, #233, #235, #236, #252, #266, #267) | Claude Code | Sonnet 5.5 | Backlog |
 | T-407 | 4 | Thistle Hollow monsters: 2–3 new original monsters with placeholders, spawns in the authoring scene, tuned to 50–80% with `stats --duel` (ADR-002 #249) | Claude Code | Sonnet 5.5 | Backlog |
 | T-603 | 6 | Shop NPC service: buy and sell for currency in one inventory transaction, prices as data, shop dialogue action (ADR-002 #268) | Claude Code | Sonnet 5.5 | Backlog |
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
