@@ -120,6 +120,16 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.DialogueClose;
     }
 
+    /// <summary>
+    /// <c>abandon_quest</c> (T-602): drop the active quest <see cref="Quest"/>: its progress is gone and nothing comes back. May come back
+    /// <see cref="RejectedMessage"/> with a "Quest reasons" term (<c>not_active</c>). <c>{"type":"abandon_quest","quest":"quest.first_hunt"}</c>.
+    /// </summary>
+    public sealed record AbandonQuestMessage(string Quest) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.AbandonQuest;
+    }
+
     /// <summary><c>stop_attack</c>: stop auto-attacking (a walk goes on). <c>{"type":"stop_attack"}</c>.</summary>
     public sealed record StopAttackMessage : ClientMessage
     {
@@ -440,7 +450,9 @@ namespace Game.Shared.Protocol
     /// <param name="Slot">The slot of a refused <c>equip</c> or <c>unequip</c>, if any.</param>
     /// <param name="Skill">The skill (or, for <c>change_job</c>, the job) of a refused <c>use_skill</c>, <c>learn_skill</c> or <c>change_job</c>, if any.</param>
     /// <param name="Stat">The primary stat of a refused <c>raise_stat</c> (reason: a "Stat reasons" term), if any.</param>
-    public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null, long? Entry = null, string? Slot = null, string? Skill = null, string? Stat = null) : ServerMessage
+    /// <param name="Quest">The quest of a refused start (<c>intent</c> <c>dialogue_choice</c>, the choice that asked for it) or <c>abandon_quest</c> (reason: a "Quest reasons" term), if any (T-602).</param>
+    public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null, long? Entry = null, string? Slot = null, string? Skill = null, string? Stat = null,
+        string? Quest = null) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Rejected;
@@ -532,7 +544,8 @@ namespace Game.Shared.Protocol
     /// <param name="WeightLimit">The character's <c>weight_limit</c>.</param>
     /// <param name="Load">A "Weight states" term.</param>
     /// <param name="Entries">Every entry, by id.</param>
-    public sealed record InventoryMessage(long Rev, int Slots, int Weight, int WeightLimit, string Load, IReadOnlyList<InventoryEntryRecord> Entries) : ServerMessage
+    /// <param name="Currency">The character's currency (T-602; engine id <c>currency</c>, its display name is in the display bundle).</param>
+    public sealed record InventoryMessage(long Rev, int Slots, int Weight, int WeightLimit, string Load, IReadOnlyList<InventoryEntryRecord> Entries, long Currency = 0) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Inventory;
@@ -551,8 +564,9 @@ namespace Game.Shared.Protocol
     /// <param name="Load">A "Weight states" term.</param>
     /// <param name="Entries">Entries added or changed, as they are now; empty when none.</param>
     /// <param name="Removed">Ids of entries that are gone; empty when none.</param>
+    /// <param name="Currency">The character's currency now (T-602).</param>
     public sealed record InventoryChangedMessage(long Rev, string Cause, string? Item, int Weight, int WeightLimit, string Load,
-        IReadOnlyList<InventoryEntryRecord> Entries, IReadOnlyList<long> Removed) : ServerMessage
+        IReadOnlyList<InventoryEntryRecord> Entries, IReadOnlyList<long> Removed, long Currency = 0) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.InventoryChanged;
@@ -636,6 +650,55 @@ namespace Game.Shared.Protocol
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.ServiceOpened;
+    }
+
+    /// <summary>
+    /// One objective of a quest's current step, for its owner (T-602): <c>{"type":"kill","target":"monster.gel_slime","have":3,"need":5}</c>. The owner sees the counts
+    /// of its own active quests only; the display bundle never holds objectives.
+    /// </summary>
+    /// <param name="Type">A "Quest objective types" term.</param>
+    /// <param name="Target">What it is about, for the label: a monster, item, NPC, job or map id; null for <c>level</c>.</param>
+    /// <param name="Have">How far it is (kills, items in the bag, the base level...), never above <see cref="Need"/>.</param>
+    /// <param name="Need">What completes it (1 for talk, reach, job and equip).</param>
+    public sealed record QuestObjectiveRecord(string Type, string? Target, int Have, int Need)
+    {
+        /// <summary>True when met.</summary>
+        public bool Met => Have >= Need;
+    }
+
+    /// <summary>One active quest for its owner (T-602): the current step (an index into the bundle's step texts), its objectives, and why its turn-in is held, if it is.</summary>
+    /// <param name="Quest">The quest id.</param>
+    /// <param name="Step">The current step, 0-based (the display bundle's <c>steps</c> index).</param>
+    /// <param name="Objectives">The current step's objectives, in content order.</param>
+    /// <param name="Held">A "Quest reasons" term (<c>inventory_full</c>, <c>too_heavy</c>, <c>missing_item</c>) while the met step waits for room in the bag; null otherwise.</param>
+    public sealed record QuestEntryRecord(string Quest, int Step, IReadOnlyList<QuestObjectiveRecord> Objectives, string? Held = null);
+
+    /// <summary>
+    /// <c>quest_log</c> (T-602, owner only): the whole quest log, after every snapshot and whenever the NPC markers change. It replaces what the client had.
+    /// <c>{"type":"quest_log","active":[{"quest":"quest.first_hunt","step":0,"objectives":[...]}],"completed":["quest.x"],"offer":["npc.guide"],"turn_in":[]}</c>.
+    /// </summary>
+    /// <param name="Active">Active quests, by id.</param>
+    /// <param name="Completed">Completed quest ids, by id.</param>
+    /// <param name="Offer">NPC ids (<c>npc.*</c>) with a quest the character could start now.</param>
+    /// <param name="TurnIn">NPC ids whose talk would complete the current step of an active quest.</param>
+    public sealed record QuestLogMessage(IReadOnlyList<QuestEntryRecord> Active, IReadOnlyList<string> Completed, IReadOnlyList<string> Offer, IReadOnlyList<string> TurnIn)
+        : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.QuestLog;
+    }
+
+    /// <summary>
+    /// <c>quest</c> (T-602, owner only): one quest changed. <c>{"type":"quest","change":"progress","quest":"quest.first_hunt","entry":{...}}</c>. The entry is the quest as
+    /// it is now (absent for <c>completed</c> and <c>abandoned</c>).
+    /// </summary>
+    /// <param name="Change">A "Quest changes" term.</param>
+    /// <param name="Quest">The quest id.</param>
+    /// <param name="Entry">The active quest now, or null when it is no longer active.</param>
+    public sealed record QuestMessage(string Change, string Quest, QuestEntryRecord? Entry) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Quest;
     }
 
     /// <summary><c>cooldown</c> (T-502, owner only): <see cref="Skill"/> went on cooldown for <see cref="Ms"/> milliseconds.</summary>

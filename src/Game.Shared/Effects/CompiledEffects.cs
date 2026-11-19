@@ -202,9 +202,11 @@ namespace Game.Shared.Effects
         private readonly Dictionary<string, IReadOnlyList<CompiledEffect>> _items = new Dictionary<string, IReadOnlyList<CompiledEffect>>(StringComparer.Ordinal);
         private readonly Dictionary<string, CompiledStatus> _statuses = new Dictionary<string, CompiledStatus>(StringComparer.Ordinal);
         private readonly Dictionary<string, IReadOnlyList<CompiledEffect>> _dialogues = new Dictionary<string, IReadOnlyList<CompiledEffect>>(StringComparer.Ordinal);
+        private readonly Dictionary<string, IReadOnlyList<CompiledEffect>> _questRewards = new Dictionary<string, IReadOnlyList<CompiledEffect>>(StringComparer.Ordinal);
 
-        /// <summary>Compiles the effects of every skill, consumable and status given.</summary>
-        public EffectLibrary(IEnumerable<SkillDef> skills, IEnumerable<ItemDef> items, IEnumerable<StatusDef> statuses, IEnumerable<DialogueDef>? dialogues = null)
+        /// <summary>Compiles the effects of every skill, consumable, status, dialogue <c>run_effects</c> action and quest <c>status</c> reward given.</summary>
+        public EffectLibrary(IEnumerable<SkillDef> skills, IEnumerable<ItemDef> items, IEnumerable<StatusDef> statuses, IEnumerable<DialogueDef>? dialogues = null,
+            IEnumerable<QuestDef>? quests = null)
         {
             if (skills == null) throw new ArgumentNullException(nameof(skills));
             if (items == null) throw new ArgumentNullException(nameof(items));
@@ -214,7 +216,30 @@ namespace Game.Shared.Effects
                 if (item.Consumable != null) _items[item.Id] = CompiledEffect.CompileList(item.Consumable.Effects);
             foreach (var status in statuses) _statuses[status.Id] = new CompiledStatus(status);
             if (dialogues != null) foreach (var dialogue in dialogues) CompileDialogue(dialogue);
+            if (quests != null) foreach (var quest in quests) CompileQuest(quest);
         }
+
+        /// <summary>
+        /// A quest's <c>status</c> rewards (T-602) become one <c>apply_status</c> each (chance 1, the reward's duration), keyed by <see cref="Quests.QuestRules.RewardKey"/>, so the
+        /// progression host applies them through the runner like any status.
+        /// </summary>
+        private void CompileQuest(QuestDef quest)
+        {
+            for (var i = 0; i < quest.Rewards.Count; i++)
+            {
+                if (!(quest.Rewards[i] is StatusReward status)) continue;
+                var effect = new ApplyStatusEffect
+                {
+                    StatusId = status.StatusId,
+                    Chance = "1",
+                    DurationMs = status.DurationMs.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                };
+                _questRewards[Quests.QuestRules.RewardKey(quest.Id, i)] = CompiledEffect.CompileList(new EffectDef[] { effect });
+            }
+        }
+
+        /// <summary>The compiled effects of a quest's <c>status</c> reward, by <see cref="Quests.QuestRules.RewardKey"/> (T-602).</summary>
+        public bool TryGetQuestReward(string key, out IReadOnlyList<CompiledEffect> effects) => _questRewards.TryGetValue(key, out effects!);
 
         /// <summary>An empty library (tests that need no effects).</summary>
         public static EffectLibrary Empty { get; } =

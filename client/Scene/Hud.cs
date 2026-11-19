@@ -27,6 +27,7 @@ public sealed class Hud
     private const double BodyFontDp = 16;
     private const double SlotFontDp = 13;      // a skill bar slot's name, before fitting (T-222)
     private const double SlotFontMinDp = 9;
+    private const double TrackerFontDp = 13;   // the quest tracker (T-602) is compact: a name and one short line per objective
     private const double ButtonDp = 48;
     private const double PanelWidthDp = 420;
     private const double InfoWidthDp = 150;
@@ -75,6 +76,15 @@ public sealed class Hud
     private SkillPanel? _skillPanel;
     private StatsPanel? _statsPanel;
     private DialoguePanel? _dialoguePanel;
+    private QuestPanel? _questPanel;
+    // The quest tracker (T-602): under the bars on the left, the tracked quest's name and counters; a tap opens the quest log. With no active quest it is the
+    // "Quests" button, so the log needs no button of its own on a full phone HUD.
+    private readonly Button _tracker = new()
+    {
+        Visible = false, Alignment = HorizontalAlignment.Left, AutowrapMode = TextServer.AutowrapMode.WordSmart, ClipText = false,
+        SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin,
+    };
+    private int _questVersion = -1;
     private readonly Button _skillsButton = new() { Text = UiText.Skills, Visible = false };
     private readonly List<ColorRect> _sweeps = new();   // one cooldown overlay per hotbar slot (T-502)
     private string? _pendingShown;
@@ -151,6 +161,8 @@ public sealed class Hud
         _left.AddChild(_spBar);
         _left.AddChild(_expBar);
         _left.AddChild(_statusRow);
+        _left.AddChild(_tracker);
+        _tracker.Pressed += () => { Tap(); _questPanel?.SetOpen(!_questPanel.Open); };
 
         _banner.Visible = false;
         _flash.Visible = false;
@@ -225,6 +237,7 @@ public sealed class Hud
             // A service the server opened (refining at a smith) is a panel of its own: the bag, where the refine button lives.
             session.ServiceOpened += _ => _bag?.SetOpen(true);
         }
+        if (session is not null && bundle is not null) _questPanel = new QuestPanel(_safe, session, bundle, _interactive, Tap);
         if (session is not null)
         {
             _statsPanel = new StatsPanel(_safe, session, _interactive, Tap);
@@ -235,6 +248,7 @@ public sealed class Hud
             }
         }
         _interactive.Add(_skillsButton);
+        _interactive.Add(_tracker);
 
         _infoTitle.HorizontalAlignment = HorizontalAlignment.Left;
         var infoBox = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -588,6 +602,9 @@ public sealed class Hud
         _statsPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _dialoguePanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
+        _questPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
+        _tracker.CustomMinimumSize = new Vector2(Dp(LeftColumnDp), buttonHeight);
+        _tracker.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(Dp(TrackerFontDp))));
         _soundGrid.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(Dp(8)));
         _soundGrid.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(Dp(8)));
         _soundCenter.Position = Vector2.Zero; // inside _safe, which is already at the safe area
@@ -656,8 +673,10 @@ public sealed class Hud
             _logout.Visible = connection.Phase == ConnectionPhase.Online;
             _bagButton.Visible = connection.Phase == ConnectionPhase.Online;
             _skillsButton.Visible = connection.Phase == ConnectionPhase.Online;
+            _tracker.Visible = connection.Phase == ConnectionPhase.Online && _questPanel is not null;
             if (connection.Phase != ConnectionPhase.Online)
             {
+                _questPanel?.SetOpen(false);
                 _bag?.SetOpen(false);
                 _skillPanel?.SetOpen(false);
                 _statsPanel?.SetOpen(false);
@@ -699,7 +718,19 @@ public sealed class Hud
         _skillPanel?.Refresh();
         _statsPanel?.Refresh();
         _dialoguePanel?.Refresh();
+        if (_questVersion != _session.Quests.Version && _bundle is not null)
+        {
+            _questVersion = _session.Quests.Version;
+            _tracker.Text = _session.Quests.TrackerText(_bundle);
+        }
+        _questPanel?.Refresh();
     }
+
+    /// <summary>The quest log panel (T-602).</summary>
+    public QuestPanel? Quests => _questPanel;
+
+    /// <summary>The quest tracker under the bars (T-602): the tracked quest's counters, or the button that opens the log.</summary>
+    public Button Tracker => _tracker;
 
     /// <summary>The own character's status icons shown now, and their texts (for the scripted run).</summary>
     public IReadOnlyList<string> StatusTexts

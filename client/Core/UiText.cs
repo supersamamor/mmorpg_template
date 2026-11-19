@@ -474,4 +474,95 @@ public static class UiText
     public static string Exp(int level, long exp, long next) =>
         "Lv " + level.ToString(CultureInfo.InvariantCulture) + "  EXP " + exp.ToString(CultureInfo.InvariantCulture) +
         (next > 0 ? " / " + next.ToString(CultureInfo.InvariantCulture) : string.Empty);
+
+    // ---- quests (T-602) ----------------------------------------------------------------------------------------------------------------------
+
+    /// <summary>The tracker when no quest is active (it opens the quest log like the tracker does).</summary>
+    public const string QuestsButton = "Quests";
+
+    /// <summary>The quest log's title.</summary>
+    public const string QuestLogTitle = "Quests";
+
+    /// <summary>The heading over the active quests.</summary>
+    public const string ActiveQuests = "Active";
+
+    /// <summary>The heading over the completed quests.</summary>
+    public const string CompletedQuests = "Completed";
+
+    /// <summary>The log line when no quest is active: where quests come from.</summary>
+    public const string NoActiveQuests = "No quests yet. Talk to people with a ! over their heads.";
+
+    /// <summary>The log line when nothing is completed yet.</summary>
+    public const string NoCompletedQuests = "None yet.";
+
+    /// <summary>The log's button that puts a quest in the tracker.</summary>
+    public const string Track = "Track";
+
+    /// <summary>The log's button that drops a quest (the server forgets its progress).</summary>
+    public const string Abandon = "Abandon";
+
+    /// <summary>The confirmation of Abandon: progress is lost and nothing comes back.</summary>
+    public const string ConfirmAbandon = "Abandon it (progress is lost)";
+
+    /// <summary>A step line of the log: <c>Step 2/3: text</c>.</summary>
+    public static string QuestStep(int index, int count, string text) =>
+        "Step " + (index + 1).ToString(CultureInfo.InvariantCulture) + "/" + Math.Max(1, count).ToString(CultureInfo.InvariantCulture) + ": " + text;
+
+    /// <summary>One objective with its counter, e.g. <c>Gel Slime 3/5</c>; <paramref name="target"/> is the display name of what it is about.</summary>
+    public static string QuestObjective(string type, string target, int have, int need)
+    {
+        var count = have.ToString(CultureInfo.InvariantCulture) + "/" + need.ToString(CultureInfo.InvariantCulture);
+        var done = have >= need ? " (done)" : string.Empty;
+        return type switch
+        {
+            QuestObjectiveTypes.Kill => "Defeat " + target + " " + count,
+            QuestObjectiveTypes.Collect => target + " " + count,
+            QuestObjectiveTypes.Talk => "Talk to " + target + done,
+            QuestObjectiveTypes.Reach => "Reach the spot (" + target + ")" + done,
+            QuestObjectiveTypes.Level => "Base level " + count,
+            QuestObjectiveTypes.Job => "Become " + target + done,
+            QuestObjectiveTypes.UseItem => "Use " + target + " " + count,
+            QuestObjectiveTypes.Equip => "Wear " + target + done,
+            _ => target + " " + count,
+        };
+    }
+
+    /// <summary>Why a met step waits (a "Quest reasons" term): the turn-in's items need room.</summary>
+    public static string QuestHeld(string reason) => reason switch
+    {
+        QuestReasons.InventoryFull => "Make room in your bag to turn this in.",
+        QuestReasons.TooHeavy => "Carry less to turn this in.",
+        QuestReasons.MissingItem => "Some items it needs are gone.",
+        _ => "Waiting.",
+    };
+
+    /// <summary>The flash for a quest change (a "Quest changes" term) of the quest named <paramref name="quest"/>; empty for <c>progress</c>.</summary>
+    public static string QuestChange(string change, string quest) => change switch
+    {
+        QuestChanges.Accepted => "New quest: " + quest,
+        QuestChanges.StepDone => "Quest updated: " + quest,
+        QuestChanges.Completed => "Quest complete: " + quest,
+        QuestChanges.Abandoned => "Quest abandoned: " + quest,
+        _ => string.Empty,
+    };
+
+    /// <summary>The flash for a refused quest start or abandon (a "Quest reasons" term).</summary>
+    public static string QuestRefused(string reason) => reason switch
+    {
+        QuestReasons.AlreadyActive => "You are already on that quest.",
+        QuestReasons.AlreadyCompleted => "You have done that quest.",
+        QuestReasons.BaseLevelTooLow => "You need a higher level for that quest.",
+        QuestReasons.WrongJob => "That quest is not for your job.",
+        QuestReasons.QuestNotCompleted => "Finish the quests before it first.",
+        QuestReasons.TooManyActive => "You have too many quests. Finish or abandon one.",
+        QuestReasons.NotActive => "That quest is not active.",
+        _ => "You cannot take that quest.",
+    };
+
+    /// <summary>The bag's first line: the entry count and the currency (T-602), e.g. <c>12 / 100 items   Crowns: 150</c>.</summary>
+    public static string BagHeader(int count, int slots, string currencyName, long currency) => EntryCount(count, slots) + "   " + Currency(currencyName, currency);
+
+    /// <summary>The bag's currency line, e.g. <c>Crowns: 150</c>; <paramref name="name"/> is the bundle's currency name.</summary>
+    public static string Currency(string name, long amount) =>
+        (name.Length > 0 ? char.ToUpperInvariant(name[0]) + name.Substring(1) : "Money") + ": " + amount.ToString(CultureInfo.InvariantCulture);
 }

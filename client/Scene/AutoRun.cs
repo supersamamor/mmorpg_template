@@ -44,7 +44,7 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 ||
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -78,6 +78,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-skills") >= 0) await SkillsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-stats") >= 0) await StatsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-dialogue") >= 0) await DialogueRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-quests") >= 0) await QuestsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
@@ -882,6 +883,130 @@ public sealed class AutoRun
         Press(panel.CloseButton);
         await UntilAsync(() => !dialogue.Open && !panel.Open, 10, "Close ending the dialogue");
         Print("dialogue: walked up, talked, chose, saw the next nodes, finished, talked again, closed");
+    }
+
+    /// <summary>
+    /// T-602: First Hunt end to end. The guide's "!" is drawn; the dialogue offers the hunt and the tracker shows it; slimes are killed and their globs picked up
+    /// until the tracker counts 5/5 and 3/3 (the server's counters) and the "!" turns green; the quest log lists it; walking back and talking turns it in: the
+    /// globs go, the reward draughts and the currency arrive and the log moves it to completed.
+    /// </summary>
+    private async Task QuestsRunAsync()
+    {
+        // No content id is written here (a client rule): the guide is the NPC the server marks with an offer, the quest is the one its dialogue starts, and the
+        // objectives' targets come from the server's quest messages.
+        await LoginAsync();
+        var hud = _main.Hud!;
+        var quests = Session.Quests;
+        var dialogue = Session.Dialogue;
+        var panel = hud.Dialogue!;
+        var bundle = _main.Bundle!;
+        var presenter = _main.Presenter!;
+        await UntilAsync(() => quests.Known && Session.Inventory.Known, 10, "the quest log and the bag after the snapshot");
+        EntityView? Marked() => World.Entities.FirstOrDefault(e => e.Kind == EntityKinds.Npc && quests.MarkerFor(e.DisplayKey) == QuestMarkers.Offer);
+        await UntilAsync(() => Marked() is not null && presenter.QuestMarkCount > 0, 10, "an NPC with a quest to offer, and its marker drawn");
+        var guide = Marked()!;
+        var guideKey = guide.DisplayKey;
+        Print($"quests: log known, tracker \"{hud.Tracker.Text}\", marker over {bundle.NameOf(guideKey)}: {quests.MarkerFor(guideKey)}, {presenter.QuestMarkCount} marker(s) drawn");
+        Check(hud.Tracker.Text == UiText.QuestsButton, "the tracker is the Quests button while nothing is active");
+
+        // Accept it through the dialogue: the first choice leads to the offer, whose first choice accepts.
+        await TapWorldAsync(new Vector3((float)guide.X, 0.8f, (float)guide.Z));
+        await UntilAsync(() => dialogue.Open, 20, "the guide's dialogue");
+        await FramesAsync(2);
+        var greeting = dialogue.Text;
+        Press(panel.ChoiceButtons[0].Button);
+        await UntilAsync(() => dialogue.Text != greeting && dialogue.Choices.Count > 0, 10, "the quest's offer");
+        Print($"quests: offer \"{panel.Text}\"");
+        Press(panel.ChoiceButtons[0].Button);
+        await UntilAsync(() => quests.Active.Count == 1, 10, "the quest accepted");
+        var questId = quests.Active[0].Quest;
+        var quest = bundle.Quest(questId)!;
+        await UntilAsync(() => dialogue.Open && dialogue.Choices.Count == 0, 10, "the accepted node");
+        Press(panel.ChoiceButtons[0].Button);
+        await UntilAsync(() => !dialogue.Open, 10, "the dialogue's end");
+        await FramesAsync(3);
+        Print($"quests: accepted {quest.Name}; flash \"{Session.Ui.Flash}\"; tracker \"{hud.Tracker.Text.Replace('\n', '|')}\"");
+        Check(quest.Giver == guideKey, "the quest is the marked NPC's");
+        Check(hud.Tracker.Text.StartsWith(quest.Name, StringComparison.Ordinal), "the tracker follows the new quest");
+        Check(quests.MarkerFor(guideKey) is null, "no marker while nothing is to offer or turn in");
+
+        // Kill and collect: the server counts, the tracker shows its counters.
+        Game.Shared.Protocol.QuestObjectiveRecord Objective(string type) => quests.Find(questId)!.Objectives.First(o => o.Type == type);
+        var killTarget = Objective(QuestObjectiveTypes.Kill).Target;
+        var collectTarget = Objective(QuestObjectiveTypes.Collect).Target;
+        Check(_monster is null || _monster == killTarget, "the hunted monster is the quest's");
+        var open = NearestOpenCellOutsideSafeZones(CurrentMap(), Own().Cell);
+        await TapCellAsync(open);
+        await UntilAsync(() => !Own().IsWalking && Own().Cell.X == open.X && Own().Cell.Y == open.Y, 30, "leaving the safe zone");
+        var shown = string.Empty;
+        for (var attempt = 0; attempt < 20 && !(Objective(QuestObjectiveTypes.Kill).Met && Objective(QuestObjectiveTypes.Collect).Met); attempt++)
+        {
+            if (!Objective(QuestObjectiveTypes.Kill).Met) await HuntOneAsync(60);
+            await SecondsAsync(1);
+            for (var pick = 0; pick < 4; pick++)
+            {
+                var drop = FindDrop();
+                if (drop is null) break;
+                var before = Session.Inventory.Rev;
+                if (!OnScreen(drop))
+                {
+                    await TapCellAsync(drop.Cell);
+                    await SecondsAsync(1);
+                }
+                await TapWorldAsync(new Vector3((float)drop.X, 0.15f, (float)drop.Z));
+                var clock = Stopwatch.StartNew();
+                while (clock.Elapsed.TotalSeconds < 8 && Session.Inventory.Rev == before && World.Find(drop.Id) is not null) await FrameAsync();
+                await FramesAsync(2);
+            }
+            if (hud.Tracker.Text != shown)
+            {
+                shown = hud.Tracker.Text;
+                Print($"quests: tracker \"{shown.Replace('\n', '|')}\"");
+            }
+        }
+        var kills = Objective(QuestObjectiveTypes.Kill);
+        Check(kills.Met, "the server counted the kills");
+        Check(Objective(QuestObjectiveTypes.Collect).Met, "the server counted the items in the bag");
+        Check(hud.Tracker.Text.Contains(UiText.QuestObjective(QuestObjectiveTypes.Kill, bundle.NameOf(killTarget), kills.Need, kills.Need), StringComparison.Ordinal),
+            "the tracker shows the full kill count");
+        await UntilAsync(() => quests.MarkerFor(guideKey) == QuestMarkers.TurnIn, 5, "the turn-in marker over the guide");
+        Print($"quests: ready to turn in; marker over the guide: {quests.MarkerFor(guideKey)}");
+        await ShotAsync("-tracker");
+
+        // The quest log, opened from the tracker.
+        Press(hud.Tracker);
+        await FramesAsync(3);
+        Check(hud.Quests!.Open, "the tracker opens the quest log");
+        Print($"quests: log \"{hud.Quests.Text}\"");
+        Check(hud.Quests.Text.Contains(quest.Step(0), StringComparison.Ordinal), "the log shows the step's text from the bundle");
+        await ShotAsync("-questlog");
+        Press(hud.Quests.CloseButton);
+        await FramesAsync(2);
+
+        // Walk back and talk: the turn-in.
+        var need = Objective(QuestObjectiveTypes.Collect).Need;
+        int Held(string? item) => Session.Inventory.Entries.Where(e => e.Item == item && e.Slot is null).Sum(e => e.Quantity);
+        var carried = Session.Inventory.Entries.Where(e => e.Slot is null).GroupBy(e => e.Item).ToDictionary(g => g.Key, g => g.Sum(e => e.Quantity));
+        var collected = Held(collectTarget);
+        await TapWorldAsync(new Vector3((float)guide.X, 0.8f, (float)guide.Z));
+        await UntilAsync(() => quests.Completed.Contains(questId), 60, "the turn-in by talking");
+        await UntilAsync(() => Session.Inventory.Currency > 0, 10, "the currency reward");
+        await FramesAsync(3);
+        var gained = Session.Inventory.Entries.Where(e => e.Slot is null).GroupBy(e => e.Item)
+            .Select(g => (Item: g.Key, More: g.Sum(e => e.Quantity) - carried.GetValueOrDefault(g.Key))).Where(x => x.More > 0).ToList();
+        Print($"quests: completed; flash \"{Session.Ui.Flash}\"; {bundle.NameOf(collectTarget)} {collected} -> {Held(collectTarget)}; gained " +
+              $"{string.Join(", ", gained.Select(g => bundle.NameOf(g.Item) + " +" + g.More))}; {UiText.Currency(bundle.CurrencyName, Session.Inventory.Currency)}; tracker \"{hud.Tracker.Text}\"");
+        Check(Held(collectTarget) == collected - need, "the collected items were taken at the turn-in");
+        Check(gained.Count > 0, "the item rewards arrived");
+        Check(Session.Inventory.Currency > 0, "the currency reward is in the bag");
+        Check(quests.Active.Count == 0 && hud.Tracker.Text == UiText.QuestsButton, "the tracker is the Quests button again");
+        if (dialogue.Open) Print($"quests: dialogue now \"{panel.Text}\"");
+        Press(hud.Tracker);
+        await FramesAsync(3);
+        Print($"quests: log \"{hud.Quests.Text}\"");
+        Check(hud.Quests.Text.Contains(quest.Name, StringComparison.Ordinal), "the log lists the completed quest");
+        Press(hud.Quests.CloseButton);
+        Print("quests: offered, accepted, counted, tracked, logged, turned in and rewarded");
     }
 
     private static void Press(Button button) => button.EmitSignal(BaseButton.SignalName.Pressed);

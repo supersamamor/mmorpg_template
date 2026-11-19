@@ -70,10 +70,10 @@ public sealed record ItemRefused(EntityId Player, string Intent, string Reason, 
 /// <summary>
 /// <c>InventoryChanged</c>: <c>Player</c>'s inventory changed, for an <see cref="InventoryChanges"/> term (<c>Cause</c>) about <c>ItemId</c>. The
 /// owner is sent exactly this: <c>Revision</c> (one more than before), the entries added or changed (<c>Upserted</c>, immutable), the ids removed,
-/// and the weight, limit and weight state after it.
+/// and the weight, limit and weight state after it, and the currency (T-602).
 /// </summary>
 public sealed record InventoryChanged(EntityId Player, long Revision, string Cause, string? ItemId, IReadOnlyList<InventoryEntry> Upserted,
-    IReadOnlyList<long> Removed, int Weight, int WeightLimit, string Load) : IGameEvent
+    IReadOnlyList<long> Removed, int Weight, int WeightLimit, string Load, long Currency = 0) : IGameEvent
 {
     /// <inheritdoc />
     public string Name => EventNames.InventoryChanged;

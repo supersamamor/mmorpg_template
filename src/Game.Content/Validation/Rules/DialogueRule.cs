@@ -78,6 +78,12 @@ public sealed class DialogueRule : IValidationRule
                         case HasItemCondition { Quantity: < 1 }:
                             context.Error(d.Id, cp + ".quantity", ValidationCodes.DialogueInvalid, "quantity must be at least 1");
                             break;
+                        case QuestStateCondition qs when !QuestStates.All.Contains(qs.State):
+                            context.Error(d.Id, cp + ".state", ValidationCodes.VocabUnknown, $"'{qs.State}' is not a quest state ({string.Join(", ", QuestStates.All.Ordered)})");
+                            break;
+                        case QuestStepCondition step when db.Quests.TryGet(step.QuestId, out var quest) && (step.Step < 1 || step.Step > quest.Steps.Count):
+                            context.Error(d.Id, cp + ".step", ValidationCodes.DialogueInvalid, $"step must be from 1 to {quest.Steps.Count}, the steps of {quest.Id}");
+                            break;
                     }
                 }
                 for (var a = 0; a < choice.Actions.Count; a++)

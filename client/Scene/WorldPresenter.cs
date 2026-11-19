@@ -18,6 +18,7 @@ public sealed class WorldPresenter
     private const float BarHeight = 2.05f;
     private const float StatusMarkAbove = 0.22f;   // the status dot sits just above the HP bar
     private const float CastBarAbove = 0.14f;      // the cast bar (T-502) sits just above the HP bar, filling left to right as the cast runs
+    private const float QuestMarkAbove = 0.45f;    // the quest "!" (T-602) floats above an NPC, where an HP bar would be
 
     private readonly WorldView _world;
     private readonly UiState _ui;
@@ -30,6 +31,9 @@ public sealed class WorldPresenter
     private readonly MultiMesh _rings;
     private readonly MultiMesh _statusMarks;
     private readonly MultiMesh _castBars;
+    private readonly MultiMesh _questMarks;
+    private int _questMarksVersion = -1;
+    private bool _questMarksDirty = true;
     private readonly MeshInstance3D _marker;
     private readonly MeshInstance3D _ring;
     private bool[] _fullRate = new bool[64];
@@ -49,6 +53,12 @@ public sealed class WorldPresenter
 
     /// <summary>Cast bars drawn above casters this frame (for the scripted run and measuring).</summary>
     public int CastBarCount => _castBars.VisibleInstanceCount;
+
+    /// <summary>The quest log whose NPC markers are drawn (T-602); null draws none.</summary>
+    public Game.Client.Core.Quests.QuestBook? Quests { get; set; }
+
+    /// <summary>Quest markers drawn above NPCs this frame (for the scripted run and measuring).</summary>
+    public int QuestMarkCount => _questMarks.VisibleInstanceCount;
 
     /// <summary>Status markers drawn above other characters this frame (for the scripted run and measuring).</summary>
     public int StatusMarkCount => _statusMarks.VisibleInstanceCount;
@@ -205,6 +215,43 @@ public sealed class WorldPresenter
             CustomAabb = new Aabb(new Vector3(-4096, -8, -4096), new Vector3(8192, 16, 8192)),
         });
 
+        // Quest markers (T-602): a "!" drawn by the shader above every NPC the server marks for this player, gold to offer a quest and green to turn one in. One
+        // multimesh, so one draw call for all of them and none when no NPC is marked; it is rewritten only when the markers or the NPCs in view change.
+        var questShader = new Shader
+        {
+            Code = """
+                shader_type spatial;
+                render_mode unshaded, cull_disabled, shadows_disabled;
+                void vertex() {
+                    vec3 center = MODEL_MATRIX[3].xyz;
+                    MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], vec4(center, 1.0));
+                }
+                void fragment() {
+                    vec2 p = UV;
+                    bool bar = abs(p.x - 0.5) < 0.16 && p.y > 0.06 && p.y < 0.66;
+                    bool dot = distance(p, vec2(0.5, 0.84)) < 0.14;
+                    bool rim = (abs(p.x - 0.5) < 0.24 && p.y > 0.0 && p.y < 0.72) || distance(p, vec2(0.5, 0.84)) < 0.22;
+                    if (!rim) discard;
+                    ALBEDO = (bar || dot) ? COLOR.rgb : vec3(0.08, 0.06, 0.04);
+                }
+                """,
+        };
+        _questMarks = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseColors = true,
+            Mesh = new QuadMesh { Size = new Vector2(0.32f, 0.62f) },
+            InstanceCount = 64,
+            VisibleInstanceCount = 0,
+        };
+        parent.AddChild(new MultiMeshInstance3D
+        {
+            Multimesh = _questMarks,
+            MaterialOverride = new ShaderMaterial { Shader = questShader },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            CustomAabb = new Aabb(new Vector3(-4096, -8, -4096), new Vector3(8192, 16, 8192)),
+        });
+
         _marker = Disc(parent, 0.8f, PlaceholderColors.Marker);
         _ring = Disc(parent, 1.1f, PlaceholderColors.TargetRing);
     }
@@ -243,6 +290,7 @@ public sealed class WorldPresenter
             }
             _barsDirty = true;
             _replan = true;
+            _questMarksDirty = true;
         }
         if (removed.Count > 0) _world.ClearRemoved();
 
@@ -257,6 +305,7 @@ public sealed class WorldPresenter
             for (var i = 0; i < entities.Count; i++) entities[i].PoseDirty = true;
             _barsDirty = true;
             _uiVersion = -1;
+            _questMarksDirty = true;
         }
         for (var i = 0; i < entities.Count; i++)
         {
@@ -266,6 +315,7 @@ public sealed class WorldPresenter
                 entity.Visual = _visuals.Acquire(entity.Kind, entity.DisplayKey);
                 entity.PoseDirty = entity.LookDirty = true;
                 _replan = true;
+                if (entity.Kind == EntityKinds.Npc) _questMarksDirty = true;
             }
             var visual = (IEntityVisual)entity.Visual;
             if (entity.LookDirty)
@@ -311,6 +361,29 @@ public sealed class WorldPresenter
         if (_barsDirty) RewriteBars();
         SyncCasts();
         SyncMarkers();
+        SyncQuestMarks();
+    }
+
+    /// <summary>The quest "!" over every NPC in view the server marked for this player (T-602). Nothing per frame unless the markers or the NPCs in view changed.</summary>
+    private void SyncQuestMarks()
+    {
+        var quests = Quests;
+        var version = quests?.MarkersVersion ?? 0;
+        if (!_questMarksDirty && _questMarksVersion == version) return;
+        _questMarksDirty = false;
+        _questMarksVersion = version;
+        var count = 0;
+        var entities = _world.Entities;
+        for (var i = 0; quests is not null && i < entities.Count && count < _questMarks.InstanceCount; i++)
+        {
+            var entity = entities[i];
+            if (entity.Kind != EntityKinds.Npc || quests.MarkerFor(entity.DisplayKey) is not { } marker) continue;
+            _questMarks.SetInstanceTransform(count, new Transform3D(Basis.Identity,
+                new Vector3((float)entity.X, _ground.At(entity.X, entity.Z) + BarHeight + QuestMarkAbove, (float)entity.Z)));
+            _questMarks.SetInstanceColor(count, marker == Game.Shared.Vocabulary.QuestMarkers.TurnIn ? PlaceholderColors.QuestTurnIn : PlaceholderColors.QuestOffer);
+            count++;
+        }
+        _questMarks.VisibleInstanceCount = count;
     }
 
     private void FadeCorpses(double dt)

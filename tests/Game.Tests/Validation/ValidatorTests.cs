@@ -111,7 +111,7 @@ public class ValidatorTests : IDisposable
     [InlineData("quests/gear_up.yaml", "status_id: status.swift", "status_id: status.nope", "rewards[3].status_id")]
     [InlineData("items/iron_blade.yaml", "job_ids: [job.warden]", "job_ids: [job.nope]", "equip.job_ids[0]")]
     [InlineData("monsters/gel_slime.yaml", "drop.tier1_supplies", "drop.nope", "drop_table_ids[1]")]
-    [InlineData("dialogue/guide_intro.yaml", "quest_id: quest.first_hunt", "quest_id: quest.nope", "nodes.greet.choices[0].actions[0].quest_id")]
+    [InlineData("dialogue/guide_intro.yaml", "quest_id: quest.first_hunt", "quest_id: quest.nope", "nodes.greet.choices[0].conditions[0].quest_id")]
     public void Dangling_reference_is_reported(string file, string from, string to, string path)
     {
         Edit(file, from, to);
@@ -286,7 +286,66 @@ public class ValidatorTests : IDisposable
     {
         Edit("dialogue/guide_intro.yaml", "next: accepted", "next: nowhere");
 
-        ShouldBe(Single(Validate(), ValidationCodes.DialogueDangling), "dialogue/guide_intro.yaml", "nodes.greet.choices[0].next");
+        ShouldBe(Single(Validate(), ValidationCodes.DialogueDangling), "dialogue/guide_intro.yaml", "nodes.offer_hunt.choices[0].next");
+    }
+
+    // ---- quests (T-602) ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void A_quest_whose_giver_has_no_start_quest_for_it_is_unreachable()
+    {
+        // Odalys' only start_quest for First Hunt now starts a quest she does not give: First Hunt can no longer be accepted from her.
+        Edit("dialogue/guide_intro.yaml", "- type: start_quest\n            quest_id: quest.first_hunt", "- type: start_quest\n            quest_id: quest.warden_trial");
+
+        var issues = Validate().Issues.Where(i => i.Code == ValidationCodes.QuestUnreachable).ToList();
+
+        issues.ShouldContain(i => i.Path == "giver_npc_id" && i.Message.Contains("npc.guide has no dialogue choice"));   // First Hunt
+        issues.ShouldContain(i => i.Path == "giver_npc_id" && i.Message.Contains("npc.guide's dialogue starts quest.warden_trial"));   // the Trial, offered by the wrong NPC
+    }
+
+    [Fact]
+    public void A_turn_in_npc_that_is_not_placed_is_unreachable()
+    {
+        Edit("quests/warden_trial.yaml", "{ type: talk, npc_id: npc.trainer }", "{ type: talk, npc_id: npc.nobody_placed }");
+        File.WriteAllText(Path.Combine(_temp, "npcs", "nobody_placed.yaml"),
+            "id: npc.nobody_placed\nname: Nobody\ndialogue_id: dialogue.smith_intro\nmodel_asset_key: model.npc.guide\n");
+
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.QuestUnreachable);
+
+        ShouldBe(issue, "quests/warden_trial.yaml", "steps[2].objectives[0].npc_id");
+    }
+
+    [Theory]
+    [InlineData("{ type: kill, monster_id: monster.sting_wasp, count: 3 }", "{ type: kill, monster_id: monster.sting_wasp, count: 0 }", "steps[1].objectives[0].count")]
+    [InlineData("{ type: level, base_level: 10 }", "{ type: level, base_level: 0 }", "steps[0].objectives[0].base_level")]
+    [InlineData("{ type: exp, base: 300, job: 150 }", "{ type: exp, base: -1, job: 150 }", "rewards[0]")]
+    [InlineData("prerequisites:\n  min_base_level: 5", "prerequisites:\n  quest_ids: [quest.warden_oath]\n  min_base_level: 5", "prerequisites.quest_ids")]
+    public void Quest_values_out_of_range_are_errors(string from, string to, string path)
+    {
+        Edit("quests/warden_trial.yaml", from, to);
+
+        ShouldBe(Validate().Issues.First(i => i.Code == ValidationCodes.QuestInvalid && i.File == "quests/warden_trial.yaml"), "quests/warden_trial.yaml", path);
+    }
+
+    [Fact]
+    public void Quest_conditions_are_checked_at_load()
+    {
+        Edit("dialogue/trainer_intro.yaml", "state: available\n        actions:\n          - type: start_quest\n            quest_id: quest.warden_trial",
+            "state: underway\n        actions:\n          - type: start_quest\n            quest_id: quest.warden_trial");
+        Edit("dialogue/trainer_intro.yaml", "      - text: Maybe later.", "      - text: Step five.\n        next: null\n        conditions:\n          - { type: quest_step, quest_id: quest.warden_trial, step: 5 }\n      - text: Maybe later.");
+
+        var report = Validate();
+
+        ShouldBe(Single(report, ValidationCodes.VocabUnknown), "dialogue/trainer_intro.yaml", "nodes.greet.choices[0].conditions[0].state");
+        ShouldBe(Single(report, ValidationCodes.DialogueInvalid), "dialogue/trainer_intro.yaml", "nodes.greet.choices[4].conditions[0].step");
+    }
+
+    [Fact]
+    public void Max_active_quests_must_be_at_least_one()
+    {
+        Edit("balance.yaml", "max_active: 10", "max_active: 0");
+
+        Single(Validate(), ValidationCodes.BalanceRange).Message.ShouldContain("quests.max_active");
     }
 
     [Fact]

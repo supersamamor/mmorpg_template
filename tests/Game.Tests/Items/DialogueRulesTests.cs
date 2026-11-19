@@ -1,6 +1,7 @@
 using Game.Shared.Definitions;
 using Game.Shared.Dialogue;
 using Game.Shared.Items;
+using Game.Shared.Quests;
 using Game.Shared.Vocabulary;
 
 namespace Game.Tests.Items;
@@ -19,6 +20,55 @@ public class DialogueRulesTests
         public int ItemCount(string itemId) => Items.GetValueOrDefault(itemId);
 
         public bool HasStatus(string statusId) => Statuses.Contains(statusId);
+
+        public Dictionary<string, QuestStanding> Quests { get; init; } = new();
+
+        public QuestStanding Quest(string questId) => Quests.TryGetValue(questId, out var standing) ? standing : new QuestStanding(QuestStates.NotStarted, 0, false);
+
+        public bool InCombat { get; init; }
+    }
+
+    [Fact]
+    public void A_quest_state_condition_reads_the_standing_and_available_is_its_own_flag()
+    {
+        var player = new Player
+        {
+            Quests =
+            {
+                ["quest.a"] = new QuestStanding(QuestStates.Active, 2, false),
+                ["quest.b"] = new QuestStanding(QuestStates.Completed, 0, false),
+                ["quest.c"] = new QuestStanding(QuestStates.NotStarted, 0, true),
+                ["quest.d"] = new QuestStanding(QuestStates.Completed, 0, true),   // repeatable: completed and available at once
+            },
+        };
+
+        DialogueRules.Matches(new QuestStateCondition { QuestId = "quest.a", State = QuestStates.Active }, player).ShouldBeTrue();
+        DialogueRules.Matches(new QuestStateCondition { QuestId = "quest.a", State = QuestStates.Completed }, player).ShouldBeFalse();
+        DialogueRules.Matches(new QuestStateCondition { QuestId = "quest.b", State = QuestStates.Completed }, player).ShouldBeTrue();
+        DialogueRules.Matches(new QuestStateCondition { QuestId = "quest.b", State = QuestStates.Available }, player).ShouldBeFalse();
+        DialogueRules.Matches(new QuestStateCondition { QuestId = "quest.c", State = QuestStates.Available }, player).ShouldBeTrue();
+        DialogueRules.Matches(new QuestStateCondition { QuestId = "quest.c", State = QuestStates.NotStarted }, player).ShouldBeTrue();
+        DialogueRules.Matches(new QuestStateCondition { QuestId = "quest.d", State = QuestStates.Available }, player).ShouldBeTrue();
+        DialogueRules.Matches(new QuestStateCondition { QuestId = "quest.d", State = QuestStates.Completed }, player).ShouldBeTrue();
+        DialogueRules.Matches(new QuestStateCondition { QuestId = "quest.unknown", State = QuestStates.NotStarted }, player).ShouldBeTrue();
+        DialogueRules.Matches(new QuestStateCondition { QuestId = "quest.c", State = "bogus" }, player).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void A_quest_step_condition_holds_only_while_the_quest_is_active_at_that_step()
+    {
+        var player = new Player { Quests = { ["quest.a"] = new QuestStanding(QuestStates.Active, 2, false), ["quest.b"] = new QuestStanding(QuestStates.Completed, 0, false) } };
+
+        DialogueRules.Matches(new QuestStepCondition { QuestId = "quest.a", Step = 2 }, player).ShouldBeTrue();
+        DialogueRules.Matches(new QuestStepCondition { QuestId = "quest.a", Step = 1 }, player).ShouldBeFalse();
+        DialogueRules.Matches(new QuestStepCondition { QuestId = "quest.b", Step = 1 }, player).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Out_of_combat_holds_unless_the_player_is_in_combat()
+    {
+        DialogueRules.Matches(new OutOfCombatCondition(), new Player()).ShouldBeTrue();
+        DialogueRules.Matches(new OutOfCombatCondition(), new Player { InCombat = true }).ShouldBeFalse();
     }
 
     [Theory]

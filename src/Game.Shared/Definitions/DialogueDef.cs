@@ -59,7 +59,7 @@ namespace Game.Shared.Definitions
 
     /// <summary>
     /// A test on the talking player that decides whether a choice is shown. In content each condition is a map whose <c>type</c> key selects the
-    /// concrete record (<see cref="Discriminators.DialogueConditions"/>). Quest-state conditions join this family in T-602.
+    /// concrete record (<see cref="Discriminators.DialogueConditions"/>). T-602 added the quest conditions and <c>out_of_combat</c>.
     /// </summary>
     public abstract record DialogueConditionDef
     {
@@ -134,6 +134,44 @@ namespace Game.Shared.Definitions
 
         /// <summary>Status id (<c>status.*</c>).</summary>
         public string StatusId { get; init; } = string.Empty;
+    }
+
+    /// <summary><c>quest_state</c> (T-602): the character stands with the quest as <see cref="State"/> says (a <c>QuestStates</c> term).</summary>
+    public sealed record QuestStateCondition : DialogueConditionDef
+    {
+        /// <inheritdoc />
+        public override string Type => DialogueConditionTypes.QuestState;
+
+        /// <summary>Quest id (<c>quest.*</c>).</summary>
+        public string QuestId { get; init; } = string.Empty;
+
+        /// <summary>
+        /// A <c>QuestStates</c> term: <c>not_started</c>, <c>available</c> (it would start now), <c>active</c> or <c>completed</c>.
+        /// </summary>
+        public string State { get; init; } = string.Empty;
+    }
+
+    /// <summary><c>quest_step</c> (T-602): the quest is active and its current step is <see cref="Step"/> (1 is the first step).</summary>
+    public sealed record QuestStepCondition : DialogueConditionDef
+    {
+        /// <inheritdoc />
+        public override string Type => DialogueConditionTypes.QuestStep;
+
+        /// <summary>Quest id (<c>quest.*</c>).</summary>
+        public string QuestId { get; init; } = string.Empty;
+
+        /// <summary>The step, counted from 1. At least 1 and at most the quest's step count (validated at load).</summary>
+        public int Step { get; init; } = 1;
+    }
+
+    /// <summary>
+    /// <c>out_of_combat</c> (T-602, ADR-002 row 253): the character has neither dealt nor taken a hit within <c>regen.out_of_combat_delay_ms</c> (the same window
+    /// as <c>progression.reset.refuse_in_combat</c>).
+    /// </summary>
+    public sealed record OutOfCombatCondition : DialogueConditionDef
+    {
+        /// <inheritdoc />
+        public override string Type => DialogueConditionTypes.OutOfCombat;
     }
 
     /// <summary>

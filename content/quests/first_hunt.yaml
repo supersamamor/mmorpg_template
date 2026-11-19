@@ -7,12 +7,12 @@ repeatable: false
 prerequisites:
   min_base_level: 1
 steps:
-  - description: Defeat 5 Gel Slimes and collect 3 Gel Globs.
+  # One step: the kills and the globs count in the field, and talking to Odalys with both done is the turn-in. The globs are taken then, in the same
+  # transaction that pays the rewards (T-602).
+  - description: Defeat 5 Gel Slimes, gather 3 Gel Globs and bring them to Odalys.
     objectives:
       - { type: kill, monster_id: monster.gel_slime, count: 5 }
       - { type: collect, item_id: item.gel_glob, count: 3, consume: true }
-  - description: Report back to Odalys.
-    objectives:
       - { type: talk, npc_id: npc.guide }
 rewards:
   - { type: exp, base: 40, job: 25 }

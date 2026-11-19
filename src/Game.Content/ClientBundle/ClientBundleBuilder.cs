@@ -28,7 +28,8 @@ public static class ClientBundleBuilder
         content.Maps.All.Select(m => Map(m, content.GetGrid(m.Id))).ToList(),
         Appearance(content.Appearance),
         new ClientRefine(content.Refine.MaxLevel, content.Refine.Levels.Select(l =>
-            new ClientRefineLevel(l.Level, l.SuccessPercent, l.MaterialItemId, l.MaterialQuantity, l.Failure)).ToList()));
+            new ClientRefineLevel(l.Level, l.SuccessPercent, l.MaterialItemId, l.MaterialQuantity, l.Failure)).ToList()),
+        content.Balance.CurrencyName);
 
     private static ClientAppearance Appearance(AppearanceDef a) => new(
         Genders.All.Where(a.Genders.ContainsKey).Select(g =>

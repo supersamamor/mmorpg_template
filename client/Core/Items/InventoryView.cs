@@ -62,6 +62,9 @@ public sealed class InventoryView
     /// <summary>A "Weight states" term.</summary>
     public string Load { get; private set; } = WeightStates.Normal;
 
+    /// <summary>The character's currency, as the server last said (T-602).</summary>
+    public long Currency { get; private set; }
+
     /// <summary>Every entry, by id.</summary>
     public IReadOnlyList<InventoryEntryRecord> Entries => _entries;
 
@@ -102,6 +105,7 @@ public sealed class InventoryView
         Rev = message.Rev;
         Slots = message.Slots;
         SetWeight(message.Weight, message.WeightLimit, message.Load);
+        Currency = message.Currency;
         Known = true;
         Stale = false;
         DropSelectionIfGone();
@@ -135,6 +139,7 @@ public sealed class InventoryView
         }
         Rev = change.Rev;
         SetWeight(change.Weight, change.WeightLimit, change.Load);
+        Currency = change.Currency;
         DropSelectionIfGone();
         Version++;
         return true;
@@ -156,6 +161,7 @@ public sealed class InventoryView
         Known = Stale = false;
         Rev = 0;
         Slots = Weight = WeightLimit = 0;
+        Currency = 0;
         Load = WeightStates.Normal;
         Selected = null;
         Version++;

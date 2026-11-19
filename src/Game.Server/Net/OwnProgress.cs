@@ -5,6 +5,7 @@ using Game.Server.World.Combat;
 using Game.Shared.Definitions;
 using Game.Shared.Progression;
 using Game.Shared.Protocol;
+using Game.Shared.Quests;
 using Game.Shared.Vocabulary;
 
 namespace Game.Server.Net;
@@ -20,6 +21,9 @@ public sealed class OwnProgress
     private readonly ExpTableDef _baseTable;
     private readonly ContentDatabase _database;
     private readonly ProgressionRules _rules;
+    private readonly QuestRules _quests;
+    private readonly SortedSet<string> _offer = new(StringComparer.Ordinal);
+    private readonly SortedSet<string> _turnIn = new(StringComparer.Ordinal);
 
     /// <summary>Reads the EXP tables from validated content; <paramref name="store"/> is the one the combat systems use.</summary>
     public OwnProgress(ContentDatabase content, IPlayerProgressionStore store)
@@ -29,6 +33,7 @@ public sealed class OwnProgress
         _database = content;
         _rules = new ProgressionRules(content.Balance, new ContentProgression(content));
         _content = new ContentProgression(content);
+        _quests = new QuestRules(content.Quests.All, content.Balance.Quests.MaxActive);
         var id = content.Balance.Progression.BaseExpTableId;
         if (!_content.TryGetExpTable(id, out var table) || table is null) throw new ArgumentException($"Base EXP table '{id}' not found.", nameof(content));
         _baseTable = table;
@@ -73,6 +78,22 @@ public sealed class OwnProgress
             }).ToList();
         var derived = DerivedStats.Panel.Ordered.Select(d => new DerivedRecord(d, sheet.GetInt(d))).ToList();
         return new StatsMessage(state.StatPoints, stats, derived);
+    }
+
+    /// <summary>
+    /// The player's <c>quest_log</c> (T-602): every active quest with its step, objectives and held reason, the completed quests, and the NPC markers, all from the
+    /// progression store the quest systems write to. Null without a progression. Call it on the tick thread of the player's instance (it reuses buffers).
+    /// </summary>
+    public QuestLogMessage? QuestsFor(EntityId player)
+    {
+        if (!_store.TryGet(player, out var state)) return null;
+        var active = state.ActiveQuests.Values.OrderBy(p => p.QuestId, StringComparer.Ordinal).Where(p => _quests.TryGet(p.QuestId, out _)).Select(_quests.Entry).ToList();
+        var completed = state.CompletedQuests.OrderBy(q => q, StringComparer.Ordinal).ToList();
+        lock (_offer)
+        {
+            _quests.Markers(state, _offer, _turnIn);
+            return new QuestLogMessage(active, completed, _offer.ToList(), _turnIn.ToList());
+        }
     }
 
     /// <summary>EXP level <paramref name="level"/> needs to level up (entry <c>level - 1</c>); 0 at the cap or without a table.</summary>

@@ -103,6 +103,12 @@ public sealed class UiState
         else if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.CardInserted && change.Item is { } socketed) SetFlash(UiText.CardInserted(_bundle.NameOf(socketed)), now);
     }
 
+    /// <summary>A <c>quest</c> change (T-602): accepted, a step done, completed or abandoned goes on the flash line with the quest's name.</summary>
+    public void OnQuest(QuestMessage message, double now)
+    {
+        if (UiText.QuestChange(message.Change, _bundle.Quest(message.Quest)?.Name ?? message.Quest) is { Length: > 0 } text) SetFlash(text, now);
+    }
+
     /// <summary><c>refine_result</c>: the outcome goes on the flash line (success, kept, down a level, broke), with the item's name and level from the server.</summary>
     public void OnRefineResult(RefineResultMessage result, double now) =>
         SetFlash(UiText.RefineResult(_bundle.NameOf(result.Item), result.Result, result.Refine), now);
@@ -113,6 +119,11 @@ public sealed class UiState
         if (IsItemIntent(rejected.Intent))
         {
             if (UiText.ItemRefused(rejected.Reason) is { Length: > 0 } why) SetFlash(why, now);
+            return;
+        }
+        if (rejected.Quest is not null)
+        {
+            SetFlash(UiText.QuestRefused(rejected.Reason), now);   // a start (the choice that asked) or an abandon (T-602)
             return;
         }
         if (rejected.Intent is MessageTypes.Talk or MessageTypes.DialogueChoice)

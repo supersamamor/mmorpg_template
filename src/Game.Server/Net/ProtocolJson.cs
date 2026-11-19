@@ -37,7 +37,7 @@ public static class ProtocolJson
         {
             var reader = new Utf8JsonReader(utf8, new JsonReaderOptions { MaxDepth = MaxClientDepth });
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ClientMessage>(ByeReasons.Malformed);
-            string? type = null, name = null, content = null, resume = null, slot = null, skill = null, job = null, stat = null;
+            string? type = null, name = null, content = null, resume = null, slot = null, skill = null, job = null, stat = null, quest = null;
             int? version = null, quantity = null, level = null, amount = null, index = null;
             long? seq = null, target = null, entry = null, card = null;
             GridCell? cell = null;
@@ -61,6 +61,7 @@ public static class ProtocolJson
                     case "skill": skill = String(ref reader); break;
                     case "job": job = String(ref reader); break;
                     case "stat": stat = String(ref reader); break;
+                    case "quest": quest = String(ref reader); break;
                     case "amount": amount = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var am) ? am : throw Bad(); break;
                     case "index": index = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var ix) ? ix : throw Bad(); break;
                     case "level": level = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var lv) ? lv : throw Bad(); break;
@@ -95,6 +96,7 @@ public static class ProtocolJson
                 MessageTypes.Talk => target is { } npc ? new TalkMessage(npc) : null,
                 MessageTypes.DialogueChoice => index is { } picked ? new DialogueChoiceMessage(picked) : null,
                 MessageTypes.DialogueClose => new DialogueCloseMessage(),
+                MessageTypes.AbandonQuest => quest is { } dropped ? new AbandonQuestMessage(dropped) : null,
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -182,6 +184,9 @@ public static class ProtocolJson
             case RaiseStatMessage raise:
                 w.WriteString("stat", raise.Stat);
                 w.WriteNumber("amount", raise.Amount);
+                break;
+            case AbandonQuestMessage abandon:
+                w.WriteString("quest", abandon.Quest);
                 break;
         }
         w.WriteEndObject();
@@ -314,6 +319,7 @@ public static class ProtocolJson
                 if (rejected.Slot is not null) w.WriteString("slot", rejected.Slot);
                 if (rejected.Skill is not null) w.WriteString("skill", rejected.Skill);
                 if (rejected.Stat is not null) w.WriteString("stat", rejected.Stat);
+                if (rejected.Quest is not null) w.WriteString("quest", rejected.Quest);
                 break;
             case AttackStoppedMessage stopped:
                 w.WriteNumber("target", stopped.Target);
@@ -345,6 +351,7 @@ public static class ProtocolJson
                 w.WriteNumber("weight", inventory.Weight);
                 w.WriteNumber("weight_limit", inventory.WeightLimit);
                 w.WriteString("load", inventory.Load);
+                w.WriteNumber("currency", inventory.Currency);
                 w.WriteStartArray("entries");
                 foreach (var e in inventory.Entries) WriteEntry(w, e);
                 w.WriteEndArray();
@@ -356,6 +363,7 @@ public static class ProtocolJson
                 w.WriteNumber("weight", change.Weight);
                 w.WriteNumber("weight_limit", change.WeightLimit);
                 w.WriteString("load", change.Load);
+                w.WriteNumber("currency", change.Currency);
                 if (change.Entries.Count > 0)
                 {
                     w.WriteStartArray("entries");
@@ -397,6 +405,23 @@ public static class ProtocolJson
             case ServiceOpenedMessage opened:
                 w.WriteString("service", opened.Service);
                 w.WriteNumber("npc", opened.Npc);
+                break;
+            case QuestLogMessage log:
+                w.WriteStartArray("active");
+                foreach (var e in log.Active) WriteQuestEntry(w, e);
+                w.WriteEndArray();
+                WriteStrings(w, "completed", log.Completed);
+                WriteStrings(w, "offer", log.Offer);
+                WriteStrings(w, "turn_in", log.TurnIn);
+                break;
+            case QuestMessage quest:
+                w.WriteString("change", quest.Change);
+                w.WriteString("quest", quest.Quest);
+                if (quest.Entry is { } state)
+                {
+                    w.WritePropertyName("state");
+                    WriteQuestEntry(w, state);
+                }
                 break;
             case PongMessage pong:
                 w.WriteNumber("seq", pong.Seq);
@@ -455,6 +480,11 @@ public static class ProtocolJson
             long? npc = null;
             bool more = false;
             List<DialogueChoiceRecord>? choices = null;
+            string? quest = null, change = null;
+            long currency = 0;
+            List<QuestEntryRecord>? questsActive = null;
+            QuestEntryRecord? questState = null;
+            List<string>? completed = null, offer = null, turnIn = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var key = reader.GetString();
@@ -524,6 +554,18 @@ public static class ProtocolJson
                     case "entries": inventoryEntries = ReadEntries(ref reader); break;
                     case "result": result = String(ref reader); break;
                     case "refine": refine = reader.GetInt32(); break;
+                    case "currency": currency = reader.GetInt64(); break;
+                    case "quest": quest = String(ref reader); break;
+                    case "change": change = String(ref reader); break;
+                    case "state": questState = ReadQuestEntry(ref reader); break;
+                    case "active":
+                        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+                        questsActive = new List<QuestEntryRecord>();
+                        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray) questsActive.Add(ReadQuestEntry(ref reader));
+                        break;
+                    case "completed": completed = ReadStrings(ref reader); break;
+                    case "offer": offer = ReadStrings(ref reader); break;
+                    case "turn_in": turnIn = ReadStrings(ref reader); break;
                     case "removed":
                         if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
                         removed = new List<long>();
@@ -537,17 +579,17 @@ public static class ProtocolJson
                 MessageTypes.Welcome => map is null ? null : new WelcomeMessage(version, id, map, tickRate, content, token),
                 MessageTypes.Snapshot => map is null ? null : new SnapshotMessage(tick, map, id, entities, vitals),
                 MessageTypes.Delta => new DeltaMessage(tick, entities, changed, gone, hits, vitals, casts, castEnds),
-                MessageTypes.Rejected => intent is null || reason is null ? null : new RejectedMessage(intent, reason, cell, target, entry, slot, skill, stat),
+                MessageTypes.Rejected => intent is null || reason is null ? null : new RejectedMessage(intent, reason, cell, target, entry, slot, skill, stat, quest),
                 MessageTypes.AttackStopped => target is null || reason is null ? null : new AttackStoppedMessage(target.Value, reason),
                 MessageTypes.Exp => baseLevel is null || jobLevel is null ? null : new ExpMessage(baseLevel.Value, baseExp, baseNext, jobLevel.Value, jobExp, jobNext),
                 MessageTypes.LevelUp => (baseLevel is null) == (jobLevel is null) ? null : new LevelUpMessage(baseLevel, jobLevel),
                 MessageTypes.YouDied => new YouDiedMessage(killer),
                 MessageTypes.Respawned => map is null || cell is null ? null : new RespawnedMessage(map, cell.Value, hp),
                 MessageTypes.Inventory => load is null ? null
-                    : new InventoryMessage(rev, slots, weight, weightLimit, load, (IReadOnlyList<InventoryEntryRecord>?)inventoryEntries ?? Array.Empty<InventoryEntryRecord>()),
+                    : new InventoryMessage(rev, slots, weight, weightLimit, load, (IReadOnlyList<InventoryEntryRecord>?)inventoryEntries ?? Array.Empty<InventoryEntryRecord>(), currency),
                 MessageTypes.InventoryChanged => load is null || cause is null ? null
                     : new InventoryChangedMessage(rev, cause, item, weight, weightLimit, load,
-                        (IReadOnlyList<InventoryEntryRecord>?)inventoryEntries ?? Array.Empty<InventoryEntryRecord>(), (IReadOnlyList<long>?)removed ?? Array.Empty<long>()),
+                        (IReadOnlyList<InventoryEntryRecord>?)inventoryEntries ?? Array.Empty<InventoryEntryRecord>(), (IReadOnlyList<long>?)removed ?? Array.Empty<long>(), currency),
                 MessageTypes.RefineResult => entry is null || item is null || result is null ? null : new RefineResultMessage(entry.Value, item, result, refine),
                 MessageTypes.Skills => job is null ? null
                     : new SkillsMessage(job, points, (levels ?? []).ConvertAll(l => new SkillLevelRecord(l.Item1, l.Item2)),
@@ -557,6 +599,9 @@ public static class ProtocolJson
                 MessageTypes.Dialogue => npc is null || speaker is null || text is null ? null : new DialogueMessage(npc.Value, speaker, portrait, text, (IReadOnlyList<DialogueChoiceRecord>?)choices ?? Array.Empty<DialogueChoiceRecord>(), more),
                 MessageTypes.DialogueEnded => reason is null ? null : new DialogueEndedMessage(reason),
                 MessageTypes.ServiceOpened => service is null || npc is null ? null : new ServiceOpenedMessage(service, npc.Value),
+                MessageTypes.QuestLog => new QuestLogMessage((IReadOnlyList<QuestEntryRecord>?)questsActive ?? Array.Empty<QuestEntryRecord>(),
+                    (IReadOnlyList<string>?)completed ?? Array.Empty<string>(), (IReadOnlyList<string>?)offer ?? Array.Empty<string>(), (IReadOnlyList<string>?)turnIn ?? Array.Empty<string>()),
+                MessageTypes.Quest => change is null || quest is null ? null : new QuestMessage(change, quest, questState),
                 MessageTypes.Pong => new PongMessage(seq),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason),
                 null => null,
@@ -692,6 +737,70 @@ public static class ProtocolJson
             list.Add(new InventoryEntryRecord(id, item ?? throw Bad(), quantity, slot, cards, refine));
         }
         return list;
+    }
+
+    private static void WriteQuestEntry(Utf8JsonWriter w, QuestEntryRecord e)
+    {
+        w.WriteStartObject();
+        w.WriteString("quest", e.Quest);
+        w.WriteNumber("step", e.Step);
+        w.WriteStartArray("objectives");
+        foreach (var o in e.Objectives)
+        {
+            w.WriteStartObject();
+            w.WriteString("type", o.Type);
+            if (o.Target is not null) w.WriteString("target", o.Target);
+            w.WriteNumber("have", o.Have);
+            w.WriteNumber("need", o.Need);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        if (e.Held is not null) w.WriteString("held", e.Held);
+        w.WriteEndObject();
+    }
+
+    private static QuestEntryRecord ReadQuestEntry(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject) throw Bad();
+        string? quest = null, held = null;
+        var step = 0;
+        var objectives = new List<QuestObjectiveRecord>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var key = reader.GetString();
+            reader.Read();
+            switch (key)
+            {
+                case "quest": quest = String(ref reader); break;
+                case "step": step = reader.GetInt32(); break;
+                case "held": held = String(ref reader); break;
+                case "objectives":
+                    if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    {
+                        if (reader.TokenType != JsonTokenType.StartObject) throw Bad();
+                        string? type = null, target = null;
+                        int have = 0, need = 0;
+                        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+                        {
+                            var field = reader.GetString();
+                            reader.Read();
+                            switch (field)
+                            {
+                                case "type": type = String(ref reader); break;
+                                case "target": target = String(ref reader); break;
+                                case "have": have = reader.GetInt32(); break;
+                                case "need": need = reader.GetInt32(); break;
+                                default: reader.Skip(); break;
+                            }
+                        }
+                        objectives.Add(new QuestObjectiveRecord(type ?? throw Bad(), target, have, need));
+                    }
+                    break;
+                default: reader.Skip(); break;
+            }
+        }
+        return new QuestEntryRecord(quest ?? throw Bad(), step, objectives, held);
     }
 
     private static List<DialogueChoiceRecord> ReadChoices(ref Utf8JsonReader reader)

@@ -60,7 +60,10 @@ namespace Game.Shared.Definitions
             (DialogueConditionTypes.JobIs, typeof(JobIsCondition)),
             (DialogueConditionTypes.JobIsNot, typeof(JobIsNotCondition)),
             (DialogueConditionTypes.HasItem, typeof(HasItemCondition)),
-            (DialogueConditionTypes.HasStatus, typeof(HasStatusCondition)));
+            (DialogueConditionTypes.HasStatus, typeof(HasStatusCondition)),
+            (DialogueConditionTypes.QuestState, typeof(QuestStateCondition)),
+            (DialogueConditionTypes.QuestStep, typeof(QuestStepCondition)),
+            (DialogueConditionTypes.OutOfCombat, typeof(OutOfCombatCondition)));
 
         /// <summary><see cref="DialogueActionDef"/> subtypes by <see cref="DialogueActionTypes"/> value.</summary>
         public static readonly IReadOnlyDictionary<string, System.Type> DialogueActions = Table(

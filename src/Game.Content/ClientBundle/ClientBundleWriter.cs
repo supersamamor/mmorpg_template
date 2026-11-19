@@ -52,6 +52,7 @@ public static class ClientBundleWriter
             w.WriteStartObject();
             w.WriteNumber("format_version", bundle.FormatVersion);
             if (hash is not null) w.WriteString("content_hash", hash);
+            w.WriteString("currency_name", bundle.CurrencyName);
             Strings(w, "elements", bundle.Elements);
             Strings(w, "stats", bundle.Stats);
             Array(w, "items", bundle.Items, Item);

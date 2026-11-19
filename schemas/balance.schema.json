@@ -370,6 +370,17 @@
       },
       "additionalProperties": false,
       "description": "Talking to NPCs and the services they open (T-601, ARCHITECTURE §6.4)."
+    },
+    "quests": {
+      "type": "object",
+      "properties": {
+        "max_active": {
+          "type": "integer",
+          "description": "Most quests a character may have active at once; a start beyond it is refused too_many_active. At least 1."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Quests (T-602, ARCHITECTURE §6.4)."
     }
   },
   "additionalProperties": false,

@@ -3,6 +3,7 @@ using Game.Client.Core.Combat;
 using Game.Client.Core.Dialogue;
 using Game.Client.Core.Items;
 using Game.Client.Core.Net;
+using Game.Client.Core.Quests;
 using Game.Client.Core.Skills;
 using Game.Client.Core.Stats;
 using Game.Client.Core.Ui;
@@ -54,6 +55,12 @@ public sealed class ClientSession
     /// <summary>Raised for each <c>service_opened</c> (after <see cref="Dialogue"/> took it): the HUD opens the service's panel.</summary>
     public event Action<ServiceOpenedMessage>? ServiceOpened;
 
+    /// <summary>The quest log, the tracked quest and the NPC markers (T-602). The server decides every count and step; this only holds what it sent.</summary>
+    public QuestBook Quests { get; } = new QuestBook();
+
+    /// <summary>Raised for each <c>quest</c> change (after <see cref="Quests"/> took it).</summary>
+    public event Action<QuestMessage>? QuestChanged;
+
     /// <summary>The floating damage numbers, started at each hit's impact moment.</summary>
     public DamageNumberPool Numbers { get; }
 
@@ -85,6 +92,7 @@ public sealed class ClientSession
         Ui.Reset();
         Inventory.Reset();
         Dialogue.Reset();
+        Quests.Reset();
         Skills.Reset();
         Stats.Reset();
         Numbers.Clear();
@@ -161,7 +169,9 @@ public sealed class ClientSession
     /// <summary>The dialogue panel's Close button: end the dialogue and any service it opened. The panel closes when the server says it ended.</summary>
     public void CloseDialogue() => SendItem(new DialogueCloseMessage());
 
-    /// <summary>The panel's Use button.</summary>
+    /// <summary>The quest log's Abandon confirmation (T-602): the server drops the quest and its progress, or refuses.</summary>
+    public void AbandonQuest(string questId) => SendItem(new AbandonQuestMessage(questId));
+
     /// <summary>
     /// A skill bar press (T-502). A skill on the caster goes out at once; one that needs an enemy goes out on the current target if there is a living one,
     /// else waits for a tap on one; a ground skill waits for a tap on the ground. A second press of a waiting skill cancels it. The server checks everything.
@@ -202,6 +212,7 @@ public sealed class ClientSession
     /// <summary>Asks to change job (T-502).</summary>
     public void ChangeJob(string jobId) => SendItem(new ChangeJobMessage(jobId));
 
+    /// <summary>The panel's Use button.</summary>
     public void UseItem(long entry) => SendItem(new UseItemMessage(entry));
 
     /// <summary>The panel's Equip button (the server picks the slot).</summary>
@@ -326,6 +337,14 @@ public sealed class ClientSession
                 break;
             case DialogueMessage dialogue:
                 Dialogue.Apply(dialogue);
+                break;
+            case QuestLogMessage log:
+                Quests.Apply(log);
+                break;
+            case QuestMessage quest:
+                Quests.Apply(quest);
+                Ui.OnQuest(quest, viewNow);
+                QuestChanged?.Invoke(quest);
                 break;
             case DialogueEndedMessage ended:
                 Dialogue.Ended(ended.Reason);

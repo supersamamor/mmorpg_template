@@ -214,7 +214,7 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 - **Whitelist, not blacklist.** `Game.Shared/ClientContent` holds one plain record per definition type, and
   `Game.Content/ClientBundle/ClientBundleBuilder` copies each field by hand. A field added to a server definition reaches the client
   only when someone maps it there; a test fails if a client record gains a field without the table below changing.
-- **Format:** `format_version` (now `5`; 2 added the sound keys, 3 the appearance options, 4 item `card_slots` / `refinable` and the `refine` steps, 5 dropped the dialogue graphs and an NPC's dialogue id: the server runs dialogue, T-601) is the first field. The client refuses a bundle with a version it does not know. Bump it
+- **Format:** `format_version` (now `6`; 2 added the sound keys, 3 the appearance options, 4 item `card_slots` / `refinable` and the `refine` steps, 5 dropped the dialogue graphs and an NPC's dialogue id: the server runs dialogue, T-601; 6 added `currency_name`, T-602) is the first field. The client refuses a bundle with a version it does not know. Bump it
   on any change to the bundle's shape.
 - **Canonical output:** compact JSON, UTF-8 without BOM, one final `\n`, fixed property order, lists ordered by id,
   integers and booleans only, non-ASCII (and `<>&'"+`) escaped as `\uXXXX`, null values left out. Two exports of the same content are byte-identical on any OS.
@@ -238,6 +238,7 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 | Maps | id, name, scene, music, ambience key, width, height, cell flags (`walkable`, `blocks_los`; base64, as in the grid file), warps (cell, target map, target cell), NPC placements, zones | `spawns`, `source_scene_hash` |
 | Appearance | genders (body model, faces, hairstyles, defaults), skin tones and hair colours: ids, names, asset keys, colours | — (cosmetic only) |
 | Elements, stats | element ids and stat ids, for labels | element multipliers, derived-stat formulas |
+| Balance | `currency_name` (the bag shows the balance with it, T-602) | every other number of `balance.yaml` |
 | — | — | drop tables and chances, `formulas.yaml`, `balance.yaml`, EXP tables |
 
 The leak tests (`tests/Game.Tests/ClientBundle`) fail if a key names server-only data (`drop`, `chance`, `spawn`, `formula`, `ai`, `exp`, `respawn`, `hp`, `atk`, ...),
@@ -299,9 +300,34 @@ New *kind* of behavior = new effect type + tests.
   `KnockedBack`, `Teleported`, `SummonRequested` → `MonsterSummoned`, `AreaApplied`; skills: `SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`.
 
 ### 6.4 Quests
-State machine per quest: `prerequisites → steps[objective] → rewards`.
-Objectives listen to the event bus (`MonsterKilled`, `ItemAcquired`, `NpcTalked`, …).
-Quest state per character is persisted as `{questId, stepIndex, counters}`.
+State machine per quest: `prerequisites → steps[objective] → rewards` (T-602). `QuestSystem` (`Game.Server/World/Quests`, after the inventory in the tick) drives it from the
+event bus only (hard rule 7): it never calls combat, the inventory or dialogue. The rules are pure, `Game.Shared/Quests/QuestRules`.
+- **State** per character, in the progression store (`ProgressionState.ActiveQuests`: `{questId, stepIndex, counters}`, beside `CompletedQuests` and `UnlockedJobs`): not started,
+  active (step and one counter per objective of the step), completed. **In memory until T-702** (with the currency): a server restart forgets them.
+- **Accepting.** A dialogue's `start_quest` raises `QuestStartRequested`; the quest starts when it is known, not active, not completed (unless `repeatable`), the base level, job and
+  prerequisite quests are met and fewer than `balance.yaml` `quests.max_active` are active. Each refusal is a "Quest reasons" term the player gets as `rejected` (`intent`
+  `dialogue_choice`, `quest`). **Abandoning** (`abandon_quest`) drops the progress and gives nothing back; the items a step would consume stay.
+- **Objectives** count only while their step is current (VOCABULARY "Quest objective types"): `kill` on `MonsterKilled` for every player with **kill credit** (§6.7: everyone with a
+  damage share who is still on the map), `collect` the bag's carried quantity (live), `talk` on `NpcTalked`, `reach` a cell and radius on a map (`CellReached`, arrival; latched),
+  `level` the base level and `job` the current job (both already met when the step starts), `use_item` on `ItemUsed`, `equip` on `ItemEquipped` or worn at the step's start.
+  A step completes when every objective is met.
+- **Turning in.** A `talk` objective counts only when every other objective of its step is met, so talking to that NPC is the step's turn-in; a step with only a `talk` completes when
+  the player talks to the NPC. The step's `collect` objectives with `consume: true` are taken then, and for the last step the `item` and `currency` rewards are given, in **one**
+  inventory transaction (`QuestItemsRequested` → `InventoryRules.TryExchange` plus the currency → `QuestItemsResolved`; rule 10). Then the next step starts (and is checked at once)
+  or the quest completes: `CompletedQuests`, `QuestCompleted`, and the other rewards go to the progression host, combat (`QuestRewardsRequested`: EXP through `ProgressionRules`,
+  stat and skill points, `unlock_job` into `UnlockedJobs`, `status` through the effect runner), none of which can fail.
+- **Full bag: the quest waits.** When the turn-in's items do not fit (`inventory_full`, `too_heavy`) nothing changed: the step stays met and *held* (the reason is in the owner's
+  `quest` message) and is tried again whenever the player's bag changes or it arrives on a map. Nothing is dropped on the ground, so no reward can be lost or taken by someone else.
+- **Dialogue follows the log.** The quest conditions `quest_state` (`not_started`, `available`, `active`, `completed`) and `quest_step` are on T-601's seam; the guide's and the trainer's
+  graphs use them to offer, track and thank. A turn-in by talking lands a tick or two after the node was shown, so the dialogue system shows the open node again when a quest
+  event (or a level or job) changes which of its choices hold.
+- **Markers** (`QuestRules.Markers`, sent in `quest_log`): `offer` over the giver of every quest that is `available`, `turn_in` over the NPC of an unmet `talk` whose other objectives
+  are met. The quest system announces a change (`QuestMarkersChanged`) and the gateway sends the whole log again.
+- **Load checks** (`QuestRule`): steps and objectives exist, counts, levels, radii and reward amounts are in range, prerequisites do not loop; the giver is placed on a map and its
+  dialogue has a reachable `start_quest` for the quest (and no other NPC's does); every `talk` NPC is placed and has a dialogue. Ids are `ReferenceRule`'s, reach cells `MapGridRule`'s.
+- **The Warden path** (rows 211, 212): Captain Brannoc offers the Warden's Trial to a Wanderer of base level 5; base level 10, three Sting Wasps, then reporting to him completes it
+  and unlocks the Warden; `change_job` is then accepted (§6.5); the Warden's Oath (offered once the trial is done) completes when the character is a Warden.
+- **Warp edge case:** a turn-in waits for the inventory of the map it was asked on; a player who warps in that tick has it asked again on arrival (open question in ADR-002).
 Dialogue graphs, NPCs and their services are T-601; quests are T-602. The sections below are the dialogue half of this chapter.
 
 #### 6.4.1 NPCs and dialogue (T-601)
@@ -319,10 +345,10 @@ Dialogue graphs, NPCs and their services are T-601; quests are T-602. The sectio
   `dialogue_choice` (`index`) moves on; the client never decides where a choice leads. A choice is *shown* when every one of its `conditions` holds, and is checked again when picked
   (`invalid_choice`). A node without shown choices is a "continue": index 0 follows its `next`, and a null `next` ends the dialogue (`finished`) after the player has read the node.
   The client gets no graph, condition or action in its display bundle (format 5): only the NPCs' names, titles and portraits.
-- **Conditions** (`Game.Shared/Dialogue/DialogueRules`, pure over `IDialoguePlayer`): `base_level` / `job_level` (`min`, `max`), `job_is`, `job_is_not`, `has_item` (`item_id`, `quantity`), `has_status`.
-  **The seam for T-602:** a quest-state condition is a new record in `Discriminators.DialogueConditions`, a term in `DialogueConditionTypes`, one member on `IDialoguePlayer` and one case in
-  `DialogueRules.Matches`; nothing else changes. An unknown condition type hides its choice.
-- **Actions**, in order when a choice is picked: `start_quest` raises `QuestStartRequested` (nothing handles it until T-602; it replaces the old `start_quest_id`), `set_save_point` (a cell of the NPC's map),
+- **Conditions** (`Game.Shared/Dialogue/DialogueRules`, pure over `IDialoguePlayer`): `base_level` / `job_level` (`min`, `max`), `job_is`, `job_is_not`, `has_item` (`item_id`, `quantity`), `has_status`,
+  and since T-602 `quest_state` (`quest_id`, `state`), `quest_step` (`quest_id`, `step` from 1) and `out_of_combat` (row 253: no hit dealt or taken within `regen.out_of_combat_delay_ms`).
+  **The seam:** a condition is a record in `Discriminators.DialogueConditions`, a term in `DialogueConditionTypes`, a member on `IDialoguePlayer` and a case in `DialogueRules.Matches`. An unknown condition type hides its choice.
+- **Actions**, in order when a choice is picked: `start_quest` raises `QuestStartRequested` (the quest system's, T-602; it replaces the old `start_quest_id`), `set_save_point` (a cell of the NPC's map),
   `run_effects` (an effect list, `EffectSite.Service`: the player is caster and target, resets allowed), `take_item` / `give_item`, `open_service`. Systems talk by events (rule 7):
   - **Items.** A choice's `take_item` / `give_item` actions are one transaction: the dialogue system publishes `DialogueItemsRequested`, the inventory applies all takes then all gives
     (`InventoryRules.TryExchange`, all or nothing, rule 10) and answers `DialogueItemsResolved`. Meanwhile the dialogue is `busy`. On a refusal (`missing_item`, `inventory_full`, `too_heavy`) nothing
@@ -333,7 +359,7 @@ Dialogue graphs, NPCs and their services are T-601; quests are T-602. The sectio
   - **Services.** `open_service` sets `Entity.OpenService` and sends `service_opened`; it stays open until the player walks beyond the talk range, warps, dies, closes or talks to someone else (a
     finished graph leaves it open). **Refine:** with `dialogue.refine_needs_service` (on in `balance.yaml`) the `refine` intent is refused `service_required` unless a `refine` service is open;
     the starter meadow's smith opens it. `insert_card` stays free anywhere. **Resets:** Odalys offers a free stat reset and skill reset to characters below base level 10 (`base_level` condition and
-    `run_effects`), the same line as `progression.reset.free_below_base_level`; the reset items stay. The NPC reset does not apply `progression.reset.refuse_in_combat` (the safe zone is the site).
+    `run_effects`), the same line as `progression.reset.free_below_base_level`; the reset items stay. Since T-602 the choices also need `out_of_combat`, the window of `progression.reset.refuse_in_combat`.
 
 ### 6.5 Progression
 Base level + job level, separate EXP tables. Stat points per base level and skill points
@@ -348,8 +374,8 @@ in the progression store (in memory until T-702): skill points, learned levels, 
   `CompletedQuests`, and `requires_unlock` in `UnlockedJobs`; refused with the first failure's term). **Carried over:** base level and EXP, stats and stat points, **unspent skill
   points and every learned skill** (parent jobs' skills stay usable and passive). **Reset:** job level to 1 and job EXP to 0 (the new job has its own EXP table). The old
   job's stat bonuses (`job:<id>` modifiers) are removed and the new job's added at job level 1; the player's `DefinitionId` becomes the job id, which is what usable
-  weapon types and the look follow. `JobChanged` goes out as `PlayerProgressed`. Quests and unlocks are T-602: until then a job with `quest_ids` or `requires_unlock`
-  (the sample's Warden) is refused with `quest_not_completed` / `not_unlocked`; the sample's Spellbinder (base 5, job 5) is the job a scripted run reaches.
+  weapon types and the look follow. `JobChanged` goes out as `PlayerProgressed`. `quest_ids` are read from `CompletedQuests` and `requires_unlock` from `UnlockedJobs`, both filled by
+  completed quests (T-602, §6.4): the sample's Warden needs the Warden's Trial.
 - **Raising stats** (T-503). `raise_stat` (`stat`, `amount`) runs `ProgressionRules.RaiseStat` on the progression store: each +1 step costs `stat_point_cost` of the value before it, up to
   `max_stat_value`, all or nothing. The new base value goes on the stat sheet in the same tick (`sheet.Base[stat]`), so every derived stat and the HP and SP pools follow at once.
   Refusals are "Stat reasons" terms (`StatRaiseRefused`, on the wire `rejected` with `stat`). `stats` tells the client the points, each stat's next cost and the panel's derived stats.
@@ -451,6 +477,8 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
   stays as a corpse for `death.corpse_ms`, is then despawned, and is respawned by the spawner. A player stays dead on its cell until `Respawn`, then comes back with
   `death.respawn_hp_percent` of max HP at the respawn point of the map it died on (the map's `respawn` cell, else the first warp arriving on it, else the `new_character` start); on death it loses
   `death.exp_penalty_percent` of its level's requirement, never more than its EXP (`ProgressionRules.LoseBaseExp`: no level loss).
+- **Kill credit** (T-602): when a monster dies combat raises `MonsterKilled` with every player that has a damage share in it and is still on the map, in first-hit order: the
+  same players who share its EXP. Quests count `kill` objectives from it; a party rule is T-902.
 - **EXP.** Per monster, the HP each player took since its last full-HP moment. On death the players still on the map share `base_exp` /
   `job_exp` in proportion (largest remainder; ties to the first hitter; the shares add up exactly) through `ProgressionRules`, which raise
   `ExpGained` and `PlayerProgressed` (`LevelUp` / `JobLevelUp`); the sheet takes the new levels and job bonuses. Progression is kept per
@@ -504,6 +532,10 @@ derived stat `weight_limit` (`formulas.yaml`).
     Sample data: max +7; +1 and +2 always succeed, then 90/75/60/45/30 %, Temper Shards ×1–3, failures keep up to +4, down at +5 and +6, break at +7.
 - **What other systems read** (hard rule 7, no calls): the sheet's modifiers; `Entity.Weapon` (type, `weapon_atk`, refine, range, element) for combat;
   `Entity.Look` (weapon type and the worn item ids that have a worn visual, in slot order) for the AOI; `Entity.Load` for combat.
+- **Currency** (T-602): one balance per character, `InventoryState.Currency` (in memory until T-702), kept with the bag so one transaction can take items and pay or spend currency;
+  sent as `currency` in `inventory` and `inventory_changed` and shown in the bag with the bundle's `currency_name`. Quest rewards add to it; nothing spends it yet (shops are later).
+- **Quest turn-ins** (T-602): `QuestItemsRequested` takes the consumed items and gives the item rewards (`TryExchange`, all or nothing) and adds the currency, then `inventory_changed`
+  (`quest`) and `QuestItemsResolved`; a refusal changes nothing and the quest waits (§6.4).
 - **Starting items** are data: `new_character.start_items` (`item_id`, `quantity`, `equipped`), validated at load. A new character gets them when the
   inventory first sees it; today the Bone Dirk (worn) and three Healing Draughts.
 
@@ -602,6 +634,12 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   portrait (the theme's `portrait.*` texture, else the first letter of the name, §7.7), name and title (from the display bundle), the line, and the choices as buttons of at least the touch
   target (48 dp), in a scroll container; a Close button. It only sends `dialogue_choice` and `dialogue_close`; it closes when the server says `dialogue_ended`. A `service_opened` for `refine`
   opens the bag, where the refine button is; `rejected` `service_required` is said on the flash line.
+- **Quests** (T-602, `client/Scene/QuestPanel.cs`, view model `client/Core/Quests/QuestBook.cs`). **Tracker:** a compact button under the bars on the top left (13 dp text, the left column's
+  width, at least the touch target): the tracked quest's name and one line per objective with the server's counter (`Defeat Gel Slime 3/5`), or "Quests" when none is active; the quest
+  last accepted or advanced is tracked, and the log's Track button picks another. A tap opens the **quest log**, a panel like the stats panel: active quests with their step text
+  (from the bundle), objectives and a held reason, each with Track and Abandon (asks once more before sending `abandon_quest`), then the completed quests. **Markers:** a "!" drawn
+  by a billboard shader above every NPC the server marks, gold to offer and green to turn in, one multimesh (one draw call, none when no NPC is marked), rewritten only when the
+  markers or the NPCs in view change. The client decides no count, step or completion; quest changes go on the flash line. The bag's first line shows the currency.
 - **Where the client's own words live (ADR-002 row 120).** In `client/Core/UiText.cs`: one static class of constants and small formatting functions in English, and nowhere
   else (a test fails on a literal assigned to a text property in `client/Scene`). Why: the refusal and update screens must read even when the bundle, theme or any data
   file is missing or broken, which rules out loading them; the pure core and its tests can use them; a typo or a missing word is a compile error; and the number of
@@ -969,21 +1007,24 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   | `talk` | C→S | `target` (an NPC entity in view): the server walks the character into `dialogue.talk_range` and starts its dialogue; a request, it may come back `rejected` with a "Dialogue reasons" term (T-601) |
   | `dialogue_choice` | C→S | `index` (a shown choice's index from `dialogue`; 0 at a node without choices) (T-601) |
   | `dialogue_close` | C→S | none: end the dialogue and any service it opened (T-601) |
+  | `abandon_quest` | C→S | `quest`: drop an active quest, its progress is lost; may come back `rejected` (`not_active`, with `quest`) (T-602) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
-  | `rejected` | S→C | `intent` (`move`, `attack`, an item intent, or `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`), `reason` (a `MoveRejected`, "Attack reasons", "Item reasons", "Skill reasons" or "Dialogue reasons" term), `cell` (move), `target` (attack, `pick_up`, `use_skill`, `talk`), `entry` (`use_item`, `equip`, `drop_item`; the equipment entry for `insert_card`, `refine`), `slot` (`equip`, `unequip`), `skill` (the skill, or for `change_job` the job) |
+  | `rejected` | S→C | `intent` (`move`, `attack`, an item intent, or `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`), `reason` (a `MoveRejected`, "Attack reasons", "Item reasons", "Skill reasons" or "Dialogue reasons" term), `cell` (move), `target` (attack, `pick_up`, `use_skill`, `talk`), `entry` (`use_item`, `equip`, `drop_item`; the equipment entry for `insert_card`, `refine`), `slot` (`equip`, `unequip`), `skill` (the skill, or for `change_job` the job), `quest` (a refused quest start, `intent` `dialogue_choice`, or `abandon_quest`; a "Quest reasons" term, T-602) |
   | `attack_stopped` | S→C (owner) | `target`, `reason` (an "Attack reasons" term) |
   | `exp` | S→C (owner) | `base_level`, `base_exp`, `base_next`, `job_level`, `job_exp`, `job_next` (`*_next` = EXP the level needs, 0 at the cap) |
   | `level_up` | S→C (owner) | `base_level` or `job_level` (one message per level reached) |
   | `you_died` | S→C (owner) | `killer` (entity id, if any); send `respawn` to come back |
   | `respawned` | S→C (owner) | `map`, `cell`, `hp`; a snapshot of the respawn point follows |
-  | `inventory` | S→C (owner) | `rev`, `slots` (most entries), `weight`, `weight_limit`, `load` (a "Weight states" term), `entries` (`[{id, item, quantity, slot?, cards?, refine?}]`, by id; `cards` and `refine` only when the equipment has any, and only ever to the owner). After every snapshot (join, resume, warp, resync); it replaces what the client had |
-  | `inventory_changed` | S→C (owner) | `rev` (one more than the last), `cause` (an "Inventory changes" term), `item`, `weight`, `weight_limit`, `load`, `entries` (added or changed, as they are now), `removed` (ids); empty lists left out. A client that sees a gap in `rev` keeps what it has until the next `inventory` |
+  | `inventory` | S→C (owner) | `rev`, `slots` (most entries), `weight`, `weight_limit`, `load` (a "Weight states" term), `currency` (T-602), `entries` (`[{id, item, quantity, slot?, cards?, refine?}]`, by id; `cards` and `refine` only when the equipment has any, and only ever to the owner). After every snapshot (join, resume, warp, resync); it replaces what the client had |
+  | `inventory_changed` | S→C (owner) | `rev` (one more than the last), `cause` (an "Inventory changes" term), `item`, `weight`, `weight_limit`, `load`, `currency` (T-602), `entries` (added or changed, as they are now), `removed` (ids); empty lists left out. A client that sees a gap in `rev` keeps what it has until the next `inventory` |
   | `refine_result` | S→C (owner) | `entry`, `item`, `result` (a "Refine results" term: `success`, `keep`, `down`, `break`), `refine` (the level now; what it had when it broke) |
   | `dialogue` | S→C (owner) | `npc` (entity id), `speaker` (an `npc.*` id: name, title and portrait are in the display bundle), `portrait` (a key overriding the speaker's, if any), `text`, `choices` (`[{index,text}]`, the shown ones), `more` (only with no choices: the dialogue goes on after this node) (T-601) |
   | `dialogue_ended` | S→C (owner) | `reason` (a "Dialogue end reasons" term) (T-601) |
   | `service_opened` | S→C (owner) | `service` (a "Service ids" term), `npc` (T-601) |
+  | `quest_log` | S→C (owner) | `active` (`[{quest, step, objectives:[{type, target?, have, need}], held?}]`, by id; `step` indexes the bundle's step texts), `completed` (quest ids), `offer`, `turn_in` (NPC ids for the markers). After every snapshot and whenever the markers change; it replaces what the client had (T-602) |
+  | `quest` | S→C (owner) | `change` (a "Quest changes" term), `quest`, `state` (the quest as it is now, the shape of an `active` entry; absent for `completed` and `abandoned`) (T-602) |
   | `skills` | S→C (owner) | `job`, `points` (unspent), `levels` (`[["skill.x",2],...]`), `cooldowns` (`[["skill.x",ms left],...]`), `jobs` (the jobs `change_job` would accept now). After every snapshot, a learn, a job change and a level (T-502) |
   | `stats` | S→C (owner) | `points` (unspent stat points), `stats` (`[["str",3,2],...]`: stat id, base value, the cost of its next +1, 0 at the maximum), `derived` (`[["atk",12],...]`: `DerivedStats.Panel`, floored from the sheet). After every snapshot, a raise, a stat reset, a level, a job change, a learned skill, a skill reset and a gear change (T-503). The client never computes a cost or a derived value |
   | `cooldown` | S→C (owner) | `skill`, `ms`: the skill went on cooldown when its cast ended (T-502) |

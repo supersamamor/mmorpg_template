@@ -61,6 +61,10 @@ public static class ValidationCodes
     public const string DialogueDangling = "dialogue.dangling";
     /// <summary>A dialogue condition or action with unusable values (T-601).</summary>
     public const string DialogueInvalid = "dialogue.invalid";
+    /// <summary>A quest with no steps or objectives, or a count, level, radius or reward amount out of range, or prerequisites that loop (T-602).</summary>
+    public const string QuestInvalid = "quest.invalid";
+    /// <summary>A quest's giver or turn-in NPC cannot be reached: not placed, no dialogue, or no <c>start_quest</c> for it (T-602).</summary>
+    public const string QuestUnreachable = "quest.unreachable";
     /// <summary>A number in <c>balance.yaml</c> is out of range or inconsistent with another.</summary>
     public const string BalanceRange = "balance.range";
     /// <summary>A number in <c>refine.yaml</c> is out of range, a level is missing or out of order, or a material is not a material item.</summary>
