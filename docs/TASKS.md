@@ -79,6 +79,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-221 | Godot tooling hangs: one bounded, retried helper for import and export, bounded harness waits, root cause of the import and export-exit hangs | Claude Code | Opus 5.5 | [T-221](../tasks/prompts/T-221.md) | T-218, T-220 | Review | ADR-002 #163, #176, #190 |
 | T-222 | Storybook toon rendering (ADR-003): toon material, near-only outlines, lighting and haze, toon placeholders | Claude Code | Opus 5.5 | [T-222](../tasks/prompts/T-222.md) | T-403, T-405, T-501, T-502 | Review | Starts when T-502 and T-405 are merged (shared client and themegen files); ADR-003 |
 | T-223 | Quiet test runs: `BannedSymbolsTests` starts `dotnet build` with `CreateNoWindow`, so no Windows Terminal window pops up on the desktop | Lead | Opus 5.5 | — | T-104 | Review | Lead fix on the user's request; ADR-002 #270 |
+| T-224 | Theme kit for forks: theme contract (`docs/THEMES.md`), manifest variants (tint, scale), import tool from a mapping file, fork guide (`docs/FORKING.md`); tested on a generated synthetic pack | Claude Code | Opus 5.5 | [T-224](../tasks/prompts/T-224.md) | T-405, T-222, T-407 | In Progress | Template keeps the placeholder theme; no downloads |
 
 ## Phase 3 — Combat loop
 
@@ -132,7 +133,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Phase | Task | Agent | Model | Status |
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
-| T-224 | 2 | Theme kit for forks: a written theme contract (rig, animation names, scale, facing, attachment points, §9 budgets), an import tool that applies a small mapping file (pack model → asset key, scale, facing, animation renames), a fork guide (map art to existing ids, rename display names only, add or remove monsters as data); tested on a free CC0 pack in an uncommitted theme. The template keeps the generated placeholder theme | Claude Code | Opus 5.5 | Backlog |
 | T-225 | 2 | AI asset pipeline for forks (after T-224): scripts drive a 3D generation API (Meshy, Tripo or Rodin; key from an environment variable, never committed) from an approved brief, then cleanup in headless Blender, rigging or scripted motion, import through the T-224 tool, and an in-game review loop (scripted runs, screenshots at the game camera next to existing art, ThemeCheck and §9 budgets) that adjusts scale, tint, outline and pose for consistency, retrying within a set credit limit. Art is generated in a fork only | Claude Code | Opus 5.5 | Backlog |
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
 | T-702 | 7 | Persistence (EF Core + Postgres), transactional inventory | Claude Code | Opus 5.5 | Backlog |
