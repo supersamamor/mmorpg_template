@@ -132,6 +132,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Phase | Task | Agent | Model | Status |
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
+| T-224 | 2 | Theme kit for forks: a written theme contract (rig, animation names, scale, facing, attachment points, §9 budgets), an import tool that applies a small mapping file (pack model → asset key, scale, facing, animation renames), a fork guide (map art to existing ids, rename display names only, add or remove monsters as data); tested on a free CC0 pack in an uncommitted theme. The template keeps the generated placeholder theme | Claude Code | Opus 5.5 | Backlog |
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
 | T-702 | 7 | Persistence (EF Core + Postgres), transactional inventory | Claude Code | Opus 5.5 | Backlog |
 | T-703 | 7 | Store compliance: account deletion, Sign in with Apple, privacy disclosures | Claude Code | Sonnet 5.5 | Backlog |
