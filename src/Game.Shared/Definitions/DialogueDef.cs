@@ -243,7 +243,10 @@ namespace Game.Shared.Definitions
         public int Quantity { get; init; } = 1;
     }
 
-    /// <summary><c>open_service</c>: opens an NPC service for the character; it stays open until the character walks out of talking range, warps, dies or closes it.</summary>
+    /// <summary>
+    /// <c>open_service</c>: opens an NPC service for the character; it stays open until the character walks out of talking range, warps, dies or closes it. A
+    /// service that needs data takes it from a field of this action (T-603: the <c>shop</c> service names its shop in <see cref="ShopId"/>; <c>refine</c> takes none).
+    /// </summary>
     public sealed record OpenServiceAction : DialogueActionDef
     {
         /// <inheritdoc />
@@ -251,5 +254,8 @@ namespace Game.Shared.Definitions
 
         /// <summary>A <see cref="ServiceIds"/> term.</summary>
         public string Service { get; init; } = string.Empty;
+
+        /// <summary>The shop to open (<c>shop.*</c>); required when <see cref="Service"/> is <c>shop</c>, not allowed otherwise (validated at load).</summary>
+        public string? ShopId { get; init; }
     }
 }

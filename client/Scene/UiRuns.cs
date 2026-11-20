@@ -54,6 +54,7 @@ public sealed class UiRuns
         await ScaleButtonAsync(originalScale);
         await SoundPanelAsync();
         await BagPanelAsync();
+        await ShopPanelAsync();
         await TapAsync();
         await MeasureAsync();
         await ShotAsync();
@@ -163,6 +164,27 @@ public sealed class UiRuns
         await FramesAsync(2);
         Check(!bag.Open, "the bag button closes it again");
         Print($"bag: fits every screen; {carried} carried entries shown; with the bag open draw calls avg {(frames > 0 ? sum / frames : 0):0.0}, max {max:0}; {nodes} UI nodes");
+    }
+
+    /// <summary>
+    /// The shop panel (T-603): filled with the longest words (a long item name, the largest prices, the picker) it fits every screen shape and scale, and every button in it
+    /// (rows, tabs, picker, Buy, Close) is at least the touch target: the same check as the rest of the HUD (<c>FindProblems</c>).
+    /// </summary>
+    private async Task ShopPanelAsync()
+    {
+        var shop = Hud.Shop!;
+        var scaleBefore = Hud.Scale;
+        shop.ShowSamples(LongName);
+        await FramesAsync(3);
+        await LayoutMatrixAsync("shop open");
+        Check(shop.Open && shop.Rows.Count >= 12, "the shop panel shows its sample rows");
+        Check(Hud.Blocks(shop.Rows[0].Button.GetGlobalRect().GetCenter()), "a touch on a shop row never reaches the world");
+        shop.ClearSamples();
+        Hud.SetScale(scaleBefore, false);
+        Hud.ForceRefresh();
+        await FramesAsync(3);
+        Check(!shop.Open, "the sample shop closes again");
+        Print("shop: the panel fits every screen shape and scale with the longest words, every button at least the touch target");
     }
 
     // ---- layout ----

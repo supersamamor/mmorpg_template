@@ -51,6 +51,9 @@ namespace Game.Shared.Definitions
 
         /// <summary>Quests (T-602, ARCHITECTURE §6.4).</summary>
         public QuestBalanceDef Quests { get; init; } = new QuestBalanceDef();
+
+        /// <summary>Shops (T-603, ARCHITECTURE §6.8).</summary>
+        public ShopBalanceDef Shop { get; init; } = new ShopBalanceDef();
     }
 
     /// <summary>Quests (T-602): the <c>quests</c> section of <c>balance.yaml</c>.</summary>

@@ -800,7 +800,7 @@ public class DialogueTests
         var db = TestGrids.SampleContent;
         var placed = db.Grids.Values.SelectMany(g => g.Npcs).Select(n => n.NpcId).ToList();
 
-        placed.ShouldBe(["npc.guide", "npc.trainer", "npc.smith"], ignoreOrder: true);
+        placed.ShouldBe(["npc.guide", "npc.trainer", "npc.smith", "npc.merchant"], ignoreOrder: true);
         db.Balance.Dialogue.RefineNeedsService.ShouldBeTrue();
         var smith = db.Dialogue.Get("dialogue.smith_intro");
         smith.Nodes[smith.Start].Choices.SelectMany(c => c.Actions).OfType<OpenServiceAction>().Single().Service.ShouldBe(ServiceIds.Refine);

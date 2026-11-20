@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/dialogue.schema.json
+id: dialogue.merchant_intro
+name: Merchant introduction
+start: greet
+nodes:
+  greet:
+    speaker_npc_id: npc.merchant
+    text: Potions, blades and a few things the road forgets to mention. Buy, sell, or just look.
+    choices:
+      - text: Show me your wares.
+        next: null
+        actions:
+          - type: open_service
+            service: shop
+            shop_id: shop.meadow_goods
+      - text: Another time.
+        next: null

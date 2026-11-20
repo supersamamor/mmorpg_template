@@ -6,6 +6,7 @@ using Game.Shared.Definitions;
 using Game.Shared.Formulas;
 using Game.Shared.Items;
 using Game.Shared.Protocol;
+using Game.Shared.Shop;
 using Game.Shared.Stats;
 using Game.Shared.Time;
 using Game.Shared.Vocabulary;
@@ -15,8 +16,8 @@ namespace Game.Server.World.Inventory;
 
 /// <summary>
 /// The server's inventory (ARCHITECTURE §6.8): picking up ground items, using consumables, equipping and unequipping, dropping items, socketing
-/// cards, refining, and the weight limit. Owns <see cref="PickUp"/>, <see cref="UseItem"/>, <see cref="Equip"/>, <see cref="Unequip"/>,
-/// <see cref="DropItem"/>, <see cref="InsertCard"/> and <see cref="RefineItem"/>. Runs after combat, before the AOI.
+/// cards, refining, the weight limit, and (T-603) buying from and selling to a shop. Owns <see cref="PickUp"/>, <see cref="UseItem"/>, <see cref="Equip"/>,
+/// <see cref="Unequip"/>, <see cref="DropItem"/>, <see cref="InsertCard"/>, <see cref="RefineItem"/>, <see cref="ShopBuy"/> and <see cref="ShopSell"/>. Runs after combat, before the AOI.
 /// </summary>
 /// <remarks>
 /// <para><b>Per tick</b>, in this order: the intents (in arrival order); pending pick-ups (in player id order); weight limits re-read from changed stat
@@ -27,13 +28,19 @@ namespace Game.Server.World.Inventory;
 /// (ARCHITECTURE §6.1); <see cref="Entity.Weapon"/> (combat's weapon inputs and range);
 /// <see cref="Entity.Look"/> (what others see, the AOI); <see cref="Entity.Load"/> (combat stops regeneration and attacks). Walks players to ground
 /// items with <see cref="MoveTo"/> / <see cref="StopMove"/> and follows the movement events.</para>
+/// <para><b>Shops (T-603).</b> <see cref="ShopBuy"/> and <see cref="ShopSell"/> work only while the player's <c>shop</c> service is open (<see cref="Entity.OpenService"/>,
+/// <see cref="Entity.OpenShopId"/>) and its NPC is within <c>dialogue.talk_range</c>. A buy is refused unless the item is in the open shop's stock, the quantity is from 1 to
+/// <c>shop.max_buy_quantity</c>, the total (price × quantity, guarded against overflow) is affordable and the bag takes the items; a sell unless the entry is carried (not worn),
+/// its item is not a quest item and has a sell price, and the sale fits the currency. The price is the server's: the shop's own, else the item's <c>buy_price</c>; a sale pays the
+/// item's <c>sell_price</c>. Every check runs before anything changes, and the last one that can fail (the bag's) is the add or remove itself, which changes nothing when it
+/// refuses; so the items and the currency move together or not at all, in one <see cref="InventoryChanged"/>. Opening a shop is answered with <see cref="ShopOpened"/> (its priced stock).</para>
 /// <para><b>Time:</b> ground items use the instance's simulated time, like combat's drops; cooldowns use the injected server clock, so they hold
 /// across maps. <b>Randomness:</b> a refine draws one value from the instance's seeded random source.</para>
 /// </remarks>
 public sealed class InventorySystem : ITickSystem
 {
     private static readonly IReadOnlyCollection<Type> Owned =
-        [typeof(PickUp), typeof(UseItem), typeof(Equip), typeof(Unequip), typeof(DropItem), typeof(InsertCard), typeof(RefineItem)];
+        [typeof(PickUp), typeof(UseItem), typeof(Equip), typeof(Unequip), typeof(DropItem), typeof(InsertCard), typeof(RefineItem), typeof(ShopBuy), typeof(ShopSell)];
     private static readonly int WeightLimitStat = StatIndex.IndexOf(DerivedStats.WeightLimit);
     private const int PickupGraceTicks = 3;   // a pick-up whose walk never started within this many ticks has no way there
 
@@ -42,6 +49,8 @@ public sealed class InventorySystem : ITickSystem
     private readonly IInventoryStore _store;
     private readonly IClock _clock;
     private readonly IPlayerProgressionStore? _progressions;
+    private readonly ShopContent? _shops;
+    private readonly List<ServiceOpened> _shopOpenings = new();   // shop services opened since the last tick: answered with the priced stock
     private readonly Func<long> _newId;
     private readonly Dictionary<long, Holder> _holders = new();
     private readonly List<long> _jobChanged = new();   // players whose job changed since the last tick: worn gear their new job cannot use comes off (row 219)
@@ -58,9 +67,10 @@ public sealed class InventorySystem : ITickSystem
     private long _nowMs;
 
     /// <summary>Creates the inventory system for one instance; <paramref name="store"/> is shared by every instance, <paramref name="clock"/> times cooldowns.</summary>
-    public InventorySystem(InventoryContent content, IInventoryStore store, IClock clock, IPlayerProgressionStore? progressions = null)
+    public InventorySystem(InventoryContent content, IInventoryStore store, IClock clock, IPlayerProgressionStore? progressions = null, ShopContent? shops = null)
     {
         _progressions = progressions;
+        _shops = shops;
         _content = content ?? throw new ArgumentNullException(nameof(content));
         _rules = content.Rules;
         _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -94,6 +104,7 @@ public sealed class InventorySystem : ITickSystem
         _tick = context.TickNumber;
         _nowMs = context.SimTimeMs;
 
+        AnnounceShops(context);
         var intents = context.Intents;
         for (var i = 0; i < intents.Count; i++)
         {
@@ -107,6 +118,8 @@ public sealed class InventorySystem : ITickSystem
                 case DropItem drop: Drop(context, holder, drop.EntryId, drop.Quantity); break;
                 case InsertCard card: Socket(context, holder, card.EntryId, card.CardEntryId); break;
                 case RefineItem refine: TryRefine(context, holder, refine.EntryId); break;
+                case ShopBuy buy: BuyFromShop(context, holder, buy.ItemId, buy.Quantity); break;
+                case ShopSell sell: SellToShop(context, holder, sell.EntryId, sell.Quantity); break;
             }
         }
         UnequipForNewJob(context);
@@ -138,6 +151,10 @@ public sealed class InventorySystem : ITickSystem
         events.Subscribe<MoveRejected>(OnMoveRejected);
         events.Subscribe<DialogueItemsRequested>(e => _dialogueItems.Add(e));
         events.Subscribe<QuestItemsRequested>(e => _questItems.Add(e));
+        events.Subscribe<ServiceOpened>(e =>
+        {
+            if (e.ShopId is not null && string.Equals(e.Service, ServiceIds.Shop, StringComparison.Ordinal)) _shopOpenings.Add(e);
+        });
         foreach (var entity in _instance.Entities) Track(entity);
     }
 
@@ -488,6 +505,90 @@ public sealed class InventorySystem : ITickSystem
         _questItemsRunning.Clear();
     }
 
+    // ---- shops (T-603) -------------------------------------------------------------------------------------------------------------------
+
+    /// <summary>Answers each shop service opened since the last tick with its priced stock (a player who closed it or left meanwhile gets nothing).</summary>
+    private void AnnounceShops(TickContext context)
+    {
+        if (_shopOpenings.Count == 0) return;
+        foreach (var opened in _shopOpenings)
+        {
+            if (_shops is null || !_shops.TryGet(opened.ShopId!, out var shop)) continue;
+            if (!_instance!.TryGetEntity(opened.Player, out var player) || player.OpenShopId != opened.ShopId) continue;
+            context.Publish(new ShopOpened(opened.Player, opened.Npc, shop.Id, _shops.MaxBuyQuantity, shop.Stock, _shops.SellPrices));
+        }
+        _shopOpenings.Clear();
+    }
+
+    /// <summary>
+    /// The checks every shop intent starts with: the player is alive, has a shop service open (<c>service_required</c>) and its NPC is still within talking range
+    /// (<c>out_of_range</c>). Returns the reason, or null with the open shop.
+    /// </summary>
+    private string? OpenShop(Holder holder, out ShopContent.Shop? shop)
+    {
+        shop = null;
+        var player = holder.Entity;
+        if (player.Dead) return ItemReasons.Dead;
+        if (_shops is null || !string.Equals(player.OpenService, ServiceIds.Shop, StringComparison.Ordinal) || player.OpenShopId is null
+            || !_shops.TryGet(player.OpenShopId, out var open)) return ItemReasons.ServiceRequired;
+        if (player.OpenServiceNpc is not { } npcId || !_instance!.TryGetEntity(npcId, out var npc)
+            || GridDistance.Chebyshev(player.Cell, npc.Cell) > _shops.TalkRange) return ItemReasons.OutOfRange;
+        shop = open;
+        return null;
+    }
+
+    private void BuyFromShop(TickContext context, Holder holder, string itemId, int quantity)
+    {
+        var reason = BuyCheck(holder, itemId, quantity, out var total);
+        if (reason is null)
+        {
+            // Everything but the bag has passed; the add checks weight and room itself and changes nothing when it refuses, so the currency is touched only after it.
+            _delta.Clear();
+            reason = _rules.TryAdd(holder.State, itemId, quantity, holder.State.WeightLimit, _newId, _delta);
+            if (reason is null)
+            {
+                holder.State.Currency -= total;
+                Changed(context, holder, InventoryChanges.ShopBuy, itemId);
+                return;
+            }
+        }
+        Refuse(context, holder, MessageTypes.ShopBuy, reason, itemId: itemId);
+    }
+
+    /// <summary>A buy's checks that need no change: the session, the stock, the quantity, the total and the money. Null when they pass.</summary>
+    private string? BuyCheck(Holder holder, string itemId, int quantity, out long total)
+    {
+        total = 0;
+        var reason = OpenShop(holder, out var shop);
+        if (reason is not null) return reason;
+        if (!shop!.Prices.TryGetValue(itemId, out var price)) return ItemReasons.NotInStock;
+        if (quantity < 1) return ItemReasons.InvalidQuantity;
+        if (quantity > _shops!.MaxBuyQuantity) return ItemReasons.QuantityLimit;
+        if (!ShopRules.TryTotal(price, quantity, out total) || !ShopRules.CanAfford(holder.State.Currency, total)) return ItemReasons.CannotAfford;
+        return null;
+    }
+
+    private void SellToShop(TickContext context, Holder holder, long entryId, int quantity)
+    {
+        var state = holder.State;
+        var reason = OpenShop(holder, out _);
+        InventoryEntry? entry = null;
+        ItemDef? item = null;
+        var gain = 0L;
+        if (reason is null) reason = _rules.CanRemove(state, entryId, quantity, out entry);
+        if (reason is null && (!_content.TryGetItem(entry!.ItemId, out item) || item.Kind == ItemKind.Quest || item.SellPrice < 1)) reason = ItemReasons.NotSellable;
+        if (reason is null && (!ShopRules.TryTotal(item!.SellPrice, quantity, out gain) || !ShopRules.TryCredit(state.Currency, gain, out _))) reason = ItemReasons.CurrencyFull;
+        if (reason is not null)
+        {
+            Refuse(context, holder, MessageTypes.ShopSell, reason, entryId: entryId, itemId: entry?.ItemId);
+            return;
+        }
+        _delta.Clear();
+        _rules.TryRemove(state, entryId, quantity, _delta);   // checked above: this cannot refuse
+        state.Currency += gain;
+        Changed(context, holder, InventoryChanges.ShopSell, entry!.ItemId);
+    }
+
     private void StartPickup(TickContext context, Holder holder, EntityId targetId)
     {
         var player = holder.Entity;
@@ -659,8 +760,8 @@ public sealed class InventorySystem : ITickSystem
         _delta.Clear();
     }
 
-    private void Refuse(TickContext context, Holder holder, string intent, string reason, long? target = null, long? entryId = null, string? slot = null) =>
-        context.Publish(new ItemRefused(holder.Entity.Id, intent, reason, target, entryId, slot));
+    private void Refuse(TickContext context, Holder holder, string intent, string reason, long? target = null, long? entryId = null, string? slot = null, string? itemId = null) =>
+        context.Publish(new ItemRefused(holder.Entity.Id, intent, reason, target, entryId, slot, itemId));
 
     private sealed class Holder(Entity entity, InventoryState state)
     {

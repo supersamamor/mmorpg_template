@@ -1,5 +1,6 @@
 using Game.Server.Events;
 using Game.Shared.Items;
+using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
 using Game.Shared.World;
 
@@ -61,10 +62,20 @@ public sealed record ItemRefined(EntityId Player, long EntryId, string ItemId, s
 /// <c>ItemRefused</c>: the inventory refused <c>Intent</c> (a <c>MessageTypes</c> item intent: <c>pick_up</c>, <c>use_item</c>, ...) for an
 /// <see cref="ItemReasons"/> term; nothing changed. <c>Target</c> (pick-up), <c>EntryId</c> and <c>Slot</c> say what it was about.
 /// </summary>
-public sealed record ItemRefused(EntityId Player, string Intent, string Reason, long? Target = null, long? EntryId = null, string? Slot = null) : IGameEvent
+public sealed record ItemRefused(EntityId Player, string Intent, string Reason, long? Target = null, long? EntryId = null, string? Slot = null, string? ItemId = null) : IGameEvent
 {
     /// <inheritdoc />
     public string Name => EventNames.ItemRefused;
+}
+
+/// <summary>
+/// <c>ShopOpened</c> (T-603): the <c>shop</c> service of the NPC entity <c>Npc</c> opened shop <c>ShopId</c> for <c>Player</c>; <c>Stock</c> is what it sells with the prices it sells at
+/// <c>Sell</c> what it pays per unit for each item it buys, and <c>MaxQuantity</c> the most one buy may ask for. The owner is sent exactly this as the <c>shop</c> message.
+/// </summary>
+public sealed record ShopOpened(EntityId Player, EntityId Npc, string ShopId, int MaxQuantity, IReadOnlyList<ShopStockRecord> Stock, IReadOnlyList<ShopStockRecord> Sell) : IGameEvent
+{
+    /// <inheritdoc />
+    public string Name => EventNames.ShopOpened;
 }
 
 /// <summary>

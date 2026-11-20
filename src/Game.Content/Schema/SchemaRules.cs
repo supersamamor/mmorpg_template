@@ -41,6 +41,7 @@ internal static class SchemaRules
         ("DropTableId", IdPrefixes.Drop),
         ("ExpTableId", IdPrefixes.Exp),
         ("DialogueId", IdPrefixes.Dialogue),
+        ("ShopId", IdPrefixes.Shop),
         ("MonsterId", IdPrefixes.Monster),
         ("StatusId", IdPrefixes.Status),
         ("SkillId", IdPrefixes.Skill),

@@ -78,6 +78,15 @@ namespace Game.Shared.Protocol
         /// <summary><c>dialogue_close</c> (T-601, client to server): end the dialogue and any service it opened.</summary>
         public const string DialogueClose = "dialogue_close";
 
+        /// <summary><c>shop_buy</c> (T-603, client to server): buy units of an item from the open shop. The price is the server's, never the client's.</summary>
+        public const string ShopBuy = "shop_buy";
+
+        /// <summary><c>shop_sell</c> (T-603, client to server): sell units of a carried inventory entry to the open shop.</summary>
+        public const string ShopSell = "shop_sell";
+
+        /// <summary><c>shop</c> (T-603, server to client, owner only): the stock and prices of the shop that just opened.</summary>
+        public const string Shop = "shop";
+
         /// <summary><c>abandon_quest</c> (client → server, T-602): drop an active quest; its progress is gone and nothing comes back.</summary>
         public const string AbandonQuest = "abandon_quest";
 
@@ -148,10 +157,10 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, QuestLog, Quest, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);
