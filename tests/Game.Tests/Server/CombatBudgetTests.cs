@@ -26,6 +26,7 @@ public class CombatBudgetTests(ITestOutputHelper output)
         public double MaxMicros;
         public long Bytes;
         public long MaxBytes;
+        public int AllocatingTicks;
 
         public ITickSystem Inner => inner;
 
@@ -45,6 +46,7 @@ public class CombatBudgetTests(ITestOutputHelper output)
             MaxMicros = Math.Max(MaxMicros, micros);
             Bytes += bytes;
             MaxBytes = Math.Max(MaxBytes, bytes);
+            if (bytes > 0) AllocatingTicks++;
         }
     }
 
@@ -153,7 +155,12 @@ public class CombatBudgetTests(ITestOutputHelper output)
         output.WriteLine($"regeneration of {entities.Count} hurt entities: combat {combat.Micros / ticks:0.0} us/tick (max {combat.MaxMicros:0} us), " +
                          $"{combat.Bytes} B over {ticks} ticks (max {combat.MaxBytes} B per tick)");
         hp.ShouldBeInRange(25, 27);   // it really regenerated: 1 HP/s for the 25 s since it was hurt
-        combat.MaxBytes.ShouldBe(0);
+        // The counter is this thread's allocations, so other threads cannot add to it, but the runtime can: the JIT tiering up a method, a GC-triggered
+        // finalizer or the thread pool's bookkeeping may allocate on the calling thread once in a while, and under load that lands in a few ticks of the
+        // 200. Regeneration runs every tick for all 400 entities, so a real allocation in it shows in every tick (or at least every 10th).
+        // A handful of ticks (2.5 %) may carry noise; more than that, or a large allocation in any tick, is the code's.
+        combat.AllocatingTicks.ShouldBeLessThanOrEqualTo(ticks / 40, $"ticks that allocated: {combat.AllocatingTicks} of {ticks}, {combat.Bytes} B in all");
+        combat.MaxBytes.ShouldBeLessThan(2048, "a stray runtime allocation is small; regenerating 400 entities would allocate far more");
     }
 
     [Fact]

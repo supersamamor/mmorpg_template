@@ -1,5 +1,6 @@
 using System.Text;
 using Game.Client.Core;
+using Game.Shared.Vocabulary;
 using Godot;
 
 namespace Game.Client.Scene;
@@ -36,6 +37,7 @@ public sealed class StatsPanel
     private readonly List<string> _ids = new();
     private readonly StringBuilder _text = new();
     private int _shownVersion = -1;
+    private bool _samples;
     private float _target = 48;
     private float _raiseWidth;   // the + button width in canvas units (rows are made after the metrics were applied)
     private Vector2 _safeSize;
@@ -147,6 +149,11 @@ public sealed class StatsPanel
     {
         if (!_center.Visible) return;
         if (_center.Size != _safeSize) _center.Size = _safeSize;
+        if (_samples)
+        {
+            DrawSamples();
+            return;
+        }
         var book = _session.Stats;
         if (_shownVersion == book.Version) return;
         _shownVersion = book.Version;
@@ -167,6 +174,42 @@ public sealed class StatsPanel
 
         _text.Clear();
         foreach (var d in book.Derived) _text.Append(_text.Length == 0 ? string.Empty : "   ").Append(UiText.DerivedLine(d.Stat, d.Value));
+        _derived.Text = _text.ToString();
+    }
+
+    /// <summary>Fills the panel with the longest numbers it can show (and opens it), so a layout check sees the worst case; <see cref="ClearSamples"/> ends it (T-406).</summary>
+    public void ShowSamples()
+    {
+        _samples = true;
+        _center.Visible = true;
+        _shownVersion = -1;
+        Refresh();
+    }
+
+    /// <summary>Ends <see cref="ShowSamples"/> and closes the panel.</summary>
+    public void ClearSamples()
+    {
+        _samples = false;
+        SetOpen(false);
+    }
+
+    private void DrawSamples()
+    {
+        _points.Text = UiText.StatPoints(999_999);
+        var stats = new[] { PrimaryStats.Str, PrimaryStats.Agi, PrimaryStats.Vit, PrimaryStats.Int, PrimaryStats.Dex, PrimaryStats.Luk };
+        _ids.Clear();
+        for (var i = 0; i < stats.Length; i++)
+        {
+            Row(i);
+            _labels[i].Text = UiText.StatLine(stats[i], 99);
+            _raise[i].Text = UiText.RaiseButton(999);
+            _raise[i].Disabled = false;
+            _labels[i].Visible = _raise[i].Visible = true;
+            _ids.Add(stats[i]);
+        }
+        for (var i = stats.Length; i < _raise.Count; i++) _labels[i].Visible = _raise[i].Visible = false;
+        _text.Clear();
+        foreach (var d in DerivedStats.Panel.Ordered) _text.Append(_text.Length == 0 ? string.Empty : "   ").Append(UiText.DerivedLine(d, 999_999));
         _derived.Text = _text.ToString();
     }
 

@@ -159,7 +159,11 @@ public class ToonLookTests
         var outline = File.ReadAllText(Path.Combine(render, "outline.tres"));
         outline.ShouldContain("outline_color = Color(0.165, 0.133, 0.125, 1)", customMessage: "warm (red above blue), not pure black (ADR-003 point 2)");
         foreach (var map in Directory.GetFiles(Path.Combine(Themes, "default", "maps"), "*.tscn").Where(f => !f.Contains(".authoring.", StringComparison.Ordinal)))
-            File.ReadAllText(map).ShouldContain("render/toon_light.gdshaderinc", customMessage: map + ": terrain uses the same ramp");
+        {
+            var text = File.ReadAllText(map);
+            text.ShouldContain("../render/toon_light.gdshaderinc", customMessage: map + ": terrain uses the same ramp, found from the theme's own render folder");
+            text.ShouldNotContain("res://themes/default/render", customMessage: map + ": no absolute path, so another theme can supply its own light (T-406)");
+        }
     }
 
     // ---- placeholders: proportions and colours (themegen) ----

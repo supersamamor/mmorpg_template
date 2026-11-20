@@ -886,7 +886,11 @@ entity kind (`player`, `monster`, `npc`, `item`), then `fallbacks.missing` (a vi
 whose content names no model uses the kind stand-in silently. `fallbacks` is a table like `audio`, not an asset key.
 
 **Generated placeholder pack** (ADR-002 row 31): `themes/default` holds one real file per manifest key, written by `dotnet run --project tools/themegen` (`-- --check` verifies).
-Models are low-poly rigs (five shared rigs) with LOD0 and LOD1 and one material coloured from the key; icons are 64x64 PNG, sounds one silent OGG, effects an empty `.tscn`. Map scenes are not generated: they are authored (§5.3).
+Models are low-poly rigs (five shared rigs) with LOD0 and LOD1 and one material; icons are 64x64 PNG, sounds one silent OGG, effects an empty `.tscn`. Map scenes are not generated: they are authored (§5.3).
+**Colours** (T-222, ADR-003 point 4): with a `palette.json` in the theme, the model's colours are **vertex colours** taken from the palette (a job's or a creature's identity colours;
+gear and other creatures pick two palette colours by a hash of the key) and the material's base colour is white, so the toon material (§7.9) multiplies them and a dressed
+character's pieces bake into one surface. Icons and portraits are still a flat colour taken from the key's hash (`KeyColor`). Without a `palette.json` the old behaviour stands: one material
+tinted with the colour of the key. The generator also writes the second theme with every hue turned, so a swap is visible. A theme's own art follows its palette file; the game never reads it.
 `themes/test` is a partial theme (three models in other colours) used by tests.
 
 Rig names are theme-internal; the validator checks that a model, its animation library and its

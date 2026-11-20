@@ -1199,11 +1199,23 @@ public sealed class AutoRun
         }
         async Task Without(string what, Action<bool> show)
         {
-            var with = await Sample();
-            show(false);
-            var without = await Sample();
-            show(true);
-            Print($"measure: breakdown {what}: 3D {with.Opaque - without.Opaque:0.0}, shadow {with.Shadow - without.Shadow:0.0}, canvas {with.Canvas - without.Canvas:0.0} (on screen {CountOnScreen()})");
+            // Three with/without pairs and the median of each pass (T-406): one HUD run once read 61 canvas draws where the others read 32 to 34, because a single pair
+            // can catch a frame with a transient (a floating number, an icon appearing) on one side only.
+            var opaque = new List<double>();
+            var shadow = new List<double>();
+            var canvas = new List<double>();
+            for (var pair = 0; pair < 3; pair++)
+            {
+                var with = await Sample();
+                show(false);
+                var without = await Sample();
+                show(true);
+                opaque.Add(with.Opaque - without.Opaque);
+                shadow.Add(with.Shadow - without.Shadow);
+                canvas.Add(with.Canvas - without.Canvas);
+            }
+            double Median(List<double> values) { values.Sort(); return values[values.Count / 2]; }
+            Print($"measure: breakdown {what}: 3D {Median(opaque):0.0}, shadow {Median(shadow):0.0}, canvas {Median(canvas):0.0} (median of 3; canvas samples {string.Join(", ", canvas.Select(c => c.ToString("0.0")))}; on screen {CountOnScreen()})");
         }
         var entities = new List<Node3D>();
         foreach (var e in World.Entities)
@@ -1760,8 +1772,15 @@ public sealed class AutoRun
     private async Task UntilAsync(Func<bool> condition, double seconds, string what)
     {
         var clock = Stopwatch.StartNew();
+        var nextReport = 15.0;
         while (!condition())
         {
+            // A slow wait says where it is (T-406: a measuring client once sat in Reconnecting on a loaded machine and nothing in the log said so).
+            if (seconds > nextReport && clock.Elapsed.TotalSeconds > nextReport)
+            {
+                Print($"still waiting for {what} after {nextReport:0} s: phase {Session.Connection.Phase}, notice {Session.Connection.Notice}, {World.Entities.Count} entities in view");
+                nextReport += 15;
+            }
             if (clock.Elapsed.TotalSeconds > seconds) throw new TimeoutException($"timed out after {seconds} s waiting for {what}; phase {Session.Connection.Phase}, notice {Session.Connection.Notice}");
             await FrameAsync();
         }

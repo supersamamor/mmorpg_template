@@ -142,19 +142,30 @@ public class TickWaiterTests
         using var waiter = TickWaiter.Create(allowPrecise: true);
         if (!waiter.Precise) return;   // not Windows (or no high-resolution timer): the runner keeps the ordinary wait
 
-        var late = new List<double>();
+        // "Never early" is exact and is checked on every wait of every attempt. "Close to the due time" depends on the OS giving this thread the CPU back
+        // promptly, which a loaded machine does not (T-406: a busy suite or a Godot run next to it pushed the median past 2 ms). So the precision is judged
+        // over up to five 30-tick attempts and one good attempt proves it: an ordinary 15.6 ms timer never produces a median under 2 ms (it is late by a
+        // uniform 0..15 ms), while the precise waiter does whenever the machine is not saturated for a whole 3 s attempt.
+        var medians = new List<double>();
         var due = Stopwatch.GetTimestamp();
-        for (var i = 0; i < 30; i++)
+        for (var attempt = 0; attempt < 5; attempt++)
         {
-            due += Stopwatch.Frequency / 10;   // 100 ms apart, like ticks
-            waiter.WaitUntil(due, CancellationToken.None).ShouldBeTrue();
-            var lateMs = Stopwatch.GetElapsedTime(due).TotalMilliseconds;
-            lateMs.ShouldBeGreaterThanOrEqualTo(0);
-            late.Add(lateMs);
+            var late = new List<double>();
+            for (var i = 0; i < 30; i++)
+            {
+                due += Stopwatch.Frequency / 10;   // 100 ms apart, like ticks
+                waiter.WaitUntil(due, CancellationToken.None).ShouldBeTrue();
+                var lateMs = Stopwatch.GetElapsedTime(due).TotalMilliseconds;
+                lateMs.ShouldBeGreaterThanOrEqualTo(0);
+                late.Add(lateMs);
+            }
+
+            late.Sort();
+            medians.Add(late[late.Count / 2]);
+            if (medians[^1] < 2.0) return;
         }
 
-        late.Sort();
-        late[late.Count / 2].ShouldBeLessThan(2.0);   // the ordinary wait is up to ~15 ms late on Windows
+        medians.Min().ShouldBeLessThan(2.0, $"median lateness of five attempts: {string.Join(", ", medians.Select(m => m.ToString("0.0")))} ms");
     }
 
     [Fact]

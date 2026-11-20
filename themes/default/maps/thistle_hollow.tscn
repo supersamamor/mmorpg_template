@@ -5,7 +5,7 @@ size = Vector3(20, 1, 14)
 
 [sub_resource type="Shader" id="checker"]
 code = "shader_type spatial;
-#include \"res://themes/default/render/toon_light.gdshaderinc\"
+#include \"../render/toon_light.gdshaderinc\"
 uniform vec3 a : source_color = vec3(0.5, 0.69, 0.36);
 uniform vec3 b : source_color = vec3(0.47, 0.65, 0.34);
 varying vec3 world;
