@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=../../schemas/drop_table.schema.json
+id: drop.thistle_burr
+name: Thistle Burr drops
+entries:
+  - { item_id: item.thistle_down, chance: 0.6, min: 1, max: 2 }
+  - { item_id: item.padded_vest, chance: 0.06 }

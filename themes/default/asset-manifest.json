@@ -113,6 +113,9 @@
   "icon.item.warden_token": {
     "file": "icons/item/warden_token.png"
   },
+  "icon.item.thistle_down": {
+    "file": "icons/item/thistle_down.png"
+  },
   "icon.item.wasp_stinger": {
     "file": "icons/item/wasp_stinger.png"
   },
@@ -283,6 +286,16 @@
     "file": "models/equip/wooden_buckler.glb",
     "attach": "hand_l"
   },
+  "model.monster.dewhare": {
+    "file": "models/monster/dewhare.glb",
+    "rig": "quadruped",
+    "anims": "anim.quadruped"
+  },
+  "model.monster.duskwing_moth": {
+    "file": "models/monster/duskwing_moth.glb",
+    "rig": "insect",
+    "anims": "anim.insect"
+  },
   "model.monster.gel_slime": {
     "file": "models/monster/gel_slime.glb",
     "rig": "blob",
@@ -302,6 +315,11 @@
     "file": "models/monster/sting_wasp.glb",
     "rig": "insect",
     "anims": "anim.insect"
+  },
+  "model.monster.thistle_burr": {
+    "file": "models/monster/thistle_burr.glb",
+    "rig": "sprout",
+    "anims": "anim.sprout"
   },
   "model.monster.thornback_boar": {
     "file": "models/monster/thornback_boar.glb",

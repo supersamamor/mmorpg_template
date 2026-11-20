@@ -4,18 +4,40 @@
   "width": 20,
   "height": 14,
   "cells": "AgICAgICAgICAgICAgICAgICAgICAQEBAQEBAQEBAQEBAQEBAQEBAgIBAQEBAQEBAQEBAQEBAQEBAQECAgEBAQICAQEBAQEBAQEBAQEBAQICAQEBAgIBAQEBAQEBAQEBAQEBAgIBAQEBAQEBAQEBAQEBAQEBAQECAgEBAQEBAQEBAQEBAQEBAQEBAQICAQEBAQEBAQEBAQEBAQEBAQEBAgIBAQEBAQEBAQEBAQEBAQEBAQECAgEBAQEBAQEBAQEBAQAAAAEBAQICAQEBAQEBAQEBAQEBAAAAAQEBAgIBAQEBAQEBAQEBAQEBAQEBAQECAgEBAQEBAQEBAQEBAQEBAQEBAQICAgICAgICAgICAgICAgICAgICAg==",
-  "source_scene_hash": "29be0d361b323ed7653f3a6274c78ede26fd615a74d5bea88c0a70fb0f4af261",
+  "source_scene_hash": "e2efb932b49fdbafd2c64c722292358fcb1e13e04467059e25bb9cf4f4a3a792",
   "spawns": [
     {
-      "monster_id": "monster.gel_slime",
+      "monster_id": "monster.dewhare",
       "area": {
-        "x": 8,
-        "y": 3,
-        "w": 9,
-        "h": 8
+        "x": 12,
+        "y": 2,
+        "w": 6,
+        "h": 7
+      },
+      "count": 3,
+      "respawn_seconds": 15
+    },
+    {
+      "monster_id": "monster.duskwing_moth",
+      "area": {
+        "x": 9,
+        "y": 7,
+        "w": 8,
+        "h": 5
+      },
+      "count": 3,
+      "respawn_seconds": 20
+    },
+    {
+      "monster_id": "monster.thistle_burr",
+      "area": {
+        "x": 6,
+        "y": 1,
+        "w": 7,
+        "h": 6
       },
       "count": 4,
-      "respawn_seconds": 10
+      "respawn_seconds": 15
     }
   ],
   "warps": [

@@ -12,14 +12,32 @@ metadata/map_slope_limit_degrees = 40.0
 
 [node name="Markers" type="Node3D" parent="."]
 
-[node name="Spawn_gel_slime" type="Marker3D" parent="Markers"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, 0, 3.5)
+[node name="Spawn_thistle_burr" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.5, 0, 1.5)
 metadata/map_marker = "spawn"
-metadata/map_monster_id = "monster.gel_slime"
-metadata/map_w = 9
-metadata/map_h = 8
+metadata/map_monster_id = "monster.thistle_burr"
+metadata/map_w = 7
+metadata/map_h = 6
 metadata/map_count = 4
-metadata/map_respawn_seconds = 10.0
+metadata/map_respawn_seconds = 15.0
+
+[node name="Spawn_dewhare" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.5, 0, 2.5)
+metadata/map_marker = "spawn"
+metadata/map_monster_id = "monster.dewhare"
+metadata/map_w = 6
+metadata/map_h = 7
+metadata/map_count = 3
+metadata/map_respawn_seconds = 15.0
+
+[node name="Spawn_duskwing_moth" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9.5, 0, 7.5)
+metadata/map_marker = "spawn"
+metadata/map_monster_id = "monster.duskwing_moth"
+metadata/map_w = 8
+metadata/map_h = 5
+metadata/map_count = 3
+metadata/map_respawn_seconds = 20.0
 
 [node name="Warp_starter_meadow" type="Marker3D" parent="Markers"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.5, 0, 7.5)

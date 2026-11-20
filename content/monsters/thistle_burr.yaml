@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../schemas/monster.schema.json
+id: monster.thistle_burr
+name: Thistle Burr
+level: 8
+race: plant
+size: medium
+element: earth
+stats: { str: 14, agi: 2, vit: 22, int: 2, dex: 8, luk: 3, max_hp: 315, atk: 16, def: 12, mdef: 4, move_speed: 1.5 }
+attack_range: 1
+base_exp: 1000
+job_exp: 650
+drop_table_ids: [drop.thistle_burr, drop.tier2_supplies]
+ai:
+  aggressive: false
+  aggro_range: 0
+  chase_range: 8
+model_asset_key: model.monster.thistle_burr
+sounds:
+  hit: sfx.monster.hit.generic
+  die: sfx.monster.die.generic
