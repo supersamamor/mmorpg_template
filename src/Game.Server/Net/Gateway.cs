@@ -109,6 +109,7 @@ public sealed class Gateway
     private readonly ConcurrentDictionary<ClientSession, byte> _sessions = new();
     private readonly object _linkLock = new();
     private readonly ConcurrentDictionary<EntityId, CharacterLink> _links = new();
+    private readonly ConcurrentDictionary<EntityId, IReadOnlyList<DerivedRecord>> _lastDerived = new();
     private int _joining;   // logins accepted whose character is not linked yet (each holds a slot); under the link lock
     private readonly ResumeGuard _resumeGuard;
     private readonly CancellationTokenSource _stop = new();
@@ -156,6 +157,10 @@ public sealed class Gateway
             events.Subscribe<StatRaiseRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(MessageTypes.RaiseStat, e.Reason, null, Stat: e.Stat)));
             events.Subscribe<StatRaised>(e => PostStats(instance.MapId, e.Player));
             events.Subscribe<StatsReset>(e => PostStats(instance.MapId, e.Player));
+            var statusPosts = new StatusPosts();
+            events.Subscribe<StatusApplied>(e => OnStatusChanged(instance, e.Target, statusPosts));
+            events.Subscribe<StatusExpired>(e => OnStatusChanged(instance, e.Target, statusPosts));
+            events.Subscribe<StatusRemoved>(e => OnStatusChanged(instance, e.Target, statusPosts));
             events.Subscribe<SkillsReset>(e =>
             {
                 PostSkills(instance.MapId, e.Player);
@@ -469,6 +474,7 @@ public sealed class Gateway
     private void Release(CharacterLink link, string why)
     {
         _links.TryRemove(link.Character, out _);
+        _lastDerived.TryRemove(link.Character, out _);
         ReleaseUnlinked(link.Character);
         Log.Info($"[net] '{link.DisplayName}' ({link.Character}) leaves the world: {why}.");
     }
@@ -526,10 +532,41 @@ public sealed class Gateway
     }
 
     /// <summary>Tick thread of the player's instance (the only thread that touches its progression and sheet).</summary>
-    internal void PostStats(string mapId, EntityId player)
+    internal void PostStats(string mapId, EntityId player) => PostStats(mapId, player, onlyIfDerivedChanged: false);
+
+    private void PostStats(string mapId, EntityId player, bool onlyIfDerivedChanged)
     {
         if (Progress is null || Owner(player) is not { } session || !_world.TryGetInstance(mapId, out var instance) || !instance.TryGetEntity(player, out var entity)) return;
-        if (Progress.StatsFor(entity) is { } stats) session.Post(stats);
+        if (Progress.StatsFor(entity) is not { } stats) return;
+        // Every post records what the client was last told, so a status can tell whether it changed anything the client shows (T-406).
+        var previous = _lastDerived.TryGetValue(player, out var sent) ? sent : null;
+        _lastDerived[player] = stats.Derived;
+        if (onlyIfDerivedChanged && previous is not null && previous.SequenceEqual(stats.Derived)) return;
+        session.Post(stats);
+    }
+
+    /// <summary>
+    /// A status started, stacked, refreshed, ended or was removed on a player (T-406): re-posts the own <c>stats</c> when its derived stats now differ from
+    /// what the client was last sent, at most once per tick per player. Events are dispatched after every system has run (tick phase 4), so the sheet
+    /// already holds the status's modifiers (or has lost them); the tick number is the same for the whole dispatch.
+    /// </summary>
+    private void OnStatusChanged(MapInstance instance, EntityId player, StatusPosts posts)
+    {
+        if (Progress is null || !_links.ContainsKey(player)) return;
+        if (posts.Tick != instance.TickNumber)
+        {
+            posts.Tick = instance.TickNumber;
+            posts.Done.Clear();
+        }
+        if (!posts.Done.Add(player)) return;
+        PostStats(instance.MapId, player, onlyIfDerivedChanged: true);
+    }
+
+    /// <summary>The players already checked this tick on one instance (tick thread only).</summary>
+    private sealed class StatusPosts
+    {
+        public long Tick = -1;
+        public readonly HashSet<EntityId> Done = new();
     }
 
     private void OnProgressed(string mapId, PlayerProgressed e)
@@ -574,6 +611,7 @@ public sealed class Gateway
             // Removed by something other than the gateway: forget it, so its token stops working.
             if (_links.TryRemove(e.Entity, out var link))
             {
+                _lastDerived.TryRemove(e.Entity, out _);
                 Tokens.Revoke(e.Entity);
                 Log.Warn($"[net] '{link.DisplayName}' ({e.Entity}) left the world without the gateway; its token is revoked.");
             }
