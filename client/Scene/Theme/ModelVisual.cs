@@ -109,7 +109,7 @@ public sealed class ModelVisual : IEntityVisual
     public bool Ready => _ready;
 
     /// <summary>Which pool this belongs to: the model's file, or empty for the built-in marker.</summary>
-    public string PoolKey => _resolution.Path ?? string.Empty;
+    public string PoolKey => _resolution.PoolKey;
 
     /// <inheritdoc />
     public bool Animated => _player is not null;
@@ -126,7 +126,7 @@ public sealed class ModelVisual : IEntityVisual
     /// </summary>
     public void SetOutline(bool on)
     {
-        if (_toon?.Outline is null) on = false;
+        if (_toon?.Outline is null || _resolution.Asset is { OutlineOff: true }) on = false; // a variant may turn its outline off (T-224)
         if (on == _outlined) return;
         _outlined = on;
         ApplyOutline();
@@ -134,7 +134,7 @@ public sealed class ModelVisual : IEntityVisual
 
     private void ApplyOutline()
     {
-        var overlay = _outlined ? _toon?.Outline : null;
+        var overlay = _outlined ? _toon?.OutlineFor(_resolution.Asset?.OutlineColor) : null;
         if (_lod0 is not null) _lod0.MaterialOverlay = overlay;
         if (_lod1 is not null) _lod1.MaterialOverlay = overlay;
         for (var i = 0; i < _looseNodes.Count; i++)
@@ -145,10 +145,11 @@ public sealed class ModelVisual : IEntityVisual
     private void ApplyMaterials()
     {
         if (_toon is null) return;
-        if (_lod0?.Mesh is not BoxMesh) _toon.Apply(_lod0); // the built-in marker stays unshaded magenta
-        _toon.Apply(_lod1);
+        var tint = _resolution.Asset?.Tint; // a variant's colour (T-224): one more material per variant, never per instance
+        if (_lod0?.Mesh is not BoxMesh) _toon.Apply(_lod0, tint); // the built-in marker stays unshaded magenta
+        _toon.Apply(_lod1, tint);
         for (var i = 0; i < _looseNodes.Count; i++)
-            if (_looseNodes[i] is MeshInstance3D m) _toon.Apply(m);
+            if (_looseNodes[i] is MeshInstance3D m) _toon.Apply(m, tint);
         ApplyOutline();
     }
 
@@ -220,6 +221,7 @@ public sealed class ModelVisual : IEntityVisual
 
         var node = scene!.Instantiate<Node3D>();
         created++;
+        if (_resolution.Asset.Scale != 1) node.Scale = Vector3.One * (float)_resolution.Asset.Scale; // a variant's size (T-224); the root stays on the ground
         _content = node;
         Root.AddChild(node);
         _lod0 = node.FindChild(Lod0Name, true, false) as MeshInstance3D;

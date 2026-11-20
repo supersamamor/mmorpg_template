@@ -142,7 +142,7 @@ public sealed class ThemedEntities : IEntityVisualSource
     public IEntityVisual Acquire(string kind, string? displayKey)
     {
         var resolution = _catalog.ResolveModel(_bundle.ModelKeyOf(displayKey), kind);
-        var pooledKey = resolution.Path ?? string.Empty;
+        var pooledKey = resolution.PoolKey;
         ModelVisual visual;
         if (_pools.TryGetValue(pooledKey, out var pool) && pool.Count > 0)
         {
