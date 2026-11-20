@@ -64,7 +64,7 @@ public class BannedSymbolsTests : IDisposable
 
     private (int Exit, string Output) Run(string args)
     {
-        var info = new ProcessStartInfo("dotnet", args) { WorkingDirectory = _temp, RedirectStandardOutput = true, RedirectStandardError = true };
+        var info = new ProcessStartInfo("dotnet", args) { WorkingDirectory = _temp, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
         info.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         info.Environment["MSBUILDDISABLENODEREUSE"] = "1";
         info.Environment["DOTNET_CLI_USE_MSBUILD_SERVER"] = "0";

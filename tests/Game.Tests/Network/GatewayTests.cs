@@ -456,7 +456,10 @@ public class GatewayTests
     [Fact]
     public async Task A_reader_that_stays_behind_is_disconnected()
     {
-        await using var rig = await GatewayRig.StartAsync(o => o with { SendQueueMessages = 2, ResyncBelowMessages = 0 });
+        // The queue must hold a whole join: welcome, snapshot, inventory, skills, stats and quest log reach a new session in one burst, and a control message that
+        // finds the queue at twice its size ends the session as too_slow. With SendQueueMessages = 2 (as this test once had) the join itself raced the send loop and,
+        // when the machine was busy, lost: the first snapshot never came. A roomier queue is filled on purpose by the walker instead.
+        await using var rig = await GatewayRig.StartAsync(o => o with { SendQueueMessages = 8, ResyncBelowMessages = 0 });
         var slow = await rig.JoinAsync("slow");
         var walker = await rig.JoinAsync("walker");
         var session = rig.SessionOf(slow.Id);
@@ -464,7 +467,14 @@ public class GatewayTests
         await slow.WaitForAsync<DeltaMessage>(d => d.Appeared.Any(e => e.Id == walker.Id));
 
         session.SendGate.Reset();
-        await walker.SendAsync(new MoveMessage(rig.NearStart((4, 0), (-4, 0), (0, 4))));
+        var far = rig.NearStart((4, 0), (-4, 0), (0, 4));
+        var near = rig.NearStart((1, 0), (-1, 0), (0, 1));
+        for (var leg = 0; leg < 8 && !session.Queue.Resyncing; leg++)   // every cell the walker reaches is a delta for the reader that no longer reads
+        {
+            var target = leg % 2 == 0 ? far : near;
+            await walker.SendAsync(new MoveMessage(target));
+            await Poll.UntilAsync(() => (walker.Seen(walker.Id), session.Queue.Resyncing), t => t.Resyncing || t.Item1 is { Next: null } r && r.Cell.Equals(target), "the walker's leg");
+        }
         await Poll.UntilAsync(() => session.Queue.Resyncing, r => r, "resync");
         rig.Clock.Advance(rig.Gateway.Options.SlowClientTimeoutMs);
         await Poll.UntilAsync(() => session.ByeReason, r => r == ByeReasons.TooSlow, "too_slow");
