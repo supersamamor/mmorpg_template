@@ -318,8 +318,10 @@ public sealed class DialogueSystem : ITickSystem
                     break;
                 case OpenServiceAction service:
                     session.Player.OpenService = service.Service;
+                    session.Player.OpenShopId = service.ShopId;
+                    session.Player.OpenServiceNpc = session.Npc;
                     session.Service = service.Service;
-                    _context!.Publish(new ServiceOpened(session.Player.Id, session.Npc, service.Service));
+                    _context!.Publish(new ServiceOpened(session.Player.Id, session.Npc, service.Service, service.ShopId));
                     break;
             }
         }
@@ -377,7 +379,9 @@ public sealed class DialogueSystem : ITickSystem
     private void End(long playerId, string reason)
     {
         if (!_sessions.Remove(playerId, out var session)) return;
-        if (session.Player.OpenService is not null) session.Player.OpenService = null;
+        session.Player.OpenService = null;
+        session.Player.OpenShopId = null;
+        session.Player.OpenServiceNpc = null;
         _context!.Publish(new DialogueEnded(session.Player.Id, session.Npc, reason));
     }
 

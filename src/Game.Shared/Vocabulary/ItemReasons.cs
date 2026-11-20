@@ -82,6 +82,27 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>service_required</c> (T-601): <c>refine</c> works only while an NPC's refine service is open and in reach (<c>dialogue.refine_needs_service</c>).</summary>
         public const string ServiceRequired = "service_required";
 
+        /// <summary><c>out_of_range</c> (T-603): the shop's NPC is farther than <c>dialogue.talk_range</c> (or gone).</summary>
+        public const string OutOfRange = "out_of_range";
+
+        /// <summary><c>not_in_stock</c> (T-603): the open shop does not sell that item.</summary>
+        public const string NotInStock = "not_in_stock";
+
+        /// <summary><c>quantity_limit</c> (T-603): a <c>shop_buy</c> asks for more than <c>shop.max_buy_quantity</c>.</summary>
+        public const string QuantityLimit = "quantity_limit";
+
+        /// <summary><c>cannot_afford</c> (T-603): the character has less currency than the price (a total beyond the number range counts as unaffordable).</summary>
+        public const string CannotAfford = "cannot_afford";
+
+        /// <summary><c>not_sellable</c> (T-603): the item has no sell price (zero), or is a quest item.</summary>
+        public const string NotSellable = "not_sellable";
+
+        /// <summary><c>currency_full</c> (T-603): the sale would push the currency past the number range.</summary>
+        public const string CurrencyFull = "currency_full";
+
+        /// <summary><c>dead</c> (T-603): a dead character cannot trade.</summary>
+        public const string Dead = "dead";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             ItemGone,
@@ -108,7 +129,14 @@ namespace Game.Shared.Vocabulary
             ResetInCombat,
             ResetDead,
             NothingToReset,
-            ServiceRequired);
+            ServiceRequired,
+            OutOfRange,
+            NotInStock,
+            QuantityLimit,
+            CannotAfford,
+            NotSellable,
+            CurrencyFull,
+            Dead);
     }
 
     /// <summary>
@@ -163,8 +191,14 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>quest</c> (T-602): a quest step's turn-in took its consumed items and gave its item and currency rewards (one transaction).</summary>
         public const string Quest = "quest";
 
+        /// <summary><c>shop_buy</c> (T-603): items bought from a shop; the currency went down in the same change.</summary>
+        public const string ShopBuy = "shop_buy";
+
+        /// <summary><c>shop_sell</c> (T-603): items sold to a shop; the currency went up in the same change.</summary>
+        public const string ShopSell = "shop_sell";
+
         /// <summary>Every term in this category, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined, Exchanged, Quest);
+        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined, Exchanged, Quest, ShopBuy, ShopSell);
     }
 
     /// <summary>What a failed refine does to the equipment, per level of <c>refine.yaml</c> (<c>failure</c>; ARCHITECTURE §6.8). VOCABULARY.md: "Refine failures".</summary>

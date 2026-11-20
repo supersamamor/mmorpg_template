@@ -37,7 +37,7 @@ public static class ProtocolJson
         {
             var reader = new Utf8JsonReader(utf8, new JsonReaderOptions { MaxDepth = MaxClientDepth });
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ClientMessage>(ByeReasons.Malformed);
-            string? type = null, name = null, content = null, resume = null, slot = null, skill = null, job = null, stat = null, quest = null;
+            string? type = null, name = null, content = null, resume = null, slot = null, skill = null, job = null, stat = null, quest = null, itemId = null;
             int? version = null, quantity = null, level = null, amount = null, index = null;
             long? seq = null, target = null, entry = null, card = null;
             GridCell? cell = null;
@@ -62,6 +62,7 @@ public static class ProtocolJson
                     case "job": job = String(ref reader); break;
                     case "stat": stat = String(ref reader); break;
                     case "quest": quest = String(ref reader); break;
+                    case "item": itemId = String(ref reader); break;
                     case "amount": amount = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var am) ? am : throw Bad(); break;
                     case "index": index = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var ix) ? ix : throw Bad(); break;
                     case "level": level = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var lv) ? lv : throw Bad(); break;
@@ -97,6 +98,8 @@ public static class ProtocolJson
                 MessageTypes.DialogueChoice => index is { } picked ? new DialogueChoiceMessage(picked) : null,
                 MessageTypes.DialogueClose => new DialogueCloseMessage(),
                 MessageTypes.AbandonQuest => quest is { } dropped ? new AbandonQuestMessage(dropped) : null,
+                MessageTypes.ShopBuy => itemId is { } bought && quantity is { } units ? new ShopBuyMessage(bought, units) : null,
+                MessageTypes.ShopSell => entry is { } sold && quantity is { } amountSold ? new ShopSellMessage(sold, amountSold) : null,
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -187,6 +190,14 @@ public static class ProtocolJson
                 break;
             case AbandonQuestMessage abandon:
                 w.WriteString("quest", abandon.Quest);
+                break;
+            case ShopBuyMessage buy:
+                w.WriteString("item", buy.Item);
+                w.WriteNumber("quantity", buy.Quantity);
+                break;
+            case ShopSellMessage sell:
+                w.WriteNumber("entry", sell.Entry);
+                w.WriteNumber("quantity", sell.Quantity);
                 break;
         }
         w.WriteEndObject();
@@ -320,6 +331,7 @@ public static class ProtocolJson
                 if (rejected.Skill is not null) w.WriteString("skill", rejected.Skill);
                 if (rejected.Stat is not null) w.WriteString("stat", rejected.Stat);
                 if (rejected.Quest is not null) w.WriteString("quest", rejected.Quest);
+                if (rejected.Item is not null) w.WriteString("item", rejected.Item);
                 break;
             case AttackStoppedMessage stopped:
                 w.WriteNumber("target", stopped.Target);
@@ -406,6 +418,13 @@ public static class ProtocolJson
                 w.WriteString("service", opened.Service);
                 w.WriteNumber("npc", opened.Npc);
                 break;
+            case ShopMessage shop:
+                w.WriteNumber("npc", shop.Npc);
+                w.WriteString("shop", shop.Shop);
+                w.WriteNumber("max_quantity", shop.MaxQuantity);
+                WriteStock(w, "stock", shop.Stock);
+                WriteStock(w, "sell", shop.Sell);
+                break;
             case QuestLogMessage log:
                 w.WriteStartArray("active");
                 foreach (var e in log.Active) WriteQuestEntry(w, e);
@@ -482,6 +501,9 @@ public static class ProtocolJson
             List<DialogueChoiceRecord>? choices = null;
             string? quest = null, change = null;
             long currency = 0;
+            string? shopId = null;
+            int maxQuantity = 0;
+            List<ShopStockRecord>? shopStock = null, shopSell = null;
             List<QuestEntryRecord>? questsActive = null;
             QuestEntryRecord? questState = null;
             List<string>? completed = null, offer = null, turnIn = null;
@@ -555,6 +577,10 @@ public static class ProtocolJson
                     case "result": result = String(ref reader); break;
                     case "refine": refine = reader.GetInt32(); break;
                     case "currency": currency = reader.GetInt64(); break;
+                    case "shop": shopId = String(ref reader); break;
+                    case "max_quantity": maxQuantity = reader.GetInt32(); break;
+                    case "stock": shopStock = ReadStock(ref reader); break;
+                    case "sell": shopSell = ReadStock(ref reader); break;
                     case "quest": quest = String(ref reader); break;
                     case "change": change = String(ref reader); break;
                     case "state": questState = ReadQuestEntry(ref reader); break;
@@ -579,7 +605,7 @@ public static class ProtocolJson
                 MessageTypes.Welcome => map is null ? null : new WelcomeMessage(version, id, map, tickRate, content, token),
                 MessageTypes.Snapshot => map is null ? null : new SnapshotMessage(tick, map, id, entities, vitals),
                 MessageTypes.Delta => new DeltaMessage(tick, entities, changed, gone, hits, vitals, casts, castEnds),
-                MessageTypes.Rejected => intent is null || reason is null ? null : new RejectedMessage(intent, reason, cell, target, entry, slot, skill, stat, quest),
+                MessageTypes.Rejected => intent is null || reason is null ? null : new RejectedMessage(intent, reason, cell, target, entry, slot, skill, stat, quest, item),
                 MessageTypes.AttackStopped => target is null || reason is null ? null : new AttackStoppedMessage(target.Value, reason),
                 MessageTypes.Exp => baseLevel is null || jobLevel is null ? null : new ExpMessage(baseLevel.Value, baseExp, baseNext, jobLevel.Value, jobExp, jobNext),
                 MessageTypes.LevelUp => (baseLevel is null) == (jobLevel is null) ? null : new LevelUpMessage(baseLevel, jobLevel),
@@ -599,6 +625,8 @@ public static class ProtocolJson
                 MessageTypes.Dialogue => npc is null || speaker is null || text is null ? null : new DialogueMessage(npc.Value, speaker, portrait, text, (IReadOnlyList<DialogueChoiceRecord>?)choices ?? Array.Empty<DialogueChoiceRecord>(), more),
                 MessageTypes.DialogueEnded => reason is null ? null : new DialogueEndedMessage(reason),
                 MessageTypes.ServiceOpened => service is null || npc is null ? null : new ServiceOpenedMessage(service, npc.Value),
+                MessageTypes.Shop => npc is null || shopId is null ? null : new ShopMessage(npc.Value, shopId, maxQuantity, (IReadOnlyList<ShopStockRecord>?)shopStock ?? Array.Empty<ShopStockRecord>(),
+                    (IReadOnlyList<ShopStockRecord>?)shopSell ?? Array.Empty<ShopStockRecord>()),
                 MessageTypes.QuestLog => new QuestLogMessage((IReadOnlyList<QuestEntryRecord>?)questsActive ?? Array.Empty<QuestEntryRecord>(),
                     (IReadOnlyList<string>?)completed ?? Array.Empty<string>(), (IReadOnlyList<string>?)offer ?? Array.Empty<string>(), (IReadOnlyList<string>?)turnIn ?? Array.Empty<string>()),
                 MessageTypes.Quest => change is null || quest is null ? null : new QuestMessage(change, quest, questState),
@@ -824,6 +852,44 @@ public static class ProtocolJson
                 }
             }
             list.Add(new DialogueChoiceRecord(index ?? throw Bad(), text ?? throw Bad()));
+        }
+        return list;
+    }
+
+    private static void WriteStock(Utf8JsonWriter w, string name, IReadOnlyList<ShopStockRecord> rows)
+    {
+        w.WriteStartArray(name);
+        foreach (var row in rows)
+        {
+            w.WriteStartObject();
+            w.WriteString("item", row.Item);
+            w.WriteNumber("price", row.Price);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+    }
+
+    private static List<ShopStockRecord> ReadStock(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+        var list = new List<ShopStockRecord>();
+        while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+        {
+            if (reader.TokenType != JsonTokenType.StartObject) throw Bad();
+            string? item = null;
+            long? price = null;
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var key = reader.GetString();
+                reader.Read();
+                switch (key)
+                {
+                    case "item": item = String(ref reader); break;
+                    case "price": price = reader.GetInt64(); break;
+                    default: reader.Skip(); break;
+                }
+            }
+            list.Add(new ShopStockRecord(item ?? throw Bad(), price ?? throw Bad()));
         }
         return list;
     }

@@ -381,6 +381,17 @@
       },
       "additionalProperties": false,
       "description": "Quests (T-602, ARCHITECTURE §6.4)."
+    },
+    "shop": {
+      "type": "object",
+      "properties": {
+        "max_buy_quantity": {
+          "type": "integer",
+          "description": "Most units one shop_buy may ask for; more is refused quantity_limit. At least 1."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Shops (T-603, ARCHITECTURE §6.8)."
     }
   },
   "additionalProperties": false,

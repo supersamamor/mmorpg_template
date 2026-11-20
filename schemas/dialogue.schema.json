@@ -650,10 +650,18 @@
                           "service": {
                             "type": "string",
                             "description": "A ServiceIds term."
+                          },
+                          "shop_id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^shop\\.[a-z0-9_]+$",
+                            "description": "The shop to open (shop.*); required when Service is shop, not allowed otherwise (validated at load)."
                           }
                         },
                         "additionalProperties": false,
-                        "description": "open_service: opens an NPC service for the character; it stays open until the character walks out of talking range, warps, dies or closes it.",
+                        "description": "open_service: opens an NPC service for the character; it stays open until the character walks out of talking range, warps, dies or closes it. A service that needs data takes it from a field of this action (T-603: the shop service names its shop in ShopId; refine takes none).",
                         "required": [
                           "service"
                         ]

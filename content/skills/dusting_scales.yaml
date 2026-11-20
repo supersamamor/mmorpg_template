@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../schemas/skill.schema.json
+id: skill.dusting_scales
+name: Dusting Scales
+description: Monster skill. A beat of the wings that showers the target in scales and may stun it.
+max_level: 1
+target: { range: 1, ground: false, friendly: false }
+sp_cost: "0"
+cast_time_ms: "400"
+cooldown_ms: "6000"
+effects:
+  - type: damage
+    multiplier: "1.1"
+    element: wind
+  - type: apply_status
+    status_id: status.stun
+    chance: "0.25"
+    duration_ms: "1500"
+animation_id: attack
+vfx_asset_key: vfx.skill.sting
+sfx_asset_key: sfx.skill.slash

@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ShopDef",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^shop\\.[a-z0-9_]+$",
+      "description": "Shop id, e.g. shop.meadow_goods."
+    },
+    "name": {
+      "type": "string",
+      "description": "Editor-facing name."
+    },
+    "stock": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "item_id": {
+            "type": "string",
+            "pattern": "^item\\.[a-z0-9_]+$",
+            "description": "Item id (item.*)."
+          },
+          "price": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Price per unit in currency, above 0; overrides the item's buy_price in this shop. Left out: the item's buy_price (which must then be above 0)."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One item a shop sells.",
+        "required": [
+          "item_id"
+        ]
+      },
+      "description": "The items for sale, in the order the client lists them. At least one; no item twice."
+    }
+  },
+  "additionalProperties": false,
+  "description": "A shop (T-603): what an NPC's shop service sells. A dialogue opens it with an open_service action whose service is shop and whose shop_id names this definition. Players buy the items listed here, each at its Price (or, without one, the item's buy_price); players sell any carried item that has a sell_price to any shop, at that price (selling is not limited to the stock).",
+  "required": [
+    "id",
+    "name"
+  ]
+}

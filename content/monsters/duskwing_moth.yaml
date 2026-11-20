@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../schemas/monster.schema.json
+id: monster.duskwing_moth
+name: Duskwing Moth
+level: 12
+race: insect
+size: medium
+element: wind
+stats: { str: 12, agi: 16, vit: 12, int: 10, dex: 16, luk: 6, max_hp: 250, atk: 27, def: 6, mdef: 8, move_speed: 3 }
+attack_range: 1
+base_exp: 1700
+job_exp: 1105
+drop_table_ids: [drop.duskwing_moth, drop.tier3_supplies]
+ai:
+  aggressive: true
+  aggro_range: 6
+  chase_range: 12
+  skills:
+    - skill_id: skill.dusting_scales
+      level: 1
+      chance: 0.3
+model_asset_key: model.monster.duskwing_moth
+sounds:
+  aggro: sfx.monster.aggro.generic
+  die: sfx.monster.die.generic

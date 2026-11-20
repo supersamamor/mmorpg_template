@@ -883,6 +883,86 @@ public sealed class AutoRun
         Press(panel.CloseButton);
         await UntilAsync(() => !dialogue.Open && !panel.Open, 10, "Close ending the dialogue");
         Print("dialogue: walked up, talked, chose, saw the next nodes, finished, talked again, closed");
+        await ShopStepAsync();
+    }
+
+    /// <summary>
+    /// T-603: the merchant's shop end to end, on the real server. Talk to Brannoc (the server walks the character up), pick "Show me your wares", see the shop panel open with
+    /// the stock and the balance; sell the three starting Healing Draughts (the balance and the bag change), buy an Antidote with the proceeds (they change again), and close.
+    /// A new character has no currency, so the sale pays for the purchase: 3 x 12 = 36, less the Antidote's 30, leaves 6.
+    /// </summary>
+    private async Task ShopStepAsync()
+    {
+        var hud = _main.Hud!;
+        var shop = hud.Shop!;
+        var book = Session.Shop;
+        var bundle = _main.Bundle!;
+        var currency = bundle.CurrencyName;
+        Check(!shop.Open, "no shop panel before talking to the merchant");
+        EntityView? Merchant() => World.Entities.FirstOrDefault(e => e.Kind == EntityKinds.Npc && bundle.NameOf(e.DisplayKey) == "Brannoc");
+        await UntilAsync(() => Merchant() is not null, 10, "the merchant in view");
+        var merchant = Merchant()!;
+        await TapWorldAsync(new Vector3((float)merchant.X, 0.8f, (float)merchant.Z));
+        await UntilAsync(() => Session.Dialogue.Open, 20, "the merchant's dialogue");
+        Check(hud.Dialogue!.Text.StartsWith("Brannoc | Meadow Merchant | ", StringComparison.Ordinal), "the merchant greets the player by name and title");
+        var wares = Session.Dialogue.Choices.ToList().FindIndex(c => c.Text.Contains("wares", StringComparison.Ordinal));
+        Check(wares >= 0, "the greeting offers the wares");
+        Press(hud.Dialogue.ChoiceButtons[wares].Button);
+        await UntilAsync(() => book.Open && shop.Open, 15, "the shop panel opening");
+        await UntilAsync(() => !Session.Dialogue.Open && !hud.Dialogue.Open, 10, "the dialogue panel closing while the shop stays");
+        await FramesAsync(3);
+        Check(shop.Open && book.Stock.Count >= 10, $"the shop lists its stock ({book.Stock.Count} items)");
+        Check(shop.Rows.Count == book.Stock.Count, "one row per stock item on the Buy tab");
+        Check(shop.Text.StartsWith(UiText.ShopHeader(currency, Session.Inventory.Currency), StringComparison.Ordinal), $"the balance is shown ({shop.Text})");
+        Check(hud.FindProblems().Count == 0, "the open shop fits this screen with every touch target at least the minimum");
+        Check(hud.Blocks(shop.Rows[0].Button.GetGlobalRect().GetCenter()), "a touch on the shop never reaches the world");
+        Print($"shop: opened; {shop.Text}; {shop.Layout}");
+        await ShotAsync("-shop");
+
+        var poorBefore = Session.Inventory.Currency;
+        var antidote = book.Stock.First(s => bundle.NameOf(s.Item) == "Antidote");   // the cheap potion: a new character's sale pays for it
+        shop.Rows.First(r => r.Item == antidote.Item).Button.EmitSignal(BaseButton.SignalName.Pressed);
+        await FramesAsync(2);
+        Press(shop.Picker.Action);   // the balance is 0: the server refuses and the flash says why, the panel stays
+        await UntilAsync(() => Session.Ui.Flash == UiText.ItemRefused(ItemReasons.CannotAfford), 10, "the refusal for a purchase it cannot afford");
+        Check(shop.Open && Session.Inventory.Currency == poorBefore, "a refused purchase changes nothing and the panel stays");
+
+        // Sell the three Healing Draughts.
+        Press(shop.Tabs.Sell);
+        await FramesAsync(3);
+        var draughts = Session.Inventory.Entries.First(e => bundle.NameOf(e.Item) == "Healing Draught" && e.Slot is null);
+        var pays = book.SellPriceOf(draughts.Item) ?? 0;
+        var row = shop.Rows.First(r => r.Entry == draughts.Id);
+        Check(pays > 0 && row.Button.Text.Contains(pays.ToString(CultureInfo.InvariantCulture), StringComparison.Ordinal), $"the sell tab shows what the shop pays ({row.Button.Text})");
+        Press(row.Button);
+        await FramesAsync(2);
+        Press(shop.Picker.Most);
+        await FramesAsync(2);
+        Check(book.Quantity == draughts.Quantity, $"Max picks the whole stack ({book.Quantity})");
+        var rev = Session.Inventory.Rev;
+        Press(shop.Picker.Action);
+        await UntilAsync(() => Session.Inventory.Rev > rev, 10, "the sale's inventory change");
+        Check(Session.Inventory.Currency == pays * draughts.Quantity, $"the balance rose by the sale ({Session.Inventory.Currency})");
+        Check(Session.Inventory.Carried(draughts.Item) == 0, "and the draughts left the bag");
+        await FramesAsync(3);
+        Check(shop.Text.StartsWith(UiText.ShopHeader(currency, Session.Inventory.Currency), StringComparison.Ordinal), "the panel shows the new balance");
+
+        // Buy an Antidote with it.
+        Press(shop.Tabs.Buy);
+        await FramesAsync(3);
+        Press(shop.Rows.First(r => r.Item == antidote.Item).Button);
+        await FramesAsync(2);
+        var before = Session.Inventory.Currency;
+        rev = Session.Inventory.Rev;
+        Press(shop.Picker.Action);
+        await UntilAsync(() => Session.Inventory.Rev > rev, 10, "the purchase's inventory change");
+        Check(Session.Inventory.Currency == before - antidote.Price, $"the balance fell by the price ({Session.Inventory.Currency})");
+        Check(Session.Inventory.Carried(antidote.Item) == 1, "and the Antidote is in the bag");
+        Print($"shop: sold {draughts.Quantity} draughts, bought an antidote; balance {Session.Inventory.Currency}");
+
+        Press(shop.CloseButton);
+        await UntilAsync(() => !book.Open && !shop.Open, 10, "Close ending the shop");
+        Print("shop: talked to the merchant, opened the shop, was refused for lack of money, sold, bought, closed");
     }
 
     /// <summary>

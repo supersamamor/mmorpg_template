@@ -4,7 +4,7 @@ using Game.Shared.Definitions;
 namespace Game.Content.Validation.Rules;
 
 /// <summary>The kind of definition an id is expected to point at.</summary>
-internal enum RefKind { Job, Skill, Item, Monster, Status, Quest, Npc, Dialogue, Drop, Map, ExpTable }
+internal enum RefKind { Job, Skill, Item, Monster, Status, Quest, Npc, Dialogue, Shop, Drop, Map, ExpTable }
 
 /// <summary>An id used inside a definition. <see cref="Path"/> is in YAML key naming.</summary>
 internal readonly record struct IdRef(string Owner, string Path, string Id, RefKind Kind);
@@ -158,6 +158,10 @@ internal static class ContentWalker
             }
         }
 
+        foreach (var s in db.Shops.All)
+            for (var i = 0; i < s.Stock.Count; i++)
+                yield return new(s.Id, $"stock[{i}].item_id", s.Stock[i].ItemId, RefKind.Item);
+
         foreach (var n in db.Npcs.All)
             if (!string.IsNullOrEmpty(n.DialogueId)) yield return new(n.Id, "dialogue_id", n.DialogueId!, RefKind.Dialogue);
 
@@ -182,6 +186,7 @@ internal static class ContentWalker
                     for (var a = 0; a < choice.Actions.Count; a++)
                         switch (choice.Actions[a])
                         {
+                            case OpenServiceAction { ShopId: { Length: > 0 } shopId }: yield return new(d.Id, $"{p}.actions[{a}].shop_id", shopId, RefKind.Shop); break;
                             case StartQuestAction q: yield return new(d.Id, $"{p}.actions[{a}].quest_id", q.QuestId, RefKind.Quest); break;
                             case TakeItemAction t: yield return new(d.Id, $"{p}.actions[{a}].item_id", t.ItemId, RefKind.Item); break;
                             case GiveItemAction g: yield return new(d.Id, $"{p}.actions[{a}].item_id", g.ItemId, RefKind.Item); break;

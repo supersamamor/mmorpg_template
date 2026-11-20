@@ -27,6 +27,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>dialogue.</c>: Dialogue graph (<c>dialogue.guide_intro</c>).</summary>
         public const string Dialogue = "dialogue.";
 
+        /// <summary><c>shop.</c>: Shop (<c>shop.meadow_goods</c>), T-603.</summary>
+        public const string Shop = "shop.";
+
         /// <summary><c>map.</c>: Map (<c>map.starter_town</c>).</summary>
         public const string Map = "map.";
 
@@ -46,6 +49,7 @@ namespace Game.Shared.Vocabulary
             Quest,
             Npc,
             Dialogue,
+            Shop,
             Map,
             Drop,
             Exp);

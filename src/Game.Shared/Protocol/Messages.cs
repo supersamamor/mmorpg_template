@@ -121,6 +121,28 @@ namespace Game.Shared.Protocol
     }
 
     /// <summary>
+    /// <c>shop_buy</c> (T-603): buy <see cref="Quantity"/> units of <see cref="Item"/> from the shop opened by an <c>open_service</c> action, if the NPC is still in talking range.
+    /// The client names the item and the count only; the price is the server's. Comes back as <c>inventory_changed</c> (cause <c>shop_buy</c>, with the new currency) or
+    /// <see cref="RejectedMessage"/> with an "Item reasons" term (<c>service_required</c>, <c>out_of_range</c>, <c>not_in_stock</c>, <c>invalid_quantity</c>, <c>quantity_limit</c>,
+    /// <c>cannot_afford</c>, <c>inventory_full</c>, <c>too_heavy</c>, <c>dead</c>). <c>{"type":"shop_buy","item":"item.healing_draught","quantity":5}</c>.
+    /// </summary>
+    public sealed record ShopBuyMessage(string Item, int Quantity) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.ShopBuy;
+    }
+
+    /// <summary>
+    /// <c>shop_sell</c> (T-603): sell <see cref="Quantity"/> units of the carried inventory entry <see cref="Entry"/> to the open shop, at the item's sell price (server data). Refused with
+    /// an "Item reasons" term: the shop ones above plus <c>item_gone</c>, <c>item_equipped</c>, <c>not_sellable</c>, <c>currency_full</c>. <c>{"type":"shop_sell","entry":12,"quantity":3}</c>.
+    /// </summary>
+    public sealed record ShopSellMessage(long Entry, int Quantity) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.ShopSell;
+    }
+
+    /// <summary>
     /// <c>abandon_quest</c> (T-602): drop the active quest <see cref="Quest"/>: its progress is gone and nothing comes back. May come back
     /// <see cref="RejectedMessage"/> with a "Quest reasons" term (<c>not_active</c>). <c>{"type":"abandon_quest","quest":"quest.first_hunt"}</c>.
     /// </summary>
@@ -451,8 +473,9 @@ namespace Game.Shared.Protocol
     /// <param name="Skill">The skill (or, for <c>change_job</c>, the job) of a refused <c>use_skill</c>, <c>learn_skill</c> or <c>change_job</c>, if any.</param>
     /// <param name="Stat">The primary stat of a refused <c>raise_stat</c> (reason: a "Stat reasons" term), if any.</param>
     /// <param name="Quest">The quest of a refused start (<c>intent</c> <c>dialogue_choice</c>, the choice that asked for it) or <c>abandon_quest</c> (reason: a "Quest reasons" term), if any (T-602).</param>
+    /// <param name="Item">The item of a refused <c>shop_buy</c> (T-603), if any.</param>
     public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null, long? Entry = null, string? Slot = null, string? Skill = null, string? Stat = null,
-        string? Quest = null) : ServerMessage
+        string? Quest = null, string? Item = null) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Rejected;
@@ -650,6 +673,25 @@ namespace Game.Shared.Protocol
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.ServiceOpened;
+    }
+
+    /// <summary>One item and a price: what a shop sells it at (<c>stock</c>), or what it pays for it (<c>sell</c>).</summary>
+    public sealed record ShopStockRecord(string Item, long Price);
+
+    /// <summary>
+    /// <c>shop</c> (T-603, owner only): the shop an <c>open_service</c> action just opened (sent right after <c>service_opened</c>). The client lists <see cref="Stock"/> as its buy tab; what
+    /// it can sell is its own bag, priced by <see cref="Sell"/> (the display bundle holds no prices, ARCHITECTURE §5.4).
+    /// <c>{"type":"shop","npc":12,"shop":"shop.meadow_goods","max_quantity":99,"stock":[{"item":"item.healing_draught","price":40}],"sell":[{"item":"item.gel_glob","price":4}]}</c>.
+    /// </summary>
+    /// <param name="Npc">The NPC entity the shop belongs to.</param>
+    /// <param name="Shop">The shop id (<c>shop.*</c>).</param>
+    /// <param name="MaxQuantity">Most units one <c>shop_buy</c> may ask for (<c>shop.max_buy_quantity</c>).</param>
+    /// <param name="Stock">What it sells, in display order.</param>
+    /// <param name="Sell">What it pays per unit for every item it buys (any shop buys every item with a sell price except quest items), by item id.</param>
+    public sealed record ShopMessage(long Npc, string Shop, int MaxQuantity, IReadOnlyList<ShopStockRecord> Stock, IReadOnlyList<ShopStockRecord> Sell) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Shop;
     }
 
     /// <summary>

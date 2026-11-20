@@ -175,11 +175,12 @@ public sealed class Gateway
                     PostStats(instance.MapId, e.Player);   // gear changes the derived stats
             });
             events.Subscribe<ItemRefined>(e => Owner(e.Player)?.Post(OwnInventory.Message(e)));
-            events.Subscribe<ItemRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(e.Intent, e.Reason, null, e.Target, e.EntryId, e.Slot)));
+            events.Subscribe<ItemRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(e.Intent, e.Reason, null, e.Target, e.EntryId, e.Slot, Item: e.ItemId)));
             // Dialogue (T-601), owner only: the node the player is at, how it ended, a service that opened, and a refused talk or choice as rejected.
             events.Subscribe<DialogueShown>(e => Owner(e.Player)?.Post(new DialogueMessage(e.Npc.Value, e.Speaker, e.Portrait, e.Text, e.Choices, e.More)));
             events.Subscribe<DialogueEnded>(e => Owner(e.Player)?.Post(new DialogueEndedMessage(e.Reason)));
             events.Subscribe<ServiceOpened>(e => Owner(e.Player)?.Post(new ServiceOpenedMessage(e.Service, e.Npc.Value)));
+            events.Subscribe<ShopOpened>(e => Owner(e.Player)?.Post(new ShopMessage(e.Npc.Value, e.ShopId, e.MaxQuantity, e.Stock, e.Sell)));
             events.Subscribe<DialogueRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(e.Intent, e.Reason, null, e.Target)));
             // Quests (T-602), owner only: each change of one quest, a refused start or abandon as rejected, the whole log when the NPC markers change, and the
             // levels, points and skills a completed quest's rewards changed.

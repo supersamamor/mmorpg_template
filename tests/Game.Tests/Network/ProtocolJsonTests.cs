@@ -47,6 +47,8 @@ public class ProtocolJsonTests
         { "dialogue_choice", new DialogueChoiceMessage(2), """{"type":"dialogue_choice","index":2}""" },
         { "dialogue_close", new DialogueCloseMessage(), """{"type":"dialogue_close"}""" },
         { "abandon_quest", new AbandonQuestMessage("quest.first_hunt"), """{"type":"abandon_quest","quest":"quest.first_hunt"}""" },
+        { "shop_buy", new ShopBuyMessage("item.healing_draught", 5), """{"type":"shop_buy","item":"item.healing_draught","quantity":5}""" },
+        { "shop_sell", new ShopSellMessage(12, 3), """{"type":"shop_sell","entry":12,"quantity":3}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -121,6 +123,19 @@ public class ProtocolJsonTests
         },
         { "dialogue_ended", new DialogueEndedMessage(DialogueEndReasons.MovedAway), """{"type":"dialogue_ended","reason":"moved_away"}""" },
         { "service_opened", new ServiceOpenedMessage(ServiceIds.Refine, 12), """{"type":"service_opened","service":"refine","npc":12}""" },
+        {
+            "shop", new ShopMessage(12, "shop.meadow_goods", 99, [new ShopStockRecord("item.healing_draught", 40), new ShopStockRecord("item.bone_dirk", 100)], [new ShopStockRecord("item.gel_glob", 4)]),
+            """{"type":"shop","npc":12,"shop":"shop.meadow_goods","max_quantity":99,"stock":[{"item":"item.healing_draught","price":40},{"item":"item.bone_dirk","price":100}],"sell":[{"item":"item.gel_glob","price":4}]}"""
+        },
+        { "shop, empty", new ShopMessage(12, "shop.x", 1, [], []), """{"type":"shop","npc":12,"shop":"shop.x","max_quantity":1,"stock":[],"sell":[]}""" },
+        {
+            "rejected shop_buy", new RejectedMessage(MessageTypes.ShopBuy, ItemReasons.CannotAfford, null, Item: "item.healing_draught"),
+            """{"type":"rejected","intent":"shop_buy","reason":"cannot_afford","item":"item.healing_draught"}"""
+        },
+        {
+            "rejected shop_sell", new RejectedMessage(MessageTypes.ShopSell, ItemReasons.NotSellable, null, Entry: 12),
+            """{"type":"rejected","intent":"shop_sell","reason":"not_sellable","entry":12}"""
+        },
         {
             "stats", new StatsMessage(4, [new StatRecord("str", 3, 2), new StatRecord("luk", 99, 0)], [new DerivedRecord("atk", 12), new DerivedRecord("max_hp", 55)]),
             """{"type":"stats","points":4,"stats":[["str",3,2],["luk",99,0]],"derived":[["atk",12],["max_hp",55]]}"""
@@ -289,6 +304,11 @@ public class ProtocolJsonTests
     [InlineData("""{"type":"refine"}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"abandon_quest"}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"abandon_quest","quest":7}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"shop_buy","item":"item.healing_draught"}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"shop_buy","quantity":2}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"shop_buy","item":7,"quantity":2}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"shop_sell","entry":12}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"shop_sell","quantity":1}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"refine","entry":1.5}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"refine_result","entry":1,"item":"item.x","result":"success","refine":1}""", ByeReasons.UnknownType)]
     public void Bad_client_messages_name_their_reason(string json, string reason)

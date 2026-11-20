@@ -78,6 +78,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-220 | Phase 3 leftovers: crowd draw calls under 100, release-export guard in `run-e2e.ps1`, scripted hill tap, audio key chain | Claude Code | Opus 5.5 | [T-220](../tasks/prompts/T-220.md) | T-219, T-303, T-305 | Review | ADR-002 #148, #149, #155, #163 |
 | T-221 | Godot tooling hangs: one bounded, retried helper for import and export, bounded harness waits, root cause of the import and export-exit hangs | Claude Code | Opus 5.5 | [T-221](../tasks/prompts/T-221.md) | T-218, T-220 | Review | ADR-002 #163, #176, #190 |
 | T-222 | Storybook toon rendering (ADR-003): toon material, near-only outlines, lighting and haze, toon placeholders | Claude Code | Opus 5.5 | [T-222](../tasks/prompts/T-222.md) | T-403, T-405, T-501, T-502 | Review | Starts when T-502 and T-405 are merged (shared client and themegen files); ADR-003 |
+| T-223 | Quiet test runs: `BannedSymbolsTests` starts `dotnet build` with `CreateNoWindow`, so no Windows Terminal window pops up on the desktop | Lead | Opus 5.5 | — | T-104 | Review | Lead fix on the user's request; ADR-002 #270 |
 
 ## Phase 3 — Combat loop
 
@@ -102,6 +103,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-404 | Early balance with weapons, skills and stat points: Rock Beetle, Thornback Boar, Thistle Hollow, time to level 10; job-change weapon rule; reset item drops | Claude Code | Sonnet 5.5 | [T-404](../tasks/prompts/T-404.md) | T-309, T-401, T-501, T-502, T-503 | Review | ADR-002 #117, #175, #219, #235 |
 | T-405 | Equipment manifest validation, preloading worn visuals, placeholder weapon shapes by type, LFS pointer message | Claude Code | Sonnet 5.5 | [T-405](../tasks/prompts/T-405.md) | T-403, T-501 | Review | ADR-002 #181, #182, #208 |
 | T-406 | Load-proof tests (gateway reader first), stats re-post on status changes, reset item icons, stats and quest panels in the layout check, toon leftovers | Claude Code | Sonnet 5.5 | [T-406](../tasks/prompts/T-406.md) | T-222, T-503, T-602 | Review | Restricted `Net/**`: test seam and stats re-post only (standing approval 2026-11-18); ADR-002 #232–236, #252, #266, #267, #269 |
+| T-407 | Thistle Hollow monsters: 2–3 original monsters with toon placeholders, spawns, tuned to 50–80% with `stats --duel` | Claude Code | Sonnet 5.5 | [T-407](../tasks/prompts/T-407.md) | T-404, T-222 | Review | ADR-002 #249 |
 
 ## Phase 5 — Skills & statuses
 
@@ -117,6 +119,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 |----|------|-------|-------|--------|------------|--------|-------|
 | T-601 | NPCs in the world, dialogue graphs, conditions and actions, NPC services (save point, refine decision, resets) | Claude Code | Sonnet 5.5 | [T-601](../tasks/prompts/T-601.md) | T-501, T-502, T-503, T-222 | Review | Touches `Net/**` for talk and dialogue messages only (standing approval 2026-11-18); ADR-002 #187, #202, #234 |
 | T-602 | Quest state machine on the event bus: objectives, turn-in, atomic rewards, currency balance, quest conditions in dialogue, quest log and tracker, the Warden path | Claude Code | Opus 5.5 | [T-602](../tasks/prompts/T-602.md) | T-601, T-404 | Review | Touches `Net/**` for quest messages and the currency field only (standing approval 2026-11-18); ADR-002 #211, #212, #253 |
+| T-603 | Shop NPC service: buy and sell for currency in one inventory transaction, shops as data, merchant NPC, shop panel | Claude Code | Sonnet 5.5 | [T-603](../tasks/prompts/T-603.md) | T-601, T-602 | Review | Touches `Net/**` for shop intents and the shop message only (standing approval 2026-11-18); ADR-002 #251, #268 |
 
 ## Phase 7 — Persistence & accounts
 
@@ -129,8 +132,8 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Phase | Task | Agent | Model | Status |
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
-| T-407 | 4 | Thistle Hollow monsters: 2–3 new original monsters with placeholders, spawns in the authoring scene, tuned to 50–80% with `stats --duel` (ADR-002 #249) | Claude Code | Sonnet 5.5 | Backlog |
-| T-603 | 6 | Shop NPC service: buy and sell for currency in one inventory transaction, prices as data, shop dialogue action (ADR-002 #268) | Claude Code | Sonnet 5.5 | Backlog |
+| T-224 | 2 | Theme kit for forks: a written theme contract (rig, animation names, scale, facing, attachment points, §9 budgets), an import tool that applies a small mapping file (pack model → asset key, scale, facing, animation renames), a fork guide (map art to existing ids, rename display names only, add or remove monsters as data); tested on a free CC0 pack in an uncommitted theme. The template keeps the generated placeholder theme | Claude Code | Opus 5.5 | Backlog |
+| T-225 | 2 | AI asset pipeline for forks (after T-224): scripts drive a 3D generation API (Meshy, Tripo or Rodin; key from an environment variable, never committed) from an approved brief, then cleanup in headless Blender, rigging or scripted motion, import through the T-224 tool, and an in-game review loop (scripted runs, screenshots at the game camera next to existing art, ThemeCheck and §9 budgets) that adjusts scale, tint, outline and pose for consistency, retrying within a set credit limit. Art is generated in a fork only | Claude Code | Opus 5.5 | Backlog |
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
 | T-702 | 7 | Persistence (EF Core + Postgres), transactional inventory | Claude Code | Opus 5.5 | Backlog |
 | T-703 | 7 | Store compliance: account deletion, Sign in with Apple, privacy disclosures | Claude Code | Sonnet 5.5 | Backlog |

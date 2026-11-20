@@ -204,6 +204,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>ServiceOpened</c> (T-601): an <c>open_service</c> action opened an NPC service for a player.</summary>
         public const string ServiceOpened = "ServiceOpened";
 
+        /// <summary><c>ShopOpened</c> (T-603): the <c>shop</c> service opened a shop for a player, with its priced stock (what the owner is sent as <c>shop</c>).</summary>
+        public const string ShopOpened = "ShopOpened";
+
         /// <summary><c>QuestStartRequested</c> (T-601): a <c>start_quest</c> action asked for a quest to start. Nobody handles it until T-602.</summary>
         public const string QuestStartRequested = "QuestStartRequested";
 
@@ -312,6 +315,7 @@ namespace Game.Shared.Vocabulary
             DialogueEnded,
             DialogueRefused,
             ServiceOpened,
+            ShopOpened,
             QuestStartRequested,
             SavePointSet,
             DialogueEffectsRequested,

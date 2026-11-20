@@ -83,6 +83,12 @@ metadata/map_marker = "npc"
 metadata/map_npc_id = "npc.smith"
 metadata/map_facing = "e"
 
+[node name="Npc_merchant" type="Marker3D" parent="Markers"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 12.5, 0, 9.5)
+metadata/map_marker = "npc"
+metadata/map_npc_id = "npc.merchant"
+metadata/map_facing = "s"
+
 [node name="Zone_safe" type="Marker3D" parent="Markers"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.5, 0, 7.5)
 metadata/map_marker = "zone"

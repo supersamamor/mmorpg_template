@@ -61,6 +61,9 @@ public static class ValidationCodes
     public const string DialogueDangling = "dialogue.dangling";
     /// <summary>A dialogue condition or action with unusable values (T-601).</summary>
     public const string DialogueInvalid = "dialogue.invalid";
+
+    /// <summary>A shop (T-603) is unusable: no stock, an item twice, or a price that is not from 1 to the maximum.</summary>
+    public const string ShopInvalid = "shop.invalid";
     /// <summary>A quest with no steps or objectives, or a count, level, radius or reward amount out of range, or prerequisites that loop (T-602).</summary>
     public const string QuestInvalid = "quest.invalid";
     /// <summary>A quest's giver or turn-in NPC cannot be reached: not placed, no dialogue, or no <c>start_quest</c> for it (T-602).</summary>

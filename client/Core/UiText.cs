@@ -147,6 +147,13 @@ public static class UiText
         ItemReasons.ResetDead => "You cannot do that now.",
         ItemReasons.NothingToReset => "There is nothing to take back.",
         ItemReasons.ServiceRequired => "Find a smith to refine your gear.",
+        ItemReasons.OutOfRange => "Step closer to the shop.",
+        ItemReasons.NotInStock => "The shop does not sell that.",
+        ItemReasons.QuantityLimit => "That is more than the shop will sell at once.",
+        ItemReasons.CannotAfford => "You cannot afford that.",
+        ItemReasons.NotSellable => "The shop will not buy that.",
+        ItemReasons.CurrencyFull => "You cannot carry any more money.",
+        ItemReasons.Dead => "You cannot trade now.",
         _ => string.Empty,   // cancelled: the player moved on, nothing to say
     };
 
@@ -558,6 +565,67 @@ public static class UiText
         QuestReasons.NotActive => "That quest is not active.",
         _ => "You cannot take that quest.",
     };
+
+    // ---- the shop (T-603) ----
+
+    /// <summary>The shop panel's heading.</summary>
+    public const string ShopTitle = "Shop";
+
+    /// <summary>The tab that lists what the shop sells.</summary>
+    public const string ShopBuyTab = "Buy";
+
+    /// <summary>The tab that lists the player's bag with the shop's prices.</summary>
+    public const string ShopSellTab = "Sell";
+
+    /// <summary>The button that buys the picked item.</summary>
+    public const string ShopBuyButton = "Buy";
+
+    /// <summary>The button that sells the picked item.</summary>
+    public const string ShopSellButton = "Sell";
+
+    /// <summary>The shop's hint while nothing is picked on the buy tab.</summary>
+    public const string ShopPickToBuy = "Tap something to buy.";
+
+    /// <summary>The shop's hint while nothing is picked on the sell tab.</summary>
+    public const string ShopPickToSell = "Tap something in your bag to sell.";
+
+    /// <summary>The sell tab when the bag holds nothing the shop will take.</summary>
+    public const string ShopNothingToSell = "You have nothing the shop will buy.";
+
+    /// <summary>The minus button of the quantity picker.</summary>
+    public const string QuantityLess = "-";
+
+    /// <summary>The plus button of the quantity picker.</summary>
+    public const string QuantityMore = "+";
+
+    /// <summary>The quantity picker's jump to the most allowed.</summary>
+    public const string QuantityMax = "Max";
+
+    /// <summary>The flash when a purchase went through.</summary>
+    public static string Bought(string item) => "Bought: " + item;
+
+    /// <summary>The flash when a sale went through.</summary>
+    public static string Sold(string item) => "Sold: " + item;
+
+    /// <summary>A shop row: the item with its price per unit, e.g. <c>Healing Draught - Crowns: 40</c> (an item the shop will not buy has no price).</summary>
+    public static string ShopRow(string name, string currencyName, long? price) =>
+        price is { } unit ? name + "  -  " + Currency(currencyName, unit) : name + "  -  " + ShopNoPrice;
+
+    /// <summary>What a bag row shows as its price when the shop will not take the item.</summary>
+    public const string ShopNoPrice = "not bought";
+
+    /// <summary>The picker's count between its minus and plus buttons, e.g. <c>x5</c>.</summary>
+    public static string QuantityLabel(int quantity) => "x" + quantity.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>The picker's line: how many, and the total, e.g. <c>x5   Crowns: 200</c>.</summary>
+    public static string ShopQuantity(int quantity, string currencyName, long? total) =>
+        QuantityLabel(quantity) + "   " + (total is { } sum ? Currency(currencyName, sum) : "-");
+
+    /// <summary>The line under the list while something is picked: the item, how many and the total, e.g. <c>Antidote x2   Crowns: 60</c>.</summary>
+    public static string ShopPick(string name, int quantity, string currencyName, long? total) => name + " " + ShopQuantity(quantity, currencyName, total);
+
+    /// <summary>The shop panel's heading line: its title and the balance, e.g. <c>Shop   Crowns: 150</c>.</summary>
+    public static string ShopHeader(string currencyName, long currency) => ShopTitle + "   " + Currency(currencyName, currency);
 
     /// <summary>The bag's first line: the entry count and the currency (T-602), e.g. <c>12 / 100 items   Crowns: 150</c>.</summary>
     public static string BagHeader(int count, int slots, string currencyName, long currency) => EntryCount(count, slots) + "   " + Currency(currencyName, currency);

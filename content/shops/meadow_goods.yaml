@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=../../schemas/shop.schema.json
+id: shop.meadow_goods
+name: Meadow Goods
+# Potions first, then the starter gear, then the two reset items (ADR-002 row 251). Every row uses the item's buy_price; a row may set its own price instead.
+stock:
+  - item_id: item.healing_draught
+  - item_id: item.antidote
+  - item_id: item.focus_tonic
+  - item_id: item.swift_elixir
+  - item_id: item.bone_dirk
+  - item_id: item.leather_cap
+  - item_id: item.padded_vest
+  - item_id: item.wooden_buckler
+  - item_id: item.oak_staff
+  - item_id: item.iron_blade
+  - item_id: item.realign_tonic
+  - item_id: item.blank_page

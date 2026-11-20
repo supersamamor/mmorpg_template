@@ -146,3 +146,41 @@ a shop (T-601 NPCs) is the place for them.
 
 **Known limits.** The duel does not model kiting or potions, so a Spellbinder (ranged, magic) is not measured by it: a level 7 Spellbinder with the Bone Dirk and Ember Bolt 3
 wins 0% against the beetle in melee, because the model never keeps it at range. The leveling estimate counts Second Wind only inside fights.
+
+
+## 6. Thistle Hollow's monsters (T-407)
+
+Row 249: the Hollow only had Gel Slimes, so T-404's 50-80% target for it could not be met. It now has three monsters of its own, tuned through the same
+seeded duel (2,000 fights, seed 1, points by the str/vit rule, skills used by the duel rotation) and pinned by `tests/Game.Tests/Golden/HollowBalanceTests.cs`.
+The gear is what the meadow and the Hollow drop: Padded Vest +2, Leather Cap, and for a Warden the Iron Blade +2 (job level 4 at base level 10, 6 at base level 12:
+Twin Strike 3 and 5). A Wanderer is level 8 with the Bone Dirk and Second Wind 3.
+
+| Monster | Level, role | Stats (HP / atk / def / agi) | Skill | Drops | Character | Win rate | HP left on a win |
+|---|---|---|---|---|---|---|---|
+| Thistle Burr | 8, the tank: slow, armoured, a 21 s fight | 315 / 16 / 12 / 2 | none | Thistle Down 60% (1-2), Padded Vest 6%, tier 2 supplies | Wanderer L8 (110 HP) | **63.3%** (all-str: 61.7%) | 27.9% |
+| Dewhare | 10, the fast one: hits often and dies in 3.5 s | 160 / 26 / 4 / 30 | none | Thistle Down 30%, Leather Cap 5%, Temper Shard 8%, tier 3 supplies | Warden L10 (130 HP) | **66.5%** (all-str: 55.2%) | 33.2% |
+| Duskwing Moth | 12, status caster | 250 / 27 / 6 / 16 | Dusting Scales (30% per swing, 6 s cooldown): wind damage x1.1 and a 25% chance of Stun for 1.5 s | Thistle Down 40%, Swift Elixir 5%, Antidote 10%, tier 3 supplies | Warden L12 (150 HP) | **60.3%** (all-str: 58.9%) | 26.3% |
+
+Nothing new but data: the skill is built from the existing `damage` and `apply_status` effects and `status.stun`; the monsters use existing rigs
+(`sprout`, `quadruped`, `insect`); `item.thistle_down` is the one new material (a sell-price item for the shop, no use yet).
+
+**EXP per minute** uses the T-404 cost of a kill (8 s walking and looting + p x (the won fight + the regeneration of the HP it cost) + (1 - p) x 30 s, all over p)
+and compares each Hollow monster with the best meadow monster the same character beats at least half the time (here always the Rock Beetle; the Thornback Boar's
+long, risky fight earns less per minute):
+
+| Monster | EXP per kill | Seconds per kill | EXP per minute | Best meadow monster for that character | Ratio |
+|---|---|---|---|---|---|
+| Thistle Burr | 1,000 | 176.4 | 340 | Rock Beetle, 298 | 1.14x |
+| Dewhare | 1,100 | 151.5 | 436 | Rock Beetle, 338 | 1.29x |
+| Duskwing Moth | 1,700 | 174.7 | 584 | Rock Beetle, 479 | 1.22x |
+
+So the move to the Hollow at level 8 pays about 14% more per minute, and more at levels 10 and 12. The Burr's EXP is only 14% ahead because its long fights cost a lot of regeneration;
+a character who drinks draughts would find it better than this estimate says.
+
+**The Gel Slimes are gone from the Hollow.** A level 1 monster gives 14 EXP there (a level 8+ character needs thousands per level), dies in one hit and only crowds the three
+monsters the map is for. The meadow keeps its slimes for the first fights, and `quest.first_hunt` is done there.
+
+**Spawns** (authoring scene `thistle_hollow.authoring.tscn`, exported by `client/export-maps.ps1`): Thistle Burr 4 in x 6-12, y 1-6, 15 s respawn; Dewhare 3 in x 12-17, y 2-8, 15 s;
+Duskwing Moth 3 in x 9-16, y 7-11, 20 s. The two aggressive ones are at least 10 cells from the warp arrival at (2, 7).
+
+T-404's time to level 10 is unchanged (65.3 minutes): the best monster at levels 1-9 is still from the meadow.

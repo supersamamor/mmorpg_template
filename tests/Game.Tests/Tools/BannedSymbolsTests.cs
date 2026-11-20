@@ -64,6 +64,7 @@ public class BannedSymbolsTests : IDisposable
 
     private (int Exit, string Output) Run(string args)
     {
+        // CreateNoWindow: the test host may have no console (ServerProcessTests frees it), and then a console child would open a visible window on the desktop.
         var info = new ProcessStartInfo("dotnet", args) { WorkingDirectory = _temp, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
         info.Environment["DOTNET_CLI_UI_LANGUAGE"] = "en";
         info.Environment["MSBUILDDISABLENODEREUSE"] = "1";
