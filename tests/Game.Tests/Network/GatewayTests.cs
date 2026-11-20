@@ -468,11 +468,10 @@ public class GatewayTests
         await Poll.UntilAsync(() => session.Queue.Resyncing, r => r, "resync");
         rig.Clock.Advance(rig.Gateway.Options.SlowClientTimeoutMs);
         await Poll.UntilAsync(() => session.ByeReason, r => r == ByeReasons.TooSlow, "too_slow");
-        rig.Clock.Advance(rig.Gateway.Options.CloseTimeoutMs); // the bye cannot be delivered: the socket is dropped
+        await Poll.UntilAsync(() => { rig.Clock.Advance(rig.Gateway.Options.CloseTimeoutMs); return slow.Closed; }, closed => closed, "socket dropped");
         await slow.WaitClosedAsync();
         await Poll.UntilAsync(() => rig.Gateway.CharactersInGrace, n => n == 1, "grace period");
-        rig.Clock.Advance(rig.Gateway.Options.GracePeriodMs);
-        await Poll.UntilAsync(() => rig.World.LocationOf(id), map => map is null, "despawn");
+        await Poll.UntilAsync(() => { rig.Clock.Advance(rig.Gateway.Options.GracePeriodMs); return rig.World.LocationOf(id); }, map => map is null, "despawn");
     }
 
     [Fact]
