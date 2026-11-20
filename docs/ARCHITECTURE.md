@@ -848,6 +848,10 @@ T-222 draws ADR-003's storybook toon in the Mobile renderer. Pure parts in `clie
 
 ## 8. Theming (asset swap)
 
+**The theme contract** (T-224) is [THEMES.md](THEMES.md): what a theme must provide per asset kind (rig and bone names, required clips, scale and facing,
+attach points, the §9 budgets per model, how the toon look applies), which of it `validate` checks, manifest **variants**, and `tools/themeimport`, which turns an
+art pack into a theme from a mapping file. Forks apply a theme with [FORKING.md](FORKING.md); this template keeps only the generated placeholders.
+
 `themes/<theme>/asset-manifest.json` maps asset keys to files plus metadata:
 
 ```json
@@ -896,6 +900,12 @@ tinted with the colour of the key. The generator also writes the second theme wi
 Rig names are theme-internal; the validator checks that a model, its animation library and its
 skinned equipment use the same rig. Active theme is a config setting.
 
+**Variants** (T-224, THEMES.md §2): an entry with `"variant_of": "<key>"` draws that key's model (looked up through the chain) with an optional `tint` (`#rrggbb`,
+multiplied into its materials: one more material per variant), `scale` (0.1–4) and `outline` (`false` or a colour), so one model serves a recolour, an elite or an
+alias. It takes the base's file, rig, animations and clips. Only whole models (monsters, NPCs, job models, props) can be variants. The client resolves it in
+`ThemeCatalog.TryFind` (pure, tested); `ModelVisual` scales the instance, `ToonLook` makes the tinted material and the outline copy. A tinted variant pools apart from
+its base. `default` has one example, `model.monster.gel_slime_elite`.
+
 **Equipment entries** (T-403, §7.5): `"attach": "<bone>"` for a rigid piece, modelled in its bone's space (origin at the bone, facing -Z), or `"skinned": "<rig>"` for a
 mesh skinned to that rig in the body's own mesh space; exactly one of the two. An animation library's `clips` may add `<animation id>.<weapon type>` entries (VOCABULARY
 "Weapon types"), which a character holding that weapon type plays instead of the generic clip. Equipment should use an untextured or atlas-shared material so it merges
@@ -905,7 +915,10 @@ has `attack.dagger`, `idle.staff` and `attack.staff`.
 **Checked at build time** (T-405, `validate`, `Game.Content/Validation/ThemeCheck.cs`): each `model.equip.*` entry has exactly one of `attach` or `skinned`; an `attach` bone exists in the
 rig of every body model of `appearance.yaml` (the bones are read from the glTF skin); a `skinned` rig is one a model of the theme chain declares; every clip suffix is a weapon type;
 a theme `.glb` that is a Git LFS pointer is an error ("run `git lfs pull`"); an item's worn visual key with no model file in the theme chain is a warning that names the missing
-model the client draws instead. Each finding names the manifest file, the key and the reason. **Placeholder weapons** take their shape from the item's `weapon_type`
+model the client draws instead. Since T-224 it also checks the theme contract (THEMES.md §1): variants; every model's `Body_LOD0`, one material, textures ≤ 1024², the
+triangle budgets (5k/2k for living models, 1k for worn pieces, 2k for props); a rigged model's skin under `Armature`, the shared humanoid bones and its facing (right
+hand on +X); a living model's height (0.1–8 units); a library's rig, required clips (idle, walk, attack, hit, die), clip names and tracks; warnings for see-through
+materials, missing outline directions and an origin off the ground. The facts are read from the glTF (`Game.Content/Themes`: `GltfFile`, `ModelFacts`), without Godot. Each finding names the manifest file, the key and the reason. **Placeholder weapons** take their shape from the item's `weapon_type`
 (`tools/themegen/Weapons.cs`; themegen reads `content/items`, or `--content <dir>`): a dagger is a short blade, a staff stands up, and so on.
 
 | Asset | Format |

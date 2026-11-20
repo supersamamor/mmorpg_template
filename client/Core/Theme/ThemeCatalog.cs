@@ -41,6 +41,12 @@ public sealed class ModelResolution
 
     /// <summary>How far down the chain it was found.</summary>
     public ResolutionLevel Level { get; }
+
+    /// <summary>
+    /// Which idle instances can serve this model: its file, plus the key for a variant drawn differently (a tint, scale or outline: T-224), so a pooled base never
+    /// comes back as its elite. Empty for the built-in marker.
+    /// </summary>
+    public string PoolKey => Path is null ? string.Empty : Asset is { Restyled: true } ? Path + "|" + Key : Path;
 }
 
 /// <summary>
@@ -64,6 +70,7 @@ public sealed class ThemeCatalog
     private readonly Dictionary<string, string?> _effects = new Dictionary<string, string?>(StringComparer.Ordinal);
     private readonly Dictionary<string, double> _impactDelays = new Dictionary<string, double>(StringComparer.Ordinal);
     private readonly Dictionary<string, ModelResolution> _byKind = new Dictionary<string, ModelResolution>(StringComparer.Ordinal);
+    private readonly Dictionary<string, (string Path, ThemeAsset Asset)> _variants = new Dictionary<string, (string Path, ThemeAsset Asset)>(StringComparer.Ordinal);
 
     /// <summary>Creates a catalog over <paramref name="layers"/> (active theme first).</summary>
     /// <param name="layers">The manifests to search, in order.</param>
@@ -82,9 +89,33 @@ public sealed class ThemeCatalog
     /// <summary>The project-relative path of a theme file.</summary>
     public static string PathOf(string theme, string file) => MountPoint + "/" + theme + "/" + file;
 
-    /// <summary>Finds a key in the layers. False when no layer has the entry with its file present.</summary>
+    /// <summary>How many variants may stand on each other (<c>variant_of</c> pointing at a variant); deeper or circular chains are not found.</summary>
+    public const int MaxVariantDepth = 4;
+
+    /// <summary>
+    /// Finds a key in the layers. False when no layer has the entry with its file present. A variant (T-224, <c>variant_of</c>) is found when its base is: the
+    /// result has the base's path and an entry that is the base's file, rig, animations and clips under the variant's key, with the tints multiplied, the scales
+    /// multiplied and the nearest outline override. The first layer that lists the key decides whether it is a variant.
+    /// </summary>
     public bool TryFind(string key, out string path, out ThemeAsset asset)
     {
+        if (_variants.TryGetValue(key, out var known))
+        {
+            path = known.Path;
+            asset = known.Asset;
+            return true;
+        }
+        if (FirstListing(key) is { VariantOf: not null } variant)
+        {
+            if (TryVariant(variant, 0, out path, out asset))
+            {
+                _variants[key] = (path, asset);
+                return true;
+            }
+            path = string.Empty;
+            asset = null!;
+            return false;
+        }
         for (var i = 0; i < _layers.Count; i++)
         {
             if (!_layers[i].TryGet(key, out var found) || found.File is null) continue;
@@ -97,6 +128,45 @@ public sealed class ThemeCatalog
         path = string.Empty;
         asset = null!;
         return false;
+    }
+
+    private ThemeAsset? FirstListing(string key)
+    {
+        for (var i = 0; i < _layers.Count; i++)
+            if (_layers[i].TryGet(key, out var found)) return found;
+        return null;
+    }
+
+    private bool TryVariant(ThemeAsset variant, int depth, out string path, out ThemeAsset asset)
+    {
+        path = string.Empty;
+        asset = null!;
+        if (depth >= MaxVariantDepth || variant.VariantOf is null) return false;
+        var baseKey = variant.VariantOf;
+        ThemeAsset resolved;
+        if (FirstListing(baseKey) is { VariantOf: not null } inner)
+        {
+            if (!TryVariant(inner, depth + 1, out path, out resolved)) return false;
+        }
+        else
+        {
+            for (var i = 0; ; i++)
+            {
+                if (i == _layers.Count) return false;
+                if (!_layers[i].TryGet(baseKey, out var found) || found.File is null) continue;
+                var candidate = PathOf(_layers[i].Theme, found.File);
+                if (!_exists(candidate)) continue;
+                path = candidate;
+                resolved = found;
+                break;
+            }
+        }
+        var tint = variant.Tint is { } own ? resolved.Tint is { } under ? own.Times(under) : own : resolved.Tint;
+        var outlineOff = variant.OutlineOff || (variant.OutlineColor is null && resolved.OutlineOff);
+        var outlineColor = variant.OutlineOff ? null : variant.OutlineColor ?? resolved.OutlineColor;
+        asset = new ThemeAsset(variant.Key, resolved.File, resolved.Rig, resolved.Anims, resolved.Attach, resolved.Skinned, resolved.Clips, variant.ImpactDelay ?? resolved.ImpactDelay,
+            variant.Effect ?? resolved.Effect, resolved.Render, resolved.VariantOf ?? baseKey, tint, variant.Scale * resolved.Scale, outlineOff, outlineColor);
+        return true;
     }
 
     /// <summary>
@@ -191,7 +261,7 @@ public sealed class ThemeCatalog
     /// </summary>
     public double ImpactDelayOf(ModelResolution model, double fallback)
     {
-        var cacheKey = model.Path ?? string.Empty;
+        var cacheKey = (model.Key ?? string.Empty) + "|" + (model.Path ?? string.Empty); // a variant shares its base's file but may have its own delay
         if (_impactDelays.TryGetValue(cacheKey, out var cached)) return cached;
         var value = fallback;
         if (model.Asset is { } asset)
@@ -256,6 +326,7 @@ public sealed class ThemeCatalog
         {
             if (!_layers[i].TryGet(key, out var found)) continue;
             listed = true;
+            if (found.VariantOf is not null) return "it is a variant of '" + found.VariantOf + "', which is not found (or the variants form a loop or stand more than " + MaxVariantDepth + " deep)";
             if (found.File is null) return "entry '" + key + "' names no file";
         }
         return listed ? "its file is missing on disk" : "no theme lists it";

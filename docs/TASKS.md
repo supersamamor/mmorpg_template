@@ -79,7 +79,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-221 | Godot tooling hangs: one bounded, retried helper for import and export, bounded harness waits, root cause of the import and export-exit hangs | Claude Code | Opus 5.5 | [T-221](../tasks/prompts/T-221.md) | T-218, T-220 | Review | ADR-002 #163, #176, #190 |
 | T-222 | Storybook toon rendering (ADR-003): toon material, near-only outlines, lighting and haze, toon placeholders | Claude Code | Opus 5.5 | [T-222](../tasks/prompts/T-222.md) | T-403, T-405, T-501, T-502 | Review | Starts when T-502 and T-405 are merged (shared client and themegen files); ADR-003 |
 | T-223 | Quiet test runs: `BannedSymbolsTests` starts `dotnet build` with `CreateNoWindow`, so no Windows Terminal window pops up on the desktop | Lead | Opus 5.5 | — | T-104 | Review | Lead fix on the user's request; ADR-002 #270 |
-| T-224 | Theme kit for forks: theme contract (`docs/THEMES.md`), manifest variants (tint, scale), import tool from a mapping file, fork guide (`docs/FORKING.md`); tested on a generated synthetic pack | Claude Code | Opus 5.5 | [T-224](../tasks/prompts/T-224.md) | T-405, T-222, T-407 | In Progress | Template keeps the placeholder theme; no downloads |
+| T-224 | Theme kit for forks: theme contract (`docs/THEMES.md`), manifest variants (tint, scale), import tool from a mapping file, fork guide (`docs/FORKING.md`); tested on a generated synthetic pack | Claude Code | Opus 5.5 | [T-224](../tasks/prompts/T-224.md) | T-405, T-222, T-407 | Review | Template keeps the placeholder theme; no downloads |
 
 ## Phase 3 — Combat loop
 

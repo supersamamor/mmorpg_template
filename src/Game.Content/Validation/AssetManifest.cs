@@ -22,9 +22,9 @@ public static class AssetManifest
             {
                 // "audio" holds the sound tables (defaults, events) and "fallbacks" the client's stand-ins by entity kind; neither is an asset key.
                 if (p.Name is "audio" or "fallbacks") continue;
-                info[p.Name] = new AssetInfo(Text(p.Value, "rig"), Text(p.Value, "attach"));
+                info[p.Name] = new AssetInfo(Text(p.Value, "rig"), Text(p.Value, "attach"), Text(p.Value, "variant_of"));
             }
-            return new AssetKeySet(info);
+            return new AssetKeySet(ResolveVariants(info));
         }
         catch (JsonException e)
         {
@@ -45,10 +45,27 @@ public static class AssetManifest
         var info = new Dictionary<string, AssetInfo>(StringComparer.Ordinal);
         foreach (var key in fallback) info[key] = fallback.InfoOf(key)!;
         foreach (var key in own) info[key] = own.InfoOf(key)!;
-        return new AssetKeySet(info);
+        return new AssetKeySet(ResolveVariants(info));
     }
 
     private const string DefaultTheme = "default";
+
+    /// <summary>
+    /// A variant (T-224, <c>variant_of</c>) draws its base's model, so it takes the base's rig and attach point (followed through variants of variants, at most
+    /// <c>Themes.ThemeContract.MaxVariantDepth</c>). A base that is missing or a loop leaves the variant's own metadata; <c>ThemeCheck</c> reports it.
+    /// </summary>
+    private static Dictionary<string, AssetInfo> ResolveVariants(Dictionary<string, AssetInfo> info)
+    {
+        foreach (var key in info.Keys.ToList())
+        {
+            var entry = info[key];
+            if (entry.VariantOf is null) continue;
+            var at = entry;
+            for (var depth = 0; depth < Themes.ThemeContract.MaxVariantDepth && at.VariantOf is { } next && info.TryGetValue(next, out var under); depth++) at = under;
+            if (at.VariantOf is null) info[key] = entry with { Rig = at.Rig, Attach = at.Attach };
+        }
+        return info;
+    }
 
     private static string? Text(JsonElement entry, string property) =>
         entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty(property, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;

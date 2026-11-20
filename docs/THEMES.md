@@ -1,0 +1,217 @@
+# Themes: the contract, variants and the import tool
+
+A **theme** is a folder `themes/<theme>/` with an `asset-manifest.json` that maps asset keys to files (ARCHITECTURE §8). This repository is a template: it ships
+only the generated placeholder theme `default` (and the small test theme `test`). A game made from it is a fork that adds its own theme. This page says exactly
+what a theme must provide, and how `tools/themeimport` turns an art pack into one. [FORKING.md](FORKING.md) is the step-by-step guide for a fork.
+
+A theme may be **partial**: the client looks a key up in the active theme, then in `default` (§7.7). So a fork can replace the monsters first and leave the rest
+to the placeholders. `validate --theme <theme>` checks the whole chain.
+
+## 1. The contract
+
+Rules marked **checked** are checked by `validate` (`src/Game.Content/Validation/ThemeCheck.cs`) and by `tools/themeimport`, with one finding per failure that
+names the manifest, the key, the reason and the fix. Rules marked *by eye* cannot be measured from the files; check them in the game at the default zoom on a
+phone-sized view (ADR-003 point 7).
+
+### 1.1 Every model (`model.*`)
+
+| Rule | Value | Check |
+|------|-------|-------|
+| Format | glTF 2.0 binary (`.glb`), one buffer, textures embedded | **checked** (a file that is not glTF is an error; `themeimport` also reads `.gltf` and embeds its files) |
+| Mesh names | The mesh node is `Body_LOD0`; a cheaper `Body_LOD1` is optional | **checked** (`theme.model`) |
+| Materials | 1 material per model (one draw call per character, two with the outline; §9) | **checked** (`theme.budget`) |
+| Texture size | Each texture ≤ 1024 × 1024 (§9) | **checked** (`theme.budget`) |
+| Atlas | Equipment shares its rig's atlas, so a dressed character merges into one surface (ADR-003 point 5, §7.5) | *by eye*: a worn piece with its own texture still draws, but as one more surface |
+| Scale | 1 cell = 1 world unit. A living model is 0.1 to 8 units tall; a worn piece or prop is at most 4 units across | **checked** (`theme.model`, with the `scale` to set) |
+| Origin | On the ground under the model: its lowest point within 35 % of its height of the origin | **checked** as a warning (`warn.theme_look`) |
+| Facing | Faces **-Z** (north at yaw 0) | **checked** for the humanoid rig (its right hand must be on +X); *by eye* for other rigs |
+| Opaque | Materials are opaque (`alphaMode` `OPAQUE`). The toon look and the outline leave blended and cut-out materials alone | **checked** as a warning |
+
+### 1.2 Living models (characters, monsters, NPCs: entries with `anims`)
+
+| Rule | Value | Check |
+|------|-------|-------|
+| LOD0 budget | ≤ 5,000 triangles (the nearest 8 characters; §9) | **checked** |
+| LOD1 budget | ≤ 2,000 triangles (everyone else). Without `Body_LOD1`, far characters draw LOD0, so LOD0 must then be ≤ 2,000 | **checked** |
+| Skin | A model with `rig` has a skin, and the skeleton sits under a node named `Armature` (Godot imports it as `Armature/Skeleton3D`) | **checked** (`themeimport` renames or adds the node) |
+| Same bones as its clips | Every bone its animation library moves exists in the model, by name | **checked** (`theme.anim`) |
+| Library on the same rig | The model's `anims` library has the model's `rig` | **checked** |
+| Outline directions | Each vertex carries its outline direction as glTF `TANGENT` (the normal averaged over the vertices at the same place) so the outline hull stays closed at hard edges | **checked** as a warning (`themeimport` writes them) |
+| Proportions and palette | Chibi-leaning, head about a third of the height; the theme palette (ADR-003 points 3 and 4) | *by eye* |
+
+### 1.3 The shared humanoid rig
+
+Every character body, face, hairstyle and garment uses **one** rig named `humanoid`, so gear and appearance attach to any character (§7.5, §7.5.1). Its bones
+must include these names (more bones, such as fingers, are fine):
+
+`hips` (the root, and the default attach point), `spine`, `head`, `arm_l`, `hand_l`, `arm_r`, `hand_r`, `leg_l`, `leg_r` — **checked**.
+
+Other rigs (`blob`, `sprout`, `insect`, `quadruped` in the placeholders, or whatever a pack has) are theme-internal: any names, as long as each model and its
+library agree. A pack's own bone names (`mixamorig:RightHand`, `Hand.R`) are mapped once per rig in the import mapping (§3).
+
+### 1.4 Attachment points
+
+| Kind | Manifest | Modelled in | Check |
+|------|----------|-------------|-------|
+| Rigid piece (weapon, shield, headgear, hairstyle) | `"attach": "<bone>"`, an attach point of VOCABULARY ("Attach points") | The bone's own space: origin at the bone, facing -Z | **checked**: the bone exists in the rig of every body model of `appearance.yaml` |
+| Garment (armour, clothes, footgear) | `"skinned": "<rig>"` | The body's mesh space, skinned to the body's own bones | **checked**: the rig exists, and the garment uses no bone the rig lacks |
+| Face | `"rig": "humanoid"` (no `anims`) | Skinned to the body's head | **checked** with the appearance rule (§7.5.1) |
+
+The placeholders use `hand_r` (weapons), `hand_l` (shield) and `head` (caps, hair). VOCABULARY also names `face`, `mouth` and `back`: a rig that has those
+bones may use them; the check stops an item that names a bone the rig lacks.
+
+### 1.5 Animation libraries (`anim.*`)
+
+| Rule | Check |
+|------|-------|
+| The entry names its `rig` | **checked** |
+| `clips` maps the animation ids **idle, walk, attack, hit, die** to clip names in the file (cast, sit and pick_up are optional) | **checked**: each missing id is an error that lists the file's clips |
+| Every mapped clip name exists in the file | **checked** |
+| Every clip id is an animation id (VOCABULARY) or `<animation id>.<weapon type>` (`attack.staff`) | **checked** |
+| The clips move only bones the rig has (same names as the models) | **checked** |
+| Loops: **idle** and **walk** loop, the rest play once and the die clip holds its last frame | Not needed in the file: the client sets the loop mode itself, so a pack's loop flags do not matter |
+| `impact_delay`: seconds from the start of the attack clip to the blow (on the library, or per model) | Optional; without it the client default (0.2 s) applies |
+
+A pack that ships animations inside each model file is fine: point the `anim.*` entry at the same source file as the model.
+
+### 1.6 The toon look on imported models (T-222, ADR-003)
+
+The client draws real art the same way as the placeholders, with no code change:
+
+- Every opaque, untextured or textured `BaseMaterial3D` the glTF importer makes becomes a **toon material** with the same colour and texture (three cel steps
+  from one warm light). Vertex colours multiply the base colour. A vertex colour with alpha 0 is drawn unlit (glowing parts: crystals, runes).
+- Blended or cut-out materials, unshaded (`KHR_materials_unlit`) materials and shader materials are left alone: they draw without the toon ramp and without the outline.
+- The **outline** is an inverted hull drawn over living models and ground items within 10 cells of the camera target, at most 6 at a time. It pushes each vertex
+  along its `TANGENT`, else its normal; without proper outline directions it opens at hard edges, so `themeimport` writes them. Normal maps are not used by the
+  toon material, so overwriting a pack's tangents loses nothing in the toon look.
+- Terrain and props get the toon ramp without outlines. Lighting, sky and haze come from the theme's `scene.environment`; a theme that has none uses `default`'s.
+- To restyle the look itself, a theme provides its own `mat.toon`, `mat.outline` or `scene.environment` (entries tagged `"render"`, VOCABULARY "Render roles").
+
+## 2. Variants
+
+One model can serve several keys. A variant entry names another entry's key in `variant_of` and draws that model, optionally changed:
+
+```json
+"model.monster.gel_slime_elite": { "variant_of": "model.monster.gel_slime", "tint": "#ffb070", "scale": 1.4, "outline": "#5a2410" }
+```
+
+| Field | Meaning |
+|-------|---------|
+| `variant_of` | The base key, looked up through the theme chain like any key, so a fork that redraws the base redraws its variants too |
+| `tint` | `#rrggbb` the model's material colours are multiplied by (one extra material per variant, shared by every instance) |
+| `scale` | A uniform scale on the whole model, 0.1 to 4; the origin stays on the ground |
+| `outline` | `false` for no outline, or an outline colour `#rrggbb` |
+| `impact_delay` | Optional; else the base's |
+
+The variant takes the base's file, rig, animations and clips; it must not have `file`, `rig`, `anims`, `attach`, `skinned` or `clips` of its own. A variant may
+stand on another variant (tints and scales multiply, the nearest outline override wins), at most 4 deep. Only whole models can be variants or bases
+(`model.monster.*`, `model.npc.*`, `model.char.*` job models, `model.prop.*`): worn pieces merge into their character's mesh, where a tint or scale cannot apply.
+A plain alias (`variant_of` alone) is the cheap way to let several monsters share one model while a pack has fewer models than the game has monsters.
+
+All of it is **checked** (`theme.variant`): the base exists in the chain and has a file, no loop, no field that comes from the base, a valid tint, scale and
+outline. `default` has one example, `model.monster.gel_slime_elite`, which no content uses yet: a fork's elite monster can point at it.
+
+## 3. The import tool
+
+`tools/themeimport` turns a pack folder into a theme folder from a small mapping file:
+
+```powershell
+dotnet run --project tools/themeimport -- --mapping theme-import/my-theme.yaml
+```
+
+It reads the mapping, writes `themes/<theme>/` (each file under the themegen layout: `models/monster/gel_slime.glb`, `anims/humanoid.glb`, `icons/item/x.png`,
+`audio/...`) and its `asset-manifest.json`, runs the content boot and ThemeCheck for that theme and prints a report:
+
+- **done**: each file written or unchanged, with the fixes made (bones renamed, mesh renamed, `Armature` added, scale, turn, outline directions);
+- **missing**: the keys content uses that the theme does not list (the placeholders stand in), grouped by kind;
+- **rules**: every finding, with its fix; the last line is `OK` or `FAILED`.
+
+It is **idempotent**: the output depends only on the mapping and the pack, and a file is written only when its bytes change, so a second run reports every file
+`unchanged`. `--check` writes nothing and exits 1 when a file would change. Files in the theme that the mapping no longer produces are reported as stale, not
+deleted. It refuses to write `default` and `test` (they are generated by `tools/themegen`). Options: `--pack <dir>`, `--themes <dir>`, `--content <dir>`. Exit code
+0 when the theme meets the contract (warnings allowed), 1 when not, 2 when the mapping cannot be used.
+
+### 3.1 Mapping format
+
+```yaml
+theme: eval-meadow-pack        # the theme folder to write; eval-* is git-ignored, for trials
+pack: ../packs/meadow-pack     # the pack folder, relative to this file (never committed: packs/ is git-ignored)
+
+rigs:                          # fixes for every file on a rig: models, garments and the library alike
+  humanoid:
+    bones:                     # the pack's bone name: the contract's
+      "mixamorig:Hips": hips
+      "mixamorig:Spine": spine
+      "mixamorig:Head": head
+      "mixamorig:LeftArm": arm_l
+      "mixamorig:LeftHand": hand_l
+      "mixamorig:RightArm": arm_r
+      "mixamorig:RightHand": hand_r
+      "mixamorig:LeftUpLeg": leg_l
+      "mixamorig:RightUpLeg": leg_r
+
+assets:
+  model.char.wanderer:
+    source: characters/ranger.glb    # a file in the pack (.glb or .gltf for models and animations)
+    rig: humanoid                    # manifest fields, as in ARCHITECTURE §8
+    anims: anim.humanoid
+    scale: 0.01                      # centimetres to cells
+    facing: +z                       # the way the source faces: -z (default), +z, +x or -x; the tool turns it to -Z
+    meshes: { lod0: Ranger, lod1: Ranger_low }   # only when the mesh nodes are not already Body_LOD0 / Body_LOD1
+  anim.humanoid:
+    source: characters/ranger.glb    # the clips may live in a model file
+    rig: humanoid
+    scale: 0.01
+    facing: +z
+    clips:                           # animation renames: animation id: the clip's name in the source
+      idle: Idle_Loop
+      walk: Walk_Fwd
+      attack: Sword_Slash
+      hit: Hit_React
+      die: Death_Back
+      attack.staff: Staff_Swing
+    impact_delay: 0.3
+  model.equip.iron_blade:
+    source: weapons/sword.glb
+    attach: hand_r                   # the attachment bone
+    scale: 0.01
+  model.monster.gel_slime:
+    source: monsters/blob.gltf
+    rig: blob
+    anims: anim.blob
+    facing: +x
+  model.monster.gel_slime_elite:
+    variant: { of: model.monster.gel_slime, tint: "#ffb070", scale: 1.4, outline: "#5a2410" }   # outline: "false" for none
+  icon.item.iron_blade:
+    source: icons/sword.png          # any other key: the file is copied as it is
+  sfx.monster.die.generic:
+    source: audio/splat.ogg
+    extra: { bus: sfx, volume_db: -3 }   # more manifest fields, copied as they are
+
+fallbacks:                           # optional: the manifest's fallbacks table
+  missing: model.missing
+```
+
+Per asset: `source`, `scale` (default 1), `facing` (default `-z`), `rig`, `anims`, `attach`, `skinned`, `clips`, `impact_delay`, `meshes` (`lod0`, `lod1`),
+`outline_directions` (default true), `variant` (`of`, `tint`, `scale`, `outline`) instead of a source, and `extra`. An unknown field is an error with its line.
+
+### 3.2 What the tool fixes and what it does not
+
+| It fixes | How |
+|----------|-----|
+| Bone names | `rigs.<rig>.bones` renames joints in every file on that rig |
+| Mesh names | `meshes`, or a file's only mesh node becomes `Body_LOD0` |
+| The `Armature` node | The node that holds the root bone is renamed, or a new one is put above a root bone that is a scene root |
+| Scale and facing | Composed into the scene roots' transforms (a root that a clip moves gets a new parent instead) |
+| Outline directions | Written as `TANGENT` on every primitive |
+| Clip names | Recorded in the manifest's `clips`; the file keeps its own names |
+
+It does not decimate meshes, merge several meshes or materials into one, bake an atlas, move an origin or convert FBX: those need Blender, and the report says
+which rule failed and what to do.
+
+## 4. Testing without downloads
+
+`tests/Game.Tests/Tools/ThemeImportTests.cs` writes a small synthetic pack in code (`SyntheticPack.cs`: a humanoid in centimetres facing +Z with exporter bone,
+mesh and clip names; a slime whose root bone has no `Armature`; a sword; an icon), imports it, and checks that the fixed mapping meets the contract, that a
+second run changes nothing, and that without the fixes each rule fails with its fix. No pack is downloaded by the tests. A trial with a real pack needs the
+project owner's approval first (licence, size): put it in the git-ignored `packs/` folder and write the theme as `eval-<name>`.

@@ -25,8 +25,9 @@ public class ThemePackTests
         return document.RootElement.Clone();
     }
 
+    // A variant (T-224) has no file of its own: it draws its base's, which is checked here as an ordinary entry (ThemeContractTests covers variants).
     private static IEnumerable<(string Key, JsonElement Entry)> Entries(JsonElement manifest) =>
-        manifest.EnumerateObject().Where(p => p.Name is not ("audio" or "fallbacks")).Select(p => (p.Name, p.Value));
+        manifest.EnumerateObject().Where(p => p.Name is not ("audio" or "fallbacks") && !p.Value.TryGetProperty("variant_of", out _)).Select(p => (p.Name, p.Value));
 
     private static IEnumerable<string> FilesOf(JsonElement entry)
     {

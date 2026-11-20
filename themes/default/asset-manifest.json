@@ -307,6 +307,12 @@
     "rig": "blob",
     "anims": "anim.blob"
   },
+  "model.monster.gel_slime_elite": {
+    "variant_of": "model.monster.gel_slime",
+    "tint": "#ffb070",
+    "scale": 1.4,
+    "outline": "#5a2410"
+  },
   "model.monster.mossling": {
     "file": "models/monster/mossling.glb",
     "rig": "sprout",

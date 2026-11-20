@@ -5,7 +5,7 @@ namespace Game.Content.Validation;
 /// <summary>What the manifest says about one asset key beyond its existence: its <c>rig</c> and <c>attach</c> point, if any.</summary>
 /// <param name="Rig">Rig name of a rigged model (<c>humanoid</c>, <c>blob</c>, ...), or null.</param>
 /// <param name="Attach">Attach point of an attached model (<c>head</c>, <c>hand_r</c>, ...), or null.</param>
-public sealed record AssetInfo(string? Rig, string? Attach);
+public sealed record AssetInfo(string? Rig, string? Attach, string? VariantOf = null);
 
 /// <summary>
 /// The asset keys of a theme manifest, with the <see cref="AssetInfo"/> of each. Behaves as a plain key set, so callers that only

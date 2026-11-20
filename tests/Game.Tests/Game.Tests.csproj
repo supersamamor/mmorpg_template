@@ -20,6 +20,7 @@
     <ProjectReference Include="..\..\src\Game.Tools\Game.Tools.csproj" />
     <!-- T-207: the placeholder pack generator; a test checks the committed pack is exactly what it writes. -->
     <ProjectReference Include="..\..\tools\themegen\ThemeGen.csproj" />
+    <ProjectReference Include="..\..\tools\themeimport\ThemeImport.csproj" />
   </ItemGroup>
   <ItemGroup>
     <!-- The client's pure core (no Godot), compiled here so its logic is tested without the engine. Its ProtocolJson comes from Game.Server. -->

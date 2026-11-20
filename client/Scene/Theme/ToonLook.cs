@@ -16,6 +16,8 @@ public sealed class ToonLook
     private readonly ShaderMaterial? _toon;
     private readonly Dictionary<ulong, Material> _bySource = new();
     private readonly Dictionary<string, ShaderMaterial> _byLook = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Material> _tinted = new(StringComparer.Ordinal);
+    private readonly Dictionary<ThemeColor, Material> _outlines = new();
 
     private ToonLook(RenderPlan plan, ShaderMaterial? toon, Material? outline)
     {
@@ -81,6 +83,45 @@ public sealed class ToonLook
         });
     }
 
+    /// <summary>
+    /// The outline overlay for a model whose manifest entry overrides the outline colour (a variant, T-224): a copy of the theme's outline material with
+    /// <c>outline_color</c> set, one per colour. Null colour, or an outline material without that parameter, gives the theme's own outline.
+    /// </summary>
+    public Material? OutlineFor(ThemeColor? color)
+    {
+        if (color is not { } c || Outline is not ShaderMaterial shader) return Outline;
+        if (_outlines.TryGetValue(c, out var known)) return known;
+        var copy = (ShaderMaterial)shader.Duplicate();
+        copy.SetShaderParameter("outline_color", new Color(c.R, c.G, c.B));
+        return _outlines[c] = copy;
+    }
+
+    /// <summary>
+    /// <see cref="Convert(Material?)"/> with a variant's tint (T-224): the converted material's colour multiplied by <paramref name="tint"/>, one material per
+    /// source and tint (so a crowd of the same variant shares it). Without a tint this is <see cref="Convert(Material?)"/>.
+    /// </summary>
+    public Material? Convert(Material? source, ThemeColor? tint)
+    {
+        var converted = Convert(source);
+        if (tint is not { } t || converted is null) return converted;
+        var key = $"{converted.GetInstanceId()}:{t}";
+        if (_tinted.TryGetValue(key, out var known)) return known;
+        var copy = (Material)converted.Duplicate();
+        var multiply = new Color(t.R, t.G, t.B);
+        switch (copy)
+        {
+            case ShaderMaterial shader when shader.GetShaderParameter("albedo").VariantType == Variant.Type.Color:
+                shader.SetShaderParameter("albedo", shader.GetShaderParameter("albedo").AsColor() * multiply);
+                break;
+            case BaseMaterial3D plain:
+                plain.AlbedoColor *= multiply;
+                break;
+            default:
+                return _tinted[key] = converted; // a material we cannot tint (an unknown shader) stays as it is
+        }
+        return _tinted[key] = copy;
+    }
+
     /// <summary>The toon material for <paramref name="source"/>, or <paramref name="source"/> itself when it is not one to convert (or the look is off).</summary>
     /// <remarks>
     /// Vertex colours always count: glTF says COLOR_0 multiplies the base colour, but Godot's importer leaves the material's vertex-colour flag off, and the
@@ -115,14 +156,17 @@ public sealed class ToonLook
     }
 
     /// <summary>Gives every surface of <paramref name="node"/> its toon material (as a surface override; the mesh is shared and untouched). Call again after the mesh changes.</summary>
-    public void Apply(MeshInstance3D? node)
+    public void Apply(MeshInstance3D? node) => Apply(node, null);
+
+    /// <summary><see cref="Apply(MeshInstance3D?)"/> with a variant's tint (T-224).</summary>
+    public void Apply(MeshInstance3D? node, ThemeColor? tint)
     {
         if (node?.Mesh is not { } mesh) return;
         var count = mesh.GetSurfaceCount();
         for (var s = 0; s < count; s++)
         {
             var source = mesh.SurfaceGetMaterial(s);
-            var toon = Convert(source);
+            var toon = Convert(source, tint);
             node.SetSurfaceOverrideMaterial(s, ReferenceEquals(toon, source) ? null : toon);
         }
     }

@@ -111,6 +111,16 @@ public static class ValidationCodes
     public const string EffectUnsupported = "effect.unsupported";
     /// <summary>A theme manifest entry for worn equipment or a weapon clip is wrong, or a theme file is a Git LFS pointer (T-405, <c>ThemeCheck</c>).</summary>
     public const string EquipManifest = "theme.equip";
+    /// <summary>A manifest variant (<c>variant_of</c>, T-224) is wrong: no base, a loop, a field that comes from the base, or a bad tint, scale or outline.</summary>
+    public const string ThemeVariant = "theme.variant";
+    /// <summary>A theme model breaks the theme contract (T-224, docs/THEMES.md): mesh names, skeleton, bones, facing or scale.</summary>
+    public const string ThemeModel = "theme.model";
+    /// <summary>An animation library breaks the theme contract (T-224): a required clip missing, a clip the file lacks, a track on a bone the rig lacks, another rig.</summary>
+    public const string ThemeAnim = "theme.anim";
+    /// <summary>A theme model is over an ARCHITECTURE §9 budget (T-224): triangles, materials or texture size.</summary>
+    public const string ThemeBudget = "theme.budget";
+    /// <summary>A theme model will not get the whole toon look (T-224): a see-through material, no outline directions, its origin off the ground (warning).</summary>
+    public const string WarnThemeLook = "warn.theme_look";
     /// <summary>An item's worn visual key has no model file in the theme chain, so the missing model is drawn (warning, T-405).</summary>
     public const string WarnVisualFile = "warn.visual_file";
     /// <summary>A rule threw; this is a validator bug, reported so it cannot pass silently.</summary>

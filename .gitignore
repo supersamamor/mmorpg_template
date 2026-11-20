@@ -21,6 +21,9 @@ export_presets.cfg
 /client/themes
 # Godot writes import settings next to each asset it reads through the mounted themes folder
 /themes/**/*.import
+# Art packs and trial themes (docs/THEMES.md, docs/FORKING.md): pack files are never committed, and themes written for evaluation are eval-*
+/packs/
+/themes/eval-*/
 !/client/export_presets.cfg
 
 # ---------- IDEs ----------
