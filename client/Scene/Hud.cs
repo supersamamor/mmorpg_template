@@ -3,6 +3,7 @@ using Game.Client.Core.World;
 using Game.Client.Core;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Net;
+using Game.Client.Core.Quests;
 using Game.Client.Core.Ui;
 using Game.Client.Core.Audio;
 using Game.Client.Scene.Audio;
@@ -78,10 +79,11 @@ public sealed class Hud
     private DialoguePanel? _dialoguePanel;
     private QuestPanel? _questPanel;
     // The quest tracker (T-602): under the bars on the left, the tracked quest's name and counters; a tap opens the quest log. With no active quest it is the
-    // "Quests" button, so the log needs no button of its own on a full phone HUD.
+    // "Quests" button, so the log needs no button of its own on a full phone HUD. Each line is trimmed to the column with an ellipsis instead of wrapping (T-406): a long
+    // quest name or three long objectives would otherwise grow it over the buttons below; the log has the whole text.
     private readonly Button _tracker = new()
     {
-        Visible = false, Alignment = HorizontalAlignment.Left, AutowrapMode = TextServer.AutowrapMode.WordSmart, ClipText = false,
+        Visible = false, Alignment = HorizontalAlignment.Left, AutowrapMode = TextServer.AutowrapMode.Off, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
         SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin,
     };
     private int _questVersion = -1;
@@ -338,6 +340,10 @@ public sealed class Hud
         _logout.Visible = true;
         _bagButton.Visible = true;
         _skillsButton.Visible = true;
+        // The longest tracker a quest can make: a long name, a held reason and the objectives up to the cap (T-406).
+        _tracker.Text = longName + " of the Far Northern Reaches\n" + UiText.QuestHeld(QuestReasons.InventoryFull) + "\n"
+            + string.Join("\n", Enumerable.Range(0, QuestBook.MaxTrackerLines - 2).Select(i => UiText.QuestObjective(QuestObjectiveTypes.Kill, longName, 99999, 99999)));
+        _tracker.Visible = true;
         ShowInfo(longName, UiText.EntityKind(EntityKinds.Item, true), new Vector2((float)_metrics.CanvasWidth, (float)_metrics.CanvasHeight));
     }
 
@@ -348,6 +354,7 @@ public sealed class Hud
         _statsVersion = -1;
         _connectionVersion = -1;
         _hotbarVersion = -1;
+        _questVersion = -1;
         _slotText.Clear(); // a new scale: every slot fits its font again
         _shownTarget = -1;
     }
@@ -875,6 +882,24 @@ public sealed class Hud
                 problems.Add($"{name} is {rect.Size.X / _metrics.UnitsPerDp:0}x{rect.Size.Y / _metrics.UnitsPerDp:0} dp, under the {TouchTargetRules.MinTarget(_metrics.Platform):0} minimum");
         }
         return problems;
+    }
+
+    /// <summary>
+    /// The other HUD buttons and the target frame the quest tracker lies over now, as "name (rect)" (T-406). The layout check compares the long tracker's list with the
+    /// one-line tracker's: a long quest must not cover anything that the plain "Quests" button does not.
+    /// </summary>
+    public List<string> TrackerOverlaps()
+    {
+        var found = new List<string>();
+        if (!_tracker.IsVisibleInTree()) return found;
+        var mine = _tracker.GetGlobalRect().Grow(-0.6f);
+        foreach (var control in _interactive)
+        {
+            if (control is not (Button or LineEdit) || control == _tracker || !control.IsVisibleInTree() || InScroll(control)) continue;
+            if (mine.Intersects(control.GetGlobalRect())) found.Add($"{control.GetType().Name}\"{(control as Button)?.Text}\" {Describe(control.GetGlobalRect())}");
+        }
+        if (_targetFrame.IsVisibleInTree() && mine.Intersects(_targetFrame.GetGlobalRect())) found.Add($"the target frame {Describe(_targetFrame.GetGlobalRect())}");
+        return found;
     }
 
     private static bool InScroll(Node node)

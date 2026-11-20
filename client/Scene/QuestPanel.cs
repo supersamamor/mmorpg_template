@@ -1,6 +1,7 @@
 using Game.Client.Core;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Quests;
+using Game.Shared.Vocabulary;
 using Godot;
 
 namespace Game.Client.Scene;
@@ -32,6 +33,7 @@ public sealed class QuestPanel
     private readonly List<(Button Track, Button Abandon, string Quest)> _questButtons = new();
     private string? _confirming;   // the quest whose Abandon was pressed once
     private int _shownVersion = -1;
+    private bool _samples;
     private float _target = 48;
     private float _width = 400;
     private Func<double, float> _dp = d => (float)d;
@@ -112,6 +114,14 @@ public sealed class QuestPanel
         if (!_center.Visible) return;
         if (_center.Size != _safeSize) _center.Size = _safeSize;
         var book = _session.Quests;
+        if (_samples)
+        {
+            if (_shownVersion == -2) return;
+            _shownVersion = -2;
+            Clear();
+            DrawSamples();
+            return;
+        }
         if (_shownVersion == book.Version) return;
         _shownVersion = book.Version;
         Clear();
@@ -142,6 +152,44 @@ public sealed class QuestPanel
         if (book.Completed.Count == 0) Line(UiText.NoCompletedQuests, dim: true);
         foreach (var id in book.Completed) Line(_bundle.Quest(id)?.Name ?? id, dim: true);
     }
+
+    /// <summary>Fills the log with the longest lines it can show (and opens it), so a layout check sees the worst case; <see cref="ClearSamples"/> ends it (T-406).</summary>
+    public void ShowSamples(string longName)
+    {
+        _samples = true;
+        _sampleName = longName;
+        _center.Visible = true;
+        _shownVersion = -1;
+        Refresh();
+    }
+
+    /// <summary>Ends <see cref="ShowSamples"/> and closes the log.</summary>
+    public void ClearSamples()
+    {
+        _samples = false;
+        SetOpen(false);
+        _shownVersion = -1;
+    }
+
+    private void DrawSamples()
+    {
+        Heading(UiText.ActiveQuests);
+        for (var q = 0; q < 4; q++)
+        {
+            Line(_sampleName + " of the Far Northern Reaches", bold: true);
+            Line(UiText.QuestStep(9, 9, _sampleName + " " + _sampleName + " " + _sampleName));
+            for (var o = 0; o < 3; o++) Line("  " + UiText.QuestObjective(QuestObjectiveTypes.Kill, _sampleName, 99_999, 99_999));
+            Line(UiText.QuestHeld(QuestReasons.InventoryFull));
+            var buttons = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+            buttons.AddChild(Button(UiText.Track));
+            buttons.AddChild(Button(UiText.ConfirmAbandon));
+            Add(buttons);
+        }
+        Heading(UiText.CompletedQuests);
+        for (var c = 0; c < 6; c++) Line(_sampleName + " " + _sampleName, dim: true);
+    }
+
+    private string _sampleName = string.Empty;
 
     private void OnAbandon(string questId)
     {

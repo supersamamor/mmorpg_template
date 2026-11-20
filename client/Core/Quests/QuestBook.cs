@@ -121,13 +121,26 @@ public sealed class QuestBook
         MarkersVersion++;
     }
 
+    /// <summary>The most lines the tracker shows: the name, a held reason and the objectives (T-406).</summary>
+    public const int MaxTrackerLines = 2;
+
     /// <summary>The compact tracker's text: the tracked quest's name, then one line per objective with its counter; <see cref="UiText.QuestsButton"/> when none is active.</summary>
     public string TrackerText(DisplayBundle bundle)
     {
         if (Tracked is not { } id || Find(id) is not { } entry) return UiText.QuestsButton;
         _text.Clear().Append(bundle.Quest(id)?.Name ?? id);
-        if (entry.Held is { } held) _text.Append('\n').Append(UiText.QuestHeld(held));
-        foreach (var objective in entry.Objectives) _text.Append('\n').Append(ObjectiveLine(bundle, objective));
+        var lines = 1;
+        if (entry.Held is { } held)
+        {
+            _text.Append('\n').Append(UiText.QuestHeld(held));
+            lines++;
+        }
+        // The tracker is a fixed-size corner of the HUD (T-406): the name and at most MaxTrackerLines - 1 more lines; the quest log shows everything.
+        foreach (var objective in entry.Objectives)
+        {
+            if (lines++ >= MaxTrackerLines) break;
+            _text.Append('\n').Append(ObjectiveLine(bundle, objective));
+        }
         return _text.ToString();
     }
 

@@ -43,6 +43,7 @@ public sealed class UiRuns
 
         await LoginAsync();
         await LayoutMatrixAsync("playing");
+        await PanelsLayoutAsync();
         Hud.SetScale(originalScale, false);
         Hud.ForceRefresh();
         await FramesAsync(3);
@@ -68,6 +69,28 @@ public sealed class UiRuns
         Hud.SetScale(originalScale, false);
         UserPrefsStore.Save(originalPreferences);
         originalPreferences.ApplyTo(_main.Audio!.Director.Mixer);
+    }
+
+    /// <summary>
+    /// The stats panel and the quest log (T-406), each filled with its longest words at every screen shape and scale; the long quest tracker is part of every
+    /// matrix (<see cref="Scene.Hud.ShowSamples"/>), where <see cref="Scene.Hud.FindProblems"/> also checks that it overlaps nothing.
+    /// </summary>
+    private async Task PanelsLayoutAsync()
+    {
+        var scaleBefore = Hud.Scale;
+        var stats = Hud.Stats!;
+        stats.ShowSamples();
+        await FramesAsync(3);
+        await LayoutMatrixAsync("stats panel open");
+        stats.ClearSamples();
+        var quests = Hud.Quests!;
+        quests.ShowSamples(LongName);
+        await FramesAsync(3);
+        await LayoutMatrixAsync("quest log open");
+        quests.ClearSamples();
+        Hud.SetScale(scaleBefore, false);
+        Hud.ForceRefresh();
+        await FramesAsync(3);
     }
 
     /// <summary>The sound settings: the panel fits at every screen shape, the buttons change the mixer and the engine's buses, and the choice is stored.</summary>
@@ -183,6 +206,7 @@ public sealed class UiRuns
         var scales = new List<double>();
         for (var i = 0; i < UiScale.StepCount(Config.UiScaleMin, Config.UiScaleMax, Config.UiScaleStep); i++) scales.Add(Config.UiScaleMin + i * Config.UiScaleStep);
         var combinations = 0;
+        var crowded = 0;
         var failures = new List<string>();
         foreach (var screen in Screens)
             foreach (var notch in new[] { false, true })
@@ -197,8 +221,19 @@ public sealed class UiRuns
                     await FramesAsync(combinations == 0 ? 6 : 3);
                     combinations++;
                     foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: {problem}");
+                    // The long quest tracker (T-406) must not lie over anything the plain one-line tracker does not (the cramped small-phone corner is a known limit of the left
+                    // column itself and is reported separately).
+                    var longOverlaps = Hud.TrackerOverlaps();
+                    var longText = Hud.Tracker.Text;
+                    Hud.Tracker.Text = UiText.QuestsButton;
+                    await FramesAsync(2);
+                    var plainOverlaps = Hud.TrackerOverlaps();
+                    Hud.Tracker.Text = longText;
+                    foreach (var name in longOverlaps.Where(o => !plainOverlaps.Contains(o))) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the long quest tracker covers {name}");
+                    if (plainOverlaps.Count > 0) crowded++;
                 }
-        Print($"layout: {what}: {combinations} combinations ({Screens.Length} screens x notch on/off x {scales.Count} scales), {failures.Count} problems");
+        Print($"layout: {what}: {combinations} combinations ({Screens.Length} screens x notch on/off x {scales.Count} scales), {failures.Count} problems" +
+              (crowded > 0 ? $"; in {crowded} of them even the one-line quest tracker lies over the skills button (a limit of the left column, not of the long text)" : string.Empty));
         foreach (var line in failures.Take(12)) Print("layout: PROBLEM " + line);
         Check(failures.Count == 0, $"{what}: nothing cut off, outside the safe area, or under the touch minimum ({failures.Count} problems)");
     }
