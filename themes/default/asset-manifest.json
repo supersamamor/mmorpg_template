@@ -71,6 +71,9 @@
   "icon.item.beetle_shell": {
     "file": "icons/item/beetle_shell.png"
   },
+  "icon.item.blank_page": {
+    "file": "icons/item/blank_page.png"
+  },
   "icon.item.boar_tusk": {
     "file": "icons/item/boar_tusk.png"
   },
@@ -103,6 +106,9 @@
   },
   "icon.item.padded_vest": {
     "file": "icons/item/padded_vest.png"
+  },
+  "icon.item.realign_tonic": {
+    "file": "icons/item/realign_tonic.png"
   },
   "icon.item.swift_elixir": {
     "file": "icons/item/swift_elixir.png"
