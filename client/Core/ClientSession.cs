@@ -55,6 +55,9 @@ public sealed class ClientSession
     /// <summary>Raised for each <c>service_opened</c> (after <see cref="Dialogue"/> took it): the HUD opens the service's panel.</summary>
     public event Action<ServiceOpenedMessage>? ServiceOpened;
 
+    /// <summary>The shop the server opened (T-603): its stock and prices, what it pays, the tab, pick and quantity the panel shows. The server prices and decides every trade.</summary>
+    public Game.Client.Core.Shop.ShopBook Shop { get; } = new Game.Client.Core.Shop.ShopBook();
+
     /// <summary>The quest log, the tracked quest and the NPC markers (T-602). The server decides every count and step; this only holds what it sent.</summary>
     public QuestBook Quests { get; } = new QuestBook();
 
@@ -92,6 +95,7 @@ public sealed class ClientSession
         Ui.Reset();
         Inventory.Reset();
         Dialogue.Reset();
+        Shop.Reset();
         Quests.Reset();
         Skills.Reset();
         Stats.Reset();
@@ -168,6 +172,12 @@ public sealed class ClientSession
 
     /// <summary>The dialogue panel's Close button: end the dialogue and any service it opened. The panel closes when the server says it ended.</summary>
     public void CloseDialogue() => SendItem(new DialogueCloseMessage());
+
+    /// <summary>The shop panel's Buy button (T-603): <paramref name="quantity"/> units of the stock item <paramref name="item"/>. Sends the item and the count, never a price; the server answers with the new bag and balance, or a refusal.</summary>
+    public void ShopBuy(string item, int quantity) => SendItem(new ShopBuyMessage(item, quantity));
+
+    /// <summary>The shop panel's Sell button (T-603): <paramref name="quantity"/> units of the carried entry <paramref name="entry"/> at the shop's price.</summary>
+    public void ShopSell(long entry, int quantity) => SendItem(new ShopSellMessage(entry, quantity));
 
     /// <summary>The quest log's Abandon confirmation (T-602): the server drops the quest and its progress, or refuses.</summary>
     public void AbandonQuest(string questId) => SendItem(new AbandonQuestMessage(questId));
@@ -348,6 +358,10 @@ public sealed class ClientSession
                 break;
             case DialogueEndedMessage ended:
                 Dialogue.Ended(ended.Reason);
+                if (Dialogue.Service != Game.Shared.Vocabulary.ServiceIds.Shop) Shop.Close();   // a finished graph leaves its service open; anything else ends it
+                break;
+            case ShopMessage shop:
+                Shop.Apply(shop);
                 break;
             case ServiceOpenedMessage service:
                 Dialogue.ServiceOpened(service.Service);
@@ -355,6 +369,12 @@ public sealed class ClientSession
                 break;
             case RejectedMessage rejected:
                 if (rejected.Intent == MessageTypes.Refine && rejected.Reason == Game.Shared.Vocabulary.ItemReasons.ServiceRequired) Dialogue.ServiceClosed();
+                if (rejected.Intent is MessageTypes.ShopBuy or MessageTypes.ShopSell
+                    && rejected.Reason is Game.Shared.Vocabulary.ItemReasons.ServiceRequired or Game.Shared.Vocabulary.ItemReasons.OutOfRange)
+                {
+                    Dialogue.ServiceClosed();   // the server says no shop is open or in reach: the panel closes
+                    Shop.Close();
+                }
                 Ui.OnRejected(rejected, viewNow);
                 break;
             case AttackStoppedMessage stopped:

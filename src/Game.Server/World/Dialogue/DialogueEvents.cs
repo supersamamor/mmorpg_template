@@ -34,8 +34,11 @@ public sealed record DialogueRefused(EntityId Player, string Intent, string Reas
     public string Name => EventNames.DialogueRefused;
 }
 
-/// <summary><c>ServiceOpened</c>: an <c>open_service</c> action opened <c>Service</c> (a <c>ServiceIds</c> term) of the NPC entity <c>Npc</c> for <c>Player</c>.</summary>
-public sealed record ServiceOpened(EntityId Player, EntityId Npc, string Service) : IGameEvent
+/// <summary>
+/// <c>ServiceOpened</c>: an <c>open_service</c> action opened <c>Service</c> (a <c>ServiceIds</c> term) of the NPC entity <c>Npc</c> for <c>Player</c>; <c>ShopId</c> is the
+/// action's <c>shop_id</c> (T-603), set for the <c>shop</c> service.
+/// </summary>
+public sealed record ServiceOpened(EntityId Player, EntityId Npc, string Service, string? ShopId = null) : IGameEvent
 {
     /// <inheritdoc />
     public string Name => EventNames.ServiceOpened;

@@ -356,10 +356,13 @@ Dialogue graphs, NPCs and their services are T-601; quests are T-602. The sectio
   - **Effects.** `DialogueEffectsRequested` is run by combat's effect runner on its next tick, like a consumable's effects (so they apply one tick later; row 203's edge case).
   - **Save point.** `ISavePointStore` (in memory until T-702, shared by every instance) holds a character's save point. **The rule:** `teleport` with `to_save_point` and the respawn after death both go
     to it; a character without one uses the respawn point of the map it is on (`CombatContent.RespawnPointFor`). It is forgotten when the character leaves the world.
-  - **Services.** `open_service` sets `Entity.OpenService` and sends `service_opened`; it stays open until the player walks beyond the talk range, warps, dies, closes or talks to someone else (a
+  - **Services.** `open_service` sets `Entity.OpenService` (and, for `shop`, `Entity.OpenShopId` and `Entity.OpenServiceNpc`) and sends `service_opened`; it stays open until the player walks beyond the talk range, warps, dies, closes or talks to someone else (a
     finished graph leaves it open). **Refine:** with `dialogue.refine_needs_service` (on in `balance.yaml`) the `refine` intent is refused `service_required` unless a `refine` service is open;
     the starter meadow's smith opens it. `insert_card` stays free anywhere. **Resets:** Odalys offers a free stat reset and skill reset to characters below base level 10 (`base_level` condition and
     `run_effects`), the same line as `progression.reset.free_below_base_level`; the reset items stay. Since T-602 the choices also need `out_of_combat`, the window of `progression.reset.refuse_in_combat`.
+    **Shop** (T-603): a service that needs data takes it from a field of the action, not from a generic parameter bag: `open_service` with `service: shop` also names `shop_id: shop.*`
+    (required for `shop`, refused for any other service; checked at load). The shop is data (`content/shops/*.yaml`, `ShopDef`): its stock, each row an item id and an optional own `price`
+    (else the item's `buy_price`); §6.8 has the trading rules.
 
 ### 6.5 Progression
 Base level + job level, separate EXP tables. Stat points per base level and skill points
@@ -533,7 +536,22 @@ derived stat `weight_limit` (`formulas.yaml`).
 - **What other systems read** (hard rule 7, no calls): the sheet's modifiers; `Entity.Weapon` (type, `weapon_atk`, refine, range, element) for combat;
   `Entity.Look` (weapon type and the worn item ids that have a worn visual, in slot order) for the AOI; `Entity.Load` for combat.
 - **Currency** (T-602): one balance per character, `InventoryState.Currency` (in memory until T-702), kept with the bag so one transaction can take items and pay or spend currency;
-  sent as `currency` in `inventory` and `inventory_changed` and shown in the bag with the bundle's `currency_name`. Quest rewards add to it; nothing spends it yet (shops are later).
+  sent as `currency` in `inventory` and `inventory_changed` and shown in the bag with the bundle's `currency_name`. Quest rewards and shop sales add to it; shop purchases spend it.
+- **Shops** (T-603, `ShopContent`, `InventorySystem`, `Game.Shared/Shop/ShopRules.cs`). A shop is a `ShopDef` (`shop.*`, `content/shops/`): a stock list of item ids with an optional own price; load
+  validation needs at least one row, no item twice, every price from 1 to `ShopRules.MaxUnitPrice` (1,000,000,000; the item's `buy_price` counts when a row sets none) and every item to exist.
+  `shop.max_buy_quantity` (`balance.yaml`, 99) caps one purchase. A dialogue opens it with `open_service` (`service: shop`, `shop_id`). The **inventory** system (not the dialogue system) owns the two
+  intents, because the items and the currency are one transaction (rule 10): `shop_buy` (item, quantity) and `shop_sell` (entry, quantity). **The client never sends a price**; every price is the
+  server's: a buy costs the stock row's price, a sale pays the item's own `sell_price`. Both need a living player with a `shop` service open and the NPC within `dialogue.talk_range`
+  (`service_required`, `out_of_range`, `dead`). **Buy** is refused unless the item is in the open shop's stock (`not_in_stock`), the quantity is from 1 to the limit (`invalid_quantity`,
+  `quantity_limit`), the total is affordable (`cannot_afford`; a price × quantity beyond the `long` range counts as unaffordable: `ShopRules.TryTotal` never wraps) and the bag takes it
+  (`inventory_full`, `too_heavy`). **Sell** works on a carried entry and is refused for a missing one (`item_gone`), a worn one (`item_equipped`), a bad quantity (`invalid_quantity`), a quest item or an
+  item with `sell_price` 0 (`not_sellable`: the two reset items are priced to buy, not to sell back) and a balance that could not hold the proceeds (`currency_full`). **Decisions:** any carried item with a
+  sell price sells to any shop, not only the shop's own stock; starter items sell like any other once they are in the bag (a worn one must come off first); quest-kind items never sell; an
+  item that an active quest still needs can be sold, and the quest's counter simply drops (nothing is lost for good: it can be gathered again). Every check runs before anything changes and the last
+  one that can fail is the add or the remove itself, which changes nothing when it refuses; so items and currency move together or not at all, in one `inventory_changed` (`shop_buy` / `shop_sell`,
+  with the new `currency`). A refusal is `ItemRefused` → `rejected` (`intent` `shop_buy` / `shop_sell`, `entry` or `item`). When the shop opens the inventory answers `ServiceOpened` with `ShopOpened`
+  (the owner's `shop` message: the priced stock, the sell prices of every item a shop buys, the buy limit). The display bundle has no prices (§5.4): the sell prices ride in `shop`, which only a
+  player at a shop is sent.
 - **Quest turn-ins** (T-602): `QuestItemsRequested` takes the consumed items and gives the item rewards (`TryExchange`, all or nothing) and adds the currency, then `inventory_changed`
   (`quest`) and `QuestItemsResolved`; a refusal changes nothing and the quest waits (§6.4).
 - **Starting items** are data: `new_character.start_items` (`item_id`, `quantity`, `equipped`), validated at load. A new character gets them when the
@@ -634,6 +652,11 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   portrait (the theme's `portrait.*` texture, else the first letter of the name, §7.7), name and title (from the display bundle), the line, and the choices as buttons of at least the touch
   target (48 dp), in a scroll container; a Close button. It only sends `dialogue_choice` and `dialogue_close`; it closes when the server says `dialogue_ended`. A `service_opened` for `refine`
   opens the bag, where the refine button is; `rejected` `service_required` is said on the flash line.
+- **Shop** (T-603, `client/Scene/ShopPanel.cs`, view model `client/Core/Shop/ShopBook.cs`). A panel the size of the bag's, opened by the `shop` message and closed when the server ends the dialogue or the service
+  (the panel follows `Dialogue.Service`; a `rejected` `service_required` / `out_of_range` closes it too). Header with the currency balance and a Close button (which sends `dialogue_close`); a Buy tab (the stock with
+  its prices) and a Sell tab (the carried bag with what the shop pays, "not bought" and disabled where it will not take the item); a picker (minus, the count with the total, plus, Max) and the Buy / Sell button.
+  It sends `shop_buy` (item, count) and `shop_sell` (entry, count) only; the total shown is a preview from `ShopRules`, and the balance and bag come back in `inventory_changed`. Rows, tabs and picker buttons
+  are at least the touch target (48 dp); the panel is in the `-Run ui` layout matrix (the longest words, six screen shapes, every scale) and its touch targets are checked with the rest of the HUD.
 - **Quests** (T-602, `client/Scene/QuestPanel.cs`, view model `client/Core/Quests/QuestBook.cs`). **Tracker:** a compact button under the bars on the top left (13 dp text, the left column's
   width, at least the touch target): the tracked quest's name and one line per objective with the server's counter (`Defeat Gel Slime 3/5`), or "Quests" when none is active; the quest
   last accepted or advanced is tracked, and the log's Track button picks another. A tap opens the **quest log**, a panel like the stats panel: active quests with their step text
@@ -1007,11 +1030,13 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   | `talk` | C→S | `target` (an NPC entity in view): the server walks the character into `dialogue.talk_range` and starts its dialogue; a request, it may come back `rejected` with a "Dialogue reasons" term (T-601) |
   | `dialogue_choice` | C→S | `index` (a shown choice's index from `dialogue`; 0 at a node without choices) (T-601) |
   | `dialogue_close` | C→S | none: end the dialogue and any service it opened (T-601) |
+  | `shop_buy` | C→S | `item` (a stock item id), `quantity`: buy from the open shop; the price is the server's. Comes back `inventory_changed` (`shop_buy`, with the new `currency`) or `rejected` (`intent` `shop_buy`, `reason` an "Item reasons" term, `item`) (T-603) |
+  | `shop_sell` | C→S | `entry` (a carried inventory entry), `quantity`: sell to the open shop at the item's sell price. Comes back `inventory_changed` (`shop_sell`) or `rejected` (`intent` `shop_sell`, `entry`) (T-603) |
   | `abandon_quest` | C→S | `quest`: drop an active quest, its progress is lost; may come back `rejected` (`not_active`, with `quest`) (T-602) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
-  | `rejected` | S→C | `intent` (`move`, `attack`, an item intent, or `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`), `reason` (a `MoveRejected`, "Attack reasons", "Item reasons", "Skill reasons" or "Dialogue reasons" term), `cell` (move), `target` (attack, `pick_up`, `use_skill`, `talk`), `entry` (`use_item`, `equip`, `drop_item`; the equipment entry for `insert_card`, `refine`), `slot` (`equip`, `unequip`), `skill` (the skill, or for `change_job` the job), `quest` (a refused quest start, `intent` `dialogue_choice`, or `abandon_quest`; a "Quest reasons" term, T-602) |
+  | `rejected` | S→C | `intent` (`move`, `attack`, an item intent, or `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`), `reason` (a `MoveRejected`, "Attack reasons", "Item reasons", "Skill reasons" or "Dialogue reasons" term), `cell` (move), `target` (attack, `pick_up`, `use_skill`, `talk`), `entry` (`use_item`, `equip`, `drop_item`; the equipment entry for `insert_card`, `refine`), `slot` (`equip`, `unequip`), `skill` (the skill, or for `change_job` the job), `quest` (a refused quest start, `intent` `dialogue_choice`, or `abandon_quest`; a "Quest reasons" term, T-602), `item` (a refused `shop_buy`, T-603) |
   | `attack_stopped` | S→C (owner) | `target`, `reason` (an "Attack reasons" term) |
   | `exp` | S→C (owner) | `base_level`, `base_exp`, `base_next`, `job_level`, `job_exp`, `job_next` (`*_next` = EXP the level needs, 0 at the cap) |
   | `level_up` | S→C (owner) | `base_level` or `job_level` (one message per level reached) |
@@ -1023,6 +1048,7 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   | `dialogue` | S→C (owner) | `npc` (entity id), `speaker` (an `npc.*` id: name, title and portrait are in the display bundle), `portrait` (a key overriding the speaker's, if any), `text`, `choices` (`[{index,text}]`, the shown ones), `more` (only with no choices: the dialogue goes on after this node) (T-601) |
   | `dialogue_ended` | S→C (owner) | `reason` (a "Dialogue end reasons" term) (T-601) |
   | `service_opened` | S→C (owner) | `service` (a "Service ids" term), `npc` (T-601) |
+  | `shop` | S→C (owner) | `npc`, `shop` (the `shop.*` id), `max_quantity`, `stock` (`[{item, price}]`, in display order), `sell` (`[{item, price}]`: what a shop pays per unit for every item it buys). Sent right after `service_opened` for the `shop` service (T-603) |
   | `quest_log` | S→C (owner) | `active` (`[{quest, step, objectives:[{type, target?, have, need}], held?}]`, by id; `step` indexes the bundle's step texts), `completed` (quest ids), `offer`, `turn_in` (NPC ids for the markers). After every snapshot and whenever the markers change; it replaces what the client had (T-602) |
   | `quest` | S→C (owner) | `change` (a "Quest changes" term), `quest`, `state` (the quest as it is now, the shape of an `active` entry; absent for `completed` and `abandoned`) (T-602) |
   | `skills` | S→C (owner) | `job`, `points` (unspent), `levels` (`[["skill.x",2],...]`), `cooldowns` (`[["skill.x",ms left],...]`), `jobs` (the jobs `change_job` would accept now). After every snapshot, a learn, a job change and a level (T-502) |

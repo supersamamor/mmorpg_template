@@ -119,7 +119,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 |----|------|-------|-------|--------|------------|--------|-------|
 | T-601 | NPCs in the world, dialogue graphs, conditions and actions, NPC services (save point, refine decision, resets) | Claude Code | Sonnet 5.5 | [T-601](../tasks/prompts/T-601.md) | T-501, T-502, T-503, T-222 | Review | Touches `Net/**` for talk and dialogue messages only (standing approval 2026-11-18); ADR-002 #187, #202, #234 |
 | T-602 | Quest state machine on the event bus: objectives, turn-in, atomic rewards, currency balance, quest conditions in dialogue, quest log and tracker, the Warden path | Claude Code | Opus 5.5 | [T-602](../tasks/prompts/T-602.md) | T-601, T-404 | Review | Touches `Net/**` for quest messages and the currency field only (standing approval 2026-11-18); ADR-002 #211, #212, #253 |
-| T-603 | Shop NPC service: buy and sell for currency in one inventory transaction, shops as data, merchant NPC, shop panel | Claude Code | Sonnet 5.5 | [T-603](../tasks/prompts/T-603.md) | T-601, T-602 | In Progress | Touches `Net/**` for shop intents and the shop message only (standing approval 2026-11-18); ADR-002 #251, #268 |
+| T-603 | Shop NPC service: buy and sell for currency in one inventory transaction, shops as data, merchant NPC, shop panel | Claude Code | Sonnet 5.5 | [T-603](../tasks/prompts/T-603.md) | T-601, T-602 | Review | Touches `Net/**` for shop intents and the shop message only (standing approval 2026-11-18); ADR-002 #251, #268 |
 
 ## Phase 7 — Persistence & accounts
 

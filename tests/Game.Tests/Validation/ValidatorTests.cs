@@ -289,6 +289,61 @@ public class ValidatorTests : IDisposable
         ShouldBe(Single(Validate(), ValidationCodes.DialogueDangling), "dialogue/guide_intro.yaml", "nodes.offer_hunt.choices[0].next");
     }
 
+    // ---- shops (T-603) ----------------------------------------------------------------------------------------------
+
+    [Theory]
+    [InlineData("  - item_id: item.healing_draught\n", "  - item_id: item.healing_draught\n    price: 0\n", "stock[0].price")]
+    [InlineData("  - item_id: item.healing_draught\n", "  - item_id: item.healing_draught\n    price: -5\n", "stock[0].price")]
+    [InlineData("  - item_id: item.healing_draught\n", "  - item_id: item.healing_draught\n    price: 1000000001\n", "stock[0].price")]
+    [InlineData("  - item_id: item.antidote\n", "  - item_id: item.healing_draught\n", "stock[1].item_id")]   // a second Healing Draught row
+    [InlineData("  - item_id: item.antidote\n", "  - item_id: item.gel_glob\n", "stock[1].price")]   // a material has no buy_price and the row gives none
+    public void A_shop_with_a_bad_price_a_repeated_item_or_an_unpriced_item_is_an_error(string from, string to, string path)
+    {
+        Edit("shops/meadow_goods.yaml", from, to);
+
+        var issue = Validate().Issues.First(i => i.Code == ValidationCodes.ShopInvalid);
+
+        ShouldBe(issue, "shops/meadow_goods.yaml", path);
+    }
+
+    [Fact]
+    public void A_shop_that_sells_nothing_or_an_unknown_item_is_an_error()
+    {
+        File.WriteAllText(Path.Combine(_temp, "shops", "empty.yaml"), "id: shop.empty\nname: Empty\nstock: []\n");
+        ShouldBe(Single(Validate(), ValidationCodes.ShopInvalid), "shops/empty.yaml", "stock");
+
+        File.Delete(Path.Combine(_temp, "shops", "empty.yaml"));
+        Edit("shops/meadow_goods.yaml", "item.antidote", "item.antidot");
+        ShouldBe(Single(Validate(), ValidationCodes.RefMissing), "shops/meadow_goods.yaml", "stock[1].item_id");
+    }
+
+    [Fact]
+    public void The_shop_service_needs_a_real_shop_and_no_other_service_takes_one()
+    {
+        Edit("dialogue/merchant_intro.yaml", "shop_id: shop.meadow_goods", "shop_id: shop.nowhere");
+        var missing = Single(Validate(), ValidationCodes.RefMissing);
+        ShouldBe(missing, "dialogue/merchant_intro.yaml", "nodes.greet.choices[0].actions[0].shop_id");
+
+        Edit("dialogue/merchant_intro.yaml", "            shop_id: shop.nowhere\n", "");
+        ShouldBe(Single(Validate(), ValidationCodes.DialogueInvalid), "dialogue/merchant_intro.yaml", "nodes.greet.choices[0].actions[0].shop_id");
+    }
+
+    [Fact]
+    public void A_refine_service_with_a_shop_id_is_an_error()
+    {
+        Edit("dialogue/smith_intro.yaml", "service: refine", "service: refine\n            shop_id: shop.meadow_goods");
+
+        ShouldBe(Single(Validate(), ValidationCodes.DialogueInvalid), "dialogue/smith_intro.yaml", "nodes.greet.choices[0].actions[0].shop_id");
+    }
+
+    [Fact]
+    public void A_buy_limit_below_one_is_an_error()
+    {
+        Edit("balance.yaml", "max_buy_quantity: 99", "max_buy_quantity: 0");
+
+        Validate().Issues.ShouldContain(i => i.Path == "shop.max_buy_quantity" && i.Severity == ValidationSeverity.Error);
+    }
+
     // ---- quests (T-602) ---------------------------------------------------------------------------------------------
 
     [Fact]

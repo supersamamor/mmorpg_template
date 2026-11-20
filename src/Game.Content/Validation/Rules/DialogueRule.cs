@@ -98,6 +98,12 @@ public sealed class DialogueRule : IValidationRule
                         case OpenServiceAction s when !ServiceIds.All.Contains(s.Service):
                             context.Error(d.Id, ap + ".service", ValidationCodes.VocabUnknown, $"'{s.Service}' is not a service ({string.Join(", ", ServiceIds.All.Ordered)})");
                             break;
+                        case OpenServiceAction { Service: ServiceIds.Shop, ShopId: null or "" }:
+                            context.Error(d.Id, ap + ".shop_id", ValidationCodes.DialogueInvalid, "the shop service needs a shop_id");
+                            break;
+                        case OpenServiceAction { Service: not ServiceIds.Shop, ShopId: { Length: > 0 } }:
+                            context.Error(d.Id, ap + ".shop_id", ValidationCodes.DialogueInvalid, "only the shop service takes a shop_id");
+                            break;
                         case SetSavePointAction save:
                             foreach (var grid in maps)
                                 if (!grid.IsWalkable(save.X, save.Y))

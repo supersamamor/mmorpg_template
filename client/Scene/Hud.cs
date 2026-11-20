@@ -76,6 +76,7 @@ public sealed class Hud
     private SkillPanel? _skillPanel;
     private StatsPanel? _statsPanel;
     private DialoguePanel? _dialoguePanel;
+    private ShopPanel? _shopPanel;
     private QuestPanel? _questPanel;
     // The quest tracker (T-602): under the bars on the left, the tracked quest's name and counters; a tap opens the quest log. With no active quest it is the
     // "Quests" button, so the log needs no button of its own on a full phone HUD.
@@ -235,7 +236,8 @@ public sealed class Hud
         {
             _dialoguePanel = new DialoguePanel(_safe, session, bundle, _interactive, Tap);
             // A service the server opened (refining at a smith) is a panel of its own: the bag, where the refine button lives.
-            session.ServiceOpened += _ => _bag?.SetOpen(true);
+            session.ServiceOpened += opened => { if (opened.Service == ServiceIds.Refine) _bag?.SetOpen(true); };
+            _shopPanel = new ShopPanel(_safe, session, bundle, _interactive, Tap);   // the shop service is a panel of its own (T-603)
         }
         if (session is not null && bundle is not null) _questPanel = new QuestPanel(_safe, session, bundle, _interactive, Tap);
         if (session is not null)
@@ -435,6 +437,9 @@ public sealed class Hud
     /// <summary>The stats panel (T-503), or null without a session.</summary>
     public StatsPanel? Stats => _statsPanel;
 
+    /// <summary>The shop panel (T-603), or null without a session.</summary>
+    public ShopPanel? Shop => _shopPanel;
+
     /// <summary>The dialogue panel (T-601), or null without a session.</summary>
     public DialoguePanel? Dialogue => _dialoguePanel;
 
@@ -453,6 +458,7 @@ public sealed class Hud
             _iconLoader = value;
             _statusVersion = -1;   // the status icons can load now
             if (_bag is not null) _bag.IconLoader = value;
+            if (_shopPanel is not null) _shopPanel.IconLoader = value;
             if (_skillPanel is not null) _skillPanel.IconLoader = value;
             if (_dialoguePanel is not null) _dialoguePanel.IconLoader = value;
         }
@@ -600,6 +606,7 @@ public sealed class Hud
         _hotbarRow.AddThemeConstantOverride("separation", Mathf.RoundToInt(margin));
         _bag?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _statsPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
+        _shopPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _dialoguePanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _questPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
@@ -718,6 +725,7 @@ public sealed class Hud
         _skillPanel?.Refresh();
         _statsPanel?.Refresh();
         _dialoguePanel?.Refresh();
+        _shopPanel?.Refresh();
         if (_questVersion != _session.Quests.Version && _bundle is not null)
         {
             _questVersion = _session.Quests.Version;

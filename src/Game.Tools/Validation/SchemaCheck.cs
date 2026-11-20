@@ -39,6 +39,7 @@ public static class SchemaCheck
         ["quests"] = "quest",
         ["npcs"] = "npc",
         ["dialogue"] = "dialogue",
+        ["shops"] = "shop",
         ["drops"] = "drop_table",
         ["maps"] = "map",
     };

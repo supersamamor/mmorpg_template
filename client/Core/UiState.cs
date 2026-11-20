@@ -100,6 +100,8 @@ public sealed class UiState
     public void OnInventoryChanged(InventoryChangedMessage change, double now)
     {
         if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.PickedUp && change.Item is { } item) SetFlash(UiText.PickedUp(_bundle.NameOf(item)), now);
+        else if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.ShopBuy && change.Item is { } bought) SetFlash(UiText.Bought(_bundle.NameOf(bought)), now);
+        else if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.ShopSell && change.Item is { } sold) SetFlash(UiText.Sold(_bundle.NameOf(sold)), now);
         else if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.CardInserted && change.Item is { } socketed) SetFlash(UiText.CardInserted(_bundle.NameOf(socketed)), now);
     }
 
@@ -250,7 +252,7 @@ public sealed class UiState
 
     private static bool IsItemIntent(string intent) =>
         intent == MessageTypes.PickUp || intent == MessageTypes.UseItem || intent == MessageTypes.Equip || intent == MessageTypes.Unequip || intent == MessageTypes.DropItem
-        || intent == MessageTypes.InsertCard || intent == MessageTypes.Refine;
+        || intent == MessageTypes.InsertCard || intent == MessageTypes.Refine || intent == MessageTypes.ShopBuy || intent == MessageTypes.ShopSell;
 
     private static bool Arrived(EntityView? own, GridCell marker) =>
         own is not null && !own.Next.HasValue && !own.IsWalking && own.Cell.X == marker.X && own.Cell.Y == marker.Y;

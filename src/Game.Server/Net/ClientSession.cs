@@ -413,6 +413,12 @@ public sealed class ClientSession : IViewSink
             case DialogueCloseMessage:
                 if (Entity is { } closer) _gateway.Enqueue(new DialogueClose(closer));
                 break;
+            case ShopBuyMessage buy:
+                if (Entity is { } buyer) _gateway.Enqueue(new ShopBuy(buyer, buy.Item, buy.Quantity));
+                break;
+            case ShopSellMessage sell:
+                if (Entity is { } seller) _gateway.Enqueue(new ShopSell(seller, sell.Entry, sell.Quantity));
+                break;
             case AbandonQuestMessage abandon:
                 if (Entity is { } quitter) _gateway.Enqueue(new AbandonQuest(quitter, abandon.Quest));
                 break;

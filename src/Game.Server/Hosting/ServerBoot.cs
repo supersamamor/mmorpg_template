@@ -131,13 +131,14 @@ public static class ServerPipeline
         savePoints ??= new InMemorySavePointStore();
         var dialogue = DialogueContent.From(content);   // and the NPCs (a placement of an unknown NPC fails at the first tick)
         var quests = QuestContent.From(content);         // and the quest numbers
+        var shops = ShopContent.From(content);           // and the shops with their prices resolved
         return new SystemPipeline()
             .Add(() => MovementSystem.Create(balance))
             .Add(() => new MonsterSpawnerSystem(monsters, balance.Death.CorpseMs))
             .Add(() => MonsterAiSystem.Create(monsters, balance))
             .Add(() => new DialogueSystem(dialogue, savePoints, progressions, inventories))
             .Add(() => new CombatSystem(combat, progressions, savePoints))
-            .Add(() => new InventorySystem(items, inventories, clock, progressions))
+            .Add(() => new InventorySystem(items, inventories, clock, progressions, shops))
             .Add(() => new QuestSystem(quests, progressions, inventories))
             .Add(() => AoiSystem.Create(balance));
     }

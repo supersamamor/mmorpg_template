@@ -25,6 +25,7 @@ public sealed class SchemaGenerator
         ("quest", typeof(QuestDef)),
         ("npc", typeof(NpcDef)),
         ("dialogue", typeof(DialogueDef)),
+        ("shop", typeof(ShopDef)),
         ("drop_table", typeof(DropTableDef)),
         ("map", typeof(MapDef)),
         ("map-grid", typeof(MapGridFile)),

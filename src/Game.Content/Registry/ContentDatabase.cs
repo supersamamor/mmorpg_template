@@ -21,14 +21,15 @@ public sealed class ContentDatabase
         Registry<DropTableDef> drops, Registry<MapDef> maps, Registry<ExpTableDef> expTables,
         FormulaSetDef formulas, ElementTableDef elements, BalanceDef balance, AppearanceDef appearance,
         IReadOnlyDictionary<string, SourceLocation>? sources = null,
-        IReadOnlyDictionary<string, MapGrid>? grids = null, RefineDef? refine = null)
+        IReadOnlyDictionary<string, MapGrid>? grids = null, RefineDef? refine = null, Registry<ShopDef>? shops = null)
     {
+        Shops = shops ?? Registry<ShopDef>.Empty();
         Jobs = jobs; Skills = skills; Items = items; Monsters = monsters; Statuses = statuses; Quests = quests;
         Npcs = npcs; Dialogue = dialogue; Drops = drops; Maps = maps; ExpTables = expTables;
         Formulas = formulas; Elements = elements; Balance = balance; Appearance = appearance; Refine = refine ?? new RefineDef();
         _sources = sources ?? new Dictionary<string, SourceLocation>();
         Grids = grids ?? new Dictionary<string, MapGrid>();
-        _registries = new IRegistry[] { jobs, skills, items, monsters, statuses, quests, npcs, dialogue, drops, maps, expTables };
+        _registries = new IRegistry[] { jobs, skills, items, monsters, statuses, quests, npcs, dialogue, drops, maps, expTables, Shops };
     }
 
     /// <summary>Jobs (<c>content/jobs/</c>).</summary>
@@ -47,6 +48,8 @@ public sealed class ContentDatabase
     public Registry<NpcDef> Npcs { get; }
     /// <summary>Dialogue trees (<c>content/dialogue/</c>).</summary>
     public Registry<DialogueDef> Dialogue { get; }
+    /// <summary>Shops (<c>content/shops/</c>, T-603).</summary>
+    public Registry<ShopDef> Shops { get; }
     /// <summary>Drop tables (<c>content/drops/</c>).</summary>
     public Registry<DropTableDef> Drops { get; }
     /// <summary>Maps (<c>content/maps/*.yaml</c>).</summary>

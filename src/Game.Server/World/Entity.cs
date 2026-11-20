@@ -147,6 +147,12 @@ public sealed class Entity
     /// </summary>
     public string? OpenService { get; set; }
 
+    /// <summary>The shop (<c>shop.*</c>) the open <c>shop</c> service sells from (T-603), or null. Set and cleared with <see cref="OpenService"/>.</summary>
+    public string? OpenShopId { get; set; }
+
+    /// <summary>The NPC entity the open service belongs to (T-603), or null. The shop checks the player is still within talking range of it.</summary>
+    public EntityId? OpenServiceNpc { get; set; }
+
     /// <summary>A player's skill cooldowns (T-502), kept by combat; null for everything else.</summary>
     public Game.Shared.Skills.SkillCooldowns? Cooldowns { get; set; }
 

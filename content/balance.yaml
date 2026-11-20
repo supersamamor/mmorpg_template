@@ -146,6 +146,10 @@ dialogue:
   talk_range: 2
   # Refining needs a smith: the refine intent works only while an NPC's refine service is open (an open_service action) and the player is still in reach.
   refine_needs_service: true
+shop:
+  # One purchase may ask for at most 99 units: a full stack of a consumable (max_stack 99), so one tap-and-hold does not need a second purchase, and the largest total
+  # (99 x the dearest price, 700) stays far from any number limit.
+  max_buy_quantity: 99
 quests:
   # How many quests a character may have going at once; one more start is refused (too_many_active) until one is completed or abandoned.
   max_active: 10

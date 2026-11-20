@@ -14,6 +14,7 @@ Add new terms here in the same change that introduces them.
 | `quest.`     | Quest                 | `quest.first_hunt`      |
 | `npc.`       | NPC                   | `npc.guide`             |
 | `dialogue.`  | Dialogue graph        | `dialogue.guide_intro`  |
+| `shop.`      | Shop (T-603)          | `shop.meadow_goods`     |
 | `map.`       | Map                   | `map.starter_town`      |
 | `drop.`      | Drop table            | `drop.slime`            |
 | `exp.`       | EXP table             | `exp.base`              |
@@ -220,10 +221,10 @@ The `type` of a choice's `conditions` entry (T-601); a choice is shown only when
 ## Dialogue action types
 The `type` of a choice's `actions` entry (T-601); they run in order when the choice is picked:
 `start_quest` (`quest_id`: raises `QuestStartRequested`, which the quest system handles, T-602), `set_save_point` (`x`, `y`: a cell of the NPC's map), `run_effects` (`effects`: run on the player as a consumable would, resets allowed),
-`take_item` / `give_item` (`item_id`, `quantity`, default 1: a choice's item actions are one all-or-nothing transaction), `open_service` (`service`: a service id)
+`take_item` / `give_item` (`item_id`, `quantity`, default 1: a choice's item actions are one all-or-nothing transaction), `open_service` (`service`: a service id; `shop_id`: the shop, required for `shop` and refused for any other service, T-603)
 
 ## Service ids
-What an `open_service` action opens: `refine`. A service stays open until the player walks beyond `dialogue.talk_range` of the NPC, warps, dies, closes or talks to someone else.
+What an `open_service` action opens: `refine`, `shop` (T-603: buying and selling; the action's `shop_id` names the shop, and `shop_buy` / `shop_sell` work while it is open). A service stays open until the player walks beyond `dialogue.talk_range` of the NPC, warps, dies, closes or talks to someone else.
 
 ## Dialogue reasons
 In `DialogueRefused` and on the wire as `rejected` (`intent` `talk` or `dialogue_choice`); nothing changed (ARCHITECTURE §6.4):
@@ -245,7 +246,7 @@ Any reason other than `finished` ends the services the dialogue opened too.
 `CardInserted`, `ItemRefined`, `StatusRemoved`, `HpRestored`, `SpRestored`, `KnockedBack`, `Teleported`, `SummonRequested`, `MonsterSummoned`, `AreaApplied`,
 `SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`, `SkillCastEnded`, `SkillCooldownStarted`, `SkillLearnRefused`, `JobChangeRefused`,
 `StatRaised`, `StatRaiseRefused`, `StatsReset`, `SkillsReset`,
-`DialogueShown`, `DialogueEnded`, `DialogueRefused`, `ServiceOpened`, `QuestStartRequested`, `SavePointSet`, `DialogueEffectsRequested`, `DialogueItemsRequested`, `DialogueItemsResolved`,
+`DialogueShown`, `DialogueEnded`, `DialogueRefused`, `ServiceOpened`, `ShopOpened`, `QuestStartRequested`, `SavePointSet`, `DialogueEffectsRequested`, `DialogueItemsRequested`, `DialogueItemsResolved`,
 `QuestProgressed`, `QuestAbandoned`, `QuestRefused`, `QuestItemsRequested`, `QuestItemsResolved`, `QuestRewardsRequested`, `QuestRewarded`, `QuestMarkersChanged`
 
 ## Area of interest
@@ -287,7 +288,12 @@ does not see, `invalid_target` for itself or anything but a monster.
 In `ItemRefused` and on the wire in `rejected` (`intent` `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card` or `refine`); nothing changed (ARCHITECTURE §6.8):
 `item_gone`, `not_yours`, `unreachable`, `cancelled`, `too_heavy`, `inventory_full`, `not_usable`, `cooldown`, `not_equipment`,
 `wrong_slot`, `level_too_low`, `wrong_job`, `not_equipped`, `item_equipped`, `invalid_quantity`, `not_a_card`, `card_does_not_fit`, `no_free_socket`,
-`not_refinable`, `at_max_refine`, `missing_material`, `reset_in_combat`, `reset_dead`, `nothing_to_reset`, `service_required`.
+`not_refinable`, `at_max_refine`, `missing_material`, `reset_in_combat`, `reset_dead`, `nothing_to_reset`, `service_required`,
+`out_of_range`, `not_in_stock`, `quantity_limit`, `cannot_afford`, `not_sellable`, `currency_full`, `dead`.
+Shops (T-603), for `intent` `shop_buy` and `shop_sell`: `service_required` (no `shop` service open), `out_of_range` (the shop's NPC is beyond `dialogue.talk_range` or gone), `dead`,
+`not_in_stock` (the open shop does not sell the item), `invalid_quantity` (below 1, or more than the entry holds when selling), `quantity_limit` (more than `shop.max_buy_quantity`),
+`cannot_afford` (the total is beyond the balance, or beyond the number range), `inventory_full` and `too_heavy` (the bag cannot take the purchase), `item_gone` (no such entry), `item_equipped`,
+`not_sellable` (a quest item, or `sell_price` 0), `currency_full` (the proceeds would pass the number range). A refusal changes nothing: items and currency move together or not at all.
 `service_required` (T-601): `refine` works only while an NPC's `refine` service is open and in reach (`dialogue.refine_needs_service`).
 Reset items (T-503): `reset_in_combat` and `reset_dead` follow `progression.reset`; `nothing_to_reset` means no stat was raised (or no skill learned). All three leave the item in the bag.
 `card_does_not_fit`: none of the card's `slots` is one of the equipment's. `no_free_socket`: its `card_slots` are full (or it has none).
@@ -302,7 +308,8 @@ In `inventory` and `inventory_changed` (`load`).
 ## Inventory changes
 In `inventory_changed` `cause`: `picked_up`, `used`, `equipped`, `unequipped`, `dropped`, `weight` (only the weight limit or state changed),
 `card_inserted`, `refined` (any refine attempt: the material is used up whatever the result), `exchanged` (a dialogue's `take_item` / `give_item` actions, T-601),
-`quest` (a quest step's turn-in: its consumed items taken and its item and currency rewards given, one transaction, T-602).
+`quest` (a quest step's turn-in: its consumed items taken and its item and currency rewards given, one transaction, T-602),
+`shop_buy` (items bought; the currency went down in the same change, T-603), `shop_sell` (items sold; the currency went up, T-603).
 
 ## Refine failures
 What a failed refine does, per step of `refine.yaml` (`failure`): `keep` (the level stays), `down` (one level down, not below 0), `break` (the item is gone, with its cards).
@@ -340,9 +347,9 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `quest_log`, `quest`, `pong`, `bye`
-Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `quest_log`, `quest`.
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `pong`, `bye`
+Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
@@ -353,7 +360,7 @@ In `bye` (the server's last message before it closes the connection): `timeout`,
 The client reconnects after neither. `resume_failed`: the token in `hello` `resume` is unknown, already used, or its grace period is over
 (the client goes to the login screen). `rate_limit` also ends a resume from an address that failed too many resumes (ARCHITECTURE §10).
 A `rejected` message carries a "Movement reasons" (`MoveRejected`) term for `move`, an "Attack reasons" term for `attack`, or an "Item reasons" term for an
-item intent, instead; the session goes on.
+item intent (`shop_buy` and `shop_sell` included), instead; the session goes on.
 
 ## Entity kinds
 In a view record's `kind`: `player`, `monster`, `npc`, `item` (a ground item a monster dropped, `EntityKind.Item`; its `display_key` is the item id).

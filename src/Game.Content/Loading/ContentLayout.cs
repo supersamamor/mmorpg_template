@@ -19,6 +19,7 @@ public static class ContentLayout
         ["quests"] = typeof(QuestDef),
         ["npcs"] = typeof(NpcDef),
         ["dialogue"] = typeof(DialogueDef),
+        ["shops"] = typeof(ShopDef),
         ["drops"] = typeof(DropTableDef),
         ["maps"] = typeof(MapDef),
     };
