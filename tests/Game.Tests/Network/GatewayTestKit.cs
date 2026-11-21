@@ -82,6 +82,16 @@ public sealed class GatewayRig : IAsyncDisposable
         return rig;
     }
 
+    /// <summary>The same content with one monster's max HP changed (T-408): a test that needs a target no fight can finish before it is stopped.</summary>
+    public static ContentDatabase WithMonsterHp(ContentDatabase db, string monsterId, double maxHp)
+    {
+        var monster = db.Monsters.Get(monsterId);
+        var changed = monster with { Stats = new Dictionary<string, double>(monster.Stats) { ["max_hp"] = maxHp } };
+        var monsters = new Registry<Game.Shared.Definitions.MonsterDef>(db.Monsters.All.Select(m => m.Id == monsterId ? changed : m));
+        return new ContentDatabase(db.Jobs, db.Skills, db.Items, monsters, db.Statuses, db.Quests, db.Npcs, db.Dialogue, db.Drops, db.Maps,
+            db.ExpTables, db.Formulas, db.Elements, db.Balance, db.Appearance, grids: db.Grids);
+    }
+
     public static void WriteSelfSignedCertificate(string path)
     {
         using var rsa = RSA.Create(2048);

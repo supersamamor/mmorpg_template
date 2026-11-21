@@ -2,6 +2,7 @@ using Game.Server.World;
 using Game.Shared.Protocol;
 using Game.Shared.Definitions;
 using Game.Shared.Vocabulary;
+using Game.Tests.World;
 using Game.Shared.World;
 
 namespace Game.Tests.Network;
@@ -61,7 +62,10 @@ public class GatewayCombatTests
     [Fact]
     public async Task Stop_ends_an_auto_attack_even_while_standing_still()
     {
-        await using var rig = await GatewayRig.StartAsync(setupWorld: Veterans);
+        // The target must outlive the whole test: a gel slime has 9 HP and a first hit (13 or more) kills it, so the attack ends as target_dead in the very tick of the hit, and
+        // the Stop races that death. On a quiet machine the Stop won; on a busy one the first hit's delta reached the test after the slime was dead, no cancelled ever came and
+        // the wait timed out (16 of 25 runs under CPU load, T-408, ADR-002 row 282). A slime with HP no test can use up leaves only the Stop to end the fight.
+        await using var rig = await GatewayRig.StartAsync(setupWorld: Veterans, content: GatewayRig.WithMonsterHp(TestGrids.SampleContent, Slime, 1_000_000));
         var me = await rig.JoinAsync("stopper");
         await WalkOutAsync(me);
         var target = await NearestSlimeAsync(me);
@@ -70,6 +74,8 @@ public class GatewayCombatTests
 
         await me.SendAsync(new StopMessage());
         await me.WaitForAsync<AttackStoppedMessage>(m => m.Target == target && m.Reason == AttackReasons.Cancelled);
+        (me.Seen(target)?.Dead ?? false).ShouldBeFalse();   // the Stop ended the fight, not a kill
+        me.Messages.OfType<AttackStoppedMessage>().ShouldNotContain(m => m.Reason == AttackReasons.TargetDead);
     }
 
     [Fact]

@@ -209,8 +209,13 @@ public sealed class Hud
         _hotbar.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter | Control.SizeFlags.Expand;
         _hotbarRow.AddChild(_hotbarSpacer);
         _hotbarSpacer.AddChild(_skillsButton);   // the spacer keeps the hotbar centred while the button is hidden
-        _skillsButton.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        _skillsButton.SizeFlagsVertical = Control.SizeFlags.ShrinkEnd;
+        _skillsButton.AnchorLeft = 0;   // as wide as the spacer, as tall as a button, at its bottom (T-408): the spacer is as tall as the hotbar, which wraps to several rows on a narrow screen
+        _skillsButton.AnchorRight = 1;
+        _skillsButton.AnchorTop = 1;
+        _skillsButton.AnchorBottom = 1;
+        _skillsButton.OffsetLeft = 0;
+        _skillsButton.OffsetRight = 0;
+        _skillsButton.OffsetBottom = 0;
         _skillsButton.Pressed += () => { Tap(); _skillPanel?.SetOpen(!_skillPanel.Open); };
         _hotbarRow.AddChild(_hotbar);
         _hotbarRow.AddChild(_bagButton);
@@ -618,6 +623,11 @@ public sealed class Hud
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _questPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _tracker.CustomMinimumSize = new Vector2(Dp(LeftColumnDp), buttonHeight);
+        _skillsButton.OffsetTop = -buttonHeight;
+        // The status lines of the left column stop growing with the UI scale at 1 (T-408): they are read-outs, not touch targets, and at 1.25-1.5 on a 360 dp phone their wrapped
+        // text pushed the tracker into the Skills button. The bars, the tracker button and every touch target still scale.
+        var readOut = Mathf.Max(8, Mathf.RoundToInt((float)(BodyFontDp * Math.Min(scale, 1.0) * unit)));
+        foreach (var label in new[] { _levels, _hpText, _spText }) label.AddThemeFontSizeOverride("font_size", readOut);
         _tracker.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(Dp(TrackerFontDp))));
         _soundGrid.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(Dp(8)));
         _soundGrid.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(Dp(8)));
@@ -901,9 +911,10 @@ public sealed class Hud
         var found = new List<string>();
         if (!_tracker.IsVisibleInTree()) return found;
         var mine = _tracker.GetGlobalRect().Grow(-0.6f);
-        foreach (var control in _interactive)
+        // The HUD's own buttons only: a panel opened over the tracker (the sound settings, the bag) is meant to cover it.
+        foreach (var control in _slots.Cast<Control>().Concat([_skillsButton, _bagButton, _uiSize, _soundButton, _logout]))
         {
-            if (control is not (Button or LineEdit) || control == _tracker || !control.IsVisibleInTree() || InScroll(control)) continue;
+            if (!control.IsVisibleInTree()) continue;
             if (mine.Intersects(control.GetGlobalRect())) found.Add($"{control.GetType().Name}\"{(control as Button)?.Text}\" {Describe(control.GetGlobalRect())}");
         }
         if (_targetFrame.IsVisibleInTree() && mine.Intersects(_targetFrame.GetGlobalRect())) found.Add($"the target frame {Describe(_targetFrame.GetGlobalRect())}");
