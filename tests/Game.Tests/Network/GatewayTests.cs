@@ -426,22 +426,40 @@ public class GatewayTests
 
     // ---- back-pressure ----
 
+    /// <summary>
+    /// What a join puts on a new session's queue at once: seven messages, counted from a real join: welcome, snapshot, EXP, inventory, skills, stats and the quest log; the
+    /// tests below assert it. A queue must hold this with room to spare, or a busy machine, where the send loop has not yet drained the burst when the next player's
+    /// delta arrives, overflows it during the join itself: the test then fails on a join, not on the back-pressure it is about (ADR-002 rows 276, 282).
+    /// </summary>
+    private const int JoinBurst = 7;
+
+    /// <summary>Twice a join's burst (T-408): the walker's join delta and a slow tick land on top of the burst without touching the limit, and a control message needs 2x this.</summary>
+    private const int RoomyQueue = 2 * JoinBurst;
+
     [Fact]
     public async Task A_reader_that_falls_behind_is_resynced_with_a_fresh_snapshot()
     {
-        await using var rig = await GatewayRig.StartAsync(o => o with { SendQueueMessages = 4, ResyncBelowMessages = 1 });
+        await using var rig = await GatewayRig.StartAsync(o => o with { SendQueueMessages = RoomyQueue, ResyncBelowMessages = 1 });
         var slow = await rig.JoinAsync("slow");
+        slow.Messages.Count.ShouldBeLessThanOrEqualTo(JoinBurst);   // the margin above is only as good as this count
         var walker = await rig.JoinAsync("walker");
         await slow.WaitForAsync<DeltaMessage>(d => d.Appeared.Any(e => e.Id == walker.Id));
         var session = rig.SessionOf(slow.Id);
         var snapshotsBefore = slow.Messages.OfType<SnapshotMessage>().Count();
 
         session.SendGate.Reset();   // stops reading, as far as the server can tell
-        var there = rig.NearStart((4, 0), (-4, 0), (0, 4));
-        await walker.SendAsync(new MoveMessage(there));
+        var far = rig.NearStart((4, 0), (-4, 0), (0, 4));
+        var near = rig.NearStart((1, 0), (-1, 0), (0, 1));
+        var there = far;
+        for (var leg = 0; leg < 16 && session.Queue.Resyncs < 1; leg++)   // every cell the walker reaches is a delta for the reader that no longer reads
+        {
+            there = leg % 2 == 0 ? far : near;
+            await walker.SendAsync(new MoveMessage(there));
+            await Poll.UntilAsync(() => (walker.Seen(walker.Id), session.Queue.Resyncs), t => t.Resyncs >= 1 || t.Item1 is { Next: null } r && r.Cell.Equals(there), "the walker's leg");
+        }
         await Poll.UntilAsync(() => session.Queue.Resyncs, n => n >= 1, "overflow");
         session.Queue.DeltasDropped.ShouldBeGreaterThan(0);
-        session.Queue.Count.ShouldBeLessThanOrEqualTo(4);
+        session.Queue.Count.ShouldBeLessThanOrEqualTo(RoomyQueue);
         await Poll.UntilAsync(() => walker.Seen(walker.Id), r => r is { Next: null } && r.Cell.Equals(there), "walker arrives");
 
         session.SendGate.Set();     // catches up: a fresh snapshot instead of the backlog
@@ -458,9 +476,10 @@ public class GatewayTests
     {
         // The queue must hold a whole join: welcome, snapshot, inventory, skills, stats and quest log reach a new session in one burst, and a control message that
         // finds the queue at twice its size ends the session as too_slow. With SendQueueMessages = 2 (as this test once had) the join itself raced the send loop and,
-        // when the machine was busy, lost: the first snapshot never came. A roomier queue is filled on purpose by the walker instead.
-        await using var rig = await GatewayRig.StartAsync(o => o with { SendQueueMessages = 8, ResyncBelowMessages = 0 });
+        // when the machine was busy, lost: the first snapshot never came. A roomier queue (RoomyQueue, twice the join's burst) is filled on purpose by the walker instead.
+        await using var rig = await GatewayRig.StartAsync(o => o with { SendQueueMessages = RoomyQueue, ResyncBelowMessages = 0 });
         var slow = await rig.JoinAsync("slow");
+        slow.Messages.Count.ShouldBeLessThanOrEqualTo(JoinBurst);
         var walker = await rig.JoinAsync("walker");
         var session = rig.SessionOf(slow.Id);
         var id = new EntityId(slow.Id);
@@ -469,7 +488,7 @@ public class GatewayTests
         session.SendGate.Reset();
         var far = rig.NearStart((4, 0), (-4, 0), (0, 4));
         var near = rig.NearStart((1, 0), (-1, 0), (0, 1));
-        for (var leg = 0; leg < 8 && !session.Queue.Resyncing; leg++)   // every cell the walker reaches is a delta for the reader that no longer reads
+        for (var leg = 0; leg < 16 && !session.Queue.Resyncing; leg++)   // every cell the walker reaches is a delta for the reader that no longer reads
         {
             var target = leg % 2 == 0 ? far : near;
             await walker.SendAsync(new MoveMessage(target));

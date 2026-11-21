@@ -657,8 +657,13 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   its prices) and a Sell tab (the carried bag with what the shop pays, "not bought" and disabled where it will not take the item); a picker (minus, the count with the total, plus, Max) and the Buy / Sell button.
   It sends `shop_buy` (item, count) and `shop_sell` (entry, count) only; the total shown is a preview from `ShopRules`, and the balance and bag come back in `inventory_changed`. Rows, tabs and picker buttons
   are at least the touch target (48 dp); the panel is in the `-Run ui` layout matrix (the longest words, six screen shapes, every scale) and its touch targets are checked with the rest of the HUD.
+- **Left column on a small phone** (T-408). On a 360 dp phone at UI scale 1.25 and 1.5 the bars' text lines (level and EXP, HP, SP) stop growing with the scale at 1.0: they are read-outs, not touch targets, and at
+  the larger scales their wrapped longest text pushed the tracker into the Skills button. The bars, the tracker and every button still scale. The Skills button is as tall as a button, anchored to the bottom of its
+  spacer (it used to fill the spacer, as tall as a wrapped hotbar). `-Run ui` fails when the tracker, long or one-line, lies over the Skills button, the hotbar slots, the bag, size, sound or log out buttons or the target
+  frame in any of the 48 combinations of a matrix (panels opened over the tracker are meant to cover it). Device behaviour stays unverified (ADR-002 row 112).
 - **Quests** (T-602, `client/Scene/QuestPanel.cs`, view model `client/Core/Quests/QuestBook.cs`). **Tracker:** a compact button under the bars on the top left (13 dp text, the left column's
-  width, at least the touch target): the tracked quest's name and one line per objective with the server's counter (`Defeat Gel Slime 3/5`), or "Quests" when none is active; the quest
+  width, at least the touch target): the tracked quest's name and, in the corner's two-line cap (`QuestBook.MaxTrackerLines`, T-406), its first objective or held reason with the server's counter (`Defeat Gel Slime 3/5`),
+  a longer line trimmed with an ellipsis by the label; the log shows everything; or "Quests" when none is active; the quest
   last accepted or advanced is tracked, and the log's Track button picks another. A tap opens the **quest log**, a panel like the stats panel: active quests with their step text
   (from the bundle), objectives and a held reason, each with Track and Abandon (asks once more before sending `abandon_quest`), then the completed quests. **Markers:** a "!" drawn
   by a billboard shader above every NPC the server marks, gold to offer and green to turn in, one multimesh (one draw call, none when no NPC is marked), rewritten only when the

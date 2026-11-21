@@ -228,7 +228,6 @@ public sealed class UiRuns
         var scales = new List<double>();
         for (var i = 0; i < UiScale.StepCount(Config.UiScaleMin, Config.UiScaleMax, Config.UiScaleStep); i++) scales.Add(Config.UiScaleMin + i * Config.UiScaleStep);
         var combinations = 0;
-        var crowded = 0;
         var failures = new List<string>();
         foreach (var screen in Screens)
             foreach (var notch in new[] { false, true })
@@ -243,19 +242,15 @@ public sealed class UiRuns
                     await FramesAsync(combinations == 0 ? 6 : 3);
                     combinations++;
                     foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: {problem}");
-                    // The long quest tracker (T-406) must not lie over anything the plain one-line tracker does not (the cramped small-phone corner is a known limit of the left
-                    // column itself and is reported separately).
-                    var longOverlaps = Hud.TrackerOverlaps();
+                    // The quest tracker, long and one-line, must lie over no other HUD button or the target frame (T-406, T-408): a failure, not a note.
+                    foreach (var name in Hud.TrackerOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the long quest tracker covers {name}");
                     var longText = Hud.Tracker.Text;
                     Hud.Tracker.Text = UiText.QuestsButton;
                     await FramesAsync(2);
-                    var plainOverlaps = Hud.TrackerOverlaps();
+                    foreach (var name in Hud.TrackerOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the one-line quest tracker covers {name}");
                     Hud.Tracker.Text = longText;
-                    foreach (var name in longOverlaps.Where(o => !plainOverlaps.Contains(o))) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the long quest tracker covers {name}");
-                    if (plainOverlaps.Count > 0) crowded++;
                 }
-        Print($"layout: {what}: {combinations} combinations ({Screens.Length} screens x notch on/off x {scales.Count} scales), {failures.Count} problems" +
-              (crowded > 0 ? $"; in {crowded} of them even the one-line quest tracker lies over the skills button (a limit of the left column, not of the long text)" : string.Empty));
+        Print($"layout: {what}: {combinations} combinations ({Screens.Length} screens x notch on/off x {scales.Count} scales), {failures.Count} problems");
         foreach (var line in failures.Take(12)) Print("layout: PROBLEM " + line);
         Check(failures.Count == 0, $"{what}: nothing cut off, outside the safe area, or under the touch minimum ({failures.Count} problems)");
     }
@@ -458,6 +453,13 @@ public sealed class UiRuns
         Hud.ShowSamples(LongName);
         await FramesAsync(4);
         await SaveAsync(System.IO.Path.ChangeExtension(_screenshot, null) + "-long-text" + System.IO.Path.GetExtension(_screenshot), "longest text");
+        // And at the largest UI scale (T-408: on a 360 dp tall window the left column must stay clear of the Skills button there).
+        var scaleBefore = Hud.Scale;
+        Hud.SetScale(Config.UiScaleMax, false);
+        Hud.ShowSamples(LongName);
+        await FramesAsync(4);
+        await SaveAsync(System.IO.Path.ChangeExtension(_screenshot, null) + "-max-scale" + System.IO.Path.GetExtension(_screenshot), $"longest text at UI scale {Config.UiScaleMax}");
+        Hud.SetScale(scaleBefore, false);
         Hud.ForceRefresh();
         Hud.HideInfo();
         OS.LowProcessorUsageMode = true;
