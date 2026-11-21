@@ -105,6 +105,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-405 | Equipment manifest validation, preloading worn visuals, placeholder weapon shapes by type, LFS pointer message | Claude Code | Sonnet 5.5 | [T-405](../tasks/prompts/T-405.md) | T-403, T-501 | Review | ADR-002 #181, #182, #208 |
 | T-406 | Load-proof tests (gateway reader first), stats re-post on status changes, reset item icons, stats and quest panels in the layout check, toon leftovers | Claude Code | Sonnet 5.5 | [T-406](../tasks/prompts/T-406.md) | T-222, T-503, T-602 | Review | Restricted `Net/**`: test seam and stats re-post only (standing approval 2026-11-18); ADR-002 #232–236, #252, #266, #267, #269 |
 | T-407 | Thistle Hollow monsters: 2–3 original monsters with toon placeholders, spawns, tuned to 50–80% with `stats --duel` | Claude Code | Sonnet 5.5 | [T-407](../tasks/prompts/T-407.md) | T-404, T-222 | Review | ADR-002 #249 |
+| T-408 | Small-phone HUD layout (left column vs the Skills hotbar), tracker cap test, the last load-sensitive gateway tests | Claude Code | Sonnet 5.5 | [T-408](../tasks/prompts/T-408.md) | T-406 | In Progress | ADR-002 #280, #282 |
 
 ## Phase 5 — Skills & statuses
 
@@ -134,7 +135,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
 | T-225 | 2 | AI asset pipeline for forks (after T-224): scripts drive a 3D generation API (Meshy, Tripo or Rodin; key from an environment variable, never committed) from an approved brief, then cleanup in headless Blender, rigging or scripted motion, import through the T-224 tool, and an in-game review loop (scripted runs, screenshots at the game camera next to existing art, ThemeCheck and §9 budgets) that adjusts scale, tint, outline and pose for consistency, retrying within a set credit limit. Art is generated in a fork only | Claude Code | Opus 5.5 | Backlog |
-| T-408 | 4 | HUD and test leftovers after T-406: the left column overlapping the Skills hotbar on 360 dp phones at UI scale 1.25–1.5, a unit test for the tracker line cap, the remaining real-socket gateway tests made load-proof (`Stop_ends_an_auto_attack_even_while_standing_still`, the resync test's queue margin) (ADR-002 #280, #282) | Claude Code | Sonnet 5.5 | Backlog |
 | T-701 | 7 | Auth, accounts, character slots | Claude Code | Opus 5.5 | Backlog |
 | T-702 | 7 | Persistence (EF Core + Postgres), transactional inventory | Claude Code | Opus 5.5 | Backlog |
 | T-703 | 7 | Store compliance: account deletion, Sign in with Apple, privacy disclosures | Claude Code | Sonnet 5.5 | Backlog |
