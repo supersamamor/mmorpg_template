@@ -141,6 +141,8 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-705 | 7 | Appearance on the server: checked at creation, stored with the character, sent in snapshots (needs T-701, T-702, T-704) | Claude Code | Sonnet 5.5 | Backlog |
 | T-706 | 7 | Character creation screen with rotating 3D preview (needs T-206, T-207, T-705) | Claude Code | Sonnet 5.5 | Backlog |
 | T-707 | 7 | Appearance art: 2 genders, skin tones, faces, hairstyles in the chosen art style (art direction: ADR-003, storybook toon) | Human / artist | — | Backlog |
+| T-708 | 7 | Cosmetic wardrobe: outfit slots that change only the look (never stats), outfits as data on the shared `humanoid` rig and T-403 attach points, owned outfits saved with the character, a wardrobe panel to pick what shows, others see it in snapshots; the template ships 1–2 placeholder outfits, forks add their own (needs T-702, T-705) | Claude Code | Opus 5.5 | Backlog |
+| T-709 | 7 | Cosmetics store: Apple and Google in-app purchases with receipts checked on the server (never trusted from the client), grants outfits from T-708 atomically, refunds revoke, store compliance; the template ships the hook and a sandbox setup, no real products or keys (needs T-701, T-702, T-703, T-708; restricted `Net/**` and `Persistence/**`) | Claude Code | Opus 5.5 | Backlog |
 | T-801 | 8 | Content hot-reload + simple editor | Claude Code | Sonnet 5.5 | Backlog |
 | T-802 | 8 | Mobile build pipeline (Android AAB, iOS on macOS CI, TestFlight / Play internal) | Claude Code | Sonnet 5.5 | Backlog |
 | T-803 | 8 | On-device performance capture vs ARCHITECTURE §9 budgets | Claude Code | Sonnet 5.5 | Backlog |
