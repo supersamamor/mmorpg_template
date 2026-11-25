@@ -39,7 +39,6 @@ public sealed class UiRuns
     {
         Print($"ui: platform {ScreenProbe.Platform}, window {_main.GetWindow().Size.X}x{_main.GetWindow().Size.Y}, canvas {Hud.Metrics.CanvasWidth:0}x{Hud.Metrics.CanvasHeight:0}, {Hud.Metrics.UnitsPerDp:0.00} units per dp, scale {Hud.Scale}, safe {Describe(Hud.Metrics.Safe)}, debug notch {(Config.DebugNotch ? "on" : "off")}");
         var originalScale = Hud.Scale;
-        var originalPreferences = UserPrefsStore.Load(); // the run presses the size button, which stores a choice: put it back at the end
 
         await LoginAsync();
         await LayoutMatrixAsync("playing");
@@ -68,8 +67,6 @@ public sealed class UiRuns
         Hud.ShowRefusal(UiText.CleartextRefused);
         await LayoutMatrixAsync("longest refusal text");
         Hud.SetScale(originalScale, false);
-        UserPrefsStore.Save(originalPreferences);
-        originalPreferences.ApplyTo(_main.Audio!.Director.Mixer);
     }
 
     /// <summary>
@@ -111,6 +108,11 @@ public sealed class UiRuns
         Check(accounts.Rows.Count == 3 && accounts.NewButton.IsVisibleInTree(), "the character screen shows its slots and the new-character button");
         Check(accounts.Pictures.Count == 3 && accounts.Pictures.All(p => p.Looks is not null), "every character in the list has its picture");
         await LayoutMatrixAsync("character select");
+        accounts.ShowSamples(Game.Client.Core.Accounts.AccountScreen.Password, LongName);
+        await FramesAsync(3);
+        var passwords = accounts.PasswordScreen;
+        Check(passwords.Current.Secret && passwords.New.Secret && passwords.Repeat.Secret && passwords.Change.IsVisibleInTree(), "the password screen hides what is typed and shows its buttons");
+        await LayoutMatrixAsync("password screen");
         accounts.ClearSamples();
         accounts.ShowCreationSamples(LongName);
         await FramesAsync(3);
@@ -120,7 +122,7 @@ public sealed class UiRuns
         await LayoutMatrixAsync("character creation");
         accounts.ClearSamples();
         await FramesAsync(3);
-        Print("accounts: the sign-in, character-select and creation screens fit every screen shape and scale, every button and field at least the touch target");
+        Print("accounts: the sign-in, character-select, password and creation screens fit every screen shape and scale, every button and field at least the touch target");
     }
 
     /// <summary>The sound settings: the panel fits at every screen shape, the buttons change the mixer and the engine's buses, and the choice is stored.</summary>

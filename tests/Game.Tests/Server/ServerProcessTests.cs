@@ -15,7 +15,7 @@ namespace Game.Tests.Server;
 /// Real time passes and the Ctrl+C test borrows the console, so these run in the non-parallel collection.
 /// </summary>
 [Collection(TimingCollection.Name)]
-public class ServerProcessTests : IDisposable
+public class ServerProcessTests(Accounts.DatabaseFixture databases) : IDisposable, IClassFixture<Accounts.DatabaseFixture>
 {
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(60);
     private static readonly string[] Quiet = ["--environment", "Development", "--net-port", "0", "--seed", "1"];
@@ -78,7 +78,9 @@ public class ServerProcessTests : IDisposable
         }
     }
 
-    private static Running Start(params string[] args)
+    private static Running Start(params string[] args) => StartWith(null, args);
+
+    private static Running StartWith(string? connection, params string[] args)
     {
         // A child inherits "Ctrl+C is ignored" from a parent that has it switched off (some test runners and shells do); undo that first.
         if (OperatingSystem.IsWindows()) SetConsoleCtrlHandler(IntPtr.Zero, false);
@@ -92,6 +94,8 @@ public class ServerProcessTests : IDisposable
         };
         info.ArgumentList.Add(Path.Combine(AppContext.BaseDirectory, "Game.Server.dll"));
         foreach (var arg in args) info.ArgumentList.Add(arg);
+        if (connection is not null) info.Environment[Game.Server.Persistence.GameDatabase.ConnectionVariable] = connection;
+        else info.Environment.Remove(Game.Server.Persistence.GameDatabase.ConnectionVariable);
         return new Running(Process.Start(info)!);
     }
 
@@ -121,6 +125,38 @@ public class ServerProcessTests : IDisposable
         server.Process.ExitCode.ShouldBe(0, server.Output);
         server.Output.ShouldContain("Stopping:");
         server.Output.ShouldContain("Server stopped.");
+    }
+
+    /// <summary>T-710: with accounts and saving on, Ctrl+C also says goodbye to whoever plays and saves them.</summary>
+    [Accounts.DatabaseFact]
+    public async Task Ctrl_C_with_a_database_saves_every_character_and_stops_cleanly()
+    {
+        using var server = StartWith(databases.ConnectionString, Quiet);
+        server.WaitForLine("Running. Press Ctrl+C to stop.").ShouldBeTrue(server.Output);
+        var endpoint = new Uri(System.Text.RegularExpressions.Regex.Match(server.Output, @"Gateway listening on (\S+)").Groups[1].Value);
+        var hash = System.Text.RegularExpressions.Regex.Match(server.Output, @"Content hash: (\S+)").Groups[1].Value;
+        using var http = new Accounts.AccountHttp(endpoint);
+        var token = await http.RegisterAsync("ctrlc" + Guid.NewGuid().ToString("N")[..10]);
+        var character = await http.CreateAsync(token, new string(System.Security.Cryptography.RandomNumberGenerator.GetItems<char>("abcdefghijklmnopqrstuvwxyz", 12)));
+        using var client = await Network.TestClient.ConnectAsync(endpoint);
+        await client.SendAsync(new Game.Shared.Protocol.HelloMessage(Game.Shared.Protocol.ProtocolVersion.Current, null, hash, null, token, character));
+        await client.WaitForAsync<Game.Shared.Protocol.SnapshotMessage>();
+        var start = client.Seen(client.Id)!.Cell;
+        await client.SendAsync(new Game.Shared.Protocol.MoveMessage(new Game.Shared.World.GridCell(start.X + 1, start.Y)));
+        var there = await Network.Poll.UntilAsync(() => client.Seen(client.Id), r => r is { Next: null } && !r.Cell.Equals(start), "the first step");
+
+        SendCtrlC(server.Process);
+
+        server.WaitForExit().ShouldBeTrue(server.Output);
+        server.Process.ExitCode.ShouldBe(0, server.Output);
+        (await client.WaitForByeAsync()).ShouldBe(Game.Shared.Protocol.ByeReasons.Shutdown);
+        server.Output.ShouldContain("Every character is saved");
+        server.Output.ShouldContain("Server stopped.");
+        await using var db = databases.Database.Open();
+        var id = Guid.Parse(character);
+        var row = db.CharacterStates.Single(r => r.CharacterId == id);
+        (row.CellX, row.CellY).ShouldBe((there!.Cell.X, there.Cell.Y));
+        row.HeldBy.ShouldBeNull("it is free for the next server at once");
     }
 
     [Fact]

@@ -71,11 +71,15 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
                 var session = register
                     ? await service.RegisterAsync(username, password, address, cancel).ConfigureAwait(false)
                     : await service.LoginAsync(username, password, address, cancel).ConfigureAwait(false);
-                await AnswerAsync(context, session, register ? StatusCodes.Status201Created : StatusCodes.Status200OK, (w, s) =>
+                await AnswerAsync(context, session, register ? StatusCodes.Status201Created : StatusCodes.Status200OK, Write).ConfigureAwait(false);
+                return;
+            case AccountPaths.Password when HttpMethods.IsPost(method):
+                if (await ReadAsync(context, "current", "new").ConfigureAwait(false) is not [var current, var next])
                 {
-                    w.WriteString("token", s.Token);
-                    w.WriteNumber("expires_in", (long)s.Lifetime.TotalSeconds);
-                }).ConfigureAwait(false);
+                    await FailAsync(context, AccountErrors.InvalidRequest).ConfigureAwait(false);
+                    return;
+                }
+                await AnswerAsync(context, await service.ChangePasswordAsync(Token(context), current, next, address, cancel).ConfigureAwait(false), StatusCodes.Status200OK, Write).ConfigureAwait(false);
                 return;
             case AccountPaths.Logout when HttpMethods.IsPost(method):
                 await AnswerAsync(context, await service.LogoutAsync(Token(context), cancel).ConfigureAwait(false), StatusCodes.Status204NoContent, null).ConfigureAwait(false);
@@ -124,7 +128,7 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
     /// <summary>The endpoint a path belongs to, or null. A path of unknown shape never reaches a log.</summary>
     private static string? Route(string path) => path switch
     {
-        AccountPaths.Register or AccountPaths.Login or AccountPaths.Logout or AccountPaths.Characters => path,
+        AccountPaths.Register or AccountPaths.Login or AccountPaths.Logout or AccountPaths.Password or AccountPaths.Characters => path,
         _ when path.StartsWith(AccountPaths.Characters + "/", StringComparison.Ordinal) => AccountPaths.Characters,
         _ => null,
     };
@@ -265,6 +269,12 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
             }
         }
         return reader.TokenType == JsonTokenType.EndObject ? new AppearanceChoice(gender, skin, face, hair, hairColor) : null;
+    }
+
+    private static void Write(Utf8JsonWriter w, NewSession session)
+    {
+        w.WriteString("token", session.Token);
+        w.WriteNumber("expires_in", (long)session.Lifetime.TotalSeconds);
     }
 
     private static void Write(Utf8JsonWriter w, CharacterRecord character)

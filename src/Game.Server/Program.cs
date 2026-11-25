@@ -111,6 +111,7 @@ GatewayHost host;
 try
 {
     if (accounts is not null) accounts.InWorld = id => gateway.HoldsCharacter(id) || saves!.Holds(id); // a character in the world, on its way in, or not saved yet is not deleted
+    if (accounts is not null) accounts.SessionsEnded = gateway.EndSessions; // T-710: what played with them ends
     host = await GatewayHost.StartAsync(gateway, accounts: accounts is null ? null : new AccountEndpoints(accounts, log));
 }
 catch (Exception e) when (e is InvalidOperationException or IOException)

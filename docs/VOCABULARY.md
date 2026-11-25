@@ -385,7 +385,7 @@ Owner only (about the client's own character): `attack_stopped`, `exp`, `level_u
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
 `oversize`, `before_hello`, `duplicate_hello`, `rate_limit`, `login_refused`, `server_full`, `too_slow`, `shutdown`, `server_error`, `update_required`,
-`logout`, `replaced`, `resume_failed`, `load_failed`, `save_pending`, `save_lost`.
+`logout`, `replaced`, `resume_failed`, `load_failed`, `save_pending`, `save_lost`, `session_ended`.
 `login_refused`: the dev login outside development or with a bad name, a session token that is unknown, expired or revoked, or a character that is not the account's
 (T-701: one answer for all of them). `server_error` also ends a `hello` whose login the database could not answer.
 `update_required`: the client's content hash differs from the server's, or it sent none outside development (ARCHITECTURE §5.4).
@@ -395,13 +395,14 @@ The client reconnects after neither. `resume_failed`: the token in `hello` `resu
 `load_failed`: the character's saved state could not be read; nothing was created or changed. `save_pending`: its last save has not landed yet (bounded wait), or another live server holds it.
 `save_lost`: the server can no longer save the character it plays (it is held elsewhere, or deleted), so the session ends and the character goes back to its last save. After these three the
 client goes to the login screen and does not retry by itself (T-702, ARCHITECTURE §3 "Saving characters").
+`session_ended`: the account session the character is played with was ended (signed out, pushed out by a newer sign-in, or a password change), so the character left the world and is saved. The client goes to the login screen (T-710).
 A `rejected` message carries a "Movement reasons" (`MoveRejected`) term for `move`, an "Attack reasons" term for `attack`, or an "Item reasons" term for an
 item intent (`shop_buy` and `shop_sell` included), instead; the session goes on.
 
 ## Account errors
-The `error` of a refused account request (T-701, ARCHITECTURE §10 "Accounts"): `invalid_request`, `invalid_username`, `invalid_password`, `username_taken`,
+The `error` of a refused account request (T-701, ARCHITECTURE §10 "Accounts"): `invalid_request`, `invalid_username`, `invalid_password`, `same_password`, `username_taken`,
 `invalid_credentials`, `invalid_session`, `rate_limited`, `invalid_name`, `invalid_appearance`, `name_taken`, `no_free_slot`, `unknown_character`, `character_in_use`, `unavailable`.
-Appearance refusals (T-705): an id is unknown, or a face or hairstyle is not the chosen gender's. `invalid_credentials` answers an unknown username and a wrong password alike. `rate_limited` and `unavailable` come with `retry_after` (seconds).
+Appearance refusals (T-705): an id is unknown, or a face or hairstyle is not the chosen gender's. `invalid_credentials` answers an unknown username and a wrong password alike, and a password change whose current password is wrong. `same_password` (T-710): a password change to the one the account has. `rate_limited` and `unavailable` come with `retry_after` (seconds).
 
 ## Account terms
 **Account**: who signs in (a username and a password). **Session token**: proves a sign-in to the account endpoints and in `hello`; stored on the server as its SHA-256.

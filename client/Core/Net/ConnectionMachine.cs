@@ -63,6 +63,9 @@ public enum ConnectionNotice
     /// <summary><c>bye save_lost</c>: the server could no longer save the character and ended the session (T-702).</summary>
     SaveLost,
 
+    /// <summary><c>bye session_ended</c>: the account session was ended elsewhere (T-710).</summary>
+    SessionEnded,
+
     /// <summary>A new login could not reach the server, or the server ended it.</summary>
     ConnectionFailed,
 
@@ -256,6 +259,10 @@ public sealed class ConnectionMachine
             case ByeReasons.SaveLost:
                 // The character left the world without being saved, so there is nothing to resume.
                 ToLogin(ConnectionNotice.SaveLost);
+                return;
+            case ByeReasons.SessionEnded:
+                // Signed out, or the password changed, elsewhere: the token is dead with the session.
+                ToLogin(ConnectionNotice.SessionEnded);
                 return;
             case ByeReasons.Shutdown:
                 // A server restart invalidates every token (§10): the retry is a normal login.

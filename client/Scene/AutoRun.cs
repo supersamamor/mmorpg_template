@@ -168,6 +168,61 @@ public sealed class AutoRun
         Press(screen.Rows[0].Play);
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null, 15, "entering the world again");
         Print($"account: signed in again (the username in another letter case) and in the world as entity {World.OwnId}");
+
+        // T-710: another device changes the password while this one plays. This one is put out and signed out; the old password is refused, the new one works.
+        var fresh = Guid.NewGuid().ToString("N");
+        var other = new Game.Client.Core.Accounts.AccountFlow(_main.Config, new GodotAccountTransport(_main, 10));
+        async Task OtherAsync(string what)
+        {
+            await UntilAsync(() =>
+            {
+                other.Update();
+                return !other.Busy;
+            }, 15, what);
+        }
+        other.SignIn("e2e-" + tag, password);
+        await OtherAsync("the second device signing in");
+        other.OpenPassword();
+        Check(other.ChangePassword(password, fresh, fresh), "the second device asks for a new password");
+        await OtherAsync("the password change");
+        Check(other.Notice == Game.Client.Core.Accounts.AccountNotice.PasswordChanged && other.SignedIn, "the second device changed the password and stays signed in, was " + other.Notice + " " + other.Error);
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy && accounts.Screen == Game.Client.Core.Accounts.AccountScreen.SignIn, 15, "being put out by the password change");
+        Check(Session.Connection.Notice == ConnectionNotice.SessionEnded && !accounts.SignedIn, "the game ended with its session, was " + Session.Connection.Notice);
+        await FramesAsync(3);
+        Print("account: the password was changed elsewhere; this device is signed out: \"" + screen.Text + "\"");
+        Type(screen.Username, "e2e-" + tag);
+        Type(screen.Password, password);
+        Press(screen.SignInButton);
+        await UntilAsync(() => !accounts.Busy && accounts.Notice != Game.Client.Core.Accounts.AccountNotice.None, 10, "the refusal of the old password");
+        Check(accounts.Error == AccountErrors.InvalidCredentials, "the old password is refused, was " + accounts.Notice + " " + accounts.Error);
+        Type(screen.Password, fresh);
+        Press(screen.SignInButton);
+        await UntilAsync(() => accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters && !accounts.Busy, 15, "signing in with the new password");
+
+        // And back through this client's own screen.
+        await FramesAsync(3);
+        Press(screen.PasswordButton);
+        await FramesAsync(3);
+        var fields = screen.PasswordScreen;
+        Check(fields.Change.IsVisibleInTree(), "the password screen opens");
+        await ShotAsync("-password");
+        Type(fields.Current, "not the password at all");
+        Type(fields.New, password);
+        Type(fields.Repeat, password);
+        Press(fields.Change);
+        await UntilAsync(() => !accounts.Busy && accounts.Notice != Game.Client.Core.Accounts.AccountNotice.None, 10, "the refusal of a wrong current password");
+        Check(accounts.Error == AccountErrors.InvalidCredentials && accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Password, "a wrong current password is refused, was " + accounts.Notice + " " + accounts.Error);
+        await FramesAsync(3);
+        Check(fields.Current.Text.Length + fields.New.Text.Length + fields.Repeat.Text.Length == 0, "the password fields are cleared");
+        Type(fields.Current, fresh);
+        Type(fields.New, password);
+        Type(fields.Repeat, password);
+        Press(fields.Change);
+        await UntilAsync(() => !accounts.Busy && accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters, 15, "the password changed back");
+        Check(accounts.Notice == Game.Client.Core.Accounts.AccountNotice.PasswordChanged && accounts.SignedIn, "and this device stays signed in");
+        await FramesAsync(3);
+        Press(screen.Rows[0].Play);
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null, 15, "entering the world with the new session");
         Session.Logout(Clocks.Wall());
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy, 10, "bye logout");
     }

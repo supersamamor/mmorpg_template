@@ -20,7 +20,7 @@ public class CharacterSavingTests
 {
     private const string Meadow = "map.starter_meadow";
     private const string Hollow = "map.thistle_hollow";
-    private static readonly Guid Ada = Guid.Parse("11111111-1111-1111-1111-111111111111");
+    internal static readonly Guid Ada = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid Bob = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid Cat = Guid.Parse("33333333-3333-3333-3333-333333333333");
 
@@ -775,25 +775,6 @@ public class CharacterSavingTests
         (await rig.Saves.EnterAsync(Ada, default)).Refusal.ShouldBe(ByeReasons.Shutdown);
     }
 
-    [Fact]
-    public async Task A_shutdown_without_a_database_is_bounded_and_says_who_was_not_saved()
-    {
-        var store = new MemoryCharacterStore();
-        var rig = SaveRig.Start(store);
-        var id = await rig.EnterAsync(Ada);
-        await rig.SettledAsync();
-        rig.Bag(id).Currency = 5;
-        store.Away = true;
-        rig.World.Despawn(id);
-        rig.Ticks(5);
-        var started = Environment.TickCount64;
-        var report = await rig.Saves.DrainAsync(TimeSpan.FromMilliseconds(300));
-        (Environment.TickCount64 - started).ShouldBeLessThan(3_000);
-        report.Failed.ShouldBe([Ada]);
-        rig.Log.Lines.ShouldContain(l => l.Contains("NOT SAVED at shutdown"));
-        store.StateOf(Ada)!.Currency.ShouldBe(0, "back to its last save");
-    }
-
     // ---- never on a tick thread -----------------------------------------------------------------------------------------------------------
 
     [Fact]
@@ -816,5 +797,32 @@ public class CharacterSavingTests
         thread.Start();
         thread.Join();
         caught.ShouldNotBeNull().Message.ShouldContain("tick thread");
+    }
+}
+
+/// <summary>
+/// The one test here that measures wall time (T-710): beside the rest of the suite the thread pool ran its short waits seconds late (3.9 s against the bound of 3 s, once), which says nothing
+/// about the shutdown.
+/// </summary>
+[Collection(TimingCollection.Name)]
+public class CharacterSavingShutdownTimeTests
+{
+    [Fact]
+    public async Task A_shutdown_without_a_database_is_bounded_and_says_who_was_not_saved()
+    {
+        var store = new MemoryCharacterStore();
+        var rig = SaveRig.Start(store);
+        var id = await rig.EnterAsync(CharacterSavingTests.Ada);
+        await rig.SettledAsync();
+        rig.Bag(id).Currency = 5;
+        store.Away = true;
+        rig.World.Despawn(id);
+        rig.Ticks(5);
+        var started = Environment.TickCount64;
+        var report = await rig.Saves.DrainAsync(TimeSpan.FromMilliseconds(300));
+        (Environment.TickCount64 - started).ShouldBeLessThan(3_000);
+        report.Failed.ShouldBe([CharacterSavingTests.Ada]);
+        rig.Log.Lines.ShouldContain(l => l.Contains("NOT SAVED at shutdown"));
+        store.StateOf(CharacterSavingTests.Ada)!.Currency.ShouldBe(0, "back to its last save");
     }
 }

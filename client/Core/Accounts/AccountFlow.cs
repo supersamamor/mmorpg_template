@@ -17,6 +17,9 @@ public enum AccountScreen
 
     /// <summary>Making a new character (T-706).</summary>
     Creation,
+
+    /// <summary>Changing the password (T-710).</summary>
+    Password,
 }
 
 /// <summary>What the line under the screen's title says. The UI picks the text (<see cref="UiText.Account"/>).</summary>
@@ -33,6 +36,12 @@ public enum AccountNotice
 
     /// <summary>The session has ended: sign in again.</summary>
     SessionEnded,
+
+    /// <summary>The new password and its repeat differ; nothing was sent (T-710).</summary>
+    PasswordsDiffer,
+
+    /// <summary>The password is changed, and every other device is signed out (T-710).</summary>
+    PasswordChanged,
 }
 
 /// <summary>
@@ -140,6 +149,39 @@ public sealed class AccountFlow
         ClearNotice();
     }
 
+    /// <summary>Opens the password screen.</summary>
+    public void OpenPassword()
+    {
+        if (Busy || Screen != AccountScreen.Characters) return;
+        Screen = AccountScreen.Password;
+        ClearNotice();
+    }
+
+    /// <summary>Back to the character list; nothing is changed.</summary>
+    public void ClosePassword()
+    {
+        if (Busy || Screen != AccountScreen.Password) return;
+        Screen = AccountScreen.Characters;
+        ClearNotice();
+    }
+
+    /// <summary>
+    /// Asks for a new password. False when nothing was sent because the repeat differs (or another request is on its way). When the server takes it, every session
+    /// of the account ends and this client gets a new one.
+    /// </summary>
+    public bool ChangePassword(string current, string next, string repeat)
+    {
+        if (Busy || _sessionToken is null) return false;
+        if (next != repeat)
+        {
+            ClearNotice();
+            Notice = AccountNotice.PasswordsDiffer;
+            return false;
+        }
+        Send(AccountCall.ChangePassword, "POST", AccountPaths.Password, AccountJson.Write(new ChangePasswordRequest(current, next)), _sessionToken);
+        return true;
+    }
+
     /// <summary>Creates a character with the chosen look (null: the server's defaults).</summary>
     public void Create(string name, AppearanceChoice? appearance = null)
     {
@@ -202,6 +244,15 @@ public sealed class AccountFlow
                     Screen = AccountScreen.Characters;
                 }
                 else Notice = AccountNotice.Unreachable;
+                break;
+            case AccountCall.ChangePassword:
+                if (AccountJson.ReadSession(response.Body) is { } renewed)
+                {
+                    _sessionToken = renewed.Token;
+                    Screen = AccountScreen.Characters;
+                    Notice = AccountNotice.PasswordChanged;
+                }
+                else Notice = AccountNotice.Unreachable; // the old token is dead: the next request says so
                 break;
             case AccountCall.Create:
                 Creator?.Reset();

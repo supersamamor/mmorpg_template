@@ -282,13 +282,17 @@ It waits for 40 entities on screen, samples 15 s and prints fps, draw calls, tri
 | `warp` | walk to the warp and arrive on the second map | weak-monster copy: on real content, aggressive monsters between the start and the warp kill a new character, which is intended game danger |
 | `hill` | tap a point on cell (23, 13) on the sample hill, which the old flat-ground pick read as (23, 12): the server walks the character to exactly (23, 13) (T-220) | weak-monster copy |
 | `ui` | the HUD layout fits every screen, notch and UI scale; pinch and wheel zoom clamp; touches on UI never reach the world; long-press shows the info panel without a tap; the hotbar sends nothing; the UI-scale and sound settings are stored (T-211, T-305) | default |
+| `items`, `statuses`, `skills`, `stats`, `dialogue`, `quests`, `autopilot` | one game system each, from the panels to the server and back (what each does: the head of `run-e2e.ps1`) | a content copy that makes it quick, or real content |
+| `account` | register, create a character, enter, resume, log out, sign out and in again; then another device changes the password: this one is put out (`bye session_ended`), the old password is refused, the new one works, and the password screen changes it back (T-701, T-710) | real content, PostgreSQL |
+| `saving` | a character changes stats, quest, items, currency, gear, EXP and place; its server stops and the next has it all; that one is killed and the third has its interval saves (T-702; about 3 minutes) | weak-monster copy, three times, PostgreSQL |
+| `appearance` | a character with other looks than the defaults, made on the creation screen, is drawn with them, and a second client sees them (T-706) | real content, PostgreSQL |
 | `resume_failed` | the socket drops, the client's first retry comes after the server's grace period (2 s vs 5 s): the resume gets `bye resume_failed`, the client goes to the login screen and does not retry | `--net-grace-period-ms 2000` |
 | `replaced` | a second connection resumes the character with the client's token: the client gets `bye replaced`, stops, and does not reconnect | default |
 | `shutdown` | the server stops itself (`--duration 20`): `bye shutdown`, the retry notice, token dropped; the script starts a second server and the client logs in again by itself | default, twice |
 | `grace_expiry` | the script kills the server: the client resumes with backoff until its own deadline (last heard + 5 s + 1 s), then `SessionExpired` and the login screen | default, killed |
 | `bye` | the four runs above | |
 | `release` | exports a desktop **release** build (Windows, or Linux on CI), runs it with `ws://` and `--set allow_cleartext=true` (refused, refusal screen, exit 0), then with `wss://` (passes the address check). The export runs through `Invoke-GodotStep` (§8.5): the old export is deleted before each attempt, a non-zero exit code fails the run, and an attempt that times out or does not exit 60 s after writing every file is stopped and retried (3 attempts) | none |
-| `all` | `play`, `warp`, `hill`, `ui`, the four bye runs and `release` | |
+| `all` | every run above but `death`. The PostgreSQL runs need `$env:GAME_TEST_DB_CONNECTION` and use a database of their own, `mmo_e2e`; without it `all` skips them and says so | |
 | `death` | killed on real content, drops the socket while dead, death screen again, respawn (`-Monster monster.gel_slime`; up to 5 minutes, not in `all`) | real content |
 
 `-EasyMonsters` runs the whole `play` run, warp included, on the weak-monster copy, as T-206 did. The scripts find Godot with `-Godot`, then `$env:GODOT`, then the winget install, and run in Windows PowerShell 5.1 and PowerShell 7.
@@ -402,9 +406,9 @@ at the source, but it changes the one-click deploy preset (`export_presets.cfg`,
 
 ## 9. CI export job (T-216)
 
-`.github/workflows/ci.yml` has a second job, `client-export`, separate from the server checks (`build-test`) so that a slow export does not hold them up. On `ubuntu-latest`, with a 200 minute job limit and per-step limits set from the scripts' own worst cases (§8.5; a clean run is far shorter), it:
+`.github/workflows/ci.yml` has a second job, `client-export`, separate from the server checks (`build-test`) so that a slow export does not hold them up. On `ubuntu-latest`, with a 240 minute job limit and per-step limits set from the scripts' own worst cases (§8.5; a clean run is far shorter), it:
 installs the pinned JDK 17, Android SDK packages (platform android-35, build-tools 35.0.1) and Godot 4.7.2 .NET with the Android and Linux export templates (downloaded from the Godot release, checked against the release's `SHA512-SUMS.txt`, cached by version);
-builds the client; exports the Android debug APK with `export-android.ps1`; fails if the APK is over 60 MB, lacks the bundle or settings, contains static archives or another architecture; keeps the APK as an artifact for 3 days; and runs `run-e2e.ps1 -Run all`.
+builds the client; exports the Android debug APK with `export-android.ps1`; fails if the APK is over 60 MB, lacks the bundle or settings, contains static archives or another architecture; keeps the APK as an artifact for 3 days; and runs `run-e2e.ps1 -Run all`, without a database, so `account`, `saving` and `appearance` are skipped there.
 The versions are in the job's `env`, next to a reminder to change them here and there together. **It has never run on GitHub** (the owner has not pushed), so the first run may need fixes; it was checked locally for YAML syntax only (`actionlint` is not installed).
 What was run locally is the same scripts on Windows.
 

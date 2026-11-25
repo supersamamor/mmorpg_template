@@ -26,6 +26,9 @@ public enum AccountCall
 
     /// <summary>Delete a character.</summary>
     Delete,
+
+    /// <summary>Change the password (T-710).</summary>
+    ChangePassword,
 }
 
 /// <summary>One request to the account endpoints. It may hold a password or a token: never log one, and drop it once sent.</summary>
@@ -92,6 +95,13 @@ public static class AccountJson
     {
         w.WriteString("username", request.Username);
         w.WriteString("password", request.Password);
+    });
+
+    /// <summary>The body of a password change (T-710).</summary>
+    public static byte[] Write(ChangePasswordRequest request) => Object(w =>
+    {
+        w.WriteString("current", request.Current);
+        w.WriteString("new", request.New);
     });
 
     /// <summary>The body of a character creation.</summary>

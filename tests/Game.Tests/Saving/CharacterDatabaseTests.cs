@@ -230,7 +230,7 @@ public sealed class CharacterDatabaseTests(DatabaseFixture fixture, Xunit.Abstra
             var claim = Task.Run(() => Store.ClaimAsync(character, run, default));
             var delete = Task.Run(() => Accounts.DeleteCharacterAsync(account, character, Now, default));
             await Task.WhenAll(claim, delete);
-            ((await claim).Outcome == ClaimOutcome.Claimed).ShouldNotBe(await delete, $"round {i}");
+            ((await claim).Outcome == ClaimOutcome.Claimed).ShouldNotBe(await delete == DeleteCharacterOutcome.Deleted, $"round {i}");
             if ((await claim).Outcome == ClaimOutcome.Claimed) entered++;
         }
         entered.ShouldBeInRange(0, 40);
@@ -242,7 +242,7 @@ public sealed class CharacterDatabaseTests(DatabaseFixture fixture, Xunit.Abstra
         var run = await Store.StartRunAsync(default);
         var (account, character) = await CharacterAsync();
         var ticket = await ClaimAsync(Store, character, run);
-        (await Accounts.DeleteCharacterAsync(account, character, Now, default)).ShouldBeFalse();
+        (await Accounts.DeleteCharacterAsync(account, character, Now, default)).ShouldBe(DeleteCharacterOutcome.InUse);
         await Store.SaveAsync([Save(ticket, With() with { Currency = 1 })], default);
         await using (var db = Database.Open())   // by another way than the account service (support)
             await db.Characters.Where(c => c.Id == character).ExecuteUpdateAsync(s => s.SetProperty(c => c.DeletedAt, Now));
@@ -258,7 +258,19 @@ public sealed class CharacterDatabaseTests(DatabaseFixture fixture, Xunit.Abstra
         var (account, character) = await CharacterAsync();
         await ClaimAsync(Store, character, run);
         await Store.EndRunAsync(run, default);
-        (await Accounts.DeleteCharacterAsync(account, character, Now, default)).ShouldBeTrue();
+        (await Accounts.DeleteCharacterAsync(account, character, Now, default)).ShouldBe(DeleteCharacterOutcome.Deleted);
+    }
+
+    [DatabaseFact]
+    public async Task A_character_another_server_holds_answers_in_use_to_its_owner_and_unknown_to_others()
+    {
+        var (account, character) = await CharacterAsync();
+        var (stranger, _) = await CharacterAsync();
+        var elsewhere = await Store.StartRunAsync(default);   // another server's run; this one holds nothing
+        await ClaimAsync(Store, character, elsewhere);
+        (await Accounts.DeleteCharacterAsync(stranger, character, Now, default)).ShouldBe(DeleteCharacterOutcome.Unknown);
+        (await Accounts.DeleteCharacterAsync(account, character, Now, default)).ShouldBe(DeleteCharacterOutcome.InUse);
+        (await Accounts.FindCharacterAsync(account, character, default)).ShouldNotBeNull();
     }
 
     // ---- whose an item is -------------------------------------------------------------------------------------------------------------------

@@ -9,7 +9,7 @@ namespace Game.Server.Net;
 /// <c>rejected</c>).
 /// </summary>
 public sealed class CharacterLink(EntityId character, string? displayName, ClientSession session, Guid? accountId = null, Guid? characterId = null,
-    World.Saving.CharacterTicket? save = null)
+    World.Saving.CharacterTicket? save = null, string? sessionKey = null)
 {
     private volatile ClientSession? _session = session;
 
@@ -21,6 +21,9 @@ public sealed class CharacterLink(EntityId character, string? displayName, Clien
 
     /// <summary>Its permanent id (T-701), or null for a dev login. <see cref="Character"/> is the runtime entity it has this time.</summary>
     public Guid? CharacterId { get; } = characterId;
+
+    /// <summary>The account session it is played with (T-710; <c>SessionTokens.KeyOf</c>), or null for a dev login. A login of the account that takes it over brings its own; a resume keeps it.</summary>
+    public string? SessionKey { get; internal set; } = sessionKey;
 
     /// <summary>Its stay as a saved character (T-702), or null when it lives in memory only.</summary>
     public World.Saving.CharacterTicket? Save { get; } = save;

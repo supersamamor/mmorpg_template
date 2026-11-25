@@ -30,6 +30,19 @@ public enum CreateCharacterOutcome
     NoFreeSlot,
 }
 
+/// <summary>How deleting a character ended.</summary>
+public enum DeleteCharacterOutcome
+{
+    /// <summary>Deleted.</summary>
+    Deleted,
+
+    /// <summary>The account has no such character.</summary>
+    Unknown,
+
+    /// <summary>A live server holds it (this one or another): nothing was changed.</summary>
+    InUse,
+}
+
 /// <summary>The store cannot answer now (the database is away or timed out). The message is safe to log.</summary>
 public sealed class StoreUnavailableException(string message) : Exception(message);
 
@@ -53,7 +66,8 @@ public interface IAccountStore
     /// and the session must not outlive that). Stores <paramref name="rehash"/> in its place when given. Deletes the account's expired sessions, and its oldest
     /// beyond <paramref name="maxSessions"/>.
     /// </summary>
-    Task<bool> TryAddSessionAsync(Guid account, string expectedHash, string? rehash, byte[] tokenHash, DateTime now, DateTime expires, int maxSessions,
+    /// <returns>The token hashes of the sessions pushed out (not of the expired ones), or null when nothing was added.</returns>
+    Task<IReadOnlyList<byte[]>?> TryAddSessionAsync(Guid account, string expectedHash, string? rehash, byte[] tokenHash, DateTime now, DateTime expires, int maxSessions,
         CancellationToken cancellation);
 
     /// <summary>The account whose live session has this token hash, or null (unknown, expired or revoked).</summary>
@@ -63,7 +77,8 @@ public interface IAccountStore
     Task<bool> DeleteSessionAsync(byte[] tokenHash, CancellationToken cancellation);
 
     /// <summary>Sets a new password hash, if the current one is still <paramref name="expectedHash"/>, and ends every session of the account.</summary>
-    Task<bool> TryChangePasswordAsync(Guid account, string expectedHash, string newHash, DateTime now, CancellationToken cancellation);
+    /// <returns>The token hashes of the sessions ended, or null when nothing was changed.</returns>
+    Task<IReadOnlyList<byte[]>?> TryChangePasswordAsync(Guid account, string expectedHash, string newHash, DateTime now, CancellationToken cancellation);
 
     /// <summary>The account's characters, by slot.</summary>
     Task<IReadOnlyList<CharacterEntry>> ListCharactersAsync(Guid account, CancellationToken cancellation);
@@ -78,6 +93,6 @@ public interface IAccountStore
     Task<(CreateCharacterOutcome Outcome, CharacterEntry? Character)> CreateCharacterAsync(Guid account, Guid character, string name, string nameKey, string jobId, int maxSlots,
         AppearanceRecord? appearance, DateTime now, CancellationToken cancellation);
 
-    /// <summary>Marks the account's character deleted; false when it has no such character.</summary>
-    Task<bool> DeleteCharacterAsync(Guid account, Guid character, DateTime now, CancellationToken cancellation);
+    /// <summary>Marks the account's character deleted, unless a live server holds it (T-710: an answer of its own, and only ever about the account's own character).</summary>
+    Task<DeleteCharacterOutcome> DeleteCharacterAsync(Guid account, Guid character, DateTime now, CancellationToken cancellation);
 }

@@ -66,6 +66,7 @@ public sealed class GatewayRig : IAsyncDisposable
         Gateway = new Gateway(World, Start, options, Clock, Log, ContentHash, login, tokens, progress: new OwnProgress(Content, progressions),
             inventory: new OwnInventory(Content.Balance.Inventory, Inventories), keeper: keeper);
         if (Accounts is not null) Accounts.InWorld = id => Gateway.HoldsCharacter(id) || Saves?.Holds(id) == true;
+        if (Accounts is not null) Accounts.SessionsEnded = Gateway.EndSessions;
         _runners = World.Instances.Select(i => new InstanceRunner(i, clock, Log)).ToList();
     }
 

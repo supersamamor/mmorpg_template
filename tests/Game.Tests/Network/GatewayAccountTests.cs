@@ -98,7 +98,7 @@ public class GatewayAccountTests
     public async Task A_password_change_shuts_old_sessions_out()
     {
         await using var s = await Setup.StartAsync();
-        (await s.Rig.Accounts!.ChangePasswordAsync(s.Ada, ServiceRig.Password, "a brand new one", default)).Ok.ShouldBeTrue();
+        (await s.Rig.Accounts!.ChangePasswordAsync(s.Ada, ServiceRig.Password, "a brand new one", "a", default)).Ok.ShouldBeTrue();
         (await (await s.Rig.PlayAsync(s.Ada, s.Lyra)).WaitForByeAsync()).ShouldBe(ByeReasons.LoginRefused);
     }
 
@@ -347,5 +347,148 @@ public class GatewayAccountTests
         await playing.SendAsync(new PingMessage(7));
         await playing.WaitForAsync<PongMessage>(p => p.Seq == 7);
     }
-}
 
+    // ---- T-710: a session that ends takes what plays with it along ----
+
+    private static Task GoneAsync(Setup s, long id) => Poll.UntilAsync(
+        () => (s.Rig.World.LocationOf(new Game.Server.World.EntityId(id)), s.Rig.Gateway.CharacterCount, s.Rig.Gateway.SlotsInUse), g => g == (null, 0, 0), "the character to leave the world");
+
+    [Fact]
+    public async Task Signing_out_ends_the_game_played_with_that_session_and_its_resume_token()
+    {
+        await using var s = await Setup.StartAsync();
+        var client = await s.JoinAsync(s.Lyra);
+        var token = client.Token;
+        (await s.Rig.Accounts!.LogoutAsync(s.Ada, default)).Ok.ShouldBeTrue();
+        (await client.WaitForByeAsync()).ShouldBe(ByeReasons.SessionEnded);
+        await GoneAsync(s, client.Id);
+        s.Rig.Gateway.CharactersInGrace.ShouldBe(0, "it left at once");
+        (await (await s.Rig.ResumeAsync(token)).WaitForByeAsync()).ShouldBe(ByeReasons.ResumeFailed);
+    }
+
+    [Fact]
+    public async Task Signing_out_of_another_session_leaves_the_game_alone()
+    {
+        await using var s = await Setup.StartAsync();
+        var bob = (await s.Rig.Accounts!.RegisterAsync("bob", ServiceRig.Password, "a", default)).Value!.Token;
+        var other = (await s.Rig.Accounts.LoginAsync("ada", ServiceRig.Password, "a", default)).Value!.Token;
+        var client = await s.JoinAsync(s.Lyra);
+        (await s.Rig.Accounts.LogoutAsync(other, default)).Ok.ShouldBeTrue();
+        (await s.Rig.Accounts.ChangePasswordAsync(bob, ServiceRig.Password, "a brand new one", "a", default)).Ok.ShouldBeTrue();
+        await client.SendAsync(new PingMessage(7));
+        await client.WaitForAsync<PongMessage>(p => p.Seq == 7);
+        client.Closed.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_password_change_ends_the_game_wherever_it_is_played()
+    {
+        await using var s = await Setup.StartAsync();
+        var client = await s.JoinAsync(s.Lyra);
+        var other = (await s.Rig.Accounts!.LoginAsync("ada", ServiceRig.Password, "a", default)).Value!.Token;
+        var renewed = (await s.Rig.Accounts.ChangePasswordAsync(other, ServiceRig.Password, "a brand new one", "a", default)).Value!.Token;
+        (await client.WaitForByeAsync()).ShouldBe(ByeReasons.SessionEnded);
+        await GoneAsync(s, client.Id);
+        var again = await s.Rig.PlayAsync(renewed, s.Lyra);
+        await again.WaitForAsync<SnapshotMessage>();
+        again.Closed.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task A_password_change_also_ends_a_game_whose_session_had_run_out_and_running_out_alone_does_not()
+    {
+        await using var s = await Setup.StartAsync();
+        var client = await s.JoinAsync(s.Lyra);
+        s.Time.Now += TimeSpan.FromDays(2);
+        var fresh = (await s.Rig.Accounts!.LoginAsync("ada", ServiceRig.Password, "a", default)).Value!.Token; // the expired session's row is gone now
+        await client.SendAsync(new PingMessage(7));
+        await client.WaitForAsync<PongMessage>(p => p.Seq == 7);
+        client.Closed.ShouldBeFalse("a session that runs out does not end a game in progress");
+        (await s.Rig.Accounts.ChangePasswordAsync(fresh, ServiceRig.Password, "a brand new one", "a", default)).Ok.ShouldBeTrue();
+        (await client.WaitForByeAsync()).ShouldBe(ByeReasons.SessionEnded);
+        await GoneAsync(s, client.Id);
+    }
+
+    [Fact]
+    public async Task A_session_pushed_out_by_newer_sign_ins_ends_its_game()
+    {
+        await using var s = await Setup.StartAsync();
+        var client = await s.JoinAsync(s.Lyra);
+        for (var i = 0; i < new AccountLimits().MaxSessions; i++)
+        {
+            s.Time.Now += TimeSpan.FromSeconds(1);
+            (await s.Rig.Accounts!.LoginAsync("ada", ServiceRig.Password, "a", default)).Ok.ShouldBeTrue();
+        }
+        (await client.WaitForByeAsync()).ShouldBe(ByeReasons.SessionEnded);
+        await GoneAsync(s, client.Id);
+    }
+
+    [Fact]
+    public async Task A_character_in_its_grace_period_leaves_with_its_session()
+    {
+        await using var s = await Setup.StartAsync();
+        var client = await s.JoinAsync(s.Lyra);
+        var (id, token) = (client.Id, client.Token);
+        client.Dispose();
+        await Poll.UntilAsync(() => s.Rig.Gateway.CharactersInGrace, n => n == 1, "grace");
+        (await s.Rig.Accounts!.LogoutAsync(s.Ada, default)).Ok.ShouldBeTrue();
+        await GoneAsync(s, id);
+        (await (await s.Rig.ResumeAsync(token)).WaitForByeAsync()).ShouldBe(ByeReasons.ResumeFailed);
+    }
+
+    [Fact]
+    public async Task A_resumed_connection_belongs_to_the_session_its_character_was_entered_with()
+    {
+        await using var s = await Setup.StartAsync();
+        var first = await s.JoinAsync(s.Lyra);
+        var token = first.Token;
+        first.Dispose();
+        await Poll.UntilAsync(() => s.Rig.Gateway.CharactersInGrace, n => n == 1, "grace");
+        var resumed = await s.Rig.ResumeAsync(token);
+        await resumed.WaitForAsync<WelcomeMessage>();
+        (await s.Rig.Accounts!.LogoutAsync(s.Ada, default)).Ok.ShouldBeTrue();
+        (await resumed.WaitForByeAsync()).ShouldBe(ByeReasons.SessionEnded);
+        await GoneAsync(s, first.Id);
+    }
+
+    [Fact]
+    public async Task A_takeover_moves_the_game_to_the_newer_session()
+    {
+        await using var s = await Setup.StartAsync();
+        var first = await s.JoinAsync(s.Lyra);
+        var newer = (await s.Rig.Accounts!.LoginAsync("ada", ServiceRig.Password, "a", default)).Value!.Token;
+        var second = await s.Rig.PlayAsync(newer, s.Lyra);
+        await second.WaitForAsync<WelcomeMessage>();
+        (await first.WaitForByeAsync()).ShouldBe(ByeReasons.Replaced);
+        (await s.Rig.Accounts.LogoutAsync(s.Ada, default)).Ok.ShouldBeTrue();
+        await second.SendAsync(new PingMessage(7));
+        await second.WaitForAsync<PongMessage>(p => p.Seq == 7);
+        second.Closed.ShouldBeFalse("the old session is no longer what it is played with");
+        (await s.Rig.Accounts.LogoutAsync(newer, default)).Ok.ShouldBeTrue();
+        (await second.WaitForByeAsync()).ShouldBe(ByeReasons.SessionEnded);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task A_session_that_ends_while_its_login_is_pending_ends_the_login(bool whileHeld)
+    {
+        await using var s = await Setup.StartAsync();
+        var held = whileHeld ? await s.JoinAsync(s.Lyra) : null;   // another session's: the pending login must not take it over
+        var newer = (await s.Rig.Accounts!.LoginAsync("ada", ServiceRig.Password, "a", default)).Value!.Token;
+        var gate = s.SlowDatabase();
+        var calls = s.Store.Calls;
+        var pending = await s.Rig.PlayAsync(newer, s.Lyra);
+        await Poll.UntilAsync(() => s.Store.Calls, c => c > calls, "the login to reach the database");
+        // What the sign-out tells the gateway, while the login's own read of the session has not answered yet (it will still find it live).
+        s.Rig.Gateway.EndSessions(new EndedSessions(Guid.NewGuid(), [SessionTokens.KeyOf(newer)!], All: false));
+        (await pending.WaitForAsync<ByeMessage>()).Reason.ShouldBe(ByeReasons.SessionEnded);
+        gate.SetResult();
+        await pending.WaitClosedAsync();
+        await Task.Delay(300); // several ticks
+        s.Rig.Gateway.CharacterCount.ShouldBe(whileHeld ? 1 : 0);
+        s.Rig.Gateway.SlotsInUse.ShouldBe(whileHeld ? 1 : 0);
+        s.Rig.World.Instances.Sum(i => i.Players.Count).ShouldBe(whileHeld ? 1 : 0);
+        if (held is not null) held.Closed.ShouldBeFalse();
+    }
+}

@@ -62,7 +62,7 @@ public sealed class AppearanceDatabaseTests(DatabaseFixture fixture) : IClassFix
     public async Task A_character_made_before_the_migration_gets_the_defaults_and_nothing_is_written_back()
     {
         await using var database = new GameDatabase(fixture.NewConnectionString());
-        await using (var db = database.Open())
+        await using (var db = database.OpenForMigrations())
         {
             await db.GetService<IMigrator>().MigrateAsync("Characters");   // the schema of T-702: no appearance columns
             var account = Guid.NewGuid();
@@ -77,7 +77,7 @@ public sealed class AppearanceDatabaseTests(DatabaseFixture fixture) : IClassFix
             found.Appearance.ShouldBe(new AppearanceChoice());
             var service = ServiceOver(store, TestGrids.SampleContent.Appearance, new ListLog());
             var token = SessionTokens.New();
-            (await store.TryAddSessionAsync(account, "x", null, SessionTokens.HashOf(token)!, DateTime.UtcNow, DateTime.UtcNow.AddHours(1), 5, default)).ShouldBeTrue();
+            (await store.TryAddSessionAsync(account, "x", null, SessionTokens.HashOf(token)!, DateTime.UtcNow, DateTime.UtcNow.AddHours(1), 5, default)).ShouldNotBeNull();
             (await service.ListAsync(token, default)).Value!.Characters.Single().Appearance.ShouldBe(service.Looks.Defaults);
             (await service.ResolveAsync(token, character.ToString("D"), "a", default)).Value!.Appearance.ShouldBe(service.Looks.Defaults);
             var row = await db.Characters.AsNoTracking().SingleAsync(c => c.Id == character);

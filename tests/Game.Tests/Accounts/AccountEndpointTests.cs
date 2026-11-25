@@ -83,8 +83,15 @@ public class AccountEndpointTests
             await Refused(401, "invalid_session", http.PostAsync(AccountPaths.Logout, token: token));
             await Refused(401, "invalid_session", http.SendAsync(HttpMethod.Get, AccountPaths.Characters, token: token));
             await Refused(401, "invalid_session", http.PostAsync(AccountPaths.Characters, new { name = "Opal" }, token));
+            await Refused(401, "invalid_session", http.PostAsync(AccountPaths.Password, new { current = good, @new = good + "x" }, token));
             await Refused(401, "invalid_session", http.SendAsync(HttpMethod.Delete, AccountPaths.Characters + "/" + adas, token: token));
         }
+        await Refused(400, "invalid_password", http.PostAsync(AccountPaths.Password, new { current = good, @new = "short" }, ada));
+        await Refused(400, "same_password", http.PostAsync(AccountPaths.Password, new { current = good, @new = good }, ada));
+        await Refused(401, "invalid_credentials", http.PostAsync(AccountPaths.Password, new { current = good + "x", @new = good + "y" }, ada));
+        foreach (var bad in new[] { "", "[]", "{}", """{"current":"1234567890"}""", """{"current":"1234567890","new":1}""", """{"current":"1234567890","new":"a","new":"b"}""" })
+            await Refused(400, "invalid_request", http.SendAsync(HttpMethod.Post, AccountPaths.Password, bad, ada));
+        (await http.SendAsync(HttpMethod.Get, AccountPaths.Password, token: ada)).Status.ShouldBe(405);
         await Refused(400, "invalid_name", http.PostAsync(AccountPaths.Characters, new { name = "L1" }, bob));
         await Refused(409, "name_taken", http.PostAsync(AccountPaths.Characters, new { name = "LYRA" }, bob));
         await Refused(409, "no_free_slot", http.PostAsync(AccountPaths.Characters, new { name = "Opal" }, ada));
@@ -226,11 +233,29 @@ public class AccountEndpointTests
         store.Away = true;
         await http.PostAsync(AccountPaths.Login, new { username = user, password = secret });
         store.Away = false;
-        await rig.Accounts!.ChangePasswordAsync(token, secret, wrong, default);
+        await http.PostAsync(AccountPaths.Password, new { current = wrong, @new = secret + "x" }, token);
+        (await http.PostAsync(AccountPaths.Password, new { current = secret, @new = wrong }, token)).Status.ShouldBe(200);
         await http.SendAsync(HttpMethod.Get, AccountPaths.Root + "/" + token);
         await http.PostAsync(AccountPaths.Logout, token: second);
         var log = string.Join("\n", rig.Log.Lines);
         log.ShouldContain("[accounts]");
         foreach (var value in new[] { user, secret, wrong, token, second, new string('Z', 43), client.Token }) log.ShouldNotContain(value, Case.Insensitive);
+    }
+
+    [Fact]
+    public async Task A_password_change_answers_with_a_new_session()
+    {
+        var (rig, http, _) = await StartAsync();
+        await using var _1 = rig;
+        using var _2 = http;
+        var token = await http.RegisterAsync("ada");
+        var (status, body, response) = await http.PostAsync(AccountPaths.Password, new { current = ServiceRig.Password, @new = "a brand new one" }, token);
+        status.ShouldBe(200);
+        body.GetProperty("expires_in").GetInt64().ShouldBe(86_400);
+        response.Headers.CacheControl!.NoStore.ShouldBeTrue();
+        (await http.SendAsync(HttpMethod.Get, AccountPaths.Characters, token: token)).Status.ShouldBe(401);
+        (await http.SendAsync(HttpMethod.Get, AccountPaths.Characters, token: body.GetProperty("token").GetString())).Status.ShouldBe(200);
+        (await http.PostAsync(AccountPaths.Login, new { username = "ada", password = ServiceRig.Password })).Status.ShouldBe(401);
+        (await http.PostAsync(AccountPaths.Login, new { username = "ada", password = "a brand new one" })).Status.ShouldBe(200);
     }
 }

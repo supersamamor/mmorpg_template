@@ -142,29 +142,43 @@ public class TickWaiterTests
         using var waiter = TickWaiter.Create(allowPrecise: true);
         if (!waiter.Precise) return;   // not Windows (or no high-resolution timer): the runner keeps the ordinary wait
 
-        // "Never early" is exact and is checked on every wait of every attempt. "Close to the due time" depends on the OS giving this thread the CPU back
-        // promptly, which a loaded machine does not (T-406: a busy suite or a Godot run next to it pushed the median past 2 ms). So the precision is judged
-        // over up to five 30-tick attempts and one good attempt proves it: an ordinary 15.6 ms timer never produces a median under 2 ms (it is late by a
-        // uniform 0..15 ms), while the precise waiter does whenever the machine is not saturated for a whole 3 s attempt.
+        // "Never early" is exact and is checked on every wait of every attempt. "Close to the due time" is about the timer, but what is measured is when this thread runs again, and on a
+        // busy machine an ordinary thread waits its turn behind others for tens of milliseconds (T-406; seen again in T-702 beside a full run). So the waits run on a thread that goes
+        // before ordinary ones: what is left is the timer. Every attempt starts from now: with due times that went on from the last attempt, one stall made every wait after it late.
+        // An ordinary 15.6 ms timer never produces a median under 2 ms (it is late by a uniform 0..15 ms), whatever the thread's priority, so one good attempt of five proves the precision.
         var medians = new List<double>();
-        var due = Stopwatch.GetTimestamp();
-        for (var attempt = 0; attempt < 5; attempt++)
+        Exception? failure = null;
+        var thread = new Thread(() =>
         {
-            var late = new List<double>();
-            for (var i = 0; i < 30; i++)
+            try
             {
-                due += Stopwatch.Frequency / 10;   // 100 ms apart, like ticks
-                waiter.WaitUntil(due, CancellationToken.None).ShouldBeTrue();
-                var lateMs = Stopwatch.GetElapsedTime(due).TotalMilliseconds;
-                lateMs.ShouldBeGreaterThanOrEqualTo(0);
-                late.Add(lateMs);
+                for (var attempt = 0; attempt < 5; attempt++)
+                {
+                    var late = new List<double>();
+                    var due = Stopwatch.GetTimestamp();
+                    for (var i = 0; i < 30; i++)
+                    {
+                        due += Stopwatch.Frequency / 10;   // 100 ms apart, like ticks
+                        waiter.WaitUntil(due, CancellationToken.None).ShouldBeTrue();
+                        var lateMs = Stopwatch.GetElapsedTime(due).TotalMilliseconds;
+                        lateMs.ShouldBeGreaterThanOrEqualTo(0);
+                        late.Add(lateMs);
+                    }
+
+                    late.Sort();
+                    medians.Add(late[late.Count / 2]);
+                    if (medians[^1] < 2.0) return;
+                }
             }
+            catch (Exception e)
+            {
+                failure = e;
+            }
+        }) { Priority = ThreadPriority.Highest, IsBackground = true };
+        thread.Start();
+        thread.Join(TimeSpan.FromSeconds(60)).ShouldBeTrue();
 
-            late.Sort();
-            medians.Add(late[late.Count / 2]);
-            if (medians[^1] < 2.0) return;
-        }
-
+        failure.ShouldBeNull();
         medians.Min().ShouldBeLessThan(2.0, $"median lateness of five attempts: {string.Join(", ", medians.Select(m => m.ToString("0.0")))} ms");
     }
 
