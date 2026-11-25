@@ -209,7 +209,8 @@ public sealed class AccountErasureDatabaseTests(DatabaseFixture fixture) : IClas
     {
         await using var db = Database.Open();
         return await db.Accounts.CountAsync(a => a.Id == account) + await db.Sessions.CountAsync(s => s.AccountId == account) + await db.Characters.CountAsync(c => c.AccountId == account)
-            + await db.CharacterStates.CountAsync(s => s.CharacterId == character) + await db.Items.CountAsync(i => i.CharacterId == character);
+            + await db.CharacterStates.CountAsync(s => s.CharacterId == character) + await db.Items.CountAsync(i => i.CharacterId == character)
+            + await db.Outfits.CountAsync(o => o.CharacterId == character);   // T-708
     }
 
     [DatabaseFact]
@@ -225,6 +226,7 @@ public sealed class AccountErasureDatabaseTests(DatabaseFixture fixture) : IClas
         await PlayedAsync(Characters, othersCharacter, run);
         await Accounts.TryAddSessionAsync(account, "hash", null, Token(), Now, Now.AddHours(1), 10, default);
         var othersRows = await RowsAsync(other, othersCharacter);
+        await using (var before = Database.Open()) (await before.Outfits.CountAsync(o => o.CharacterId == character)).ShouldBe(2, "the character owns outfits (T-708), so erasing must take them");
 
         (await Accounts.TryRequestErasureAsync(account, "hash", Now, Now.AddDays(14), default))!.Count.ShouldBe(1);
         (await Accounts.EraseAsync(account, Now.AddDays(14).AddSeconds(-1), default)).ShouldBe(EraseOutcome.Nothing, "not due");

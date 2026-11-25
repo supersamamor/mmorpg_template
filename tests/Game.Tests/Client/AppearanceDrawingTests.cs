@@ -309,8 +309,8 @@ public class AppearanceDrawingTests
         ShouldBeNear(body.Apply(Linear("#2a2226"), default), Linear("#2a2226"), "ink stays");
         ShouldBeNear(body.Apply(Linear("#8a5a33"), default), Linear("#8a5a33"), "leather stays");
         ShouldBeNear(look.FaceColors.Apply(Linear(AppearancePaint.Cloth[0]), default), Linear(AppearancePaint.Cloth[0]), "a face has no cloth");
-        look.ColorsOf(PartRole.Gear).IsNone.ShouldBeTrue("gear keeps its own colours");
-        look.ColorsOf(PartRole.Job).IsNone.ShouldBeTrue();
+        look.ColorsOf(new DressPart(look.Face!, PartRole.Gear)).IsNone.ShouldBeTrue("gear keeps its own colours");
+        look.ColorsOf(new DressPart(look.Face!, PartRole.Job)).IsNone.ShouldBeTrue();
     }
 
     [Fact]
@@ -451,7 +451,8 @@ public class AppearanceDrawingTests
         var root = TestGrids.RepoRoot();
         var path = Path.Combine(root, "themes", "default", "asset-manifest.json");
         ThemeManifest.TryParse("default", File.ReadAllText(path), out var manifest, out _).ShouldBeTrue();
-        manifest!.Keys.Count(k => manifest.TryGet(k, out var asset) && asset.HidesHair).ShouldBe(1);
+        manifest!.Keys.Count(k => k.StartsWith("model.equip.", StringComparison.Ordinal) && manifest.TryGet(k, out var asset) && asset.HidesHair).ShouldBe(1);
+        manifest.Keys.Where(k => manifest.TryGet(k, out var asset) && asset.HidesHair && !k.StartsWith("model.equip.", StringComparison.Ordinal)).ShouldBe(["model.outfit.rain_hood"]);   // T-708
         foreach (var key in new[] { "model.char.body_male", "model.char.body_female" })
         {
             manifest.TryGet(key, out var asset).ShouldBeTrue();

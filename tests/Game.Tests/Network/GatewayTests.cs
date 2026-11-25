@@ -427,11 +427,11 @@ public class GatewayTests
     // ---- back-pressure ----
 
     /// <summary>
-    /// What a join puts on a new session's queue at once: seven messages, counted from a real join: welcome, snapshot, EXP, inventory, skills, stats and the quest log; the
+    /// What a join puts on a new session's queue at once: eight messages, counted from a real join: welcome, snapshot, EXP, inventory, skills, stats, the quest log and the wardrobe (T-708); the
     /// tests below assert it. A queue must hold this with room to spare, or a busy machine, where the send loop has not yet drained the burst when the next player's
     /// delta arrives, overflows it during the join itself: the test then fails on a join, not on the back-pressure it is about (ADR-002 rows 276, 282).
     /// </summary>
-    private const int JoinBurst = 7;
+    private const int JoinBurst = 8;
 
     /// <summary>Twice a join's burst (T-408): the walker's join delta and a slow tick land on top of the burst without touching the limit, and a control message needs 2x this.</summary>
     private const int RoomyQueue = 2 * JoinBurst;

@@ -348,7 +348,8 @@ public sealed class DisplayBundle
 
     private static void ReadOutfits(DisplayBundle result, JsonElement root)
     {
-        foreach (var entry in root.GetProperty("outfits").EnumerateArray())
+        if (!root.TryGetProperty("outfits", out var all) || all.ValueKind != JsonValueKind.Array) return;
+        foreach (var entry in all.EnumerateArray())
         {
             var pieces = new List<ClientOutfitPiece>();
             foreach (var piece in entry.GetProperty("pieces").EnumerateArray())
