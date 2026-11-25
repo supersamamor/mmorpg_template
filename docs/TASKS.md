@@ -127,6 +127,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
+| T-701 | Accounts, login and character slots: EF Core + PostgreSQL base, account endpoints, sessions, sign-in and character-select screens | Claude Code | Opus 5.5 | [T-701](../tasks/prompts/T-701.md) | T-210, T-214, T-704 | In Progress | Restricted `Net/**` and `Persistence/**`, limited scope approved by owner 2026-11-25 |
 | T-704 | Appearance definitions: `appearance.yaml` (gender male/female, skin, faces, hair) + validation | Claude Code | Sonnet 5.5 | [T-704](../tasks/prompts/T-704.md) | T-102, T-209 | Review | Data only, started early; server flow is T-705 |
 
 ## Backlog (prompts written when the previous phase is Done)
@@ -137,7 +138,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-225 | 2 | AI asset pipeline for forks (after T-224): scripts drive a 3D generation API (Meshy, Tripo or Rodin; key from an environment variable, never committed) from an approved brief, then cleanup in headless Blender, rigging or scripted motion, import through the T-224 tool, and an in-game review loop (scripted runs, screenshots at the game camera next to existing art, ThemeCheck and §9 budgets) that adjusts scale, tint, outline and pose for consistency, retrying within a set credit limit. Art is generated in a fork only | Claude Code | Opus 5.5 | Backlog |
 | T-604 | 6 | Quest autopilot, server: runs a player's ticked quests in sequence. Per step: nearest map with the target (route over warps), walk to the nearest monster and kill until the count is met, casting the hotbar's skills (the client sends their ids; the server checks they are learned and all the usual rules), gather `collect` drops, walk to `reach` cells, walk to and talk to NPCs incl. the turn-in. Uses the same rules as manual play; decided on the server (spawn data never goes to the client, rule 11); stops on manual input, disconnect or death; `balance.yaml` switch and limits so a fork can turn it off (needs T-502, T-601, T-602; restricted `Net/**` for its intents and status message) | Claude Code | Opus 5.5 | Backlog |
 | T-605 | 6 | Quest autopilot, client: an autopilot toggle per quest in the log (tick several, shown in run order), an on/off indicator and the current action on the HUD, the reason when it pauses, in the `-Run ui` check (needs T-604) | Claude Code | Sonnet 5.5 | Backlog |
-| T-701 | 7 | Auth, accounts, character slots ([prompt](../tasks/prompts/T-701.md) written; waits for the owner's OK on `Net/**` and `Persistence/**`) | Claude Code | Opus 5.5 | Backlog |
 | T-702 | 7 | Persistence (EF Core + Postgres), transactional inventory | Claude Code | Opus 5.5 | Backlog |
 | T-703 | 7 | Store compliance: account deletion, Sign in with Apple, privacy disclosures | Claude Code | Sonnet 5.5 | Backlog |
 | T-705 | 7 | Appearance on the server: checked at creation, stored with the character, sent in snapshots (needs T-701, T-702, T-704) | Claude Code | Sonnet 5.5 | Backlog |
