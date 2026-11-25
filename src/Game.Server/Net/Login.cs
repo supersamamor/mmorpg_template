@@ -1,21 +1,26 @@
 using Game.Content.Registry;
 using Game.Content.Simulation;
+using Game.Server.Accounts;
 using Game.Server.World;
 using Game.Shared.Progression;
 using Game.Shared.Protocol;
 using Game.Shared.Stats;
+using Game.Shared.Vocabulary;
 using Game.Shared.World;
 
 namespace Game.Server.Net;
 
 /// <summary>
-/// The outcome of a login: a display name for a new character, the character a resume token belongs to, or a refusal (a
-/// <see cref="ByeReasons"/> term).
+/// The outcome of a login: a display name for a new character (with the account and the permanent character id it stands for, unless it is a dev login), the
+/// character a resume token belongs to, or a refusal (a <see cref="ByeReasons"/> term).
 /// </summary>
-public sealed record LoginResult(string? DisplayName, string? Refusal, EntityId? Character = null)
+public sealed record LoginResult(string? DisplayName, string? Refusal, EntityId? Character = null, Guid? AccountId = null, Guid? CharacterId = null)
 {
     /// <summary>Accepted.</summary>
     public static LoginResult Accept(string displayName) => new(displayName, null);
+
+    /// <summary>Accepted: <paramref name="account"/> plays its character <paramref name="character"/>.</summary>
+    public static LoginResult Play(string displayName, Guid account, Guid character) => new(displayName, null, null, account, character);
 
     /// <summary>Refused for <paramref name="reason"/>.</summary>
     public static LoginResult Refuse(string reason) => new(null, reason);
@@ -25,14 +30,16 @@ public sealed record LoginResult(string? DisplayName, string? Refusal, EntityId?
 }
 
 /// <summary>
-/// Decides whether a <c>hello</c> may play. Called on the session's receive loop; must be thread-safe. <b>Seam for T-701:</b> real
-/// accounts replace <see cref="DevLogin"/> here (a session token in <c>hello</c>, checked against the account service) and return the
-/// account's character instead of a name, and may keep resume tokens across restarts.
+/// Decides whether a <c>hello</c> may play. Called on the session's receive loop, never on a tick thread; must be thread-safe.
+/// <see cref="AccountLogin"/> checks real accounts; <see cref="DevLogin"/> is the development stub.
 /// </summary>
 public interface ILoginService
 {
-    /// <summary>Checks a new login's hello (<see cref="HelloMessage.Name"/> set; version and content hash already checked).</summary>
-    LoginResult Login(HelloMessage hello);
+    /// <summary>
+    /// Checks a new login's hello (<see cref="HelloMessage.Name"/>, or <see cref="HelloMessage.Session"/> and <see cref="HelloMessage.Character"/>, set; version
+    /// and content hash already checked). <paramref name="address"/> is the remote address without its port. May read the database.
+    /// </summary>
+    ValueTask<LoginResult> LoginAsync(HelloMessage hello, string address, CancellationToken cancellation);
 
     /// <summary>
     /// Checks a resume's hello (<see cref="HelloMessage.Resume"/> set; version and content hash already checked): the character the token
@@ -51,6 +58,9 @@ public interface ILoginService
 public sealed class DevLogin(bool development, int maxNameLength, ResumeTokens tokens) : ILoginService
 {
     /// <inheritdoc />
+    public ValueTask<LoginResult> LoginAsync(HelloMessage hello, string address, CancellationToken cancellation) => new(Login(hello));
+
+    /// <summary>Checks the name. A hello with a session is refused: there are no accounts here.</summary>
     public LoginResult Login(HelloMessage hello)
     {
         if (!development) return LoginResult.Refuse(ByeReasons.LoginRefused);
@@ -62,6 +72,30 @@ public sealed class DevLogin(bool development, int maxNameLength, ResumeTokens t
     /// <inheritdoc />
     public LoginResult Resume(HelloMessage hello) =>
         hello.Resume is { } token && tokens.Find(token) is { } character ? LoginResult.Resume(character) : LoginResult.Refuse(ByeReasons.ResumeFailed);
+}
+
+/// <summary>
+/// The real login (T-701): a live session token and one of its account's characters. A bad session and another account's character get the same refusal. A
+/// <c>hello</c> with a name, and every resume, go to <see cref="DevLogin"/>, which refuses names outside development.
+/// </summary>
+public sealed class AccountLogin(AccountService accounts, DevLogin dev) : ILoginService
+{
+    /// <inheritdoc />
+    public async ValueTask<LoginResult> LoginAsync(HelloMessage hello, string address, CancellationToken cancellation)
+    {
+        if (hello.Session is not { } session || hello.Character is not { } character) return dev.Login(hello);
+        var result = await accounts.ResolveAsync(session, character, AddressKeys.Of(address), cancellation).ConfigureAwait(false);
+        if (result.Ok) return LoginResult.Play(result.Value.Character.Name, result.Value.Account, result.Value.Character.Id);
+        return LoginResult.Refuse(result.Error switch
+        {
+            AccountErrors.RateLimited => ByeReasons.RateLimit,
+            AccountErrors.Unavailable => ByeReasons.ServerError,
+            _ => ByeReasons.LoginRefused,
+        });
+    }
+
+    /// <inheritdoc />
+    public LoginResult Resume(HelloMessage hello) => dev.Resume(hello);
 }
 
 /// <summary>

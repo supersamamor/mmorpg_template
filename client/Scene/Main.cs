@@ -110,7 +110,8 @@ public partial class Main : Node3D
         }
 
         _socket = new GodotSocket(_config.SocketPollMs);
-        _session = new ClientSession(_config, _bundle!, _socket, new Pcg32Random((ulong)System.Random.Shared.NextInt64()));
+        _session = new ClientSession(_config, _bundle!, _socket, new Pcg32Random((ulong)System.Random.Shared.NextInt64()),
+            new GodotAccountTransport(this, _config.ConnectTimeoutSeconds));
         var catalog = ThemeLoader.Load(_config);
         _look = ToonLook.Mount(this, _config, catalog);
         _map = new ThemeMapView(this, catalog, _look);

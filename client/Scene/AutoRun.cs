@@ -44,7 +44,7 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 ||
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -79,6 +79,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-stats") >= 0) await StatsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-dialogue") >= 0) await DialogueRunAsync();
             else if (Array.IndexOf(_args, "--e2e-quests") >= 0) await QuestsRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-account") >= 0) await AccountRunAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
@@ -93,6 +94,82 @@ public sealed class AutoRun
     }
 
     // ---- the runs ----
+
+    /// <summary>
+    /// T-701's run, against a server with a database: register, see an empty character list, create a character, enter the world, log out (back to the list), be
+    /// refused the deletion of nothing and the wrong password, sign out, sign in again and enter the world with the same character. Every step goes through the
+    /// screens' fields and buttons. The names are random, so the run can be repeated on one database.
+    /// </summary>
+    private async Task AccountRunAsync()
+    {
+        var hud = _main.Hud!;
+        var accounts = Session.Accounts;
+        await FramesAsync(3);
+        var screen = hud.Accounts!;
+        Check(screen.Open && screen.SignInButton.IsVisibleInTree(), "starts on the sign-in screen");
+        var tag = new string(System.Security.Cryptography.RandomNumberGenerator.GetItems<char>("abcdefghijklmnopqrstuvwxyz", 10));
+        var password = Guid.NewGuid().ToString("N"); // thrown away with the run
+
+        Type(screen.Username, "E2E-" + tag);
+        Type(screen.Password, "short");
+        static void Type(LineEdit field, string value) => field.Text = value;
+        Press(screen.RegisterButton);
+        await UntilAsync(() => !accounts.Busy && accounts.Notice != Game.Client.Core.Accounts.AccountNotice.None, 10, "the refusal of a short password");
+        Check(accounts.Error == AccountErrors.InvalidPassword, "a short password is refused, was " + accounts.Notice + " " + accounts.Error);
+        Check(screen.Password.Text.Length == 0, "the password field is cleared");
+
+        Type(screen.Password, password);
+        Press(screen.RegisterButton);
+        await UntilAsync(() => accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters && !accounts.Busy, 15, "the character list after registering");
+        await FramesAsync(3);
+        Check(accounts.Characters.Count == 0 && accounts.Slots > 0, "a new account has no characters and some slots");
+        Print($"account: registered; {accounts.Slots} free slots, names of {accounts.NameMin} to {accounts.NameMax} letters");
+
+        Type(screen.NameField, "Run" + tag);
+        Press(screen.CreateButton);
+        await UntilAsync(() => accounts.Characters.Count == 1 && !accounts.Busy, 10, "the new character");
+        await FramesAsync(3);
+        var character = accounts.Characters[0];
+        Print($"account: character in slot {character.Slot}, row \"{screen.Rows[0].Text.Replace("\n", ", ")}\"");
+        await ShotAsync();
+
+        Press(screen.Rows[0].Play);
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null && _main.LoadedMap == World.MapId, 15, "entering the world");
+        await FramesAsync(3);
+        Check(!screen.Open && hud.PanelText.Length == 0, "the account screens are gone while playing");
+        Print($"account: in the world as entity {World.OwnId} on {World.MapId}");
+
+        _main.Socket!.Kill();
+        await UntilAsync(() => Session.Connection.Phase != ConnectionPhase.Online, 10, "noticing the dropped socket");
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online, 20, "the resume");
+        Print("account: resumed after a dropped socket");
+
+        Session.Logout(Clocks.Wall());
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen, 10, "bye logout");
+        await UntilAsync(() => !accounts.Busy && accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters, 10, "back at the character list");
+        await FramesAsync(3);
+        Check(screen.Open && accounts.Characters.Count == 1, "log out leads back to the character list");
+
+        Press(screen.SignOutButton);
+        await UntilAsync(() => !accounts.Busy && accounts.Screen == Game.Client.Core.Accounts.AccountScreen.SignIn, 10, "signing out");
+        Check(!accounts.SignedIn, "the session token is dropped");
+
+        Type(screen.Username, "e2e-" + tag.ToUpperInvariant());
+        Type(screen.Password, password + "x");
+        Press(screen.SignInButton);
+        await UntilAsync(() => !accounts.Busy && accounts.Notice != Game.Client.Core.Accounts.AccountNotice.None, 10, "the refusal of a wrong password");
+        Check(accounts.Error == AccountErrors.InvalidCredentials, "a wrong password is refused, was " + accounts.Notice + " " + accounts.Error);
+        Type(screen.Password, password);
+        Press(screen.SignInButton);
+        await UntilAsync(() => accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters && !accounts.Busy, 15, "the character list after signing in again");
+        await FramesAsync(3);
+        Check(accounts.Characters.Count == 1 && accounts.Characters[0].Id == character.Id, "the same character is there");
+        Press(screen.Rows[0].Play);
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null, 15, "entering the world again");
+        Print($"account: signed in again (the username in another letter case) and in the world as entity {World.OwnId}");
+        Session.Logout(Clocks.Wall());
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy, 10, "bye logout");
+    }
 
     private async Task PlayRunAsync()
     {

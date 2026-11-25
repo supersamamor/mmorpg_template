@@ -114,7 +114,7 @@ public sealed class Hud
     private readonly CenterContainer _panelCenter = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly VBoxContainer _panelBox = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly Label _panelTitle = Wrapped(HorizontalAlignment.Center);
-    private readonly LineEdit _nameEdit = new() { Alignment = HorizontalAlignment.Center };
+    private AccountPanel? _accountPanel;   // sign-in and character select (T-701), in the full-screen panel
     private readonly Button _panelButton = new();
     private readonly List<Control> _interactive = new();
 
@@ -271,15 +271,13 @@ public sealed class Hud
         _panel.AddChild(_panelCenter);
         _panelCenter.AddChild(_panelBox);
         _panelBox.AddChild(_panelTitle);
-        _panelBox.AddChild(_nameEdit);
         _panelBox.AddChild(_panelButton);
         _panelButton.Pressed += () => _panelAction?.Invoke();
-        _nameEdit.Text = config.DevName;
+        if (session is not null && bundle is not null) _accountPanel = new AccountPanel(_panel, session, bundle, config, _interactive, Tap);
         _interactive.Add(_logout);
         _interactive.Add(_uiSize);
         _interactive.Add(_soundButton);
         _interactive.Add(_bagButton);
-        _interactive.Add(_nameEdit);
         _interactive.Add(_panelButton);
 
         ApplyLayout();
@@ -287,10 +285,13 @@ public sealed class Hud
     }
 
     /// <summary>The text on screen in the panel, for the scripted run.</summary>
-    public string PanelText => _panel.Visible ? _panelTitle.Text : string.Empty;
+    public string PanelText => !_panel.Visible ? string.Empty : _accountPanel is { Open: true } accounts ? accounts.Text : _panelTitle.Text;
 
     /// <summary>True when the panel's button shows, for the scripted run.</summary>
-    public bool PanelButtonShown => _panel.Visible && _panelButton.Visible;
+    public bool PanelButtonShown => _panel.Visible && _panelCenter.Visible && _panelButton.Visible;
+
+    /// <summary>The sign-in and character-select screens (T-701), or null without a session.</summary>
+    public AccountPanel? Accounts => _accountPanel;
 
     /// <summary>The metrics the layout was last made for.</summary>
     public ScreenMetrics Metrics => _metrics;
@@ -376,7 +377,7 @@ public sealed class Hud
     public void ShowRefusal(string text)
     {
         _logout.Visible = false;
-        ShowPanel(text, false, null, null);
+        ShowPanel(text, null, null);
     }
 
     /// <summary>
@@ -663,7 +664,7 @@ public sealed class Hud
         var panelWidth = Mathf.Min(Dp(PanelWidthDp), (float)safe.Width - 2 * margin);
         _panelBox.CustomMinimumSize = new Vector2(panelWidth, 0);
         _panelBox.AddThemeConstantOverride("separation", Mathf.RoundToInt(Dp(12)));
-        _nameEdit.CustomMinimumSize = new Vector2(0, Target(56));
+        _accountPanel?.ApplyMetrics(Dp, buttonHeight, new Rect2((float)safe.X, (float)safe.Y, (float)safe.Width, (float)safe.Height));
         _panelButton.CustomMinimumSize = new Vector2(0, Target(56));
 
         _info.Visible = false;
@@ -716,6 +717,7 @@ public sealed class Hud
             _targetFrame.Visible = targetName.Length > 0;
         }
         if (panelChanged) RefreshPanel();
+        _accountPanel?.Refresh();
         RefreshTargetHp(ui, world);
         RefreshLevelFlash(ui);
 
@@ -944,31 +946,36 @@ public sealed class Hud
         switch (connection.Phase)
         {
             case ConnectionPhase.LoginScreen:
-                ShowPanel(UiText.Notice(connection.Notice), true, UiText.Play, () => session.Login(_nameEdit.Text.Trim(), Clocks.Wall()));
+                _panelCenter.Visible = false;
+                _accountPanel?.SetOpen(true);
+                if (!_panel.Visible) HideInfo();
+                _panel.Visible = true;
                 return;
             case ConnectionPhase.Stopped when connection.Notice == ConnectionNotice.Replaced:
-                ShowPanel(UiText.Notice(connection.Notice), false, UiText.BackToLogin, () => session.Login(_nameEdit.Text.Trim(), Clocks.Wall()));
+                ShowPanel(UiText.Notice(connection.Notice), UiText.BackToLogin, session.BackToLogin);
                 return;
             case ConnectionPhase.Stopped:
-                ShowPanel(UiText.Notice(connection.Notice), false, _config.StoreUrl.Length > 0 ? UiText.GoToStore : null,
+                ShowPanel(UiText.Notice(connection.Notice), _config.StoreUrl.Length > 0 ? UiText.GoToStore : null,
                     () => OS.ShellOpen(_config.StoreUrl));
                 return;
             case ConnectionPhase.Connecting or ConnectionPhase.AwaitingWelcome when session.World.MapId is null:
-                ShowPanel(connection.Notice != ConnectionNotice.None ? UiText.Notice(connection.Notice) : UiText.Connecting, false, null, null);
+                ShowPanel(connection.Notice != ConnectionNotice.None ? UiText.Notice(connection.Notice) : UiText.Connecting, null, null);
                 return;
         }
         if (session.Ui.Dead && connection.Phase == ConnectionPhase.Online)
         {
-            ShowPanel(UiText.YouDied, false, UiText.Respawn, session.Respawn);
+            ShowPanel(UiText.YouDied, UiText.Respawn, session.Respawn);
             return;
         }
+        _accountPanel?.SetOpen(false);
         _panel.Visible = false;
     }
 
-    private void ShowPanel(string title, bool nameField, string? buttonText, Action? action)
+    private void ShowPanel(string title, string? buttonText, Action? action)
     {
+        _accountPanel?.SetOpen(false);
+        _panelCenter.Visible = true;
         _panelTitle.Text = title;
-        _nameEdit.Visible = nameField;
         _panelButton.Visible = buttonText is not null;
         _panelButton.Text = buttonText ?? string.Empty;
         _panelAction = action;

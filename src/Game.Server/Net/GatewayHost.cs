@@ -1,5 +1,6 @@
 using System.IO.Pipelines;
 using System.Security.Cryptography.X509Certificates;
+using Game.Server.Accounts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -13,7 +14,8 @@ namespace Game.Server.Net;
 /// <summary>
 /// Kestrel listening for WebSocket upgrades on <see cref="GatewayOptions.Path"/> and handing each one to <see cref="Gateway"/>. In
 /// development it listens on loopback only and allows plain <c>ws://</c>; outside development it listens on every interface (or
-/// <see cref="GatewayOptions.BindAddress"/>) and only with TLS (<c>wss://</c>), and refuses to start without a certificate (<see cref="GatewayOptions.Problems"/>). Nothing else is served.
+/// <see cref="GatewayOptions.BindAddress"/>) and only with TLS (<c>wss://</c>), and refuses to start without a certificate (<see cref="GatewayOptions.Problems"/>). The account
+/// endpoints (T-701), when there are any, are served on the same listener, so the same transport rule holds for them. Nothing else is served.
 /// </summary>
 public sealed class GatewayHost : IAsyncDisposable
 {
@@ -32,7 +34,7 @@ public sealed class GatewayHost : IAsyncDisposable
     /// Validates the options, loads the certificate (password from <see cref="GatewayOptions.CertificatePasswordEnv"/>), binds and starts
     /// listening. Throws <see cref="InvalidOperationException"/> listing every problem when the options are unusable.
     /// </summary>
-    public static async Task<GatewayHost> StartAsync(Gateway gateway, Func<string, string?>? environment = null)
+    public static async Task<GatewayHost> StartAsync(Gateway gateway, Func<string, string?>? environment = null, AccountEndpoints? accounts = null)
     {
         var options = gateway.Options;
         environment ??= Environment.GetEnvironmentVariable;
@@ -81,6 +83,7 @@ public sealed class GatewayHost : IAsyncDisposable
         app.UseWebSockets(new WebSocketOptions { KeepAliveInterval = TimeSpan.FromMilliseconds(options.KeepAliveMs) });
         app.Run(async context =>
         {
+            if (accounts is not null && await accounts.TryHandleAsync(context).ConfigureAwait(false)) return;
             if (context.Request.Path != options.Path || !context.WebSockets.IsWebSocketRequest)
             {
                 context.Response.StatusCode = context.Request.Path == options.Path ? StatusCodes.Status400BadRequest : StatusCodes.Status404NotFound;

@@ -61,6 +61,7 @@ public sealed class InstanceRunner
 
     private void Run()
     {
+        TickThread.Enter();
         var token = _stop.Token;
         var pacer = new TickPacer(_clock.NowMilliseconds);
         var lifetime = new TickStatsWindow();

@@ -269,7 +269,13 @@ public class ClientRulesTests
         byeRuns.ShouldNotContain("{token", Case.Sensitive);
         byeRuns.ShouldNotContain("{Session.Connection.ResumeToken", Case.Sensitive);
 
-        // Those two write nothing anywhere: no file API and no printing.
+        // The account's session token (T-701): the flow holds it, and the session hands it to hello. The transport gets it inside a request; none of them prints.
+        var sessionToken = new Regex("\\bSessionToken\\b|\\b_sessionToken\\b");
+        Sources("client").Where(f => sessionToken.IsMatch(File.ReadAllText(f))).Select(Path.GetFileName).OrderBy(n => n).ToArray().ShouldBe(["AccountFlow.cs", "ClientSession.cs"]);
+        foreach (var name in new[] { "GodotAccountTransport.cs", "AccountPanel.cs" })
+            File.ReadAllText(Sources("client/Scene").Single(f => Path.GetFileName(f) == name)).ShouldNotContain("GD.", Case.Sensitive, name);
+
+        // Those write nothing anywhere: no file API and no printing.
         var writer = new Regex("\\b(File|FileAccess|ConfigFile|DirAccess|StreamWriter|Console|GD|OS|ProjectSettings|DisplayServer)\\.");
         foreach (var file in Sources("client/Core"))
         {

@@ -1,0 +1,50 @@
+namespace Game.Shared.Vocabulary
+{
+    /// <summary>Why an account request was refused: the <c>error</c> of its answer (VOCABULARY.md "Account errors").</summary>
+    public static class AccountErrors
+    {
+        /// <summary>The body is not the JSON object the endpoint expects, is too long, or lacks a field.</summary>
+        public const string InvalidRequest = "invalid_request";
+
+        /// <summary>The username does not follow the rules (length, characters).</summary>
+        public const string InvalidUsername = "invalid_username";
+
+        /// <summary>The password is too short or too long.</summary>
+        public const string InvalidPassword = "invalid_password";
+
+        /// <summary>Another account has this username.</summary>
+        public const string UsernameTaken = "username_taken";
+
+        /// <summary>Unknown username or wrong password: the same answer for both.</summary>
+        public const string InvalidCredentials = "invalid_credentials";
+
+        /// <summary>The session token is missing, unknown, expired or revoked: sign in again.</summary>
+        public const string InvalidSession = "invalid_session";
+
+        /// <summary>Too many requests or failures; the answer says when to retry.</summary>
+        public const string RateLimited = "rate_limited";
+
+        /// <summary>The character name does not follow the rules of <c>balance.yaml</c> <c>characters</c>.</summary>
+        public const string InvalidName = "invalid_name";
+
+        /// <summary>Another character has this name (whatever its letter case).</summary>
+        public const string NameTaken = "name_taken";
+
+        /// <summary>Every character slot of the account is in use.</summary>
+        public const string NoFreeSlot = "no_free_slot";
+
+        /// <summary>The account has no such character.</summary>
+        public const string UnknownCharacter = "unknown_character";
+
+        /// <summary>The character is in the world (played, or in its grace period): it cannot be deleted now.</summary>
+        public const string CharacterInUse = "character_in_use";
+
+        /// <summary>The server could not answer now (the database is away, or too many logins at once): try again later.</summary>
+        public const string Unavailable = "unavailable";
+
+        /// <summary>Every account error.</summary>
+        public static readonly VocabularySet All = new VocabularySet(
+            InvalidRequest, InvalidUsername, InvalidPassword, UsernameTaken, InvalidCredentials, InvalidSession, RateLimited, InvalidName, NameTaken,
+            NoFreeSlot, UnknownCharacter, CharacterInUse, Unavailable);
+    }
+}

@@ -17,7 +17,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
 {
     /// <summary>Usage text.</summary>
     public const string Usage =
-        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--net-<name> <value> ...]";
+        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--net-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
 
     /// <summary>The environment name that enables development mode (plain ws:// on loopback, the dev login).</summary>
     public const string DevelopmentName = "Development";
@@ -32,6 +32,9 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
 
     /// <summary><c>--legacy-timer</c>: keep the ordinary wait on Windows too, to measure what the high-resolution timer buys.</summary>
     public bool LegacyTimer { get; init; }
+
+    /// <summary><c>--migrate</c>: apply the database migrations and exit. Development applies them at start; everywhere else this is how it is done (T-701).</summary>
+    public bool Migrate { get; init; }
 
     /// <summary>The <c>--net-</c> options and their values, in order, for <see cref="Game.Server.Net.GatewayOptions.Parse"/>.</summary>
     public IReadOnlyList<string> NetArgs { get; init; } = NoArgs;
@@ -49,6 +52,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         double? duration = null;
         string? environment = null;
         var legacyTimer = false;
+        var migrate = false;
         var net = new List<string>();
         error = null;
         for (var i = 0; i < args.Length; i++)
@@ -64,6 +68,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                     case "--duration": duration = double.Parse(Value(), System.Globalization.CultureInfo.InvariantCulture); break;
                     case "--environment": environment = Value(); break;
                     case "--legacy-timer": legacyTimer = true; break;
+                    case "--migrate": migrate = true; break;
                     case var _ when arg.StartsWith(Game.Server.Net.GatewayOptions.ArgPrefix, StringComparison.Ordinal):
                         net.Add(arg);
                         net.Add(Value());
@@ -84,6 +89,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         {
             Environment = environment,
             LegacyTimer = legacyTimer,
+            Migrate = migrate,
             NetArgs = net.Count == 0 ? NoArgs : net,
         };
     }

@@ -58,6 +58,43 @@ jobs:
       - name: Client bundle matches the reference
         run: dotnet run --no-build --configuration Release --project src/Game.Tools -- export-client --check content/client-content.reference.json --allow-missing
 
+  # The tests that need a real PostgreSQL (T-701). A job of its own because service containers run on Linux runners only, and the job above also runs on Windows, where
+  # these tests are skipped with their reason. The throw-away server has no password (trust authentication), so none is written here; a missing database fails the job.
+  database-tests:
+    name: database tests (PostgreSQL)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: mmo
+          POSTGRES_DB: mmo_game
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mmo -d mmo_game"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      GAME_TEST_DB_CONNECTION: Host=127.0.0.1;Port=5432;Database=mmo_game;Username=mmo
+      GAME_TEST_DB_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Build
+        run: dotnet build Game.sln --configuration Release -warnaserror
+
+      - name: Database tests
+        run: dotnet test Game.sln --no-build --configuration Release --filter Category=Database
+
   # The client is built and exported on every push (T-216): an Android debug APK, a size and contents check, and the headless scripted runs against a real server.
   # Separate from the job above on purpose: a slow export must not hold up the server checks. It has never run on GitHub (written without access to it).
   client-export:

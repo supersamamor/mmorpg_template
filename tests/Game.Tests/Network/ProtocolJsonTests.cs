@@ -23,6 +23,7 @@ public class ProtocolJsonTests
         { "hello", new HelloMessage(1, "Ada"), """{"type":"hello","version":1,"name":"Ada"}""" },
         { "hello with content hash", new HelloMessage(1, "Ada", "ab12"), """{"type":"hello","version":1,"name":"Ada","content":"ab12"}""" },
         { "hello with a resume token", new HelloMessage(1, null, "ab12", "Qk3x-_9"), """{"type":"hello","version":1,"resume":"Qk3x-_9","content":"ab12"}""" },
+        { "hello with a session", new HelloMessage(1, null, "ab12", null, "Zk3x-_9", "0198"), """{"type":"hello","version":1,"session":"Zk3x-_9","character":"0198","content":"ab12"}""" },
         { "move", new MoveMessage(new GridCell(12, 9)), """{"type":"move","cell":[12,9]}""" },
         { "stop", new StopMessage(), """{"type":"stop"}""" },
         { "attack", new AttackMessage(7), """{"type":"attack","target":7}""" },

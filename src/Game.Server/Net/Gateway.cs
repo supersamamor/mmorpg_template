@@ -110,6 +110,7 @@ public sealed class Gateway
     private readonly object _linkLock = new();
     private readonly ConcurrentDictionary<EntityId, CharacterLink> _links = new();
     private readonly ConcurrentDictionary<EntityId, IReadOnlyList<DerivedRecord>> _lastDerived = new();
+    private readonly Dictionary<Guid, ClientSession> _accountSessions = new();   // the session each account last logged in with, while it is connected; under the link lock
     private int _joining;   // logins accepted whose character is not linked yet (each holds a slot); under the link lock
     private readonly ResumeGuard _resumeGuard;
     private readonly CancellationTokenSource _stop = new();
@@ -239,6 +240,9 @@ public sealed class Gateway
     /// <summary>Characters waiting in their grace period.</summary>
     public int CharactersInGrace => _links.Values.Count(l => l.InGrace);
 
+    /// <summary>True while the gateway holds the account's character with this permanent id: played, or in its grace period. Any thread.</summary>
+    public bool HoldsCharacter(Guid characterId) => _links.Values.Any(l => l.CharacterId == characterId);
+
     /// <summary>The gateway's link for <paramref name="character"/>, or null when it does not hold it.</summary>
     public CharacterLink? LinkOf(EntityId character) => _links.TryGetValue(character, out var link) ? link : null;
 
@@ -313,11 +317,53 @@ public sealed class Gateway
         _world.LocationOf(id) is { } map && _world.TryGetInstance(map, out var instance) ? instance.Grid : null;
 
     /// <summary>
+    /// An account's login (T-701): an account plays one character at a time, so whatever it was playing ends by the <c>replaced</c> rule. If the gateway already
+    /// holds the character it asks for (played elsewhere, or in its grace period), the session takes it over where it stands, exactly as a resume would, and true
+    /// is returned. Any other character of the account leaves the world, and false is returned: the caller spawns the one asked for.
+    /// </summary>
+    internal bool ClaimAccount(ClientSession session, LoginResult login)
+    {
+        if (login.AccountId is not { } account) return false; // the dev login has no account
+        ClientSession? replaced;
+        CharacterLink? taken = null;
+        var token = string.Empty;
+        lock (_linkLock)
+        {
+            _accountSessions.TryGetValue(account, out replaced);
+            _accountSessions[account] = session;
+            // Closing it here, before anything else, also ends a login of the account that is still joining: its character is never linked and leaves.
+            replaced?.Bye(ByeReasons.Replaced);
+            foreach (var link in _links.Values.Where(l => l.AccountId == account).ToList())
+            {
+                if (link.CharacterId == login.CharacterId && taken is null && !_shuttingDown && _world.LocationOf(link.Character) is { } map)
+                {
+                    taken = link;
+                    link.Session?.Bye(ByeReasons.Replaced);
+                    link.Session = session;
+                    token = Tokens.Issue(link.Character); // the replaced session's token stops working
+                    session.OnResumed(link.Character, link.DisplayName, map, token);
+                    Enqueue(new AttachView(link.Character, session));
+                    Enqueue(new RequestSnapshot(link.Character));
+                }
+                else
+                {
+                    link.Session?.Bye(ByeReasons.Replaced);
+                    Release(link, "its account plays another character");
+                }
+            }
+        }
+        if (taken is not null)
+            Log.Info($"[net] {session.Peer} took over '{taken.DisplayName}' ({taken.Character}) with its account; new token {ResumeTokens.Fingerprint(token)}");
+        return taken is not null;
+    }
+
+    /// <summary>
     /// Queues the session's new character on the start map, or returns null when the server is full (<see cref="SlotsInUse"/>): nobody is
     /// evicted to make room. The character joins on that instance's next tick. There, unless the session has already ended, the gateway links
-    /// the character to the session, issues its first resume token, and the session queues <c>welcome</c>.
+    /// the character to the session (and to the account's character, when <paramref name="login"/> names one), issues its first resume token,
+    /// and the session queues <c>welcome</c>.
     /// </summary>
-    internal EntityId? SpawnCharacter(ClientSession session)
+    internal EntityId? SpawnCharacter(ClientSession session, LoginResult login)
     {
         lock (_linkLock)
         {
@@ -338,7 +384,7 @@ public sealed class Gateway
                 FreeJoiningSlot(session); // from here the link holds the slot, or the character leaves
                 if (session.State != SessionState.Closing)
                 {
-                    _links[entity.Id] = new CharacterLink(entity.Id, session.DisplayName, session);
+                    _links[entity.Id] = new CharacterLink(entity.Id, session.DisplayName, session, login.AccountId, login.CharacterId);
                     token = Tokens.Issue(entity.Id);
                 }
             }
@@ -376,6 +422,7 @@ public sealed class Gateway
                 {
                     replaced = link.Session;
                     link.Session = session;
+                    if (link.AccountId is { } account) _accountSessions[account] = session;
                     taken = link;
                     map = where;
                     // Welcome first, then the view: the AOI snapshots a new sink in the tick that attaches it. Inside the lock so that a drop
@@ -442,7 +489,11 @@ public sealed class Gateway
     /// </summary>
     private void OnSessionEnded(ClientSession session)
     {
-        lock (_linkLock) FreeJoiningSlot(session);
+        lock (_linkLock)
+        {
+            FreeJoiningSlot(session);
+            foreach (var account in _accountSessions.Where(a => a.Value == session).Select(a => a.Key).ToList()) _accountSessions.Remove(account);
+        }
         if (session.Entity is { } id)
         {
             lock (_linkLock)

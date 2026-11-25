@@ -117,7 +117,16 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
   manifest's asset keys and audio data. The server calls it at start and refuses to run on an error, printing the same lines
   `Game.Tools validate` prints; `validate` adds only the JSON Schema check (YAML documents and `maps/*.grid.json`) and the map scene check (§5.3).
 - **Map instances:** each map runs in its own instance; warps move a character between instances.
-- **Persistence:** player state saved on interval, on map change, and on logout. Content is never in the DB.
+- **Persistence:** player state saved on interval, on map change, and on logout (T-702). Content is never in the DB.
+  **Base** (T-701, `Game.Server/Persistence`): EF Core with Npgsql. The connection string is the environment variable `GAME_DB_CONNECTION` (not an option: those
+  show up in process listings); it is never committed or logged, and database error details (which quote row values) are off. Without it a development server runs with
+  the dev login only; any other server refuses to start. At start the applied migrations are compared with the build's: a missing or older schema is migrated in
+  development and refused elsewhere (`Game.Server --migrate` applies it and exits), and a newer one is always refused. Every operation opens its own `GameDb` through
+  `GameDatabase.Open`, which throws on a tick thread (`TickThread`), so database work cannot run there. Tables: `accounts` (`id`, `username`, `password_hash`,
+  `created_at`, `password_changed_at`), `account_sessions` (`token_hash`, `account_id`, `created_at`, `expires_at`), `characters` (`id`, `account_id`, `slot`, `name`,
+  `name_key`, `job_id`, `created_at`, `deleted_at`). Unique indexes decide: `username`; `name_key` over **every** row (a deleted character keeps its name); and
+  `account_id, slot` over characters that are not deleted. A character's `id` is a GUID, separate from its runtime `EntityId`; T-702 and T-705 hang their data off it.
+  A new table is one row class, its block in `GameDb.OnModelCreating` and `dotnet ef migrations add <Name> --project src/Game.Server --output-dir Persistence/Migrations`.
 - **Mobile sessions are flaky** — the network layer assumes drops and app suspension (§10).
 
 ## 4. World space & movement
@@ -1030,7 +1039,7 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
 
   | type | direction | fields |
   |------|-----------|--------|
-  | `hello` | C→S (first) | `version`, `content` (the hash of the client bundle, §5.4; optional in development), and exactly one of `name` (dev login stub; T-701 replaces it) and `resume` (a resume token) |
+  | `hello` | C→S (first) | `version`, `content` (the hash of the client bundle, §5.4; optional in development), and exactly one of: `session` and `character` (an account's session token and its character's id, T-701), `resume` (a resume token), `name` (the dev login, development only) |
   | `move` | C→S | `cell` (a request; it may come back `rejected`) |
   | `stop` | C→S | — (stops walking **and** auto-attacking: a stop while standing still has no movement event, so combat could not see it) |
   | `attack` | C→S | `target` (an entity id the client sees; a request, it may come back `rejected`) |
@@ -1085,8 +1094,9 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   `"statuses":[{"id":"status.poison","stacks":1,"left_ms":7400,"debuff":true}]`.
 - **Session lifecycle:**
   1. The client connects and must send `hello` within `hello-timeout-ms`.
-  2. The server checks the protocol version, then the content hash (T-209): a `content` that differs from the server's ends in `bye update_required`; a missing one is accepted in development (logged as a warning) and refused elsewhere. Then it checks the dev login. The dev login is development only; any other environment refuses it. A `hello` with `resume`
-     instead of `name` goes to step 6.
+  2. The server checks the protocol version, then the content hash (T-209): a `content` that differs from the server's ends in `bye update_required`; a missing one is accepted in development (logged as a warning) and refused elsewhere. Then it checks the login: a live session and one of its account's characters (T-701, "Accounts" below), or the dev
+     login (`name`), which any environment but development refuses. The check may read the database; it runs on the session's receive loop, never on a tick. Messages that arrive meanwhile wait for it, and a
+     connection that drops, times out or is shut down meanwhile leaves no slot and no character behind. A `hello` with `resume` goes to step 6.
   3. The server queues the character with `GameWorld.Spawn(..., initialize)` at `balance.yaml` `new_character`. On the start
      instance's tick, the initializer sets its stats (from the stats pipeline), its display key (the job id) and its view sink, and
      queues `welcome`. The AOI then sends the first `snapshot` in phase 5 of that tick, and deltas follow.
@@ -1114,7 +1124,8 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
      - **The token:** 256 bits from the OS CSPRNG, base64url without padding (43 characters), bound to one character, **single use and
        rotated** (every successful resume returns a new one). The server keeps only its SHA-256 and
        compares in constant time; tokens never appear in logs (at most a 6-hex-digit fingerprint of the hash). Tokens live in server
-       memory only: **a server restart invalidates every token** (durable sessions are T-701).
+       memory only: **a server restart invalidates every token**. T-701 decided to keep it so: a resume token stands for a place in a running world, and after
+       a restart there is none. What is durable is the account's session: after a restart the client says `hello` with the same `session` and `character`, without asking the player.
      - **Acknowledgement** (T-214): the `welcome` of a resume can be lost if the connection drops again before it arrives. So the token
        the resume used keeps working until the client's **first message on the new session** (any message: that is the implicit
        acknowledgement), then it stops. Resuming with it again before that rotates once more and kills the token issued in between. It
@@ -1123,6 +1134,28 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
        period, plus logins still joining. A new login on a full server gets `bye server_full` at its `hello`; nobody is evicted to make
        room. A resume is always let in, since it reuses its character's slot. Connections that have not said `hello` are refused with
        `server_full` only when more than `max-sessions` of them are open at once.
+- **Accounts** (T-701, `Game.Server/Accounts`). HTTPS on the gateway's own host and port, so the transport rule is the socket's: TLS everywhere, plain HTTP on loopback in
+  development only. Bodies are JSON objects of at most 2 KB that must arrive within 5 s; answers are JSON with `Cache-Control: no-store`. The session token travels as
+  `Authorization: Bearer <token>`, never in a URL. A refusal is `{"error": <an "Account errors" term>}`, with `retry_after` (seconds) when waiting helps.
+
+  | endpoint | request | answer |
+  |----------|---------|--------|
+  | `POST /account/register` | `username`, `password` | 201 `token`, `expires_in` (seconds): registered and signed in |
+  | `POST /account/login` | `username`, `password` | 200 `token`, `expires_in` |
+  | `POST /account/logout` | token | 204; the session has ended |
+  | `GET /account/characters` | token | 200 `slots`, `name_min`, `name_max`, `characters` (`[{id, slot, name, job}]`, by slot) |
+  | `POST /account/characters` | token, `name` | 201 `id`, `slot`, `name`, `job` (the lowest free slot; appearance is T-705) |
+  | `DELETE /account/characters/{id}` | token | 204 (a soft delete: the row and its name stay); `character_in_use` while it is in the world |
+
+  Status: 400 invalid, 401 `invalid_credentials` / `invalid_session`, 404 `unknown_character`, 409 taken / full / in use, 429 `rate_limited`, 503 `unavailable`.
+  - **Slots and names** come from `balance.yaml` `characters` (slots, name lengths, letters, separators). Names that differ in letter case are the same name.
+  - **An account plays one character at a time.** A login with the character the gateway already holds (played elsewhere, or in its grace period) takes it over where it
+    stands, as a resume would: the old session gets `bye replaced` and its resume token stops working. A login with another character ends the first one (`bye replaced`,
+    and it leaves the world). A login of the same account that is still joining is replaced too, so there is never a second one.
+  - **What ending a session does not do:** logout from the account endpoints and a password change stop the token for every new request and `hello`; a game socket that is already
+    open, and its resume token, go on (a follow-up).
+  - **The client** (`client/Core/Accounts`, `Scene/AccountPanel`) keeps the session token in memory only: Godot offers no secure storage (Keychain, Keystore) without
+    native code. The password is never kept. A restarted app signs in again. `TransportPolicy.AccountBase` gives the endpoints' address: a release build has none for `ws://`.
 - **Client resume flow** (for T-206):
   1. Keep the token from the latest `welcome` **in memory only** (never on disk or in preferences); replace it on every `welcome`.
   2. On a socket drop, or when the app comes back to the foreground and the socket is gone, reconnect with backoff (e.g. 0.5 s,
@@ -1160,7 +1193,14 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
 ## 11. Security baseline
 - Server validates every intent (range, cooldown, SP, line of sight, ownership).
 - Rate-limit intents per session.
-- Passwords hashed (Argon2/BCrypt). Session tokens, not credentials, on the socket.
+- **Passwords** (T-701): Argon2id through NSec (libsodium): 19 MiB, 2 passes, 1 lane, 16-byte salt, 32-byte hash, stored in PHC format with its parameters and rehashed at
+  the next login when they change. At most a quarter of the cores hash at once, with a bounded line behind them, so a flood of logins does not take the tick's cores.
+  Usernames are stored and compared in one normalised form (NFKC, lower case, `a-z 0-9 . _ -`). No e-mail or other personal data.
+- **Session tokens, not credentials, on the socket** (T-701): 256 random bits, only the SHA-256 stored, 24 hours, at most 10 per account; logout and a password change end them.
+- **Guessing** (T-701): an unknown username and a wrong password get the same answer after the same work (a dummy hash). Failed logins lock the username (whether or not it
+  exists) after 5 and the address (an IPv6 /64 counts as one) after 20, for 5 s doubling to 5 min; attempts count when they start, so a burst gains nothing. Requests and registrations
+  per address, creations per account and failed `hello`s per address are limited too. Every table of the limiter is bounded.
+- **Nothing secret in logs:** no password, token, connection string or username (accounts appear by id); records that hold a secret do not print it.
 - Item operations in DB transactions; item instances have unique ids (dupe auditing).
 - The client is untrusted (CLAUDE.md rule 11); the client bundle holds display data only.
 - No plaintext outside debug builds (§10): release clients refuse `ws://`. The Android APK carries only what runs on a device (arm64-v8a; the Mono static

@@ -2,8 +2,10 @@ using System.Runtime.InteropServices;
 using Game.Content.ClientExport;
 using Game.Content.Loading;
 using Game.Content.Validation;
+using Game.Server.Accounts;
 using Game.Server.Hosting;
 using Game.Server.Net;
+using Game.Server.Persistence;
 using Game.Server.World;
 using Game.Server.World.Combat;
 using Game.Server.World.Inventory;
@@ -29,6 +31,26 @@ if (netOptions is null)
 
 var log = new ConsoleLog();
 log.Info($"Environment: {environmentName}{(development ? " (development: ws:// on loopback, dev login enabled)" : "")}");
+
+// The database (T-701): accounts and characters. Optional in development (then only the dev login works), required everywhere else.
+GameDatabase? database = null;
+try
+{
+    var connection = Environment.GetEnvironmentVariable(GameDatabase.ConnectionVariable);
+    if (!string.IsNullOrWhiteSpace(connection)) database = new GameDatabase(connection);
+    else if (options.Migrate || !development)
+        throw new DatabaseException($"{(options.Migrate ? "--migrate needs" : "outside development the server needs")} a database: set {GameDatabase.ConnectionVariable} to its connection string.");
+    else log.Info($"No database ({GameDatabase.ConnectionVariable} is not set): accounts are off, only the dev login works.");
+    if (database is not null) await database.PrepareAsync(development, options.Migrate, log);
+}
+catch (DatabaseException e)
+{
+    log.Error(e.Message);
+    log.Error(options.Migrate ? "Not migrated." : "Refusing to start.");
+    return 1;
+}
+if (options.Migrate) return 0;
+
 var netProblems = netOptions.Problems();
 if (netProblems.Count > 0)
 {
@@ -56,13 +78,18 @@ var world = new GameWorld(content.Grids.Values, pipeline, seed, clock, log);
 var runners = world.Instances.Select(i => new InstanceRunner(i, clock, log, !options.LegacyTimer)).ToList();
 var contentHash = ClientBundleExporter.Hash(content); // the display bundle's hash: a client packed with another one must update (ARCHITECTURE §5.4)
 log.Info($"Content hash: {contentHash}");
-var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log, contentHash,
+var tokens = new ResumeTokens();
+var devLogin = new DevLogin(development, netOptions.MaxNameLength, tokens);
+var accounts = database is null ? null : new AccountService(new PostgresAccountStore(database), new Argon2idHasher(), HashQueue.Default(), new AccountLimits(), content.Balance, clock,
+    TimeProvider.System, log);
+var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log, contentHash, accounts is null ? devLogin : new AccountLogin(accounts, devLogin), tokens,
     progress: new OwnProgress(content, progressions), inventory: new OwnInventory(content.Balance.Inventory, inventories)); // subscribes to instance events: before ticking
 
 GatewayHost host;
 try
 {
-    host = await GatewayHost.StartAsync(gateway);
+    if (accounts is not null) accounts.InWorld = gateway.HoldsCharacter; // a character in the world is not deleted
+    host = await GatewayHost.StartAsync(gateway, accounts: accounts is null ? null : new AccountEndpoints(accounts, log));
 }
 catch (Exception e) when (e is InvalidOperationException or IOException)
 {
@@ -83,7 +110,7 @@ log.Info($"Starting {runners.Count} map instance(s) at {TickRate.Hz} Hz, seed {s
          string.Join(", ", world.Instances.Select(i => $"{i.MapId} {i.Grid.Width}x{i.Grid.Height}")));
 foreach (var runner in runners) runner.Start();
 gateway.Start();
-log.Info($"Gateway listening on {host.Endpoint}");
+log.Info($"Gateway listening on {host.Endpoint}{(accounts is null ? "" : " (account endpoints on the same port)")}");
 log.Info(options.DurationSeconds is { } d ? $"Running for {d} s." : "Running. Press Ctrl+C to stop.");
 
 if (options.DurationSeconds is { } seconds) stop.Wait(TimeSpan.FromSeconds(seconds));
@@ -94,6 +121,7 @@ log.Info($"Stopping: saying bye to {gateway.SessionCount} session(s), releasing 
 await gateway.ShutdownAsync();
 await host.StopAsync();
 await host.DisposeAsync();
+if (database is not null) await database.DisposeAsync();
 foreach (var runner in runners) runner.Stop();
 foreach (var runner in runners)
     log.Info($"[{runner.Instance.MapId}] stopped after tick {runner.Instance.TickNumber}; lifetime: {runner.Lifetime}");

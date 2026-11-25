@@ -13,4 +13,11 @@
     <ProjectReference Include="..\Game.Shared\Game.Shared.csproj" />
     <ProjectReference Include="..\Game.Content\Game.Content.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Persistence (PostgreSQL through EF Core) and password hashing (Argon2id, libsodium): T-701. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />
+    <PackageReference Include="NSec.Cryptography" />
+    <!-- Only for `dotnet ef migrations add`; nothing of it ships. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
+  </ItemGroup>
 </Project>

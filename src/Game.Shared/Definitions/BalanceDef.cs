@@ -54,6 +54,28 @@ namespace Game.Shared.Definitions
 
         /// <summary>Shops (T-603, ARCHITECTURE §6.8).</summary>
         public ShopBalanceDef Shop { get; init; } = new ShopBalanceDef();
+
+        /// <summary>Character slots and what a character may be called (T-701, ARCHITECTURE §10).</summary>
+        public CharactersBalanceDef Characters { get; init; } = new CharactersBalanceDef();
+    }
+
+    /// <summary>Character slots and names (T-701): the <c>characters</c> section of <c>balance.yaml</c>. Whether a name is free is decided by the database.</summary>
+    public sealed record CharactersBalanceDef
+    {
+        /// <summary>Most characters an account has at once (deleted ones do not count). At least 1.</summary>
+        public int MaxSlots { get; init; } = 3;
+
+        /// <summary>Shortest name, at least 1.</summary>
+        public int NameMinLength { get; init; } = 3;
+
+        /// <summary>Longest name, at least <see cref="NameMinLength"/> and at most 32.</summary>
+        public int NameMaxLength { get; init; } = 16;
+
+        /// <summary>Letters a name may use: single characters (<c>x</c>) and ranges (<c>a-z</c>). Names that differ only in letter case are the same name.</summary>
+        public IReadOnlyList<string> NameLetters { get; init; } = new[] { "a-z", "A-Z" };
+
+        /// <summary>Single characters allowed between two letters only: never first, last, or two in a row.</summary>
+        public IReadOnlyList<string> NameSeparators { get; init; } = Empty.List<string>();
     }
 
     /// <summary>Quests (T-602): the <c>quests</c> section of <c>balance.yaml</c>.</summary>

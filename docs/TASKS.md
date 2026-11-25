@@ -127,7 +127,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
-| T-701 | Accounts, login and character slots: EF Core + PostgreSQL base, account endpoints, sessions, sign-in and character-select screens | Claude Code | Opus 5.5 | [T-701](../tasks/prompts/T-701.md) | T-210, T-214, T-704 | In Progress | Restricted `Net/**` and `Persistence/**`, limited scope approved by owner 2026-11-25 |
+| T-701 | Accounts, login and character slots: EF Core + PostgreSQL base, account endpoints, sessions, sign-in and character-select screens | Claude Code | Opus 5.5 | [T-701](../tasks/prompts/T-701.md) | T-210, T-214, T-704 | Review | Restricted `Net/**` and `Persistence/**`, limited scope approved by owner 2026-11-25 |
 | T-704 | Appearance definitions: `appearance.yaml` (gender male/female, skin, faces, hair) + validation | Claude Code | Sonnet 5.5 | [T-704](../tasks/prompts/T-704.md) | T-102, T-209 | Review | Data only, started early; server flow is T-705 |
 
 ## Backlog (prompts written when the previous phase is Done)

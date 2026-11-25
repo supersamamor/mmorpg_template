@@ -35,4 +35,20 @@ public static class TransportPolicy
         if (secure) return TransportVerdict.Allowed;
         return allowCleartext ? TransportVerdict.Allowed : TransportVerdict.CleartextRefused;
     }
+
+    /// <summary>
+    /// Where the account endpoints are (T-701): the same host and port as the game socket, <c>https://</c> for <c>wss://</c> and <c>http://</c> only for a
+    /// <c>ws://</c> address this build may use. Null when <see cref="Check"/> does not allow the address, so credentials are never sent where the game would not go.
+    /// </summary>
+    public static string? AccountBase(string? serverUrl, bool allowCleartext)
+    {
+        if (Check(serverUrl, allowCleartext) != TransportVerdict.Allowed) return null;
+        var url = serverUrl!.Trim();
+        var secure = url.StartsWith("wss://", StringComparison.OrdinalIgnoreCase);
+        var rest = url.Substring(secure ? 6 : 5);
+        var end = rest.IndexOfAny(new[] { '/', '?', '#' });
+        var authority = end < 0 ? rest : rest.Substring(0, end);
+        // user@host would send the credentials to the part after the @, which is not what the address looks like
+        return authority.IndexOf('@') >= 0 ? null : (secure ? "https://" : "http://") + authority;
+    }
 }

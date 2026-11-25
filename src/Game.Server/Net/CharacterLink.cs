@@ -8,12 +8,18 @@ namespace Game.Server.Net;
 /// time. Changed only under the gateway's link lock; <see cref="Session"/> is also read without it on tick threads (to route
 /// <c>rejected</c>).
 /// </summary>
-public sealed class CharacterLink(EntityId character, string? displayName, ClientSession session)
+public sealed class CharacterLink(EntityId character, string? displayName, ClientSession session, Guid? accountId = null, Guid? characterId = null)
 {
     private volatile ClientSession? _session = session;
 
     /// <summary>The character.</summary>
     public EntityId Character { get; } = character;
+
+    /// <summary>The account it belongs to, or null for a dev login.</summary>
+    public Guid? AccountId { get; } = accountId;
+
+    /// <summary>Its permanent id (T-701), or null for a dev login. <see cref="Character"/> is the runtime entity it has this time.</summary>
+    public Guid? CharacterId { get; } = characterId;
 
     /// <summary>The dev display name it logged in with (kept for the sessions that resume it).</summary>
     public string? DisplayName { get; } = displayName;

@@ -165,6 +165,12 @@ public sealed class ConnectionMachine
         Open(now, ConnectionNotice.None);
     }
 
+    /// <summary>The player leaves a stop (<see cref="ConnectionPhase.Stopped"/>) for the login screen.</summary>
+    public void BackToLogin()
+    {
+        if (Phase == ConnectionPhase.Stopped) Set(ConnectionPhase.LoginScreen, ConnectionNotice.None);
+    }
+
     /// <summary>The player chooses to leave (§10 step 6). Without a live socket there is nothing to tell the server: back to the login screen.</summary>
     public void Logout(double now)
     {
