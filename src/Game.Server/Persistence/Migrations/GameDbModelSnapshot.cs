@@ -243,6 +243,19 @@ namespace Game.Server.Persistence.Migrations
                         .HasColumnType("character varying(128)")
                         .HasColumnName("map_id");
 
+                    b.Property<string>("OutfitSlots")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("outfit_slots")
+                        .HasDefaultValueSql("'{}'::jsonb");
+
+                    b.Property<bool>("OutfitsHidden")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("outfits_hidden");
+
                     b.Property<string>("Quests")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -370,6 +383,22 @@ namespace Game.Server.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Game.Server.Persistence.OutfitRow", b =>
+                {
+                    b.Property<Guid>("CharacterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("character_id");
+
+                    b.Property<string>("OutfitId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("outfit_id");
+
+                    b.HasKey("CharacterId", "OutfitId");
+
+                    b.ToTable("character_outfits", (string)null);
+                });
+
             modelBuilder.Entity("Game.Server.Persistence.ServerRunRow", b =>
                 {
                     b.Property<long>("Id")
@@ -447,6 +476,15 @@ namespace Game.Server.Persistence.Migrations
                 });
 
             modelBuilder.Entity("Game.Server.Persistence.ItemRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.CharacterStateRow", null)
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.OutfitRow", b =>
                 {
                     b.HasOne("Game.Server.Persistence.CharacterStateRow", null)
                         .WithMany()

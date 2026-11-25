@@ -26,7 +26,7 @@ public sealed class PostgresCharacterStore(GameDatabase database) : ICharacterSt
     internal Func<string, Task>? OnStep { get; set; }
 
     /// <summary>The steps of <see cref="SaveAsync"/> a fault may come after, in order; the last one is after the commit.</summary>
-    internal static readonly IReadOnlyList<string> SaveSteps = ["begun", "locked", "states", "items_removed", "slots_cleared", "items_written", "checked", "committed"];
+    internal static readonly IReadOnlyList<string> SaveSteps = ["begun", "locked", "states", "items_removed", "slots_cleared", "items_written", "outfits_written", "checked", "committed"];
 
     /// <inheritdoc />
     public Task<long> StartRunAsync(CancellationToken cancellation) => RunAsync(async db =>
@@ -66,7 +66,10 @@ public sealed class PostgresCharacterStore(GameDatabase database) : ICharacterSt
         var items = row.Version == 0
             ? []
             : await db.Items.AsNoTracking().Where(i => i.CharacterId == character).OrderBy(i => i.Id).ToListAsync(cancellation).ConfigureAwait(false);
-        var state = row.Version == 0 ? null : Read(row, items);   // before the commit: a state that cannot be read changes nothing
+        var outfits = row.Version == 0
+            ? []
+            : await db.Outfits.Where(o => o.CharacterId == character).OrderBy(o => o.OutfitId).Select(o => o.OutfitId).ToListAsync(cancellation).ConfigureAwait(false);
+        var state = row.Version == 0 ? null : Read(row, items, outfits);   // before the commit: a state that cannot be read changes nothing
         await transaction.CommitAsync(cancellation).ConfigureAwait(false);
         return new CharacterClaim(ClaimOutcome.Claimed, row.Claim, row.Version, state);
     });
@@ -99,6 +102,8 @@ public sealed class PostgresCharacterStore(GameDatabase database) : ICharacterSt
         await StepAsync("states").ConfigureAwait(false);
 
         if (await WriteItemsAsync(db, write, cancellation).ConfigureAwait(false) is { Count: > 0 } duplicated) return new SaveResult.Duplicated(duplicated);
+        await WriteOutfitsAsync(db, write, cancellation).ConfigureAwait(false);
+        await StepAsync("outfits_written").ConfigureAwait(false);
 
         var jobs = write.Select(s => s.State.JobId).ToArray();
         var owners = write.Select(s => s.CharacterId).ToArray();
@@ -169,6 +174,23 @@ public sealed class PostgresCharacterStore(GameDatabase database) : ICharacterSt
             .ToListAsync(cancellation).ConfigureAwait(false);
     }
 
+    /// <summary>Makes the owned outfits of the group's characters exactly the saves' (T-708): one statement, and nothing is written where nothing differs.</summary>
+    private static Task WriteOutfitsAsync(GameDb db, List<CharacterSave> write, CancellationToken cancellation)
+    {
+        var outfits = write.SelectMany(s => s.State.Outfits.Distinct(StringComparer.Ordinal).Select(o => (Owner: s.CharacterId, Outfit: o))).ToList();
+        return db.Database.ExecuteSqlRawAsync(
+            """
+            WITH gone AS (
+                DELETE FROM character_outfits o WHERE o.character_id = ANY(@characters)
+                AND NOT EXISTS (SELECT 1 FROM unnest(@owners, @outfits) AS n(owner, outfit) WHERE n.owner = o.character_id AND n.outfit = o.outfit_id))
+            INSERT INTO character_outfits (character_id, outfit_id)
+            SELECT n.owner, n.outfit FROM unnest(@owners, @outfits) AS n(owner, outfit)
+            ON CONFLICT (character_id, outfit_id) DO NOTHING
+            """,
+            [new NpgsqlParameter("characters", write.Select(s => s.CharacterId).ToArray()), new NpgsqlParameter("owners", outfits.Select(o => o.Owner).ToArray()),
+                Texts("outfits", outfits.Select(o => (string?)o.Outfit))], cancellation);
+    }
+
     private static NpgsqlParameter Texts(string name, IEnumerable<string?> values) => new(name, NpgsqlDbType.Array | NpgsqlDbType.Text) { Value = values.ToArray() };
 
     // ---- rows ---------------------------------------------------------------------------------------------------------------------------
@@ -208,9 +230,11 @@ public sealed class PostgresCharacterStore(GameDatabase database) : ICharacterSt
         row.Quests = JsonSerializer.Serialize(new QuestsJson(s.ActiveQuests.ToList(), s.CompletedQuests.ToList(), s.UnlockedJobs.ToList(), s.SettledTurnIns.ToList(), s.OwedRewards.ToList()), Json);
         row.Cooldowns = JsonSerializer.Serialize(new CooldownsJson(new(s.SkillCooldowns), new(s.ItemCooldowns)), Json);
         row.SetAside = JsonSerializer.Serialize(s.Aside, Json);
+        row.OutfitSlots = JsonSerializer.Serialize(s.OutfitSlots);
+        row.OutfitsHidden = s.OutfitsHidden;
     }
 
-    private static CharacterState Read(CharacterStateRow row, List<ItemRow> items)
+    private static CharacterState Read(CharacterStateRow row, List<ItemRow> items, List<string> outfits)
     {
         var quests = Parse<QuestsJson>(row.Quests, Json);
         var cooldowns = Parse<CooldownsJson>(row.Cooldowns, Json);
@@ -246,6 +270,9 @@ public sealed class PostgresCharacterStore(GameDatabase database) : ICharacterSt
             AutopilotDayStartedAt = row.AutopilotDayStartedAt,
             AsideItems = items.Where(i => i.Aside is not null).Select(i => new SetAsideItem(Entry(i), i.Aside!)).ToList(),
             Aside = Parse<List<SetAside>>(row.SetAside, Json),
+            Outfits = outfits,
+            OutfitSlots = Parse<Dictionary<string, string>>(row.OutfitSlots, null),
+            OutfitsHidden = row.OutfitsHidden,
         };
     }
 

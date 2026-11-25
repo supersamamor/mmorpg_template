@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Game.Client.Core.Bundle;
+using Game.Client.Core.Outfits;
 using Game.Shared.ClientContent;
 using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
@@ -21,12 +22,19 @@ public enum PartRole
 
     /// <summary>The hairstyle: takes the hair colour as a whole.</summary>
     Hair,
+
+    /// <summary>A piece of a shown outfit (T-708): takes the character's colours its outfit names, where it is painted with them.</summary>
+    Outfit,
 }
 
 /// <summary>One part merged into a character's body.</summary>
 /// <param name="Piece">Its model and where it goes.</param>
 /// <param name="Role">What it is.</param>
-public readonly record struct DressPart(WornPiece Piece, PartRole Role);
+/// <param name="TakesColors">For an outfit's piece, the colour roles it takes (the bundle's own list, so equal parts stay equal); null for every other role.</param>
+public readonly record struct DressPart(WornPiece Piece, PartRole Role, IReadOnlyList<string>? TakesColors = null);
+
+/// <summary>One piece of a shown outfit (T-708) and the outfit slot it is drawn in.</summary>
+public readonly record struct OutfitPart(WornPiece Piece, string Slot, IReadOnlyList<string> TakesColors);
 
 /// <summary>A piece of the job's look and the equipment slot it stands for (null: always drawn).</summary>
 public sealed record JobPart(WornPiece Piece, string? Slot);
@@ -96,7 +104,28 @@ public sealed class CharacterLook
     public Recolor HairColors { get; }
 
     /// <summary>The colours a part takes.</summary>
-    public Recolor ColorsOf(PartRole role) => role == PartRole.Face ? FaceColors : role == PartRole.Hair ? HairColors : Recolor.None;
+    public Recolor ColorsOf(DressPart part) => part.Role switch
+    {
+        PartRole.Face => FaceColors,
+        PartRole.Hair => HairColors,
+        PartRole.Outfit => OutfitColors(part),
+        _ => Recolor.None,
+    };
+
+    /// <summary>An outfit's piece takes the colours its outfit names, where its model is painted with them (its <c>recolor</c>, else the contract's paint).</summary>
+    private Recolor OutfitColors(DressPart part)
+    {
+        if (part.TakesColors is not { Count: > 0 } takes) return Recolor.None;
+        var paint = part.Piece.Model.Asset?.Recolor ?? RecolorPaint.Contract;
+        var builder = new Recolor.Builder();
+        foreach (var role in takes)
+        {
+            if (role == AppearanceColorRoles.Skin && Skin is { } skin) builder.Add(paint.Families(role, s_skin), skin);
+            else if (role == AppearanceColorRoles.Hair && HairColor is { } hair) builder.Add(paint.Families(role, s_hair), hair);
+            else if (role == AppearanceColorRoles.Cloth && Cloth is { } cloth) builder.Add(paint.Families(role, s_cloth), cloth);
+        }
+        return builder.Build();
+    }
 
     private Recolor Painted(ThemeAsset? asset, bool body)
     {
@@ -150,6 +179,25 @@ public sealed class AppearanceCatalog
         if (_looks.TryGetValue(key, out var known)) return known;
         if (_looks.Count >= _limit) _looks.Clear();
         return _looks[key] = Make(_bundle.Appearance, ids, jobId);
+    }
+
+    /// <summary>
+    /// The pieces of the outfits a character shows (T-708), for its gender and its body's rig; <paramref name="into"/> is cleared first. An outfit the bundle does not have, or that has
+    /// nothing for the slot and gender, is left out (one warning) and the gear is drawn there; a model no theme has is the missing model, like any worn piece.
+    /// </summary>
+    public void ResolveOutfit(IReadOnlyList<ShownOutfit> shown, string? gender, string? rig, List<OutfitPart> into)
+    {
+        into.Clear();
+        for (var i = 0; i < shown.Count; i++)
+        {
+            var slot = shown[i].Slot;
+            if (_bundle.Outfit(shown[i].Outfit) is not { } outfit || !OutfitSlots.All.Contains(slot) || OutfitPieces.Find(outfit, slot, gender) is not { } piece)
+            {
+                _catalog.WarnOnce("outfit:" + shown[i].Outfit + ":" + slot, "[look] no piece of '" + shown[i].Outfit + "' for '" + slot + "' here; drawing the gear");
+                continue;
+            }
+            into.Add(new OutfitPart(_equipment.ResolveKey(piece.ModelAssetKey, rig), slot, outfit.TakesColors));
+        }
     }
 
     private CharacterLook? Make(ClientAppearance options, AppearanceRecord ids, string? jobId)
@@ -211,35 +259,61 @@ public sealed class AppearanceCatalog
 public readonly record struct WornItem(WornPiece Piece, IReadOnlyList<string> Slots);
 
 /// <summary>
-/// What is merged into a character's body, in order (T-706): the face, the hairstyle unless something worn hides it, the job's pieces unless equipment stands in their
-/// slot, and the worn equipment. Outfits (T-708) join here, as parts that replace job pieces and equipment by slot.
+/// What is merged into a character's body, in order (T-706, T-708): the face, the hairstyle unless something drawn hides it, the job's pieces, the worn equipment, and the pieces of the
+/// outfits it shows. A job piece gives way to equipment worn in its slot. <b>An outfit in a slot takes the place of the job pieces and the equipment of the equipment slots it covers</b>
+/// (<see cref="OutfitSlots"/>), in the drawing only. Nothing covers weapon and shield, so what a character fights with always shows.
 /// </summary>
 public static class DressPlan
 {
-    /// <summary>Fills <paramref name="into"/> (cleared first). Without a look only the equipment is merged, as before T-706.</summary>
-    public static void Fill(CharacterLook? look, IReadOnlyList<WornItem> worn, List<DressPart> into)
+    private static readonly OutfitPart[] s_none = Array.Empty<OutfitPart>();
+
+    /// <summary>Fills <paramref name="into"/> (cleared first). Without a look only the equipment and outfits are merged.</summary>
+    public static void Fill(CharacterLook? look, IReadOnlyList<WornItem> worn, List<DressPart> into) => Fill(look, worn, s_none, into);
+
+    /// <summary>The same, with the outfits it shows.</summary>
+    public static void Fill(CharacterLook? look, IReadOnlyList<WornItem> worn, IReadOnlyList<OutfitPart> outfit, List<DressPart> into)
     {
         into.Clear();
         if (look is not null)
         {
             if (look.Face is not null) into.Add(new DressPart(look.Face, PartRole.Face));
             var hidden = false;
-            for (var i = 0; i < worn.Count; i++) hidden |= worn[i].Piece.HidesHair;
+            for (var i = 0; i < outfit.Count; i++) hidden |= outfit[i].Piece.HidesHair;
+            for (var i = 0; i < worn.Count; i++) hidden |= worn[i].Piece.HidesHair && !Covered(worn[i], outfit);
             for (var i = 0; i < look.JobParts.Count; i++)
-                hidden |= look.JobParts[i].Piece.HidesHair && !Taken(look.JobParts[i].Slot, worn);
+                hidden |= look.JobParts[i].Piece.HidesHair && Drawn(look.JobParts[i], worn, outfit);
             if (look.Hair is not null && !hidden) into.Add(new DressPart(look.Hair, PartRole.Hair));
             for (var i = 0; i < look.JobParts.Count; i++)
-                if (!Taken(look.JobParts[i].Slot, worn)) into.Add(new DressPart(look.JobParts[i].Piece, PartRole.Job));
+                if (Drawn(look.JobParts[i], worn, outfit)) into.Add(new DressPart(look.JobParts[i].Piece, PartRole.Job));
         }
-        for (var i = 0; i < worn.Count; i++) into.Add(new DressPart(worn[i].Piece, PartRole.Gear));
+        for (var i = 0; i < worn.Count; i++)
+            if (!Covered(worn[i], outfit)) into.Add(new DressPart(worn[i].Piece, PartRole.Gear));
+        for (var i = 0; i < outfit.Count; i++) into.Add(new DressPart(outfit[i].Piece, PartRole.Outfit, outfit[i].TakesColors));
     }
 
-    private static bool Taken(string? slot, IReadOnlyList<WornItem> worn)
+    private static bool Drawn(JobPart part, IReadOnlyList<WornItem> worn, IReadOnlyList<OutfitPart> outfit)
     {
-        if (slot is null) return false;
+        if (part.Slot is null) return true;
+        if (Covers(outfit, part.Slot)) return false;
         for (var i = 0; i < worn.Count; i++)
             for (var s = 0; s < worn[i].Slots.Count; s++)
-                if (worn[i].Slots[s] == slot) return true;
+                if (worn[i].Slots[s] == part.Slot) return false;
+        return true;
+    }
+
+    /// <summary>An item that fits several slots is covered when an outfit covers any of them: the record does not say which one it is worn in.</summary>
+    private static bool Covered(WornItem item, IReadOnlyList<OutfitPart> outfit)
+    {
+        for (var s = 0; s < item.Slots.Count; s++)
+            if (Covers(outfit, item.Slots[s])) return true;
+        return false;
+    }
+
+    private static bool Covers(IReadOnlyList<OutfitPart> outfit, string equipSlot)
+    {
+        if (outfit.Count == 0 || OutfitSlots.Covering(equipSlot) is not { } slot) return false;
+        for (var i = 0; i < outfit.Count; i++)
+            if (outfit[i].Slot == slot) return true;
         return false;
     }
 }

@@ -319,7 +319,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
             if (nowMs < item.OwnerUntilMs) owner = item.Owner;
         }
         return new EntityView(entity.Id, entity.Kind, entity.DefinitionId, cell, facing, next, speed, hp, entity.Dead, quantity, owner, entity.Look,
-            entity.StatusLook, entity.Appearance);
+            entity.StatusLook, entity.Appearance, entity.Outfit);
     }
 
     private static void Store(AoiEntry entry, in EntityView v)
@@ -335,6 +335,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         entry.LootOwner = v.LootOwner;
         entry.Look = v.Look;
         entry.Statuses = v.Statuses;
+        entry.Outfit = v.Outfit;
     }
 
     private static void Update(AoiGrid grid, AoiEntry entry, long tick, long nowMs)
@@ -351,6 +352,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
         if (v.LootOwner != entry.LootOwner) changed |= ViewFields.Mine;
         if (!ReferenceEquals(v.Look, entry.Look)) changed |= ViewFields.Look;   // the inventory keeps the object while the look is the same
         if (!ReferenceEquals(v.Statuses, entry.Statuses)) changed |= ViewFields.Statuses;   // likewise combat's status look
+        if (!ReferenceEquals(v.Outfit, entry.Outfit)) changed |= ViewFields.Outfit;   // and the outfit system's
         if (changed == ViewFields.None) return;
 
         Store(entry, v);   // the quantity of a ground item never changes, so it has no field of its own

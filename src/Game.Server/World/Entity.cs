@@ -117,6 +117,12 @@ public sealed class Entity
     public Game.Shared.Protocol.AppearanceRecord? Appearance { get; set; }
 
     /// <summary>
+    /// The outfits a player shows (T-708), or null for one that has shown none and for every other kind. Set by the outfit system, read by the AOI; a new object means a change. Cosmetic
+    /// only: no rule reads it.
+    /// </summary>
+    public Outfits.OutfitLook? Outfit { get; set; }
+
+    /// <summary>
     /// A player's <see cref="WeightStates"/> term: <c>burdened</c> stops natural regeneration, <c>overweight</c> also stops attacks (ARCHITECTURE §6.8).
     /// Set by the inventory, read by combat. <c>normal</c> for everything else.
     /// </summary>

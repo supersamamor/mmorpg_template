@@ -49,6 +49,9 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
     /// <summary>Their items (T-702).</summary>
     public DbSet<ItemRow> Items => Set<ItemRow>();
 
+    /// <summary>The outfits they own (T-708).</summary>
+    public DbSet<OutfitRow> Outfits => Set<OutfitRow>();
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -153,9 +156,19 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
             e.Property(s => s.Quests).HasColumnName("quests").HasColumnType("jsonb");
             e.Property(s => s.Cooldowns).HasColumnName("cooldowns").HasColumnType("jsonb");
             e.Property(s => s.SetAside).HasColumnName("set_aside").HasColumnType("jsonb");
+            e.Property(s => s.OutfitSlots).HasColumnName("outfit_slots").HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb");   // rows from before T-708 get the default
+            e.Property(s => s.OutfitsHidden).HasColumnName("outfits_hidden").HasDefaultValue(false);
             e.HasOne<CharacterRow>().WithOne().HasForeignKey<CharacterStateRow>(s => s.CharacterId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<ServerRunRow>().WithMany().HasForeignKey(s => s.HeldBy).OnDelete(DeleteBehavior.Restrict);
             e.HasIndex(s => s.HeldBy).HasDatabaseName("ix_character_states_held_by").HasFilter("held_by IS NOT NULL");
+        });
+        model.Entity<OutfitRow>(e =>
+        {
+            e.ToTable("character_outfits");
+            e.HasKey(o => new { o.CharacterId, o.OutfitId });
+            e.Property(o => o.CharacterId).HasColumnName("character_id");
+            e.Property(o => o.OutfitId).HasColumnName("outfit_id").HasMaxLength(128);
+            e.HasOne<CharacterStateRow>().WithMany().HasForeignKey(o => o.CharacterId).OnDelete(DeleteBehavior.Restrict);
         });
         model.Entity<ItemRow>(e =>
         {

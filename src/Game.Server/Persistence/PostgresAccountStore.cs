@@ -118,6 +118,7 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
         foreach (var run in holders)
             if (await PostgresCharacterStore.IsAliveAsync(db, run, cancellation).ConfigureAwait(false)) return EraseOutcome.InUse;
         await db.Items.Where(i => characters.Contains(i.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        await db.Outfits.Where(o => characters.Contains(o.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.CharacterStates.Where(s => characters.Contains(s.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.Characters.Where(c => c.AccountId == account).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.Sessions.Where(s => s.AccountId == account).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);

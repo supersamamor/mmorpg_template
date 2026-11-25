@@ -108,6 +108,17 @@ public sealed record CharacterState
     /// <summary>Quest rewards not paid yet.</summary>
     public IReadOnlyList<OwedQuestRewards> OwedRewards { get; init; } = [];
 
+    // ---- how it looks ----
+
+    /// <summary>Owned outfits (T-708), in id order, each once; ids the content has lost included.</summary>
+    public IReadOnlyList<string> Outfits { get; init; } = [];
+
+    /// <summary>Outfit slot → the outfit chosen for it (T-708).</summary>
+    public IReadOnlyDictionary<string, string> OutfitSlots { get; init; } = Empty<string>();
+
+    /// <summary>Every outfit is hidden (T-708).</summary>
+    public bool OutfitsHidden { get; init; }
+
     // ---- what it owns ----
 
     /// <summary>Its items, worn ones included, in id order.</summary>

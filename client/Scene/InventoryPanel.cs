@@ -30,6 +30,7 @@ public sealed class InventoryPanel
     private readonly VBoxContainer _box = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly Label _title = Label(UiText.BagTitle);
     private readonly Label _count = Label(string.Empty);
+    private readonly Button _outfits = new() { Text = UiText.WardrobeButton };
     private readonly Button _close = new() { Text = UiText.Close };
     private readonly Label _weight = Label(string.Empty);
     private readonly ProgressBar _weightBar = new() { ShowPercentage = false, MaxValue = 1, MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -78,6 +79,7 @@ public sealed class InventoryPanel
         var header = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         _title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         header.AddChild(_title);
+        header.AddChild(_outfits);
         header.AddChild(_close);
         _box.AddChild(header);
         _box.AddChild(_count);
@@ -129,6 +131,8 @@ public sealed class InventoryPanel
             _session.Refine(entry.Id);   // the server rolls; the selection stays, so the next step shows when the result is in
             SetMode(Mode.Actions, tap: false);
         };
+        _outfits.Pressed += () => { _tap(); SetOpen(false); ShowWardrobe?.Invoke(); };
+        _interactive.Add(_outfits);
         _close.Pressed += () => { _tap(); SetOpen(false); };
         _interactive.Add(_close);
         _interactive.Add(_panel);
@@ -177,6 +181,12 @@ public sealed class InventoryPanel
 
     private Button[] ActionButtons => new[] { _use, _equip, _unequip, _drop, _insertCard, _refine, _confirm, _cancel };
 
+    /// <summary>Raised by the Outfits button, after the panel closed: the HUD opens the wardrobe (T-708).</summary>
+    public Action? ShowWardrobe { get; set; }
+
+    /// <summary>The Outfits button (for the scripted run).</summary>
+    public Button OutfitsButton => _outfits;
+
     /// <summary>Opens or closes the panel; opening clears the selection.</summary>
     public void SetOpen(bool open)
     {
@@ -209,7 +219,7 @@ public sealed class InventoryPanel
         // As many columns as fit the panel's inner width (minus room for the scroll bar), at least one; each cell is as wide as that allows.
         var inner = width - dp(16) - dp(12);
         // Every label wraps at a width fixed here, so its height is right the first time it is laid out (no waiting for the containers to settle).
-        _title.CustomMinimumSize = new Vector2(Mathf.Max(0, width - dp(24) - dp(96) - gap), 0);
+        _title.CustomMinimumSize = new Vector2(Mathf.Max(0, width - dp(24) - dp(96) * 2 - gap * 2), 0);
         foreach (var label in new[] { _count, _weight, _hint }) label.CustomMinimumSize = new Vector2(width - dp(24), 0);
         _offer.CustomMinimumSize = new Vector2(inner, 0);
         var columns = Mathf.Max(1, Mathf.FloorToInt((inner + gap) / (dp(CellDp) + gap)));
@@ -219,6 +229,7 @@ public sealed class InventoryPanel
         _choicesGrid.Columns = columns;
         _weightBar.CustomMinimumSize = new Vector2(0, dp(10));
         _close.CustomMinimumSize = new Vector2(dp(96), target);
+        _outfits.CustomMinimumSize = new Vector2(dp(96), target);
         _actions.AddThemeConstantOverride("h_separation", gap);
         _actions.AddThemeConstantOverride("v_separation", gap);
         foreach (var action in ActionButtons) action.CustomMinimumSize = new Vector2(dp(80), target);

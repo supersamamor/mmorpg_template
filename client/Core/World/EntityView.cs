@@ -69,6 +69,9 @@ public sealed class EntityView
     /// </summary>
     public AppearanceRecord? Appearance { get; private set; }
 
+    /// <summary>A player: the outfits it shows by slot (T-708), as the server says; empty for none and for other kinds. A new list means a change.</summary>
+    public IReadOnlyList<ShownOutfit> Outfit { get; private set; } = Array.Empty<ShownOutfit>();
+
     /// <summary>Counts changes to <see cref="Weapon"/> and <see cref="Worn"/>, so a visual re-dresses only when they changed (T-403).</summary>
     public int LookVersion { get; private set; }
 
@@ -136,6 +139,7 @@ public sealed class EntityView
         Weapon = record.Weapon;
         Worn = record.Worn ?? Array.Empty<string>();
         Appearance = record.Appearance;
+        Outfit = record.Outfit ?? Array.Empty<ShownOutfit>();
         LookVersion++;
         StartedStatuses.Clear();
         SetStatuses(record.Statuses, now, announce: false);
@@ -178,6 +182,11 @@ public sealed class EntityView
             Weapon = change.Weapon;
             Worn = change.Worn ?? Array.Empty<string>();
             LookVersion++;
+            LookDirty = true;
+        }
+        if ((fields & ChangedFields.Outfit) != 0)
+        {
+            Outfit = change.Outfit ?? Array.Empty<ShownOutfit>();
             LookDirty = true;
         }
         if ((fields & ChangedFields.Statuses) != 0) SetStatuses(change.Statuses, now, announce: true);

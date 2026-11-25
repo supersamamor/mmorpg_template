@@ -847,6 +847,53 @@ public static class UiText
     /// <summary>The minus button of the quantity picker.</summary>
     public const string QuantityLess = "-";
 
+    /// <summary>The bag's button that opens the wardrobe (T-708).</summary>
+    public const string WardrobeButton = "Outfits";
+
+    /// <summary>The wardrobe's heading.</summary>
+    public const string WardrobeTitle = "Outfits";
+
+    /// <summary>The wardrobe's button back to the bag.</summary>
+    public const string BackToBag = "Bag";
+
+    /// <summary>The choice that shows the gear in a slot.</summary>
+    public const string OutfitNone = "My gear";
+
+    /// <summary>What the wardrobe says while nothing is owned.</summary>
+    public const string WardrobeEmpty = "No outfits yet. They change only how you look.";
+
+    /// <summary>The line under the choices.</summary>
+    public const string WardrobeHint = "Only looks: outfits never change what you can do. Your weapon always shows.";
+
+    /// <summary>The line under the choices while outfits are hidden.</summary>
+    public const string WardrobeHidden = "Outfits are hidden. Everyone sees your gear.";
+
+    /// <summary>The wardrobe's switch.</summary>
+    public static string HideOutfits(bool hidden) => hidden ? "Show outfits" : "Hide outfits";
+
+    /// <summary>An outfit slot's label (an "Outfit slots" term).</summary>
+    public static string OutfitSlot(string slot) => slot switch
+    {
+        OutfitSlots.Head => "Head",
+        OutfitSlots.Face => "Face",
+        OutfitSlots.Body => "Body",
+        OutfitSlots.Back => "Back",
+        OutfitSlots.Feet => "Feet",
+        _ => slot,
+    };
+
+    /// <summary>The flash when an outfit is gained.</summary>
+    public static string OutfitGained(string name) => "New outfit: " + name;
+
+    /// <summary>The flash for a refused choice (an "Outfit reasons" term).</summary>
+    public static string OutfitRefused(string reason) => reason switch
+    {
+        OutfitReasons.NotOwned => "You do not own that outfit.",
+        OutfitReasons.SlotNotCovered => "That outfit has nothing for that place.",
+        OutfitReasons.WrongGender => "That outfit does not fit this character.",
+        _ => "That outfit does not exist.",
+    };
+
     /// <summary>The plus button of the quantity picker.</summary>
     public const string QuantityMore = "+";
 

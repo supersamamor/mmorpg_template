@@ -5,6 +5,7 @@ using Game.Client.Core.Combat;
 using Game.Client.Core.Dialogue;
 using Game.Client.Core.Items;
 using Game.Client.Core.Net;
+using Game.Client.Core.Outfits;
 using Game.Client.Core.Quests;
 using Game.Client.Core.Skills;
 using Game.Client.Core.Stats;
@@ -40,6 +41,7 @@ public sealed class ClientSession
         Ui = new UiState(config, bundle);
         Skills = new SkillBook(bundle);
         Stats = new StatBook();
+        Wardrobe = new WardrobeBook(bundle);
         Hotbar = new HotbarModel(config.HotbarSlots);
         Hotbar.Bind(Skills, new SkillActivator(this));
         Numbers = new DamageNumberPool(config.MaxDamageNumbers, config.DamageNumberSeconds, config.DamageNumberLaneSeconds);
@@ -94,6 +96,11 @@ public sealed class ClientSession
     /// <summary>The player's own stat points, stats and derived stats (T-503).</summary>
     public StatBook Stats { get; }
 
+    /// <summary>The player's own outfits and what shows of them (T-708).</summary>
+    public WardrobeBook Wardrobe { get; }
+
+    private readonly List<string> _gainedOutfits = new();
+
     /// <summary>Server messages applied so far (for measuring).</summary>
     public long MessagesApplied { get; private set; }
 
@@ -124,6 +131,7 @@ public sealed class ClientSession
         Autopilot.Reset();
         Skills.Reset();
         Stats.Reset();
+        Wardrobe.Reset();
         Numbers.Clear();
         Connection.Login(name, wallNow);
         RunCommands();
@@ -276,6 +284,18 @@ public sealed class ClientSession
     /// <summary>Spends stat points on one primary stat (T-503); the server prices the step and answers with the new stats or a refusal.</summary>
     public void RaiseStat(string statId, int amount = 1) => SendItem(new RaiseStatMessage(statId, amount));
 
+    /// <summary>The wardrobe panel's choice (T-708): show an outfit in a slot, or nothing (null). Looks only, so also while dead. The server decides and answers with the new wardrobe.</summary>
+    public void SetOutfit(string slot, string? outfit)
+    {
+        if (Connection.Phase == ConnectionPhase.Online) Send(new SetOutfitMessage(slot, outfit));
+    }
+
+    /// <summary>The wardrobe panel's switch (T-708): hide every outfit, or show the choices again.</summary>
+    public void HideOutfits(bool hidden)
+    {
+        if (Connection.Phase == ConnectionPhase.Online) Send(new SetOutfitMessage(null, null, hidden));
+    }
+
     /// <summary>Asks to change job (T-502).</summary>
     public void ChangeJob(string jobId) => SendItem(new ChangeJobMessage(jobId));
 
@@ -386,6 +406,10 @@ public sealed class ClientSession
                 break;
             case StatsMessage stats:
                 Stats.Apply(stats);
+                break;
+            case WardrobeMessage wardrobe:
+                Wardrobe.Apply(wardrobe, _gainedOutfits);
+                foreach (var outfit in _gainedOutfits) Ui.OnOutfitGained(outfit, viewNow);
                 break;
             case CooldownMessage cooldown:
                 Skills.ApplyCooldown(cooldown, viewNow);
