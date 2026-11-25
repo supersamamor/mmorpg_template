@@ -432,10 +432,12 @@ public sealed class CharacterDatabaseTests(DatabaseFixture fixture, Xunit.Abstra
             }
             if (random.Next(2) == 0)
             {
-                // Sometimes there is time for what happened to land.
+                // Sometimes there is time for what happened to land (with a limit: a save may keep dying; under load a fixed wait is too short for any).
                 rig.Tickets[a].SaveSoon = rig.Tickets[b].SaveSoon = true;
                 rig.Ticks(2);
-                await Task.Delay(60);
+                var waited = System.Diagnostics.Stopwatch.StartNew();
+                bool Landed(EntityId who) => rig.Tickets[who].LandedVersion >= rig.Tickets[who].TakenVersion;
+                while (!(Landed(a) && Landed(b)) && waited.ElapsedMilliseconds < 3_000) await Task.Delay(5);
             }
             Volatile.Write(ref dead, true);   // the process dies: whatever was under way ends where it is
             await rig.StopAsync();
