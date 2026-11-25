@@ -21,12 +21,18 @@ namespace Game.Shared.Protocol
     /// <c>{"type":"hello","version":1,"resume":"Qk3x...","content":"ab12..."}</c>.
     /// </summary>
     /// <param name="Version">The client's <see cref="ProtocolVersion"/>.</param>
-    /// <param name="Name">Display name for the dev login stub (no password), or null when resuming. Real accounts replace this (T-701).</param>
+    /// <param name="Name">Display name for the dev login (no password, development only), or null for the other two forms.</param>
     /// <param name="Content">The content hash of the client's bundle (ARCHITECTURE §5.4), or null when the client has none. A hash that differs from the server's ends in <c>bye</c> <c>update_required</c>; a missing one is allowed only in development.</param>
     /// <param name="Resume">The resume token from the last <see cref="WelcomeMessage"/>, or null for a new login. Single use: a successful resume
     /// returns a new one; an unknown, used or expired token ends in <c>bye</c> <c>resume_failed</c>.</param>
-    public sealed record HelloMessage(int Version, string? Name, string? Content = null, string? Resume = null) : ClientMessage
+    /// <param name="Session">The session token of the player's account (T-701), or null for the other two forms. Never log it.</param>
+    /// <param name="Character">The account's character to play (its permanent id, a GUID), with <paramref name="Session"/>. A session that is unknown, expired or
+    /// revoked, or a character that is not the account's, ends in <c>bye</c> <c>login_refused</c>.</param>
+    public sealed record HelloMessage(int Version, string? Name, string? Content = null, string? Resume = null, string? Session = null, string? Character = null) : ClientMessage
     {
+        /// <summary>No token in a log line or an exception.</summary>
+        public override string ToString() => $"HelloMessage {{ {Version}, {(Resume is not null ? "resume" : Session is not null ? "session" : "name")} }}";
+
         /// <inheritdoc />
         public override string Type => MessageTypes.Hello;
     }

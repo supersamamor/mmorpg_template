@@ -355,12 +355,24 @@ Owner only (about the client's own character): `attack_stopped`, `exp`, `level_u
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
 `oversize`, `before_hello`, `duplicate_hello`, `rate_limit`, `login_refused`, `server_full`, `too_slow`, `shutdown`, `server_error`, `update_required`,
 `logout`, `replaced`, `resume_failed`.
+`login_refused`: the dev login outside development or with a bad name, a session token that is unknown, expired or revoked, or a character that is not the account's
+(T-701: one answer for all of them). `server_error` also ends a `hello` whose login the database could not answer.
 `update_required`: the client's content hash differs from the server's, or it sent none outside development (ARCHITECTURE §5.4).
-`logout`: the client sent `logout`; its character left the world at once. `replaced`: another connection resumed this character with its token.
+`logout`: the client sent `logout`; its character left the world at once. `replaced`: another connection resumed this character with its token, or its account logged in again (an account plays one character at a time, T-701).
 The client reconnects after neither. `resume_failed`: the token in `hello` `resume` is unknown, already used, or its grace period is over
 (the client goes to the login screen). `rate_limit` also ends a resume from an address that failed too many resumes (ARCHITECTURE §10).
 A `rejected` message carries a "Movement reasons" (`MoveRejected`) term for `move`, an "Attack reasons" term for `attack`, or an "Item reasons" term for an
 item intent (`shop_buy` and `shop_sell` included), instead; the session goes on.
+
+## Account errors
+The `error` of a refused account request (T-701, ARCHITECTURE §10 "Accounts"): `invalid_request`, `invalid_username`, `invalid_password`, `username_taken`,
+`invalid_credentials`, `invalid_session`, `rate_limited`, `invalid_name`, `name_taken`, `no_free_slot`, `unknown_character`, `character_in_use`, `unavailable`.
+`invalid_credentials` answers an unknown username and a wrong password alike. `rate_limited` and `unavailable` come with `retry_after` (seconds).
+
+## Account terms
+**Account**: who signs in (a username and a password). **Session token**: proves a sign-in to the account endpoints and in `hello`; stored on the server as its SHA-256.
+**Resume token**: takes a character back after a drop; server memory only (ARCHITECTURE §10). **Character id**: a character's permanent id, a GUID; not the runtime
+entity id. **Slot**: a character's place in its account, from 0 (`characters.max_slots` in `balance.yaml`).
 
 ## Entity kinds
 In a view record's `kind`: `player`, `monster`, `npc`, `item` (a ground item a monster dropped, `EntityKind.Item`; its `display_key` is the item id).

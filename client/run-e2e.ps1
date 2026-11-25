@@ -21,12 +21,15 @@
 #   .\client\run-e2e.ps1 -Run quests                      First Hunt end to end: the guide's marker, accept in the dialogue, kill slimes and pick up their globs until the tracker
 #                                                         counts 5/5 and 3/3, open the quest log, talk to turn it in, see the globs go and the draughts and currency arrive
 #                                                         (T-602; content copy: weak monsters, every slime drops a glob; quests and drops are server-only, the bundle hash is unchanged)
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, bye, release
+#   .\client\run-e2e.ps1 -Run account                     register, create a character, enter the world, drop and resume, log out, sign out, sign in again and enter the world with
+#                                                         the same character (T-701). Needs PostgreSQL: $env:GAME_TEST_DB_CONNECTION; it uses its own database, mmo_e2e, on that server
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, account, bye, release (account is skipped, and said
+#                                                         so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "account", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -158,6 +161,14 @@ function Get-QuestsContent {
     $text = [IO.File]::ReadAllText($drops) -replace '\{ item_id: item.gel_glob, chance: [0-9.]+', '{ item_id: item.gel_glob, chance: 1'
     [IO.File]::WriteAllText($drops, $text)
     return (Join-Path $script:questsTemp "content")
+}
+
+# The account run's connection string (T-701): $env:GAME_TEST_DB_CONNECTION with the database mmo_e2e.
+function Get-E2EConnection {
+    $builder = New-Object System.Data.Common.DbConnectionStringBuilder
+    $builder.set_ConnectionString($env:GAME_TEST_DB_CONNECTION)
+    $builder["Database"] = "mmo_e2e"
+    return $builder.get_ConnectionString()
 }
 
 function Start-GameServer([switch] $Easy, [switch] $Items, [switch] $Statuses, [switch] $Skills, [switch] $Quests, [string[]] $Extra = @()) {
@@ -353,6 +364,14 @@ function Invoke-Scenario([string] $Name) {
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-quests" $extra) -EngineArgs $engineArgs
                 return (Wait-GodotClient $run 600).Code
             }
+            "account" {
+                # T-701: needs PostgreSQL. The server gets a database of its own (mmo_e2e), which it creates and migrates, so the developer's data is untouched.
+                # Its connection string goes through the environment, never the command line or the output.
+                $env:GAME_DB_CONNECTION = Get-E2EConnection
+                try { $server = Start-GameServer } finally { $env:GAME_DB_CONNECTION = $null }
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-account" @()) -EngineArgs $engineArgs
+                return (Wait-GodotClient $run 180).Code
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -479,8 +498,16 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "account", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
+}
+# The account run needs a database. Named alone it fails without one; in `all` it is skipped, and the last line says so: skipped is not passed.
+$skipped = @()
+if ($runs -contains "account" -and -not $env:GAME_TEST_DB_CONNECTION) {
+    if ($Run -ne "all") { throw "The account run needs a PostgreSQL server: set `$env:GAME_TEST_DB_CONNECTION." }
+    $skipped = @("account")
+    $runs = @($runs | Where-Object { $_ -ne "account" })
+    Write-Host "== account == SKIPPED: no database (`$env:GAME_TEST_DB_CONNECTION is not set)"
 }
 $failed = @()
 try {
@@ -510,5 +537,5 @@ finally {
     if ($script:questsTemp) { Remove-Item $script:questsTemp -Recurse -Force -ErrorAction SilentlyContinue }
 }
 if ($failed.Count -gt 0) { Write-Host "[run-e2e] FAILED: $($failed -join ', ')"; exit 1 }
-Write-Host "[run-e2e] all passed: $($runs -join ', ')"
+Write-Host "[run-e2e] all passed: $($runs -join ', ')$(if ($skipped.Count -gt 0) { "; SKIPPED: $($skipped -join ', ')" })"
 exit 0

@@ -1,3 +1,4 @@
+using Game.Client.Core.Accounts;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Combat;
 using Game.Client.Core.Dialogue;
@@ -26,9 +27,10 @@ public sealed class ClientSession
     private readonly DisplayBundle _bundle;
     private readonly IClientSocket _socket;
 
-    /// <summary>Creates a session on the login screen.</summary>
-    public ClientSession(ClientConfig config, DisplayBundle bundle, IClientSocket socket, IRandom random)
+    /// <summary>Creates a session on the login screen. Without <paramref name="accounts"/> only the dev login works.</summary>
+    public ClientSession(ClientConfig config, DisplayBundle bundle, IClientSocket socket, IRandom random, IAccountTransport? accounts = null)
     {
+        Accounts = new AccountFlow(config, accounts);
         _config = config;
         _bundle = bundle;
         _socket = socket;
@@ -42,6 +44,9 @@ public sealed class ClientSession
         Numbers = new DamageNumberPool(config.MaxDamageNumbers, config.DamageNumberSeconds, config.DamageNumberLaneSeconds);
         World.Combat.Impact += Numbers.OnImpact;
     }
+
+    /// <summary>Signing in and picking a character (T-701).</summary>
+    public AccountFlow Accounts { get; }
 
     /// <summary>The own inventory and equipment, as the server last said, and the panel's selection.</summary>
     public InventoryView Inventory { get; } = new InventoryView();
@@ -88,9 +93,24 @@ public sealed class ClientSession
     /// <summary>Server messages applied so far (for measuring).</summary>
     public long MessagesApplied { get; private set; }
 
-    /// <summary>Starts a login with the dev name.</summary>
-    public void Login(string name, double wallNow)
+    /// <summary>Starts a login with the dev name (development servers only).</summary>
+    public void Login(string name, double wallNow) => Start(name, null, wallNow);
+
+    /// <summary>Enters the world with one of the account's characters (T-701); does nothing unless signed in.</summary>
+    public void Play(string characterId, double wallNow)
     {
+        if (Accounts.SignedIn) Start(string.Empty, characterId, wallNow);
+    }
+
+    /// <summary>Leaves a stop for the login screen.</summary>
+    public void BackToLogin() => Connection.BackToLogin();
+
+    private string? _characterId;   // the character of an account's login, or null for a dev login
+
+    private void Start(string name, string? characterId, double wallNow)
+    {
+        if (Connection.Phase != ConnectionPhase.LoginScreen && Connection.Phase != ConnectionPhase.Stopped) return;
+        _characterId = characterId;
         World.Reset();
         Ui.Reset();
         Inventory.Reset();
@@ -102,6 +122,16 @@ public sealed class ClientSession
         Numbers.Clear();
         Connection.Login(name, wallNow);
         RunCommands();
+    }
+
+    private int _noticeVersion;
+
+    /// <summary>Back on the login screen after playing an account's character: the list may have changed, or the server may have refused the session.</summary>
+    private void WatchLogin()
+    {
+        if (Connection.Version == _noticeVersion) return;
+        _noticeVersion = Connection.Version;
+        if (_characterId is not null && Connection.Phase == ConnectionPhase.LoginScreen) Accounts.Refresh();
     }
 
     /// <summary>Asks to leave (§10 step 6).</summary>
@@ -287,6 +317,8 @@ public sealed class ClientSession
         }
         Connection.Tick(wallNow);
         RunCommands();
+        WatchLogin();
+        Accounts.Update();
         _lastViewNow = viewNow;
         World.Advance(viewNow);
         Skills.Update(viewNow);
@@ -410,7 +442,10 @@ public sealed class ClientSession
                     _socket.Close();
                     break;
                 case ConnectionCommandKind.SendLogin:
-                    Send(new HelloMessage(ProtocolVersion.Current, Connection.LoginName, _bundle.ContentHash));
+                    // An account's login names the session and the character. A session that has ended meanwhile is refused by the server like any other.
+                    Send(_characterId is null
+                        ? new HelloMessage(ProtocolVersion.Current, Connection.LoginName, _bundle.ContentHash)
+                        : new HelloMessage(ProtocolVersion.Current, null, _bundle.ContentHash, null, Accounts.SessionToken ?? string.Empty, _characterId));
                     break;
                 case ConnectionCommandKind.SendResume:
                     Send(new HelloMessage(ProtocolVersion.Current, null, _bundle.ContentHash, Connection.ResumeToken));

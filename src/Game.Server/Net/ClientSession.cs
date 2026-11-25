@@ -294,32 +294,47 @@ public sealed class ClientSession : IViewSink
         var buffer = new byte[_options.MaxMessageBytes];
         var count = 0;
         var token = _abort.Token;
-        while (true)
+        // The login a hello started (T-701: it may read the database). Reading goes on while it runs, so a connection that drops ends it at once; but the next
+        // message waits for it, so nothing is handled before the login is decided.
+        Task login = Task.CompletedTask;
+        using var loginStop = CancellationTokenSource.CreateLinkedTokenSource(token);
+        try
         {
-            var result = await _socket.ReceiveAsync(buffer.AsMemory(count), token).ConfigureAwait(false);
-            if (result.MessageType == WebSocketMessageType.Close) return;
-            count += result.Count;
-            if (!result.EndOfMessage)
+            while (true)
             {
-                if (count < buffer.Length) continue;
-                // Too long: say so, then discard the rest of this and any later message until the close handshake ends.
-                Bye(ByeReasons.Oversize);
+                var result = await _socket.ReceiveAsync(buffer.AsMemory(count), token).ConfigureAwait(false);
+                if (result.MessageType == WebSocketMessageType.Close) return;
+                count += result.Count;
+                if (!result.EndOfMessage)
+                {
+                    if (count < buffer.Length) continue;
+                    // Too long: say so, then discard the rest of this and any later message until the close handshake ends.
+                    Bye(ByeReasons.Oversize);
+                    count = 0;
+                    continue;
+                }
+                var length = count;
                 count = 0;
-                continue;
+                await login.ConfigureAwait(false);
+                if (Closing) continue; // after bye, input is ignored until the client answers the close
+                if (result.MessageType == WebSocketMessageType.Binary)
+                {
+                    Bye(ByeReasons.Malformed);
+                    continue;
+                }
+                if (Handle(buffer.AsSpan(0, length)) is { } hello) login = JoinAsync(hello, loginStop.Token);
             }
-            var length = count;
-            count = 0;
-            if (Closing) continue; // after bye, input is ignored until the client answers the close
-            if (result.MessageType == WebSocketMessageType.Binary)
-            {
-                Bye(ByeReasons.Malformed);
-                continue;
-            }
-            Handle(buffer.AsSpan(0, length));
+        }
+        finally
+        {
+            // The session must not end while its login still runs: what the login did (a joining slot, a character) is cleaned up after this.
+            await loginStop.CancelAsync().ConfigureAwait(false);
+            await login.ConfigureAwait(false);
         }
     }
 
-    private void Handle(ReadOnlySpan<byte> utf8)
+    /// <summary>Handles one message, except a <c>hello</c> that may log in: that one is returned.</summary>
+    private HelloMessage? Handle(ReadOnlySpan<byte> utf8)
     {
         var now = _gateway.Clock.NowMilliseconds;
         Interlocked.Exchange(ref _lastInboundMs, now);
@@ -328,21 +343,21 @@ public sealed class ClientSession : IViewSink
         {
             _gateway.Stats.CountRateLimited();
             if (_bucket.DropsSinceFull >= _options.RateLimitDropsBeforeBye) Bye(ByeReasons.RateLimit);
-            return;
+            return null;
         }
 
         var read = ProtocolJson.ReadClient(utf8);
         if (read.Message is not { } message)
         {
             Bye(read.Error ?? ByeReasons.Malformed);
-            return;
+            return null;
         }
 
         if (State == SessionState.AwaitingHello)
         {
-            if (message is HelloMessage hello) Join(hello);
-            else Bye(ByeReasons.BeforeHello);
-            return;
+            if (message is HelloMessage hello) return hello;
+            Bye(ByeReasons.BeforeHello);
+            return null;
         }
 
         if (_unacknowledged)
@@ -435,9 +450,28 @@ public sealed class ClientSession : IViewSink
                 if (Entity is { } changer) _gateway.Enqueue(new ChangeJob(changer, job.Job));
                 break;
         }
+        return null;
     }
 
-    private void Join(HelloMessage hello)
+    /// <summary>Logs in and joins; never throws. While the login is pending the session is still awaiting its hello (<see cref="SessionState.AwaitingHello"/>).</summary>
+    private async Task JoinAsync(HelloMessage hello, CancellationToken stop)
+    {
+        try
+        {
+            await LogInAsync(hello, stop).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (stop.IsCancellationRequested)
+        {
+            // the connection ended first
+        }
+        catch (Exception e)
+        {
+            _gateway.Log.Error($"[net] session {Peer}: login failed.", e);
+            Bye(ByeReasons.ServerError);
+        }
+    }
+
+    private async Task LogInAsync(HelloMessage hello, CancellationToken stop)
     {
         if (hello.Version != ProtocolVersion.Current)
         {
@@ -463,15 +497,18 @@ public sealed class ClientSession : IViewSink
             _gateway.Resume(this, hello);
             return;
         }
-        var login = _gateway.Login.Login(hello);
+        var login = await _gateway.Login.LoginAsync(hello, Address, stop).ConfigureAwait(false);
+        stop.ThrowIfCancellationRequested();   // dropped while it was pending: nothing is claimed or spawned for it
         if (login.Refusal is { } refusal)
         {
             Bye(refusal);
             return;
         }
+        if (Closing) return; // timed out, or the server is stopping
         DisplayName = login.DisplayName;
-        Volatile.Write(ref _state, (int)SessionState.Joining);
-        if (_gateway.SpawnCharacter(this) is not { } id)
+        if (_gateway.ClaimAccount(this, login)) return;
+        if (Interlocked.CompareExchange(ref _state, (int)SessionState.Joining, (int)SessionState.AwaitingHello) != (int)SessionState.AwaitingHello) return;
+        if (_gateway.SpawnCharacter(this, login) is not { } id)
         {
             Bye(ByeReasons.ServerFull);
             return;

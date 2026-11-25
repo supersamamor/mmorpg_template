@@ -153,3 +153,14 @@ shop:
 quests:
   # How many quests a character may have going at once; one more start is refused (too_many_active) until one is completed or abandoned.
   max_active: 10
+characters:
+  # Three characters per account: one per job path to try, and a small list that fits the character-select screen of a phone without scrolling far.
+  max_slots: 3
+  # Short enough to fit a name plate and the chat, long enough for a first and a last part.
+  name_min_length: 3
+  name_max_length: 16
+  # Latin letters only, so no name can imitate another with look-alike letters of a second script. A fork in another language lists its own letters
+  # (from one script). Upper and lower case never make two different names.
+  name_letters: [a-z, A-Z]
+  # Allowed between two letters only (never first, last or doubled): "Anna-Lee", "O'Dell".
+  name_separators: ["-", "'"]

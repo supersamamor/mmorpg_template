@@ -63,8 +63,8 @@ public sealed class UiRuns
         Session.Logout(Clocks.Wall());
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen, 10, "bye logout");
         await FramesAsync(3);
-        Check(Hud.PanelButtonShown, "the login panel shows");
-        await LayoutMatrixAsync("login panel");
+        Check(Hud.Accounts!.Open && Hud.Accounts.SignInButton.IsVisibleInTree(), "the sign-in screen shows");
+        await AccountScreensAsync();
         Hud.ShowRefusal(UiText.CleartextRefused);
         await LayoutMatrixAsync("longest refusal text");
         Hud.SetScale(originalScale, false);
@@ -92,6 +92,27 @@ public sealed class UiRuns
         Hud.SetScale(scaleBefore, false);
         Hud.ForceRefresh();
         await FramesAsync(3);
+    }
+
+    /// <summary>
+    /// The sign-in and character-select screens (T-701), each with the longest words it can show, at every screen shape and scale. Every button and field in them
+    /// is at least the touch target: the same check as the rest of the HUD (<c>FindProblems</c>).
+    /// </summary>
+    private async Task AccountScreensAsync()
+    {
+        var accounts = Hud.Accounts!;
+        accounts.ShowSamples(Game.Client.Core.Accounts.AccountScreen.SignIn, LongName);
+        await FramesAsync(3);
+        Check(accounts.Password.Secret, "the password field hides what is typed");
+        Check(Hud.Blocks(accounts.SignInButton.GetGlobalRect().GetCenter()), "a touch on the sign-in screen never reaches the world");
+        await LayoutMatrixAsync("sign-in screen");
+        accounts.ShowSamples(Game.Client.Core.Accounts.AccountScreen.Characters, LongName);
+        await FramesAsync(3);
+        Check(accounts.Rows.Count == 3 && accounts.CreateButton.IsVisibleInTree(), "the character screen shows its slots and the create button");
+        await LayoutMatrixAsync("character select");
+        accounts.ClearSamples();
+        await FramesAsync(3);
+        Print("accounts: the sign-in and character-select screens fit every screen shape and scale, every button and field at least the touch target");
     }
 
     /// <summary>The sound settings: the panel fits at every screen shape, the buttons change the mixer and the engine's buses, and the choice is stored.</summary>

@@ -83,6 +83,111 @@ public class ClientSessionTests
         hello.Resume.ShouldBeNull();
     }
 
+    /// <summary>Answers every account request with a fixed session and one character.</summary>
+    private sealed class ScriptedAccounts : Game.Client.Core.Accounts.IAccountTransport
+    {
+        private Game.Client.Core.Accounts.AccountHttpResponse? _answer;
+        public readonly List<string> Calls = new();
+        public bool SessionEnded;
+
+        public void Send(Game.Client.Core.Accounts.AccountHttpRequest request)
+        {
+            Calls.Add(request.Call.ToString());
+            var body = SessionEnded ? "{\"error\":\"invalid_session\"}" : request.Call == Game.Client.Core.Accounts.AccountCall.SignIn
+                ? "{\"token\":\"account-session\",\"expires_in\":1}"
+                : "{\"slots\":3,\"name_min\":3,\"name_max\":16,\"characters\":[{\"id\":\"c1\",\"slot\":0,\"name\":\"Lyra\",\"job\":\"job.wanderer\"}]}";
+            _answer = new Game.Client.Core.Accounts.AccountHttpResponse(SessionEnded ? 401 : 200, Encoding.UTF8.GetBytes(body));
+        }
+
+        public bool TryDequeue(out Game.Client.Core.Accounts.AccountHttpResponse response)
+        {
+            response = _answer ?? default;
+            var any = _answer is not null;
+            _answer = null;
+            return any;
+        }
+    }
+
+    private static (ClientSession Session, ScriptedSocket Socket, ScriptedAccounts Accounts) SignedIn()
+    {
+        var socket = new ScriptedSocket();
+        var accounts = new ScriptedAccounts();
+        var session = new ClientSession(new ClientConfig { AllowCleartext = true }, Bundle(), socket, new Pcg32Random(1), accounts);
+        session.Play("c1", 0);
+        session.Connection.Phase.ShouldBe(ConnectionPhase.LoginScreen, "nobody is signed in yet");
+        session.Accounts.SignIn("ada", "secret-password");
+        session.Update(0, 0);
+        session.Update(0, 0);
+        session.Accounts.Characters.Single().Id.ShouldBe("c1");
+        session.Play("c1", 0);
+        socket.Events.Enqueue(new SocketEvent(SocketEventKind.Opened));
+        session.Update(0, 0);
+        return (session, socket, accounts);
+    }
+
+    [Fact]
+    public void Playing_a_character_says_hello_with_the_session_and_the_character_and_no_name()
+    {
+        var (_, socket, _) = SignedIn();
+        var hello = ProtocolJson.ReadClient(Encoding.UTF8.GetBytes(socket.Sent.Single())).Message.ShouldBeOfType<HelloMessage>();
+        (hello.Name, hello.Resume, hello.Session, hello.Character).ShouldBe((null, null, "account-session", "c1"));
+        hello.Content.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void A_server_restart_signs_the_character_in_again_with_the_same_session()
+    {
+        var (session, socket, _) = SignedIn();
+        socket.Push(new WelcomeMessage(1, 1, "map.starter_meadow", 10, null, "resume-token"));
+        socket.Push(new ByeMessage(ByeReasons.Shutdown));
+        session.Update(1, 1);
+        session.Update(100, 100);
+        socket.Events.Enqueue(new SocketEvent(SocketEventKind.Opened));
+        session.Update(100, 100);
+        var hello = ProtocolJson.ReadClient(Encoding.UTF8.GetBytes(socket.Sent.Last())).Message.ShouldBeOfType<HelloMessage>();
+        (hello.Resume, hello.Session, hello.Character).ShouldBe((null, "account-session", "c1"));
+    }
+
+    [Fact]
+    public void Logging_out_leads_back_to_the_character_list_which_is_asked_for_again()
+    {
+        var (session, socket, accounts) = SignedIn();
+        socket.Push(new WelcomeMessage(1, 1, "map.starter_meadow", 10, null, "resume-token"));
+        session.Update(1, 1);
+        accounts.Calls.Clear();
+        session.Logout(2);
+        socket.Push(new ByeMessage(ByeReasons.Logout));
+        session.Update(2, 2);
+        session.Update(2, 2);
+        session.Connection.Phase.ShouldBe(ConnectionPhase.LoginScreen);
+        accounts.Calls.ShouldBe(["List"]);
+        session.Accounts.Screen.ShouldBe(Game.Client.Core.Accounts.AccountScreen.Characters);
+    }
+
+    [Fact]
+    public void A_refused_session_leads_to_the_sign_in_screen()
+    {
+        var (session, socket, accounts) = SignedIn();
+        accounts.SessionEnded = true;
+        socket.Push(new ByeMessage(ByeReasons.LoginRefused));
+        session.Update(1, 1);
+        session.Update(1, 1);
+        session.Accounts.SignedIn.ShouldBeFalse();
+        session.Accounts.Screen.ShouldBe(Game.Client.Core.Accounts.AccountScreen.SignIn);
+    }
+
+    [Fact]
+    public void A_replaced_player_goes_back_to_the_login_screen_on_request_only()
+    {
+        var (session, socket, _) = SignedIn();
+        socket.Push(new ByeMessage(ByeReasons.Replaced));
+        session.Update(1, 1);
+        session.Connection.Phase.ShouldBe(ConnectionPhase.Stopped);
+        session.BackToLogin();
+        session.Connection.Phase.ShouldBe(ConnectionPhase.LoginScreen);
+        session.Accounts.SignedIn.ShouldBeTrue();
+    }
+
     [Fact]
     public void A_resume_says_hello_with_the_token_the_hash_and_no_name()
     {

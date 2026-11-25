@@ -392,6 +392,39 @@
       },
       "additionalProperties": false,
       "description": "Shops (T-603, ARCHITECTURE §6.8)."
+    },
+    "characters": {
+      "type": "object",
+      "properties": {
+        "max_slots": {
+          "type": "integer",
+          "description": "Most characters an account has at once (deleted ones do not count). At least 1."
+        },
+        "name_min_length": {
+          "type": "integer",
+          "description": "Shortest name, at least 1."
+        },
+        "name_max_length": {
+          "type": "integer",
+          "description": "Longest name, at least NameMinLength and at most 32."
+        },
+        "name_letters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Letters a name may use: single characters (x) and ranges (a-z). Names that differ only in letter case are the same name."
+        },
+        "name_separators": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Single characters allowed between two letters only: never first, last, or two in a row."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Character slots and what a character may be called (T-701, ARCHITECTURE §10)."
     }
   },
   "additionalProperties": false,

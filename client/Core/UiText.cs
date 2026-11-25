@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Game.Client.Core.Accounts;
 using Game.Client.Core.Net;
 using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
@@ -69,6 +70,85 @@ public static class UiText
             default: return string.Empty;
         }
     }
+
+    // ---- sign-in and character select (T-701) ----
+
+    /// <summary>The sign-in screen's title.</summary>
+    public const string SignInTitle = "Sign in";
+
+    /// <summary>The username field's hint.</summary>
+    public const string Username = "Username";
+
+    /// <summary>The password field's hint.</summary>
+    public const string Password = "Password (at least 10 characters)";
+
+    /// <summary>The sign-in button.</summary>
+    public const string SignIn = "Sign in";
+
+    /// <summary>The register button.</summary>
+    public const string Register = "New account";
+
+    /// <summary>The development login's button (debug builds only).</summary>
+    public const string DevLogin = "Dev login";
+
+    /// <summary>The character screen's title.</summary>
+    public const string CharactersTitle = "Your characters";
+
+    /// <summary>The button that creates a character.</summary>
+    public const string CreateCharacter = "Create character";
+
+    /// <summary>The button that deletes a character.</summary>
+    public const string DeleteCharacter = "Delete";
+
+    /// <summary>The same button, once pressed.</summary>
+    public const string ConfirmDelete = "Really?";
+
+    /// <summary>The button that leaves the account.</summary>
+    public const string SignOut = "Sign out";
+
+    /// <summary>The line while the server is asked.</summary>
+    public const string AccountBusy = "One moment...";
+
+    /// <summary>A character's line: its name and its job.</summary>
+    public static string CharacterRow(string name, string job) => name + "\n" + job;
+
+    /// <summary>The hint of the new character's name field.</summary>
+    public static string NewCharacterName(int min, int max) =>
+        "Name (" + min.ToString(CultureInfo.InvariantCulture) + " to " + max.ToString(CultureInfo.InvariantCulture) + " letters)";
+
+    /// <summary>The line for an account notice: for a refusal, the sentence of its "Account errors" term.</summary>
+    public static string Account(AccountNotice notice, string error, long retryAfterSeconds)
+    {
+        switch (notice)
+        {
+            case AccountNotice.Unreachable: return "Could not reach the server.";
+            case AccountNotice.SessionEnded: return "Your session has ended. Please sign in again.";
+            case AccountNotice.Refused: break;
+            default: return string.Empty;
+        }
+        switch (error)
+        {
+            case AccountErrors.InvalidUsername: return "A username has 3 to 24 letters, digits, dots, dashes or underscores, and starts with a letter or digit.";
+            case AccountErrors.InvalidPassword: return "A password has 10 to 128 characters.";
+            case AccountErrors.UsernameTaken: return "That username is taken.";
+            case AccountErrors.InvalidSession: return Account(AccountNotice.SessionEnded, error, 0);
+            case AccountErrors.InvalidCredentials: return "Wrong username or password.";
+            case AccountErrors.RateLimited:
+                return retryAfterSeconds > 0
+                    ? "Too many tries. Please wait " + retryAfterSeconds.ToString(CultureInfo.InvariantCulture) + " seconds."
+                    : "Too many tries. Please wait a moment.";
+            case AccountErrors.InvalidName: return "That name cannot be used. Use letters, with single dashes or apostrophes between them at most.";
+            case AccountErrors.NameTaken: return "That name is taken.";
+            case AccountErrors.NoFreeSlot: return "You have no free character slot.";
+            case AccountErrors.UnknownCharacter: return "That character no longer exists.";
+            case AccountErrors.CharacterInUse: return "That character is still in the world. Please try again in a minute.";
+            case AccountErrors.Unavailable: return "The server is busy. Please try again.";
+            default: return "The server could not use that. Please try again.";
+        }
+    }
+
+    /// <summary>The longest line <see cref="Account"/> can return, for the layout check.</summary>
+    public static string LongestAccount => Account(AccountNotice.Refused, AccountErrors.InvalidUsername, 0);
 
     /// <summary>The line while a connection is being made, with no notice.</summary>
     public const string Connecting = "Connecting...";

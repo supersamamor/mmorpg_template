@@ -37,7 +37,7 @@ public static class ProtocolJson
         {
             var reader = new Utf8JsonReader(utf8, new JsonReaderOptions { MaxDepth = MaxClientDepth });
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ClientMessage>(ByeReasons.Malformed);
-            string? type = null, name = null, content = null, resume = null, slot = null, skill = null, job = null, stat = null, quest = null, itemId = null;
+            string? type = null, name = null, content = null, resume = null, session = null, character = null, slot = null, skill = null, job = null, stat = null, quest = null, itemId = null;
             int? version = null, quantity = null, level = null, amount = null, index = null;
             long? seq = null, target = null, entry = null, card = null;
             GridCell? cell = null;
@@ -53,6 +53,8 @@ public static class ProtocolJson
                     case "name": name = String(ref reader); break;
                     case "content": content = String(ref reader); break;
                     case "resume": resume = String(ref reader); break;
+                    case "session": session = String(ref reader); break;
+                    case "character": character = String(ref reader); break;
                     case "seq": seq = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var s) ? s : throw Bad(); break;
                     case "target": target = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var t) ? t : throw Bad(); break;
                     case "cell": cell = Cell(ref reader); break;
@@ -74,8 +76,10 @@ public static class ProtocolJson
 
             ClientMessage? message = type switch
             {
-                // exactly one of name (a new login) and resume (a resume token)
-                MessageTypes.Hello => version is { } ver && (name is null) != (resume is null) ? new HelloMessage(ver, name, content, resume) : null,
+                // exactly one of name (the dev login), resume (a resume token), and session with character (an account's login)
+                MessageTypes.Hello => version is { } ver && (session is null) == (character is null)
+                                      && (name is null ? 0 : 1) + (resume is null ? 0 : 1) + (session is null ? 0 : 1) == 1
+                    ? new HelloMessage(ver, name, content, resume, session, character) : null,
                 MessageTypes.Move => cell is { } c ? new MoveMessage(c) : null,
                 MessageTypes.Stop => new StopMessage(),
                 MessageTypes.Attack => target is { } id ? new AttackMessage(id) : null,
@@ -131,6 +135,8 @@ public static class ProtocolJson
                 w.WriteNumber("version", hello.Version);
                 if (hello.Name is not null) w.WriteString("name", hello.Name);
                 if (hello.Resume is not null) w.WriteString("resume", hello.Resume);
+                if (hello.Session is not null) w.WriteString("session", hello.Session);
+                if (hello.Character is not null) w.WriteString("character", hello.Character);
                 if (hello.Content is not null) w.WriteString("content", hello.Content);
                 break;
             case MoveMessage move:

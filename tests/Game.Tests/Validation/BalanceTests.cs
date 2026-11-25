@@ -168,6 +168,24 @@ public class BalanceTests : IDisposable
     }
 
     [Theory]
+    [InlineData("max_slots: 3", "max_slots: 0", "characters.max_slots")]
+    [InlineData("name_min_length: 3", "name_min_length: 0", "characters.name_min_length")]
+    [InlineData("name_max_length: 16", "name_max_length: 2", "characters.name_max_length")]
+    [InlineData("name_max_length: 16", "name_max_length: 33", "characters.name_max_length")]
+    [InlineData("name_letters: [a-z, A-Z]", "name_letters: []", "characters.name_letters")]
+    [InlineData("name_letters: [a-z, A-Z]", "name_letters: [z-a]", "characters.name_letters")]
+    [InlineData("name_letters: [a-z, A-Z]", "name_letters: [abc]", "characters.name_letters")]
+    [InlineData("name_separators: [\"-\", \"'\"]", "name_separators: [\"--\"]", "characters.name_separators")]
+    public void Character_slots_and_name_rules_must_be_usable(string from, string to, string path)
+    {
+        Edit(from, to);
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);
+        issue.File.ShouldBe("balance.yaml");
+        issue.Path.ShouldBe(path);
+        issue.Line.ShouldBeGreaterThan(0);
+    }
+
+    [Theory]
     [InlineData("bucket_size: 6", "bucket_size: 0", "aoi.bucket_size")]
     [InlineData("view_radius: 2", "view_radius: -1", "aoi.view_radius")]
     [InlineData("max_visible: 50", "max_visible: 0", "aoi.max_visible")]

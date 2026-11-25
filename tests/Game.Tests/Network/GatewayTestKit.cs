@@ -4,6 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using Game.Content.ClientExport;
 using Game.Content.Registry;
+using Game.Server.Accounts;
 using Game.Server.Hosting;
 using Game.Server.Net;
 using Game.Server.World;
@@ -36,7 +37,7 @@ public sealed class GatewayRig : IAsyncDisposable
     private GatewayHost? _host;
     private string? _certificateFile;
 
-    private GatewayRig(GatewayOptions options, ContentDatabase content)
+    private GatewayRig(GatewayOptions options, ContentDatabase content, AccountRigOptions? accounts)
     {
         Content = content;
         var clock = new SystemClock();
@@ -44,10 +45,21 @@ public sealed class GatewayRig : IAsyncDisposable
         var progressions = Progressions;
         World = new GameWorld(Content.Grids.Values, ServerPipeline.Create(Content, progressions, Inventories, clock), 1, clock, Log);
         Start = new NewCharacters(Content);
-        Gateway = new Gateway(World, Start, options, Clock, Log, ContentHash, progress: new OwnProgress(Content, progressions),
+        ILoginService? login = null;
+        var tokens = new ResumeTokens();
+        if (accounts is not null)
+        {
+            Accounts = new AccountService(accounts.Store, accounts.Hasher, new HashQueue(4, 64, TimeSpan.FromSeconds(10)), accounts.Limits, Content.Balance, Clock, accounts.Time, Log);
+            login = new AccountLogin(Accounts, new DevLogin(options.Development, options.MaxNameLength, tokens));
+        }
+        Gateway = new Gateway(World, Start, options, Clock, Log, ContentHash, login, tokens, progress: new OwnProgress(Content, progressions),
             inventory: new OwnInventory(Content.Balance.Inventory, Inventories));
+        if (Accounts is not null) Accounts.InWorld = Gateway.HoldsCharacter;
         _runners = World.Instances.Select(i => new InstanceRunner(i, clock, Log)).ToList();
     }
+
+    /// <summary>The account service (T-701), when the rig was started with one.</summary>
+    public AccountService? Accounts { get; }
 
     /// <summary>The players' inventories (the inventory systems write them; the gateway's own inventory messages read them).</summary>
     public InMemoryInventoryStore Inventories { get; } = new();
@@ -63,7 +75,7 @@ public sealed class GatewayRig : IAsyncDisposable
     /// <param name="setupWorld">Runs before the instances start ticking (subscribe to their events here).</param>
     /// <param name="content">Content to run instead of the sample content (a test that needs different monster numbers builds it).</param>
     public static async Task<GatewayRig> StartAsync(Func<GatewayOptions, GatewayOptions>? configure = null, bool development = true, bool tls = false,
-        Action<GameWorld>? setupWorld = null, ContentDatabase? content = null)
+        Action<GameWorld>? setupWorld = null, ContentDatabase? content = null, AccountRigOptions? accounts = null)
     {
         var options = new GatewayOptions { Development = development, BindAddress = "127.0.0.1", Port = 0, SweepIntervalMs = 10, CloseTimeoutMs = 1_000 };
         string? certificate = null;
@@ -74,9 +86,10 @@ public sealed class GatewayRig : IAsyncDisposable
             options = options with { CertificatePath = certificate };
         }
         if (configure is not null) options = configure(options);
-        var rig = new GatewayRig(options, content ?? TestGrids.SampleContent) { _certificateFile = certificate };
+        var rig = new GatewayRig(options, content ?? TestGrids.SampleContent, accounts) { _certificateFile = certificate };
         setupWorld?.Invoke(rig.World);
-        rig._host = await GatewayHost.StartAsync(rig.Gateway, name => name == options.CertificatePasswordEnv ? CertificatePassword : null);
+        rig._host = await GatewayHost.StartAsync(rig.Gateway, name => name == options.CertificatePasswordEnv ? CertificatePassword : null,
+            rig.Accounts is null ? null : new AccountEndpoints(rig.Accounts, rig.Log));
         foreach (var runner in rig._runners) runner.Start();
         rig.Gateway.Start();
         return rig;
@@ -131,6 +144,14 @@ public sealed class GatewayRig : IAsyncDisposable
         return client;
     }
 
+    /// <summary>Connects and says hello with an account's session token and a character; the caller waits for the welcome or the bye.</summary>
+    public async Task<TestClient> PlayAsync(string session, string character)
+    {
+        var client = await ConnectAsync();
+        await client.SendAsync(new HelloMessage(ProtocolVersion.Current, null, ContentHash, null, session, character));
+        return client;
+    }
+
     /// <summary>The session whose character is <paramref name="id"/>.</summary>
     public ClientSession SessionOf(long id) =>
         Poll.Until(() => Gateway.Sessions.FirstOrDefault(s => s.Entity?.Value == id), s => s is not null, "session of #" + id)!;
@@ -159,6 +180,9 @@ public sealed class GatewayRig : IAsyncDisposable
         if (_certificateFile is not null) File.Delete(_certificateFile);
     }
 }
+
+/// <summary>What a rig's account service runs on (T-701).</summary>
+public sealed record AccountRigOptions(IAccountStore Store, IPasswordHasher Hasher, AccountLimits Limits, TimeProvider Time);
 
 /// <summary>
 /// A protocol client on <see cref="ClientWebSocket"/>: collects every server message (decoded with <see cref="ProtocolJson"/>, as the Godot
@@ -370,7 +394,7 @@ public static class Poll
         {
             var value = read();
             if (done(value)) return value;
-            if (Environment.TickCount64 > deadline) throw new TimeoutException($"Timed out after {timeoutMs} ms waiting for {what}.");
+            if (Environment.TickCount64 > deadline) throw new TimeoutException($"Timed out after {timeoutMs} ms waiting for {what} (last: {value}).");
             Thread.Sleep(5);
         }
     }
@@ -382,7 +406,7 @@ public static class Poll
         {
             var value = read();
             if (done(value)) return value;
-            if (Environment.TickCount64 > deadline) throw new TimeoutException($"Timed out after {timeoutMs} ms waiting for {what}.");
+            if (Environment.TickCount64 > deadline) throw new TimeoutException($"Timed out after {timeoutMs} ms waiting for {what} (last: {value}).");
             await Task.Delay(5);
         }
     }

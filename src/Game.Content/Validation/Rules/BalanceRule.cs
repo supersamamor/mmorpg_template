@@ -1,3 +1,4 @@
+using Game.Shared.Accounts;
 using Game.Shared.Definitions;
 using Game.Shared.Formulas;
 using Game.Shared.Vocabulary;
@@ -85,6 +86,26 @@ public sealed class BalanceRule : IValidationRule
         if (balance.Shop.MaxBuyQuantity < 1)
             Range(context, "shop.max_buy_quantity", "must be at least 1.");
         StartItems(context, balance.NewCharacter);
+        Characters(context, balance.Characters);
+    }
+
+    /// <summary>There is a slot, the name lengths are ordered and fit the database column, and every letter and separator entry can be read.</summary>
+    private static void Characters(ValidationContext context, CharactersBalanceDef c)
+    {
+        if (c.MaxSlots < 1)
+            Range(context, "characters.max_slots", "must be at least 1.");
+        if (c.NameMinLength < 1)
+            Range(context, "characters.name_min_length", "must be at least 1.");
+        if (c.NameMaxLength < c.NameMinLength || c.NameMaxLength > CharacterNameRules.LongestAllowed)
+            Range(context, "characters.name_max_length", $"must be from name_min_length ({c.NameMinLength}) to {CharacterNameRules.LongestAllowed}.");
+        if (c.NameLetters.Count == 0)
+            Range(context, "characters.name_letters", "must list at least one letter or range.");
+        foreach (var entry in c.NameLetters)
+            if (!CharacterNameRules.TryParseRange(entry, out _))
+                Range(context, "characters.name_letters", $"'{entry}' is not a single character or a range like 'a-z'.");
+        foreach (var entry in c.NameSeparators)
+            if (entry.Length != 1 || char.IsControl(entry[0]) || char.IsSurrogate(entry[0]))
+                Range(context, "characters.name_separators", $"'{entry}' is not a single character.");
     }
 
     /// <summary>The talking range is at least 1.</summary>
