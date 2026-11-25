@@ -21,6 +21,9 @@ namespace Game.Shared.Vocabulary
         /// <summary>Unknown username or wrong password (at a password change: the current one is wrong): the same answer for both.</summary>
         public const string InvalidCredentials = "invalid_credentials";
 
+        /// <summary>The account waits to be erased (T-703), told only to someone who has its password; the answer says how long is left. Its owner can take the request back.</summary>
+        public const string AccountDeleting = "account_deleting";
+
         /// <summary>The session token is missing, unknown, expired or revoked: sign in again.</summary>
         public const string InvalidSession = "invalid_session";
 
@@ -50,7 +53,7 @@ namespace Game.Shared.Vocabulary
 
         /// <summary>Every account error.</summary>
         public static readonly VocabularySet All = new VocabularySet(
-            InvalidRequest, InvalidUsername, InvalidPassword, SamePassword, UsernameTaken, InvalidCredentials, InvalidSession, RateLimited, InvalidName, InvalidAppearance, NameTaken,
+            InvalidRequest, InvalidUsername, InvalidPassword, SamePassword, UsernameTaken, InvalidCredentials, AccountDeleting, InvalidSession, RateLimited, InvalidName, InvalidAppearance, NameTaken,
             NoFreeSlot, UnknownCharacter, CharacterInUse, Unavailable);
     }
 }

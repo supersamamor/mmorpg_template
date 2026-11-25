@@ -46,6 +46,9 @@ public sealed record AccountLimits
     /// <summary>How long a session lasts.</summary>
     public TimeSpan SessionLifetime { get; init; } = TimeSpan.FromHours(24);
 
+    /// <summary>How long a deleted account waits before its data is erased (T-703, <c>--account-erase-days</c>); its owner can take the request back until then.</summary>
+    public TimeSpan EraseWait { get; init; } = TimeSpan.FromDays(14);
+
     /// <summary>Live sessions an account keeps; a sign-in beyond that ends the oldest.</summary>
     public int MaxSessions { get; init; } = 10;
 }

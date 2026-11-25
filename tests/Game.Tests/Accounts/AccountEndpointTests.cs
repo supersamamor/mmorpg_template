@@ -86,6 +86,10 @@ public class AccountEndpointTests
             await Refused(401, "invalid_session", http.PostAsync(AccountPaths.Password, new { current = good, @new = good + "x" }, token));
             await Refused(401, "invalid_session", http.SendAsync(HttpMethod.Delete, AccountPaths.Characters + "/" + adas, token: token));
         }
+        await Refused(401, "invalid_credentials", http.PostAsync(AccountPaths.Delete, new { password = good + "x" }, ada));
+        await Refused(401, "invalid_credentials", http.PostAsync(AccountPaths.Keep, new { username = "ada", password = good + "x" }));
+        await Refused(401, "invalid_session", http.PostAsync(AccountPaths.Delete, new { password = good }, "x"));
+        await Refused(400, "invalid_request", http.PostAsync(AccountPaths.Delete, new { }, ada));
         await Refused(400, "invalid_password", http.PostAsync(AccountPaths.Password, new { current = good, @new = "short" }, ada));
         await Refused(400, "same_password", http.PostAsync(AccountPaths.Password, new { current = good, @new = good }, ada));
         await Refused(401, "invalid_credentials", http.PostAsync(AccountPaths.Password, new { current = good + "x", @new = good + "y" }, ada));
@@ -257,5 +261,22 @@ public class AccountEndpointTests
         (await http.SendAsync(HttpMethod.Get, AccountPaths.Characters, token: body.GetProperty("token").GetString())).Status.ShouldBe(200);
         (await http.PostAsync(AccountPaths.Login, new { username = "ada", password = ServiceRig.Password })).Status.ShouldBe(401);
         (await http.PostAsync(AccountPaths.Login, new { username = "ada", password = "a brand new one" })).Status.ShouldBe(200);
+    }
+
+    [Fact]
+    public async Task Deleting_answers_with_the_time_left_and_a_sign_in_then_says_so_without_a_retry()
+    {
+        var (rig, http, _) = await StartAsync();
+        await using var _1 = rig;
+        using var _2 = http;
+        var token = await http.RegisterAsync("ada");
+        var (status, body, _) = await http.PostAsync(AccountPaths.Delete, new { password = ServiceRig.Password }, token);
+        (status, body.GetProperty("erased_in").GetInt64()).ShouldBe((200, 14 * 86_400));
+        var (refused, error, response) = await http.PostAsync(AccountPaths.Login, new { username = "ada", password = ServiceRig.Password });
+        (refused, error.GetProperty("error").GetString(), error.GetProperty("erased_in").GetInt64()).ShouldBe((409, "account_deleting", 14 * 86_400));
+        response.Headers.RetryAfter.ShouldBeNull("waiting does not help");
+        var (kept, session, _) = await http.PostAsync(AccountPaths.Keep, new { username = "ada", password = ServiceRig.Password });
+        kept.ShouldBe(200);
+        (await http.SendAsync(HttpMethod.Get, AccountPaths.Characters, token: session.GetProperty("token").GetString())).Status.ShouldBe(200);
     }
 }

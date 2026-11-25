@@ -113,6 +113,10 @@ public sealed class UiRuns
         var passwords = accounts.PasswordScreen;
         Check(passwords.Current.Secret && passwords.New.Secret && passwords.Repeat.Secret && passwords.Change.IsVisibleInTree(), "the password screen hides what is typed and shows its buttons");
         await LayoutMatrixAsync("password screen");
+        accounts.ShowSamples(Game.Client.Core.Accounts.AccountScreen.DeleteAccount, LongName);
+        await FramesAsync(3);
+        Check(accounts.DeletionScreen.Password.Secret && accounts.DeletionScreen.Confirm.IsVisibleInTree(), "the deletion screen hides what is typed and shows its buttons");
+        await LayoutMatrixAsync("deletion screen");
         accounts.ClearSamples();
         accounts.ShowCreationSamples(LongName);
         await FramesAsync(3);
@@ -122,7 +126,7 @@ public sealed class UiRuns
         await LayoutMatrixAsync("character creation");
         accounts.ClearSamples();
         await FramesAsync(3);
-        Print("accounts: the sign-in, character-select, password and creation screens fit every screen shape and scale, every button and field at least the touch target");
+        Print("accounts: the sign-in, character-select, password, deletion and creation screens fit every screen shape and scale, every button and field at least the touch target");
     }
 
     /// <summary>The sound settings: the panel fits at every screen shape, the buttons change the mixer and the engine's buses, and the choice is stored.</summary>

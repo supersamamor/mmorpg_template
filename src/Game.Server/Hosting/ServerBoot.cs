@@ -19,7 +19,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
 {
     /// <summary>Usage text.</summary>
     public const string Usage =
-        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--save-interval <seconds>] [--save-shutdown-wait <seconds>] [--net-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
+        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--save-interval <seconds>] [--save-shutdown-wait <seconds>] [--account-erase-days <days>] [--net-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
 
     /// <summary>The environment name that enables development mode (plain ws:// on loopback, the dev login).</summary>
     public const string DevelopmentName = "Development";
@@ -44,6 +44,9 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
     /// <summary><c>--save-shutdown-wait</c>: how long a shutdown waits for the last saves (T-702).</summary>
     public int SaveShutdownWaitSeconds { get; init; } = 20;
 
+    /// <summary><c>--account-erase-days</c>: how long a deleted account waits before it is erased (T-703).</summary>
+    public int AccountEraseDays { get; init; } = 14;
+
     /// <summary>The <c>--net-</c> options and their values, in order, for <see cref="Game.Server.Net.GatewayOptions.Parse"/>.</summary>
     public IReadOnlyList<string> NetArgs { get; init; } = NoArgs;
 
@@ -63,6 +66,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         var migrate = false;
         var saveInterval = 60;
         var saveWait = 20;
+        var eraseDays = 14;
         var net = new List<string>();
         error = null;
         for (var i = 0; i < args.Length; i++)
@@ -82,6 +86,10 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                     case "--legacy-timer": legacyTimer = true; break;
                     case "--migrate": migrate = true; break;
                     case "--save-interval": saveInterval = Seconds(1, 3_600); break;
+                    case "--account-erase-days":
+                        eraseDays = int.TryParse(Value(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var days) && days <= 90
+                            ? days : throw new FormatException($"{arg} takes 0 to 90 days");
+                        break;
                     case "--save-shutdown-wait": saveWait = Seconds(0, 600); break;
                     case var _ when arg.StartsWith(Game.Server.Net.GatewayOptions.ArgPrefix, StringComparison.Ordinal):
                         net.Add(arg);
@@ -106,6 +114,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
             Migrate = migrate,
             SaveIntervalSeconds = saveInterval,
             SaveShutdownWaitSeconds = saveWait,
+            AccountEraseDays = eraseDays,
             NetArgs = net.Count == 0 ? NoArgs : net,
         };
     }

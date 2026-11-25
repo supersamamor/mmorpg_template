@@ -29,6 +29,12 @@ public enum AccountCall
 
     /// <summary>Change the password (T-710).</summary>
     ChangePassword,
+
+    /// <summary>Delete the account (T-703).</summary>
+    DeleteAccount,
+
+    /// <summary>Take the deletion back and sign in (T-703).</summary>
+    Keep,
 }
 
 /// <summary>One request to the account endpoints. It may hold a password or a token: never log one, and drop it once sent.</summary>
@@ -104,6 +110,12 @@ public static class AccountJson
         w.WriteString("new", request.New);
     });
 
+    /// <summary>The body of an account deletion (T-703).</summary>
+    public static byte[] Write(DeleteAccountRequest request) => Object(w => w.WriteString("password", request.Password));
+
+    /// <summary>Reads how many seconds are left until a deleted account is erased, or null.</summary>
+    public static long? ReadErasedIn(byte[] utf8) => Read(utf8, root => new AccountErrorAnswer(string.Empty, root.GetProperty("erased_in").GetInt64()))?.RetryAfterSeconds;
+
     /// <summary>The body of a character creation.</summary>
     public static byte[] Write(CreateCharacterRequest request) => Object(w =>
     {
@@ -132,7 +144,7 @@ public static class AccountJson
 
     /// <summary>Reads a refusal, or null.</summary>
     public static AccountErrorAnswer? ReadError(byte[] utf8) => Read(utf8, root =>
-        root.GetProperty("error").GetString() is { Length: > 0 } error ? new AccountErrorAnswer(error, root.TryGetProperty("retry_after", out var retry) ? retry.GetInt64() : 0) : null);
+        root.GetProperty("error").GetString() is { Length: > 0 } error ? new AccountErrorAnswer(error, root.TryGetProperty("retry_after", out var retry) || root.TryGetProperty("erased_in", out retry) ? retry.GetInt64() : 0) : null);
 
     private static CharacterRecord Character(JsonElement item) =>
         new CharacterRecord(Text(item, "id"), item.GetProperty("slot").GetInt32(), Text(item, "name"), Text(item, "job"), Looks(item));

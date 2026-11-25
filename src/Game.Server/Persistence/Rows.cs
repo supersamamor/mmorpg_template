@@ -1,6 +1,6 @@
 namespace Game.Server.Persistence;
 
-/// <summary>Table <c>accounts</c>: who may sign in. No personal data beyond the username (T-703 owns privacy).</summary>
+/// <summary>Table <c>accounts</c>: who may sign in. No personal data beyond the username (docs/STORE_COMPLIANCE.md lists everything that is stored).</summary>
 public sealed class AccountRow
 {
     /// <summary>Permanent id.</summary>
@@ -17,6 +17,25 @@ public sealed class AccountRow
 
     /// <summary>When its password was last set by its owner (UTC); a rehash does not count.</summary>
     public DateTime PasswordChangedAt { get; set; }
+
+    /// <summary>From when it may be erased (UTC; T-703), or null. While it is set nobody can sign in to the account; its owner can still take the request back.</summary>
+    public DateTime? EraseAfter { get; set; }
+}
+
+/// <summary>
+/// Table <c>account_deletions</c> (T-703): that an account was asked to be deleted, and when it was erased. It holds no personal data: the id of an account that is gone leads nowhere. It
+/// refers to no table, because it outlives what it is about; after a restored backup it says which accounts to erase again. A request that is taken back leaves no row.
+/// </summary>
+public sealed class AccountDeletionRow
+{
+    /// <summary>The account's id.</summary>
+    public Guid AccountId { get; set; }
+
+    /// <summary>When its owner asked (UTC).</summary>
+    public DateTime RequestedAt { get; set; }
+
+    /// <summary>When its data was erased (UTC), or null while it waits.</summary>
+    public DateTime? ErasedAt { get; set; }
 }
 
 /// <summary>Table <c>account_sessions</c>: one live sign-in. Logout and a password change delete the row; an expired one goes at the account's next sign-in.</summary>

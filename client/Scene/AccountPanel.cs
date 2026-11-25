@@ -47,6 +47,15 @@ public sealed class AccountPanel
     private readonly Button _newButton = new() { Text = UiText.NewCharacter };
     private readonly Button _passwordButton = new() { Text = UiText.ChangePassword };
     private readonly Button _signOutButton = new() { Text = UiText.SignOut };
+    private readonly Button _deleteAccountButton = new() { Text = UiText.DeleteAccount };
+    private readonly Button _keepButton = new() { Text = UiText.KeepAccount };
+
+    private readonly VBoxContainer _deleteBox = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+    private readonly Label _deleteHelp = Wrapped();
+    private readonly LineEdit _deletePassword = new() { PlaceholderText = UiText.DeleteAccountPassword, Secret = true, MaxLength = 128 };
+    private readonly HBoxContainer _deleteButtons = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+    private readonly Button _deleteBack = new() { Text = UiText.Back, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+    private readonly Button _deleteConfirm = new() { Text = UiText.DeleteAccount, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
 
     private readonly VBoxContainer _passwordBox = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly Label _passwordHelp = Wrapped();
@@ -99,6 +108,9 @@ public sealed class AccountPanel
         _signIn.AddChild(_signInButtons);
         _signInButtons.AddChild(_signInButton);
         _signInButtons.AddChild(_registerButton);
+        _signIn.AddChild(_keepButton);
+        _keepButton.Visible = false;
+        _keepButton.Pressed += () => Submit(_session.Accounts.Keep);
         _signIn.AddChild(_devButton);
         _devButton.Visible = _devLogin;
         _signInButton.Pressed += () => Submit(_session.Accounts.SignIn);
@@ -116,6 +128,7 @@ public sealed class AccountPanel
         _characters.AddChild(_newButton);
         _characters.AddChild(_passwordButton);
         _characters.AddChild(_signOutButton);
+        _characters.AddChild(_deleteAccountButton);
         _newButton.Pressed += () =>
         {
             _tap();
@@ -149,6 +162,29 @@ public sealed class AccountPanel
         };
         _changeButton.Pressed += SubmitPassword;
         _repeatPassword.TextSubmitted += _ => SubmitPassword();
+        _deleteAccountButton.Pressed += () =>
+        {
+            _tap();
+            if (_samples is null) _session.Accounts.OpenDeleteAccount();
+        };
+        _box.AddChild(_deleteBox);
+        _deleteBox.AddChild(_deleteHelp);
+        _deleteBox.AddChild(_deletePassword);
+        _deleteBox.AddChild(_deleteButtons);
+        _deleteButtons.AddChild(_deleteBack);
+        _deleteButtons.AddChild(_deleteConfirm);
+        _deleteHelp.Text = UiText.DeleteAccountHelp;
+        _deleteBack.Pressed += () =>
+        {
+            _tap();
+            ClearPasswords();
+            if (_samples is null) _session.Accounts.CloseDeleteAccount();
+        };
+        _deleteConfirm.Pressed += () =>
+        {
+            _tap();
+            if (_samples is null && _session.Accounts.DeleteAccount(_deletePassword.Text)) _deletePassword.Text = string.Empty; // sent: not kept, whatever comes of it
+        };
         foreach (var control in Controls()) interactive.Add(control);
     }
 
@@ -188,6 +224,12 @@ public sealed class AccountPanel
     /// <summary>The password screen's fields (current, new, repeat) and buttons (for the scripted run).</summary>
     public (LineEdit Current, LineEdit New, LineEdit Repeat, Button Back, Button Change) PasswordScreen => (_currentPassword, _newPassword, _repeatPassword, _passwordBack, _changeButton);
 
+    /// <summary>The button that opens the deletion screen, and the sign-in screen's that takes a deletion back (for the scripted run).</summary>
+    public (Button Open, Button Keep) DeletionButtons => (_deleteAccountButton, _keepButton);
+
+    /// <summary>The deletion screen's field and buttons (for the scripted run).</summary>
+    public (LineEdit Password, Button Back, Button Confirm) DeletionScreen => (_deletePassword, _deleteBack, _deleteConfirm);
+
     /// <summary>The character rows now shown: what each says and its buttons (for the scripted run).</summary>
     public IReadOnlyList<(string Text, Button Play, Button Delete)> Rows => _rowList.Where(r => r.Box.Visible).Select(r => (r.Label.Text, r.Play, r.Delete)).ToList();
 
@@ -222,9 +264,9 @@ public sealed class AccountPanel
         _scroll.CustomMinimumSize = new Vector2(width, safe.Size.Y - 2 * margin);
         var inner = width - dp(12); // beside the scroll bar
         var gap = Mathf.RoundToInt(dp(8));
-        foreach (var box in new BoxContainer[] { _box, _signIn, _signInButtons, _characters, _rows, _passwordBox, _passwordButtons }) box.AddThemeConstantOverride("separation", gap);
+        foreach (var box in new BoxContainer[] { _box, _signIn, _signInButtons, _characters, _rows, _passwordBox, _passwordButtons, _deleteBox, _deleteButtons }) box.AddThemeConstantOverride("separation", gap);
         _box.CustomMinimumSize = new Vector2(inner, 0);
-        foreach (var label in new[] { _title, _notice, _accountNotice, _passwordHelp }) label.CustomMinimumSize = new Vector2(inner, 0);
+        foreach (var label in new[] { _title, _notice, _accountNotice, _passwordHelp, _deleteHelp }) label.CustomMinimumSize = new Vector2(inner, 0);
         foreach (var control in Controls())
             control.CustomMinimumSize = new Vector2(_target, _target);
         foreach (var row in _rowList) Size(row);
@@ -254,17 +296,20 @@ public sealed class AccountPanel
         _shownConnection = connection.Version;
         var screen = _samples is null ? flow.Screen : _sampleScreen;
         var characters = _samples ?? flow.Characters;
-        _title.Text = screen == AccountScreen.SignIn ? UiText.SignInTitle : screen == AccountScreen.Password ? UiText.PasswordTitle : UiText.CharactersTitle;
-        Set(_notice, screen == AccountScreen.Password ? string.Empty : UiText.Notice(connection.Notice)); // how the last game ended is said on the screens around it
+        _title.Text = screen == AccountScreen.SignIn ? UiText.SignInTitle : screen == AccountScreen.Password ? UiText.PasswordTitle : screen == AccountScreen.DeleteAccount ? UiText.DeleteAccount : UiText.CharactersTitle;
+        Set(_notice, screen is AccountScreen.Password or AccountScreen.DeleteAccount ? string.Empty : UiText.Notice(connection.Notice)); // how the last game ended is said on the screens around it
         if (_samples is null)
             Set(_accountNotice, flow.Busy ? UiText.AccountBusy
-                : screen == AccountScreen.Password && flow.Notice == AccountNotice.Refused && flow.Error == AccountErrors.InvalidCredentials ? UiText.WrongCurrentPassword
+                : screen is (AccountScreen.Password or AccountScreen.DeleteAccount) && flow.Notice == AccountNotice.Refused && flow.Error == AccountErrors.InvalidCredentials ? UiText.WrongCurrentPassword
                 : UiText.Account(flow.Notice, flow.Error, flow.RetryAfterSeconds));
         _signIn.Visible = screen == AccountScreen.SignIn;
         _characters.Visible = screen == AccountScreen.Characters;
         _passwordBox.Visible = screen == AccountScreen.Password;
-        if (screen != AccountScreen.Password) ClearPasswords(); // changed, or the session ended: none is kept
-        foreach (var button in new[] { _signInButton, _registerButton, _newButton, _passwordButton, _signOutButton, _passwordBack, _changeButton }) button.Disabled = flow.Busy;
+        _deleteBox.Visible = screen == AccountScreen.DeleteAccount;
+        _deleteConfirm.Text = flow.ConfirmingDeletion || _samples is not null ? UiText.ConfirmDeleteAccount : UiText.DeleteAccount;
+        _keepButton.Visible = flow.KeepOffered || _samples is not null;
+        if (screen is not (AccountScreen.Password or AccountScreen.DeleteAccount)) ClearPasswords(); // changed, or the session ended: none is kept
+        foreach (var button in new[] { _signInButton, _registerButton, _newButton, _passwordButton, _signOutButton, _passwordBack, _changeButton, _deleteAccountButton, _keepButton, _deleteBack, _deleteConfirm }) button.Disabled = flow.Busy;
 
         while (_rowList.Count < characters.Count) AddRow();
         for (var i = 0; i < _rowList.Count; i++)
@@ -329,11 +374,12 @@ public sealed class AccountPanel
         if (_session.Accounts.ChangePassword(current, next, repeat)) _currentPassword.Text = string.Empty;
     }
 
-    private void ClearPasswords() => _currentPassword.Text = _newPassword.Text = _repeatPassword.Text = string.Empty;
+    private void ClearPasswords() => _currentPassword.Text = _newPassword.Text = _repeatPassword.Text = _deletePassword.Text = string.Empty;
 
     private Control[] Controls() =>
     [
         _username, _password, _signInButton, _registerButton, _devButton, _newButton, _passwordButton, _signOutButton, _currentPassword, _newPassword, _repeatPassword, _passwordBack, _changeButton,
+        _deleteAccountButton, _keepButton, _deletePassword, _deleteBack, _deleteConfirm,
     ];
 
     private void AddRow()

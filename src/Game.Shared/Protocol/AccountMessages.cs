@@ -20,6 +20,12 @@ namespace Game.Shared.Protocol
         /// <summary><c>POST</c> a <see cref="ChangePasswordRequest"/> with the session token: changes the password and ends every session of the account (T-710). 200 with the caller's new <see cref="SessionAnswer"/>.</summary>
         public const string Password = Root + "/password";
 
+        /// <summary><c>POST</c> a <see cref="DeleteAccountRequest"/> with the session token: the account will be erased (T-703). 200 with <c>erased_in</c> (seconds); every session has ended.</summary>
+        public const string Delete = Root + "/delete";
+
+        /// <summary><c>POST</c> a <see cref="CredentialsRequest"/>: takes a deletion back and signs in (T-703). 200 with a <see cref="SessionAnswer"/>.</summary>
+        public const string Keep = Root + "/keep";
+
         /// <summary><c>GET</c>: 200 with a <see cref="CharactersAnswer"/>. <c>POST</c> a <see cref="CreateCharacterRequest"/>: 201 with a <see cref="CharacterRecord"/>. <c>DELETE</c> <c>/{id}</c>: 204.</summary>
         public const string Characters = Root + "/characters";
 
@@ -43,6 +49,14 @@ namespace Game.Shared.Protocol
     {
         /// <summary>No password in a log line or an exception.</summary>
         public override string ToString() => "ChangePasswordRequest { *** }";
+    }
+
+    /// <summary>The body of <see cref="AccountPaths.Delete"/>: <c>{"password":"..."}</c>. Never log one.</summary>
+    /// <param name="Password">The account's password.</param>
+    public sealed record DeleteAccountRequest(string Password)
+    {
+        /// <summary>No password in a log line or an exception.</summary>
+        public override string ToString() => "DeleteAccountRequest { *** }";
     }
 
     /// <summary>A new session: <c>{"token":"...","expires_in":86400}</c>. Never log one.</summary>
