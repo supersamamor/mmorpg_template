@@ -66,6 +66,9 @@ public sealed class MemoryAccountStore : IAccountStore
     /// <summary>When set, every call fails: a database that is away.</summary>
     public bool Away { get; set; }
 
+    /// <summary>Runs once, right before the next look-up of an account by its id: what happens between two reads of one request.</summary>
+    public Func<Task>? BeforeFindById { get; set; }
+
     /// <summary>Calls started.</summary>
     public int Calls;
 
@@ -92,14 +95,19 @@ public sealed class MemoryAccountStore : IAccountStore
         await Enter(cancellation);
         lock (_lock)
             foreach (var (id, a) in _accounts)
-                if (a.Username == username) return new AccountAuth(id, a.Hash);
+                if (a.Username == username) return new AccountAuth(id, a.Hash, EraseAfter(id));
         return null;
     }
 
     public async Task<AccountAuth?> FindAccountAsync(Guid id, CancellationToken cancellation)
     {
+        if (BeforeFindById is { } before)
+        {
+            BeforeFindById = null;
+            await before();
+        }
         await Enter(cancellation);
-        lock (_lock) return _accounts.TryGetValue(id, out var a) ? new AccountAuth(id, a.Hash) : null;
+        lock (_lock) return _accounts.TryGetValue(id, out var a) ? new AccountAuth(id, a.Hash, EraseAfter(id)) : null;
     }
 
     public async Task<bool> TryCreateAccountAsync(Guid id, string username, string passwordHash, DateTime now, CancellationToken cancellation)
@@ -118,7 +126,7 @@ public sealed class MemoryAccountStore : IAccountStore
         await Enter(cancellation);
         lock (_lock)
         {
-            if (!_accounts.TryGetValue(account, out var a) || a.Hash != expectedHash) return null;
+            if (!_accounts.TryGetValue(account, out var a) || a.Hash != expectedHash || EraseAfter(account) is not null) return null;
             if (rehash is not null) _accounts[account] = (a.Username, rehash);
             _sessions.Add(Convert.ToHexString(tokenHash), (account, now, expires));
             foreach (var key in _sessions.Where(s => s.Value.Account == account && s.Value.Expires <= now).Select(s => s.Key).ToList()) _sessions.Remove(key);
@@ -154,6 +162,60 @@ public sealed class MemoryAccountStore : IAccountStore
         }
     }
 
+    private readonly Dictionary<Guid, DateTime> _eraseAfter = new();
+
+    /// <summary>Deletions recorded: when asked, and when erased.</summary>
+    public Dictionary<Guid, (DateTime Asked, DateTime? Erased)> Deletions { get; } = new();
+
+    public int AccountCount
+    {
+        get { lock (_lock) return _accounts.Count; }
+    }
+
+    private DateTime? EraseAfter(Guid account) => _eraseAfter.TryGetValue(account, out var at) ? at : null;
+
+    public async Task<IReadOnlyList<byte[]>?> TryRequestErasureAsync(Guid account, string expectedHash, DateTime now, DateTime eraseAfter, CancellationToken cancellation)
+    {
+        await Enter(cancellation);
+        lock (_lock)
+        {
+            if (!_accounts.TryGetValue(account, out var a) || a.Hash != expectedHash) return null;
+            if (_eraseAfter.TryAdd(account, eraseAfter)) Deletions.Add(account, (now, null));
+            var ended = _sessions.Where(s => s.Value.Account == account).Select(s => s.Key).ToList();
+            foreach (var key in ended) _sessions.Remove(key);
+            return ended.Select(Convert.FromHexString).ToList();
+        }
+    }
+
+    public async Task<bool> TryCancelErasureAsync(Guid account, string expectedHash, CancellationToken cancellation)
+    {
+        await Enter(cancellation);
+        lock (_lock)
+            return _accounts.TryGetValue(account, out var a) && a.Hash == expectedHash && _eraseAfter.Remove(account) && Deletions.Remove(account);
+    }
+
+    public async Task<IReadOnlyList<Guid>> ListErasableAsync(DateTime now, int limit, CancellationToken cancellation)
+    {
+        await Enter(cancellation);
+        lock (_lock) return _eraseAfter.Where(e => e.Value <= now).OrderBy(e => e.Value).Take(limit).Select(e => e.Key).ToList();
+    }
+
+    public async Task<EraseOutcome> EraseAsync(Guid account, DateTime now, CancellationToken cancellation)
+    {
+        await Enter(cancellation);
+        lock (_lock)
+        {
+            if (EraseAfter(account) is not { } due || due > now) return EraseOutcome.Nothing;
+            var characters = _characters.Where(c => c.Value.Account == account).Select(c => c.Key).ToList();
+            if (characters.Any(HeldElsewhere.Contains)) return EraseOutcome.InUse;
+            foreach (var id in characters) _characters.Remove(id);
+            _accounts.Remove(account);
+            _eraseAfter.Remove(account);
+            Deletions[account] = (Deletions[account].Asked, now);
+            return EraseOutcome.Erased;
+        }
+    }
+
     public async Task<IReadOnlyList<CharacterEntry>> ListCharactersAsync(Guid account, CancellationToken cancellation)
     {
         await Enter(cancellation);
@@ -175,6 +237,7 @@ public sealed class MemoryAccountStore : IAccountStore
         await Enter(cancellation);
         lock (_lock)
         {
+            if (!_accounts.ContainsKey(account) || EraseAfter(account) is not null) return (CreateCharacterOutcome.AccountGone, null);
             var used = _characters.Values.Where(c => c.Account == account && !c.Deleted).Select(c => c.Slot).ToList();
             var slot = Enumerable.Range(0, maxSlots).Where(s => !used.Contains(s)).Cast<int?>().FirstOrDefault();
             if (slot is null) return (CreateCharacterOutcome.NoFreeSlot, null);

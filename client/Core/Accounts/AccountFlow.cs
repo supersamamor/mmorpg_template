@@ -20,6 +20,9 @@ public enum AccountScreen
 
     /// <summary>Changing the password (T-710).</summary>
     Password,
+
+    /// <summary>Deleting the account (T-703).</summary>
+    DeleteAccount,
 }
 
 /// <summary>What the line under the screen's title says. The UI picks the text (<see cref="UiText.Account"/>).</summary>
@@ -42,6 +45,9 @@ public enum AccountNotice
 
     /// <summary>The password is changed, and every other device is signed out (T-710).</summary>
     PasswordChanged,
+
+    /// <summary>The account will be erased in <see cref="AccountFlow.RetryAfterSeconds"/> seconds (T-703).</summary>
+    AccountDeleted,
 }
 
 /// <summary>
@@ -81,7 +87,13 @@ public sealed class AccountFlow
     /// <summary>The "Account errors" term of the last refusal, for <see cref="AccountNotice.Refused"/>.</summary>
     public string Error { get; private set; } = string.Empty;
 
-    /// <summary>Seconds the server asked to wait, or 0.</summary>
+    /// <summary>True when the sign-in screen offers to take a deletion back (T-703): the server said the account waits to be erased.</summary>
+    public bool KeepOffered { get; private set; }
+
+    /// <summary>True after the first press on the deletion's button: the next one sends it.</summary>
+    public bool ConfirmingDeletion { get; private set; }
+
+    /// <summary>Seconds the server asked to wait, or until a deleted account is erased, or 0.</summary>
     public long RetryAfterSeconds { get; private set; }
 
     /// <summary>True while a request is on its way: the screen takes no other.</summary>
@@ -182,6 +194,39 @@ public sealed class AccountFlow
         return true;
     }
 
+    /// <summary>Opens the screen that deletes the account.</summary>
+    public void OpenDeleteAccount()
+    {
+        if (Busy || Screen != AccountScreen.Characters) return;
+        Screen = AccountScreen.DeleteAccount;
+        ClearNotice();
+    }
+
+    /// <summary>Back to the character list; nothing is deleted.</summary>
+    public void CloseDeleteAccount()
+    {
+        if (Busy || Screen != AccountScreen.DeleteAccount) return;
+        Screen = AccountScreen.Characters;
+        ClearNotice();
+    }
+
+    /// <summary>First press: asks again. Second press: asks the server to delete the account (T-703). False while nothing was sent.</summary>
+    public bool DeleteAccount(string password)
+    {
+        if (Busy || _sessionToken is null || Screen != AccountScreen.DeleteAccount) return false;
+        if (!ConfirmingDeletion)
+        {
+            ClearNotice();
+            ConfirmingDeletion = true;
+            return false;
+        }
+        Send(AccountCall.DeleteAccount, "POST", AccountPaths.Delete, AccountJson.Write(new DeleteAccountRequest(password)), _sessionToken);
+        return true;
+    }
+
+    /// <summary>Takes a deletion back and signs in (T-703).</summary>
+    public void Keep(string username, string password) => Send(AccountCall.Keep, "POST", AccountPaths.Keep, AccountJson.Write(new CredentialsRequest(username, password)), null);
+
     /// <summary>Creates a character with the chosen look (null: the server's defaults).</summary>
     public void Create(string name, AppearanceChoice? appearance = null)
     {
@@ -226,6 +271,7 @@ public sealed class AccountFlow
         {
             case AccountCall.Register:
             case AccountCall.SignIn:
+            case AccountCall.Keep:
                 if (AccountJson.ReadSession(response.Body) is { } session)
                 {
                     _sessionToken = session.Token;
@@ -244,6 +290,13 @@ public sealed class AccountFlow
                     Screen = AccountScreen.Characters;
                 }
                 else Notice = AccountNotice.Unreachable;
+                break;
+            case AccountCall.DeleteAccount:
+                Forget();
+                Creator?.Reset();
+                Notice = AccountNotice.AccountDeleted;
+                RetryAfterSeconds = AccountJson.ReadErasedIn(response.Body) ?? 0;
+                KeepOffered = true;
                 break;
             case AccountCall.ChangePassword:
                 if (AccountJson.ReadSession(response.Body) is { } renewed)
@@ -279,6 +332,7 @@ public sealed class AccountFlow
         }
         Notice = AccountNotice.Refused;
         Error = error.Error;
+        KeepOffered = error.Error == AccountErrors.AccountDeleting || _pending == AccountCall.Keep; // a mistyped password does not take the offer away
         RetryAfterSeconds = error.RetryAfterSeconds;
     }
 
@@ -298,6 +352,8 @@ public sealed class AccountFlow
         Error = string.Empty;
         RetryAfterSeconds = 0;
         Deleting = null;
+        KeepOffered = false;
+        ConfirmingDeletion = false;
     }
 
     private void Send(AccountCall call, string method, string path, byte[]? body, string? token)

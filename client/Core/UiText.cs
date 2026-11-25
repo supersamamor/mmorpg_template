@@ -158,6 +158,30 @@ public static class UiText
     /// <summary>The refusal of a password change whose current password is wrong.</summary>
     public const string WrongCurrentPassword = "The current password is wrong.";
 
+    /// <summary>The button that opens the deletion screen, and its title (T-703).</summary>
+    public const string DeleteAccount = "Delete account";
+
+    /// <summary>What deleting the account means.</summary>
+    public const string DeleteAccountHelp = "This deletes your account and all your characters, with everything they own and have done. You are signed out on every device. The server says how long you have to change your mind; after that nothing can be brought back.";
+
+    /// <summary>The hint of the password's field on the deletion screen.</summary>
+    public const string DeleteAccountPassword = "Your password";
+
+    /// <summary>The deletion's button, once pressed.</summary>
+    public const string ConfirmDeleteAccount = "Really delete everything?";
+
+    /// <summary>The sign-in screen's button that takes a deletion back.</summary>
+    public const string KeepAccount = "Keep my account";
+
+    /// <summary>How long until a deleted account is erased.</summary>
+    public static string EraseTime(long seconds)
+    {
+        if (seconds <= 0) return "soon";
+        var days = (seconds + 86_399) / 86_400;
+        var hours = (seconds + 3_599) / 3_600;
+        return seconds > 86_400 ? "in " + days.ToString(CultureInfo.InvariantCulture) + " days" : hours == 1 ? "in an hour" : "in " + hours.ToString(CultureInfo.InvariantCulture) + " hours";
+    }
+
     /// <summary>The line while the server is asked.</summary>
     public const string AccountBusy = "One moment...";
 
@@ -177,6 +201,7 @@ public static class UiText
             case AccountNotice.SessionEnded: return "Your session has ended. Please sign in again.";
             case AccountNotice.PasswordsDiffer: return "The two new passwords are not the same.";
             case AccountNotice.PasswordChanged: return "Your password is changed.";
+            case AccountNotice.AccountDeleted: return "Your account will be erased " + EraseTime(retryAfterSeconds) + ". Until then you can keep it.";
             case AccountNotice.Refused: break;
             default: return string.Empty;
         }
@@ -185,6 +210,7 @@ public static class UiText
             case AccountErrors.InvalidUsername: return "A username has 3 to 24 letters, digits, dots, dashes or underscores, and starts with a letter or digit.";
             case AccountErrors.InvalidPassword: return "A password has 10 to 128 characters.";
             case AccountErrors.SamePassword: return "The new password is the same as the old one.";
+            case AccountErrors.AccountDeleting: return "This account will be erased " + EraseTime(retryAfterSeconds) + ". You can still keep it.";
             case AccountErrors.UsernameTaken: return "That username is taken.";
             case AccountErrors.InvalidSession: return Account(AccountNotice.SessionEnded, error, 0);
             case AccountErrors.InvalidCredentials: return "Wrong username or password.";

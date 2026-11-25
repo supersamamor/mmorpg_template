@@ -308,33 +308,6 @@ public class AccountServiceTests
         rig.Clock.Advance(5000);
         (await rig.Service.ResolveAsync(new string('A', 43), Guid.NewGuid().ToString("D"), "a", default)).Error.ShouldBe(AccountErrors.InvalidSession);
     }
-}
-
-/// <summary>The one test here that measures time: never in parallel with others.</summary>
-[Collection(TimingCollection.Name)]
-public class AccountTimingTests
-{
-    [Fact]
-    public async Task The_dummy_of_the_real_hasher_takes_as_long_as_a_real_check()
-    {
-        var rig = new ServiceRig(new Argon2idHasher(), new AccountLimits { AccountFreeFailures = 1000, AddressFreeFailures = 1000 });
-        await rig.RegisterAsync();
-        async Task<double> MedianAsync(string user)
-        {
-            var times = new List<double>();
-            for (var i = 0; i < 15; i++)
-            {
-                var start = System.Diagnostics.Stopwatch.GetTimestamp();
-                await rig.LoginAsync(user, "a wrong password");
-                times.Add(System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds);
-            }
-            return times.Order().ElementAt(7);
-        }
-        await MedianAsync("ada"); // warm up
-        var known = await MedianAsync("ada");
-        var unknown = await MedianAsync("nobody");
-        (unknown / known).ShouldBeInRange(0.4, 2.5, $"known {known:0.0} ms, unknown {unknown:0.0} ms"); // wide: other tests share the machine. Without the dummy it is near 0.
-    }
 
     // ---- T-710: password change, ended sessions, a character another server holds ----
 
@@ -411,6 +384,16 @@ public class AccountTimingTests
     }
 
     [Fact]
+    public async Task A_change_that_lost_to_another_one_learns_its_session_is_gone_and_costs_no_try()
+    {
+        var rig = new ServiceRig(limits: new AccountLimits { AddressFreeFailures = 0 });
+        var token = await rig.RegisterAsync();
+        rig.Memory.BeforeFindById = async () => (await rig.Service.ChangePasswordAsync(token, ServiceRig.Password, NewPassword, "198.51.100.1", default)).Ok.ShouldBeTrue();
+        (await rig.Service.ChangePasswordAsync(token, ServiceRig.Password, "the other new one", "203.0.113.9", default)).Error.ShouldBe(AccountErrors.InvalidSession);
+        (await rig.LoginAsync("ada", NewPassword, "203.0.113.9")).Ok.ShouldBeTrue("no failure was counted for its address");
+    }
+
+    [Fact]
     public async Task Signing_out_and_being_pushed_out_name_the_session_and_expiry_names_none()
     {
         var rig = new ServiceRig(limits: new AccountLimits { MaxSessions = 2 });
@@ -445,5 +428,32 @@ public class AccountTimingTests
         (await rig.Service.DeleteAsync(bob, id, default)).Error.ShouldBe(AccountErrors.UnknownCharacter);
         rig.Memory.HeldElsewhere.Clear();
         (await rig.Service.DeleteAsync(ada, id, default)).Ok.ShouldBeTrue();
+    }
+}
+
+/// <summary>The one test here that measures time: never in parallel with others.</summary>
+[Collection(TimingCollection.Name)]
+public class AccountTimingTests
+{
+    [Fact]
+    public async Task The_dummy_of_the_real_hasher_takes_as_long_as_a_real_check()
+    {
+        var rig = new ServiceRig(new Argon2idHasher(), new AccountLimits { AccountFreeFailures = 1000, AddressFreeFailures = 1000 });
+        await rig.RegisterAsync();
+        async Task<double> MedianAsync(string user)
+        {
+            var times = new List<double>();
+            for (var i = 0; i < 15; i++)
+            {
+                var start = System.Diagnostics.Stopwatch.GetTimestamp();
+                await rig.LoginAsync(user, "a wrong password");
+                times.Add(System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+            }
+            return times.Order().ElementAt(7);
+        }
+        await MedianAsync("ada"); // warm up
+        var known = await MedianAsync("ada");
+        var unknown = await MedianAsync("nobody");
+        (unknown / known).ShouldBeInRange(0.4, 2.5, $"known {known:0.0} ms, unknown {unknown:0.0} ms"); // wide: other tests share the machine. Without the dummy it is near 0.
     }
 }

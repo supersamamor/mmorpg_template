@@ -22,6 +22,25 @@ namespace Game.Server.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Game.Server.Persistence.AccountDeletionRow", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTime?>("ErasedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("erased_at");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("requested_at");
+
+                    b.HasKey("AccountId");
+
+                    b.ToTable("account_deletions", (string)null);
+                });
+
             modelBuilder.Entity("Game.Server.Persistence.AccountRow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -31,6 +50,10 @@ namespace Game.Server.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("EraseAfter")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("erase_after");
 
                     b.Property<DateTime>("PasswordChangedAt")
                         .HasColumnType("timestamp with time zone")
@@ -49,6 +72,10 @@ namespace Game.Server.Persistence.Migrations
                         .HasColumnName("username");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EraseAfter")
+                        .HasDatabaseName("ix_accounts_erase_after")
+                        .HasFilter("erase_after IS NOT NULL");
 
                     b.HasIndex("Username")
                         .IsUnique()

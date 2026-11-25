@@ -491,4 +491,17 @@ public class GatewayAccountTests
         s.Rig.World.Instances.Sum(i => i.Players.Count).ShouldBe(whileHeld ? 1 : 0);
         if (held is not null) held.Closed.ShouldBeFalse();
     }
+
+    [Fact]
+    public async Task Deleting_the_account_ends_its_game_and_it_cannot_be_entered_again()
+    {
+        await using var s = await Setup.StartAsync();
+        var client = await s.JoinAsync(s.Lyra);
+        var token = client.Token;
+        (await s.Rig.Accounts!.DeleteAccountAsync(s.Ada, ServiceRig.Password, "a", default)).Ok.ShouldBeTrue();
+        (await client.WaitForByeAsync()).ShouldBe(ByeReasons.SessionEnded);
+        await GoneAsync(s, client.Id);
+        (await (await s.Rig.ResumeAsync(token)).WaitForByeAsync()).ShouldBe(ByeReasons.ResumeFailed);
+        (await (await s.Rig.PlayAsync(s.Ada, s.Lyra)).WaitForByeAsync()).ShouldBe(ByeReasons.LoginRefused);
+    }
 }

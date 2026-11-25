@@ -13,11 +13,11 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
 {
     /// <inheritdoc />
     public Task<AccountAuth?> FindAccountAsync(string username, CancellationToken cancellation) => RunAsync(db =>
-        db.Accounts.Where(a => a.Username == username).Select(a => new AccountAuth(a.Id, a.PasswordHash)).SingleOrDefaultAsync(cancellation));
+        db.Accounts.Where(a => a.Username == username).Select(a => new AccountAuth(a.Id, a.PasswordHash, a.EraseAfter)).SingleOrDefaultAsync(cancellation));
 
     /// <inheritdoc />
     public Task<AccountAuth?> FindAccountAsync(Guid id, CancellationToken cancellation) => RunAsync(db =>
-        db.Accounts.Where(a => a.Id == id).Select(a => new AccountAuth(a.Id, a.PasswordHash)).SingleOrDefaultAsync(cancellation));
+        db.Accounts.Where(a => a.Id == id).Select(a => new AccountAuth(a.Id, a.PasswordHash, a.EraseAfter)).SingleOrDefaultAsync(cancellation));
 
     /// <inheritdoc />
     public Task<bool> TryCreateAccountAsync(Guid id, string username, string passwordHash, DateTime now, CancellationToken cancellation) => RunAsync(async db =>
@@ -33,7 +33,7 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
         await using var transaction = await db.Database.BeginTransactionAsync(cancellation).ConfigureAwait(false);
         // Locking the account makes this wait for a password change in progress, and a password change wait for this: it then ends this session too.
         var row = await LockAccountAsync(db, account, cancellation).ConfigureAwait(false);
-        if (row is null || row.PasswordHash != expectedHash) return null;
+        if (row is null || row.PasswordHash != expectedHash || row.EraseAfter is not null) return null; // T-703: nobody signs in to an account that waits to be erased
         if (rehash is not null) row.PasswordHash = rehash;
         db.Sessions.Add(new SessionRow { TokenHash = tokenHash, AccountId = account, CreatedAt = now, ExpiresAt = expires });
         await db.SaveChangesAsync(cancellation).ConfigureAwait(false);
@@ -70,6 +70,64 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
     });
 
     /// <inheritdoc />
+    public Task<IReadOnlyList<byte[]>?> TryRequestErasureAsync(Guid account, string expectedHash, DateTime now, DateTime eraseAfter, CancellationToken cancellation) =>
+        RunAsync<IReadOnlyList<byte[]>?>(async db =>
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellation).ConfigureAwait(false);
+        var row = await LockAccountAsync(db, account, cancellation).ConfigureAwait(false);
+        if (row is null || row.PasswordHash != expectedHash) return null;
+        if (row.EraseAfter is null)
+        {
+            row.EraseAfter = eraseAfter;
+            db.AccountDeletions.Add(new AccountDeletionRow { AccountId = account, RequestedAt = now });
+            await db.SaveChangesAsync(cancellation).ConfigureAwait(false);
+        }
+        var ended = await db.Sessions.Where(s => s.AccountId == account).Select(s => s.TokenHash).ToListAsync(cancellation).ConfigureAwait(false);
+        await db.Sessions.Where(s => s.AccountId == account).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellation).ConfigureAwait(false);
+        return ended;
+    });
+
+    /// <inheritdoc />
+    public Task<bool> TryCancelErasureAsync(Guid account, string expectedHash, CancellationToken cancellation) => RunAsync(async db =>
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellation).ConfigureAwait(false);
+        var row = await LockAccountAsync(db, account, cancellation).ConfigureAwait(false); // waits for an erasure in progress: the account is gone then
+        if (row is null || row.PasswordHash != expectedHash || row.EraseAfter is null) return false;
+        row.EraseAfter = null;
+        await db.SaveChangesAsync(cancellation).ConfigureAwait(false);
+        await db.AccountDeletions.Where(d => d.AccountId == account).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellation).ConfigureAwait(false);
+        return true;
+    });
+
+    /// <inheritdoc />
+    public Task<IReadOnlyList<Guid>> ListErasableAsync(DateTime now, int limit, CancellationToken cancellation) => RunAsync<IReadOnlyList<Guid>>(async db =>
+        await db.Accounts.Where(a => a.EraseAfter <= now).OrderBy(a => a.EraseAfter).Take(limit).Select(a => a.Id).ToListAsync(cancellation).ConfigureAwait(false));
+
+    /// <inheritdoc />
+    public Task<EraseOutcome> EraseAsync(Guid account, DateTime now, CancellationToken cancellation) => RunAsync(async db =>
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellation).ConfigureAwait(false);
+        // The account first, as everything here that takes several locks does; another server that is at it already is left to it.
+        var row = await db.Accounts.FromSql($"SELECT * FROM accounts WHERE id = {account} AND erase_after <= {now} FOR UPDATE SKIP LOCKED").SingleOrDefaultAsync(cancellation).ConfigureAwait(false);
+        if (row is null) return EraseOutcome.Nothing;
+        // Then its characters in the order a save locks them. Entering the world takes the same lock first, so from here nobody claims one, and a save that waits finds it gone.
+        var characters = await db.Characters.FromSql($"SELECT * FROM characters WHERE account_id = {account} ORDER BY id FOR UPDATE").Select(c => c.Id).ToListAsync(cancellation).ConfigureAwait(false);
+        var holders = await db.CharacterStates.Where(s => characters.Contains(s.CharacterId) && s.HeldBy != null).Select(s => s.HeldBy!.Value).Distinct().ToListAsync(cancellation).ConfigureAwait(false);
+        foreach (var run in holders)
+            if (await PostgresCharacterStore.IsAliveAsync(db, run, cancellation).ConfigureAwait(false)) return EraseOutcome.InUse;
+        await db.Items.Where(i => characters.Contains(i.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        await db.CharacterStates.Where(s => characters.Contains(s.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        await db.Characters.Where(c => c.AccountId == account).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        await db.Sessions.Where(s => s.AccountId == account).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        await db.Accounts.Where(a => a.Id == account).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        await db.AccountDeletions.Where(d => d.AccountId == account).ExecuteUpdateAsync(s => s.SetProperty(d => d.ErasedAt, now), cancellation).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellation).ConfigureAwait(false);
+        return EraseOutcome.Erased;
+    });
+
+    /// <inheritdoc />
     public Task<IReadOnlyList<CharacterEntry>> ListCharactersAsync(Guid account, CancellationToken cancellation) => RunAsync<IReadOnlyList<CharacterEntry>>(async db =>
         await db.Characters.Where(c => c.AccountId == account && c.DeletedAt == null).OrderBy(c => c.Slot)
             .Select(c => new CharacterEntry(c.Id, c.Slot, c.Name, c.JobId, new AppearanceChoice(c.Gender, c.SkinToneId, c.FaceId, c.HairstyleId, c.HairColorId)))
@@ -87,7 +145,7 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellation).ConfigureAwait(false);
         // One creation per account at a time, so two at once take two slots; the index on (account, slot) is the backstop.
-        await LockAccountAsync(db, account, cancellation).ConfigureAwait(false);
+        if (await LockAccountAsync(db, account, cancellation).ConfigureAwait(false) is not { EraseAfter: null }) return (CreateCharacterOutcome.AccountGone, null); // T-703
         var used = await db.Characters.Where(c => c.AccountId == account && c.DeletedAt == null).Select(c => c.Slot).ToListAsync(cancellation).ConfigureAwait(false);
         var slot = 0;
         while (used.Contains(slot)) slot++;

@@ -62,6 +62,7 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
         {
             case AccountPaths.Register when HttpMethods.IsPost(method):
             case AccountPaths.Login when HttpMethods.IsPost(method):
+            case AccountPaths.Keep when HttpMethods.IsPost(method):
                 if (await ReadAsync(context, "username", "password").ConfigureAwait(false) is not [var username, var password])
                 {
                     await FailAsync(context, AccountErrors.InvalidRequest).ConfigureAwait(false);
@@ -70,7 +71,9 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
                 var register = path == AccountPaths.Register;
                 var session = register
                     ? await service.RegisterAsync(username, password, address, cancel).ConfigureAwait(false)
-                    : await service.LoginAsync(username, password, address, cancel).ConfigureAwait(false);
+                    : path == AccountPaths.Keep
+                        ? await service.KeepAsync(username, password, address, cancel).ConfigureAwait(false)
+                        : await service.LoginAsync(username, password, address, cancel).ConfigureAwait(false);
                 await AnswerAsync(context, session, register ? StatusCodes.Status201Created : StatusCodes.Status200OK, Write).ConfigureAwait(false);
                 return;
             case AccountPaths.Password when HttpMethods.IsPost(method):
@@ -80,6 +83,15 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
                     return;
                 }
                 await AnswerAsync(context, await service.ChangePasswordAsync(Token(context), current, next, address, cancel).ConfigureAwait(false), StatusCodes.Status200OK, Write).ConfigureAwait(false);
+                return;
+            case AccountPaths.Delete when HttpMethods.IsPost(method):
+                if (await ReadAsync(context, "password").ConfigureAwait(false) is not [var proof])
+                {
+                    await FailAsync(context, AccountErrors.InvalidRequest).ConfigureAwait(false);
+                    return;
+                }
+                await AnswerAsync(context, await service.DeleteAccountAsync(Token(context), proof, address, cancel).ConfigureAwait(false), StatusCodes.Status200OK,
+                    (w, erasure) => w.WriteNumber("erased_in", (long)erasure.In.TotalSeconds)).ConfigureAwait(false);
                 return;
             case AccountPaths.Logout when HttpMethods.IsPost(method):
                 await AnswerAsync(context, await service.LogoutAsync(Token(context), cancel).ConfigureAwait(false), StatusCodes.Status204NoContent, null).ConfigureAwait(false);
@@ -128,7 +140,7 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
     /// <summary>The endpoint a path belongs to, or null. A path of unknown shape never reaches a log.</summary>
     private static string? Route(string path) => path switch
     {
-        AccountPaths.Register or AccountPaths.Login or AccountPaths.Logout or AccountPaths.Password or AccountPaths.Characters => path,
+        AccountPaths.Register or AccountPaths.Login or AccountPaths.Logout or AccountPaths.Password or AccountPaths.Delete or AccountPaths.Keep or AccountPaths.Characters => path,
         _ when path.StartsWith(AccountPaths.Characters + "/", StringComparison.Ordinal) => AccountPaths.Characters,
         _ => null,
     };
@@ -300,11 +312,13 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
     private static Task FailAsync(HttpContext context, string error, long retryAfterMs = 0)
     {
         var seconds = (retryAfterMs + 999) / 1000;
-        if (seconds > 0) context.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
+        var erasing = error == AccountErrors.AccountDeleting; // waiting does not help: it says how long there is left to take the deletion back
+        if (seconds > 0 && !erasing) context.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
         return SendAsync(context, StatusOf(error), w =>
         {
             w.WriteString("error", error);
-            if (seconds > 0) w.WriteNumber("retry_after", seconds);
+            if (erasing) w.WriteNumber("erased_in", seconds);
+            else if (seconds > 0) w.WriteNumber("retry_after", seconds);
         });
     }
 
@@ -313,7 +327,7 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
     {
         AccountErrors.InvalidCredentials or AccountErrors.InvalidSession => StatusCodes.Status401Unauthorized,
         AccountErrors.UnknownCharacter => StatusCodes.Status404NotFound,
-        AccountErrors.UsernameTaken or AccountErrors.NameTaken or AccountErrors.NoFreeSlot or AccountErrors.CharacterInUse => StatusCodes.Status409Conflict,
+        AccountErrors.UsernameTaken or AccountErrors.NameTaken or AccountErrors.NoFreeSlot or AccountErrors.CharacterInUse or AccountErrors.AccountDeleting => StatusCodes.Status409Conflict,
         AccountErrors.RateLimited => StatusCodes.Status429TooManyRequests,
         AccountErrors.Unavailable => StatusCodes.Status503ServiceUnavailable,
         _ => StatusCodes.Status400BadRequest,

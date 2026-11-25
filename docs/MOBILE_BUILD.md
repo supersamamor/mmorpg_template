@@ -133,7 +133,7 @@ Godot exports C# projects to iOS **only from macOS**: the C# code is compiled wi
    (`Godot_v4.7.2-stable_mono_macos.universal.zip` from the GitHub release), then the export templates as in §1.
 3. Clone the repo on the Mac and open `spikes/mobile-export/godot` in Godot.
 4. Xcode ▸ Settings ▸ Accounts: add your Apple ID. Note the **Team ID** (10 characters).
-5. Godot ▸ Project ▸ Export ▸ **iOS (Xcode project)**: set *App Store Team ID*; change
+5. (T-703: after the export, compare the generated `PrivacyInfo.xcprivacy` with docs/STORE_COMPLIANCE.md §4: it could not be checked on Windows.) Godot ▸ Project ▸ Export ▸ **iOS (Xcode project)**: set *App Store Team ID*; change
    *Bundle Identifier* if `dev.mmorpgtemplate.spike` is taken for a free account.
    Export to `../builds/ios/MobileSpike.ipa` — with *Export Project Only* on, this writes
    `MobileSpike.xcodeproj` next to it.
@@ -283,7 +283,7 @@ It waits for 40 entities on screen, samples 15 s and prints fps, draw calls, tri
 | `hill` | tap a point on cell (23, 13) on the sample hill, which the old flat-ground pick read as (23, 12): the server walks the character to exactly (23, 13) (T-220) | weak-monster copy |
 | `ui` | the HUD layout fits every screen, notch and UI scale; pinch and wheel zoom clamp; touches on UI never reach the world; long-press shows the info panel without a tap; the hotbar sends nothing; the UI-scale and sound settings are stored (T-211, T-305) | default |
 | `items`, `statuses`, `skills`, `stats`, `dialogue`, `quests`, `autopilot` | one game system each, from the panels to the server and back (what each does: the head of `run-e2e.ps1`) | a content copy that makes it quick, or real content |
-| `account` | register, create a character, enter, resume, log out, sign out and in again; then another device changes the password: this one is put out (`bye session_ended`), the old password is refused, the new one works, and the password screen changes it back (T-701, T-710) | real content, PostgreSQL |
+| `account` | register, create a character, enter, resume, log out, sign out and in again; then another device changes the password: this one is put out (`bye session_ended`), the old password is refused, the new one works, and the password screen changes it back; then the account is deleted, kept and deleted again (T-701, T-710, T-703) | real content, PostgreSQL |
 | `saving` | a character changes stats, quest, items, currency, gear, EXP and place; its server stops and the next has it all; that one is killed and the third has its interval saves (T-702; about 3 minutes) | weak-monster copy, three times, PostgreSQL |
 | `appearance` | a character with other looks than the defaults, made on the creation screen, is drawn with them, and a second client sees them (T-706) | real content, PostgreSQL |
 | `resume_failed` | the socket drops, the client's first retry comes after the server's grace period (2 s vs 5 s): the resume gets `bye resume_failed`, the client goes to the login screen and does not retry | `--net-grace-period-ms 2000` |

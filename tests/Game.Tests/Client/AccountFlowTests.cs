@@ -315,4 +315,72 @@ public class AccountFlowTests
         flow.Screen.ShouldBe(AccountScreen.SignIn);
         flow.ChangePassword("old-password-1", "new-password-1", "new-password-1").ShouldBeFalse("not signed in");
     }
+
+    // ---- T-703: deleting the account ----
+
+    [Fact]
+    public void Deleting_asks_twice_then_signs_out_and_offers_to_keep_it()
+    {
+        var (flow, http) = SignedIn();
+        flow.OpenDeleteAccount();
+        var sent = http.Sent.Count;
+        flow.DeleteAccount("secret-password").ShouldBeFalse();
+        (flow.ConfirmingDeletion, http.Sent.Count).ShouldBe((true, sent));
+        flow.CloseDeleteAccount();
+        flow.OpenDeleteAccount();
+        flow.ConfirmingDeletion.ShouldBeFalse("going back forgets the first press");
+        flow.DeleteAccount("secret-password");
+        flow.DeleteAccount("secret-password").ShouldBeTrue();
+        (http.Last.Method, http.Last.Url, http.Last.Token).ShouldBe(("POST", "http://127.0.0.1:7780/account/delete", Token));
+        JsonDocument.Parse(http.Last.Body!).RootElement.EnumerateObject().Select(p => (p.Name, p.Value.GetString())).ShouldBe([("password", "secret-password")]);
+        http.Answer(200, "{\"erased_in\":1209600}");
+        flow.Update();
+        (flow.Screen, flow.Notice, flow.RetryAfterSeconds, flow.KeepOffered, flow.SignedIn).ShouldBe((AccountScreen.SignIn, AccountNotice.AccountDeleted, 1_209_600L, true, false));
+        flow.Characters.ShouldBeEmpty();
+        UiText.Account(flow.Notice, flow.Error, flow.RetryAfterSeconds).ShouldContain("14 days");
+    }
+
+    [Fact]
+    public void A_deleted_account_can_be_kept_and_a_mistyped_password_does_not_take_the_offer_away()
+    {
+        var (flow, http) = Create();
+        flow.SignIn("ada", "secret-password");
+        http.Answer(409, "{\"error\":\"account_deleting\",\"erased_in\":86400}");
+        flow.Update();
+        (flow.Notice, flow.Error, flow.RetryAfterSeconds, flow.KeepOffered, flow.SignedIn).ShouldBe((AccountNotice.Refused, AccountErrors.AccountDeleting, 86_400L, true, false));
+        flow.Keep("ada", "wrong-password");
+        (http.Last.Method, http.Last.Url, http.Last.Token).ShouldBe(("POST", "http://127.0.0.1:7780/account/keep", null));
+        http.Answer(401, "{\"error\":\"invalid_credentials\"}");
+        flow.Update();
+        flow.KeepOffered.ShouldBeTrue();
+        flow.Keep("ada", "secret-password");
+        http.Answer(200, Session);
+        flow.Update();
+        http.Answer(200, One);
+        flow.Update();
+        (flow.Screen, flow.SignedIn, flow.KeepOffered).ShouldBe((AccountScreen.Characters, true, false));
+    }
+
+    [Fact]
+    public void A_refused_deletion_stays_on_the_screen_and_asks_again_from_the_start()
+    {
+        var (flow, http) = SignedIn();
+        flow.DeleteAccount("secret-password").ShouldBeFalse("only from its screen");
+        flow.OpenDeleteAccount();
+        flow.DeleteAccount("wrong-password");
+        flow.DeleteAccount("wrong-password");
+        http.Answer(401, "{\"error\":\"invalid_credentials\"}");
+        flow.Update();
+        (flow.Screen, flow.Error, flow.ConfirmingDeletion, flow.SignedIn).ShouldBe((AccountScreen.DeleteAccount, AccountErrors.InvalidCredentials, false, true));
+    }
+
+    [Theory]
+    [InlineData(0, "soon")]
+    [InlineData(1, "in an hour")]
+    [InlineData(3_600, "in an hour")]
+    [InlineData(3_601, "in 2 hours")]
+    [InlineData(86_400, "in 24 hours")]
+    [InlineData(86_401, "in 2 days")]
+    [InlineData(1_209_600, "in 14 days")]
+    public void The_time_that_is_left_is_said_in_words(long seconds, string text) => UiText.EraseTime(seconds).ShouldBe(text);
 }

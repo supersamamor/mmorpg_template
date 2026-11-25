@@ -38,6 +38,9 @@ public sealed record NewSession(string Token, TimeSpan Lifetime)
 /// <param name="All">True when every session of the account ended, also any it no longer had a record of.</param>
 public sealed record EndedSessions(Guid Account, IReadOnlyCollection<string> Keys, bool All);
 
+/// <summary>An accepted deletion: how long until everything is erased.</summary>
+public sealed record ErasureAnswer(TimeSpan In);
+
 /// <summary>A value for requests that only succeed or fail.</summary>
 public sealed class Done
 {
@@ -131,8 +134,10 @@ public sealed class AccountService
         }).ConfigureAwait(false);
     }
 
-    /// <summary>Signs in.</summary>
-    public async Task<AccountResult<NewSession>> LoginAsync(string username, string password, string address, CancellationToken cancellation)
+    /// <summary>Signs in. An account that waits to be erased is refused with <c>account_deleting</c>, and only to someone who has its password (T-703).</summary>
+    public Task<AccountResult<NewSession>> LoginAsync(string username, string password, string address, CancellationToken cancellation) => SignInAsync(username, password, address, keep: false, cancellation);
+
+    private async Task<AccountResult<NewSession>> SignInAsync(string username, string password, string address, bool keep, CancellationToken cancellation)
     {
         if (AccountRules.NormalizeUsername(username) is not { } name) return AccountResult<NewSession>.Fail(AccountErrors.InvalidUsername);
         if (AccountRules.NormalizePassword(password) is not { } secret) return AccountResult<NewSession>.Fail(AccountErrors.InvalidPassword);
@@ -152,6 +157,12 @@ public sealed class AccountService
                 var account = await _store.FindAccountAsync(name, cancellation).ConfigureAwait(false);
                 var check = await _hashes.RunAsync(() => _hasher.Verify(secret, account?.PasswordHash ?? _dummyHash), cancellation).ConfigureAwait(false);
                 if (account is null || check == PasswordCheck.Wrong) return AccountResult<NewSession>.Fail(AccountErrors.InvalidCredentials);
+                if (account.EraseAfter is { } eraseAfter)
+                {
+                    if (!keep) return AccountResult<NewSession>.Fail(AccountErrors.AccountDeleting, Math.Max(0, (long)(eraseAfter - UtcNow).TotalMilliseconds));
+                    if (!await _store.TryCancelErasureAsync(account.Id, account.PasswordHash, cancellation).ConfigureAwait(false)) continue; // erased, or taken back elsewhere: look again
+                    _log.Info($"[accounts] account {account.Id} is kept: its deletion was taken back from {address}.");
+                }
                 var rehash = check == PasswordCheck.RightButOutdated ? await _hashes.RunAsync(() => _hasher.Hash(secret), cancellation).ConfigureAwait(false) : null;
                 if (await OpenSessionAsync(account.Id, account.PasswordHash, rehash, cancellation).ConfigureAwait(false) is not { } session) continue; // the hash changed meanwhile: check again
                 _log.Info($"[accounts] account {account.Id} signed in from {address}{(rehash is null ? "" : "; its password was rehashed with the current parameters")}.");
@@ -160,7 +171,7 @@ public sealed class AccountService
             return AccountResult<NewSession>.Fail(AccountErrors.InvalidCredentials);
         }).ConfigureAwait(false);
 
-        if (result.Ok)
+        if (result.Ok || result.Error == AccountErrors.AccountDeleting) // the password was right
         {
             _accountFailures.Succeed(name);
             _addressFailures.Undo(address); // not forgotten: an attacker's own good login must not buy them more guesses
@@ -186,52 +197,84 @@ public sealed class AccountService
 
     /// <summary>
     /// Changes the password (T-710). Every session of the account ends, this one included, with whatever plays with them; the caller, who has just proved the password, gets a new one.
-    /// A wrong current password counts like a failed sign-in: for the address, and for the account (under its id, so a stolen session cannot lock the owner's sign-in).
     /// </summary>
-    public Task<AccountResult<NewSession>> ChangePasswordAsync(string? token, string current, string next, string address, CancellationToken cancellation) => WithSessionAsync<NewSession>(token, async account =>
+    public Task<AccountResult<NewSession>> ChangePasswordAsync(string? token, string current, string next, string address, CancellationToken cancellation)
     {
-        if (AccountRules.NormalizePassword(next) is not { } fresh) return AccountResult<NewSession>.Fail(AccountErrors.InvalidPassword);
+        var fresh = AccountRules.NormalizePassword(next);
+        string? hash = null;
+        return WithPasswordAsync<NewSession>(token, current, address, "password change", fresh is null ? AccountErrors.InvalidPassword : null, async (auth, secret) =>
+        {
+            if (fresh == secret) return AccountResult<NewSession>.Fail(AccountErrors.SamePassword);
+            hash ??= await _hashes.RunAsync(() => _hasher.Hash(fresh!), cancellation).ConfigureAwait(false);
+            if (await _store.TryChangePasswordAsync(auth.Id, auth.PasswordHash, hash, UtcNow, cancellation).ConfigureAwait(false) is not { } ended) return null;
+            _log.Info($"[accounts] account {auth.Id} changed its password from {address}; its {ended.Count} session(s) are ended.");
+            SessionsEnded(new EndedSessions(auth.Id, ended.Select(SessionTokens.KeyOf).ToList(), All: true));
+            try
+            {
+                return await OpenSessionAsync(auth.Id, hash, null, cancellation).ConfigureAwait(false) is { } session ? session : AccountResult<NewSession>.Fail(AccountErrors.InvalidSession);
+            }
+            catch (StoreUnavailableException)
+            {
+                return AccountResult<NewSession>.Fail(AccountErrors.InvalidSession); // the password is changed all the same: sign in with it
+            }
+        }, cancellation);
+    }
+
+    /// <summary>
+    /// Asks for the account's deletion (T-703). Every session ends with whatever plays with it, nobody can sign in any more, and after <see cref="AccountLimits.EraseWait"/> everything is
+    /// erased (<see cref="AccountEraser"/>). Until then <see cref="KeepAsync"/> takes it back.
+    /// </summary>
+    public Task<AccountResult<ErasureAnswer>> DeleteAccountAsync(string? token, string password, string address, CancellationToken cancellation) =>
+        WithPasswordAsync<ErasureAnswer>(token, password, address, "account deletion", null, async (auth, _) =>
+        {
+            var now = UtcNow;
+            if (await _store.TryRequestErasureAsync(auth.Id, auth.PasswordHash, now, now + _limits.EraseWait, cancellation).ConfigureAwait(false) is not { } ended) return null;
+            _log.Info($"[accounts] account {auth.Id} is to be deleted, asked from {address}; its {ended.Count} session(s) are ended.");
+            SessionsEnded(new EndedSessions(auth.Id, ended.Select(SessionTokens.KeyOf).ToList(), All: true));
+            return new ErasureAnswer(_limits.EraseWait);
+        }, cancellation);
+
+    /// <summary>Takes a deletion back, with the account's username and password, and signs in. An account that does not wait to be erased is signed in to as by <see cref="LoginAsync"/>.</summary>
+    public Task<AccountResult<NewSession>> KeepAsync(string username, string password, string address, CancellationToken cancellation) => SignInAsync(username, password, address, keep: true, cancellation);
+
+    /// <summary>
+    /// Runs <paramref name="work"/> for the session's account once its password is proved again: a stolen session must not be enough. A wrong one counts like a failed sign-in: for the
+    /// address, and for the account (under its id, so a stolen session cannot lock the owner's sign-in). <paramref name="work"/> returns null when the stored hash changed meanwhile: it is
+    /// checked again, once.
+    /// </summary>
+    private Task<AccountResult<T>> WithPasswordAsync<T>(string? token, string password, string address, string what, string? refusal, Func<AccountAuth, string, Task<AccountResult<T>?>> work,
+        CancellationToken cancellation) where T : class => WithSessionAsync<T>(token, async account =>
+    {
+        if (refusal is not null) return AccountResult<T>.Fail(refusal);
         var key = account.ToString();
         var now = _clock.NowMilliseconds;
         var wait = _addressFailures.TryBegin(address, now);
         if (wait == 0 && (wait = _accountFailures.TryBegin(key, now)) > 0) _addressFailures.Undo(address); // nothing was tried: only the account is locked
         if (wait > 0)
         {
-            _log.Warn($"[accounts] password change of account {account} from {address} refused: locked out after failures.");
-            return AccountResult<NewSession>.Fail(AccountErrors.RateLimited, wait);
+            _log.Warn($"[accounts] {what} of account {account} from {address} refused: locked out after failures.");
+            return AccountResult<T>.Fail(AccountErrors.RateLimited, wait);
         }
         var judged = false;
         try
         {
-            var secret = AccountRules.NormalizePassword(current);
-            string? hash = null;
-            IReadOnlyList<byte[]>? ended = null;
-            for (var attempt = 0; attempt < 2 && ended is null; attempt++) // twice, as at a sign-in: the stored hash may have changed meanwhile
+            var secret = AccountRules.NormalizePassword(password);
+            for (var attempt = 0; attempt < 2; attempt++) // twice, as at a sign-in: the stored hash may have changed meanwhile
             {
-                if (await _store.FindAccountAsync(account, cancellation).ConfigureAwait(false) is not { } auth) return AccountResult<NewSession>.Fail(AccountErrors.InvalidSession);
+                if (await _store.FindAccountAsync(account, cancellation).ConfigureAwait(false) is not { } auth) return AccountResult<T>.Fail(AccountErrors.InvalidSession);
                 if (secret is null || await _hashes.RunAsync(() => _hasher.Verify(secret, auth.PasswordHash), cancellation).ConfigureAwait(false) == PasswordCheck.Wrong)
                 {
-                    if (attempt > 0) break; // another change won
+                    // A password change may have won after this session was found: it ended the session with the hash, so it is the session that is refused, and no try is counted.
+                    if (attempt > 0 || await _store.FindSessionAsync(SessionTokens.HashOf(token)!, UtcNow, cancellation).ConfigureAwait(false) is null) break;
                     judged = true;
-                    _log.Warn($"[accounts] failed password change of account {account} from {address}.");
-                    return AccountResult<NewSession>.Fail(AccountErrors.InvalidCredentials);
+                    _log.Warn($"[accounts] failed {what} of account {account} from {address}.");
+                    return AccountResult<T>.Fail(AccountErrors.InvalidCredentials);
                 }
-                if (fresh == secret) return AccountResult<NewSession>.Fail(AccountErrors.SamePassword);
-                hash ??= await _hashes.RunAsync(() => _hasher.Hash(fresh), cancellation).ConfigureAwait(false);
-                ended = await _store.TryChangePasswordAsync(account, auth.PasswordHash, hash, UtcNow, cancellation).ConfigureAwait(false);
+                if (await work(auth, secret).ConfigureAwait(false) is not { } result) continue;
+                if (result.Ok) _accountFailures.Succeed(key);
+                return result;
             }
-            if (ended is null) return AccountResult<NewSession>.Fail(AccountErrors.InvalidSession); // the change that won ended this session too
-            _accountFailures.Succeed(key);
-            _log.Info($"[accounts] account {account} changed its password from {address}; its {ended.Count} session(s) are ended.");
-            SessionsEnded(new EndedSessions(account, ended.Select(SessionTokens.KeyOf).ToList(), All: true));
-            try
-            {
-                return await OpenSessionAsync(account, hash!, null, cancellation).ConfigureAwait(false) is { } session ? session : AccountResult<NewSession>.Fail(AccountErrors.InvalidSession);
-            }
-            catch (StoreUnavailableException)
-            {
-                return AccountResult<NewSession>.Fail(AccountErrors.InvalidSession); // the password is changed all the same: sign in with it
-            }
+            return AccountResult<T>.Fail(AccountErrors.InvalidSession);
         }
         finally
         {
@@ -266,6 +309,7 @@ public sealed class AccountService
         {
             CreateCharacterOutcome.Created => Logged(account, $"created character {character!.Id}", Record(character) with { Appearance = looks }),
             CreateCharacterOutcome.NameTaken => AccountResult<CharacterRecord>.Fail(AccountErrors.NameTaken),
+            CreateCharacterOutcome.AccountGone => AccountResult<CharacterRecord>.Fail(AccountErrors.InvalidSession),
             _ => AccountResult<CharacterRecord>.Fail(AccountErrors.NoFreeSlot),
         };
     }, cancellation);

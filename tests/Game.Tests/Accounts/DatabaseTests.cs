@@ -109,7 +109,7 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
         await using var db = fixture.Database.Open();
         db.Database.HasPendingModelChanges().ShouldBeFalse("the model changed without a migration");
         var tables = await db.Database.SqlQuery<string>($"SELECT table_name AS \"Value\" FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name").ToListAsync();
-        tables.ShouldBe(["__EFMigrationsHistory", "account_sessions", "accounts", "character_items", "character_states", "characters", "server_runs"]);
+        tables.ShouldBe(["__EFMigrationsHistory", "account_deletions", "account_sessions", "accounts", "character_items", "character_states", "characters", "server_runs"]);
         var indexes = await db.Database.SqlQuery<string>($"SELECT indexname AS \"Value\" FROM pg_indexes WHERE schemaname = 'public' AND indexdef LIKE 'CREATE UNIQUE%'").ToListAsync();
         indexes.ShouldContain(GameDb.UsernameIndex);
         indexes.ShouldContain(GameDb.CharacterNameIndex);

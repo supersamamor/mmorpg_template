@@ -102,7 +102,7 @@ var contentHash = ClientBundleExporter.Hash(content); // the display bundle's ha
 log.Info($"Content hash: {contentHash}");
 var tokens = new ResumeTokens();
 var devLogin = new DevLogin(development, netOptions.MaxNameLength, tokens);
-var accounts = database is null ? null : new AccountService(new PostgresAccountStore(database), new Argon2idHasher(), HashQueue.Default(), new AccountLimits(), content.Balance, content.Appearance, clock,
+var accounts = database is null ? null : new AccountService(new PostgresAccountStore(database), new Argon2idHasher(), HashQueue.Default(), new AccountLimits { EraseWait = TimeSpan.FromDays(options.AccountEraseDays) }, content.Balance, content.Appearance, clock,
     TimeProvider.System, log);
 var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log, contentHash, accounts is null ? devLogin : new AccountLogin(accounts, devLogin), tokens,
     progress: new OwnProgress(content, progressions), inventory: new OwnInventory(content.Balance.Inventory, inventories), keeper: keeper); // subscribes to instance events: before ticking
@@ -134,6 +134,7 @@ log.Info($"Starting {runners.Count} map instance(s) at {TickRate.Hz} Hz, seed {s
          string.Join(", ", world.Instances.Select(i => $"{i.MapId} {i.Grid.Width}x{i.Grid.Height}")));
 foreach (var runner in runners) runner.Start();
 gateway.Start();
+await using var eraser = database is null ? null : AccountEraser.Start(new PostgresAccountStore(database), TimeProvider.System, log); // T-703
 log.Info($"Gateway listening on {host.Endpoint}{(accounts is null ? "" : " (account endpoints on the same port)")}");
 log.Info(options.DurationSeconds is { } d ? $"Running for {d} s." : "Running. Press Ctrl+C to stop.");
 
@@ -141,6 +142,7 @@ if (options.DurationSeconds is { } seconds) stop.Wait(TimeSpan.FromSeconds(secon
 else stop.Wait();
 
 var unsaved = 0;
+if (eraser is not null) await eraser.DisposeAsync(); // an erasure in progress is one transaction: it is finished or undone
 log.Info($"Stopping: saying bye to {gateway.SessionCount} session(s), releasing {gateway.CharactersInGrace} character(s) in their grace period, " +
          "then finishing the current tick of each instance.");
 await gateway.ShutdownAsync();

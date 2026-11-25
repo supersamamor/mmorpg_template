@@ -3,7 +3,7 @@ using Game.Shared.Protocol;
 namespace Game.Server.Accounts;
 
 /// <summary>An account's id and stored password hash.</summary>
-public sealed record AccountAuth(Guid Id, string PasswordHash)
+public sealed record AccountAuth(Guid Id, string PasswordHash, DateTime? EraseAfter = null)
 {
     /// <summary>No hash in a log line or an exception.</summary>
     public override string ToString() => $"AccountAuth {{ {Id} }}";
@@ -28,6 +28,9 @@ public enum CreateCharacterOutcome
 
     /// <summary>Every slot is in use.</summary>
     NoFreeSlot,
+
+    /// <summary>The account is gone, or waits to be erased (T-703): its session has ended meanwhile.</summary>
+    AccountGone,
 }
 
 /// <summary>How deleting a character ended.</summary>
@@ -41,6 +44,19 @@ public enum DeleteCharacterOutcome
 
     /// <summary>A live server holds it (this one or another): nothing was changed.</summary>
     InUse,
+}
+
+/// <summary>How erasing an account ended.</summary>
+public enum EraseOutcome
+{
+    /// <summary>Everything is gone.</summary>
+    Erased,
+
+    /// <summary>A live server still holds one of its characters: later.</summary>
+    InUse,
+
+    /// <summary>It is not due, no longer asked for, gone already, or being erased by another server right now.</summary>
+    Nothing,
 }
 
 /// <summary>The store cannot answer now (the database is away or timed out). The message is safe to log.</summary>
@@ -79,6 +95,25 @@ public interface IAccountStore
     /// <summary>Sets a new password hash, if the current one is still <paramref name="expectedHash"/>, and ends every session of the account.</summary>
     /// <returns>The token hashes of the sessions ended, or null when nothing was changed.</returns>
     Task<IReadOnlyList<byte[]>?> TryChangePasswordAsync(Guid account, string expectedHash, string newHash, DateTime now, CancellationToken cancellation);
+
+    /// <summary>
+    /// Asks for the account's deletion (T-703), if its password hash is still <paramref name="expectedHash"/>: from <paramref name="eraseAfter"/> on it may be erased. Ends every session of the
+    /// account and records the request. One that is waiting already keeps its time.
+    /// </summary>
+    /// <returns>The token hashes of the sessions ended, or null when nothing was changed.</returns>
+    Task<IReadOnlyList<byte[]>?> TryRequestErasureAsync(Guid account, string expectedHash, DateTime now, DateTime eraseAfter, CancellationToken cancellation);
+
+    /// <summary>Takes the account's deletion request back, if its password hash is still <paramref name="expectedHash"/>; false when there is none to take back (never asked, or erased).</summary>
+    Task<bool> TryCancelErasureAsync(Guid account, string expectedHash, CancellationToken cancellation);
+
+    /// <summary>The accounts that may be erased now, longest due first, at most <paramref name="limit"/>.</summary>
+    Task<IReadOnlyList<Guid>> ListErasableAsync(DateTime now, int limit, CancellationToken cancellation);
+
+    /// <summary>
+    /// Erases the account and everything that hangs off it in one transaction: sessions, characters (deleted ones too) with their states and items, and the account. Only what
+    /// <see cref="ListErasableAsync"/> would list, and never while a live server holds one of its characters.
+    /// </summary>
+    Task<EraseOutcome> EraseAsync(Guid account, DateTime now, CancellationToken cancellation);
 
     /// <summary>The account's characters, by slot.</summary>
     Task<IReadOnlyList<CharacterEntry>> ListCharactersAsync(Guid account, CancellationToken cancellation);

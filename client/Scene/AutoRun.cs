@@ -225,6 +225,40 @@ public sealed class AutoRun
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null, 15, "entering the world with the new session");
         Session.Logout(Clocks.Wall());
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy, 10, "bye logout");
+
+        // T-703: delete the account (it is this run's own), be refused, take it back, and delete it again.
+        async Task DeleteAsync(string what)
+        {
+            await FramesAsync(3);
+            Press(screen.DeletionButtons.Open);
+            await FramesAsync(3);
+            var deletion = screen.DeletionScreen;
+            Check(deletion.Confirm.IsVisibleInTree(), "the deletion screen opens");
+            if (what == "first") await ShotAsync("-delete");
+            Type(deletion.Password, password);
+            Press(deletion.Confirm);
+            await FramesAsync(3);
+            Check(accounts.ConfirmingDeletion && !accounts.Busy && accounts.SignedIn, "the first press only asks again");
+            Press(deletion.Confirm);
+            await UntilAsync(() => !accounts.Busy && accounts.Notice == Game.Client.Core.Accounts.AccountNotice.AccountDeleted, 15, "the " + what + " deletion");
+            await FramesAsync(3);
+            Check(!accounts.SignedIn && accounts.RetryAfterSeconds > 86_400 && screen.SignInButton.IsVisibleInTree() && deletion.Password.Text.Length == 0, "signed out, with the time that is left, and the password is gone");
+        }
+        await DeleteAsync("first");
+        Print("account: deleted: \"" + screen.Text + "\"");
+        Type(screen.Username, "e2e-" + tag);
+        Type(screen.Password, password);
+        Press(screen.SignInButton);
+        await UntilAsync(() => !accounts.Busy && accounts.Notice != Game.Client.Core.Accounts.AccountNotice.None, 10, "the refusal of a deleted account");
+        Check(accounts.Error == AccountErrors.AccountDeleting && !accounts.SignedIn, "a deleted account cannot be signed in to, was " + accounts.Notice + " " + accounts.Error);
+        await FramesAsync(3);
+        Check(screen.DeletionButtons.Keep.IsVisibleInTree(), "keeping it is offered");
+        Type(screen.Password, password);
+        Press(screen.DeletionButtons.Keep);
+        await UntilAsync(() => accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters && !accounts.Busy, 15, "the account kept");
+        Check(accounts.Characters.Count == 1 && accounts.Characters[0].Id == character.Id, "and its character is there");
+        Print("account: kept, and deleted again at the end");
+        await DeleteAsync("second");
     }
 
     /// <summary>

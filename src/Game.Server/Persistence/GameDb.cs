@@ -28,6 +28,9 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
     /// <summary>Accounts.</summary>
     public DbSet<AccountRow> Accounts => Set<AccountRow>();
 
+    /// <summary>Deletion requests and what came of them (T-703).</summary>
+    public DbSet<AccountDeletionRow> AccountDeletions => Set<AccountDeletionRow>();
+
     /// <summary>Live sign-ins.</summary>
     public DbSet<SessionRow> Sessions => Set<SessionRow>();
 
@@ -58,7 +61,17 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
             e.Property(a => a.PasswordHash).HasColumnName("password_hash").HasMaxLength(256);
             e.Property(a => a.CreatedAt).HasColumnName("created_at");
             e.Property(a => a.PasswordChangedAt).HasColumnName("password_changed_at");
+            e.Property(a => a.EraseAfter).HasColumnName("erase_after");
             e.HasIndex(a => a.Username).IsUnique().HasDatabaseName(UsernameIndex);
+            e.HasIndex(a => a.EraseAfter).HasFilter("erase_after IS NOT NULL").HasDatabaseName("ix_accounts_erase_after");
+        });
+        model.Entity<AccountDeletionRow>(e =>
+        {
+            e.ToTable("account_deletions");
+            e.HasKey(d => d.AccountId);
+            e.Property(d => d.AccountId).HasColumnName("account_id").ValueGeneratedNever();
+            e.Property(d => d.RequestedAt).HasColumnName("requested_at");
+            e.Property(d => d.ErasedAt).HasColumnName("erased_at");
         });
         model.Entity<SessionRow>(e =>
         {
