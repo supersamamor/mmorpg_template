@@ -25,6 +25,7 @@ public sealed class Hud
     private const double EdgeMarginDp = 8;
     private const double LeftColumnDp = 150;
     private const double RightColumnDp = 104;
+    private const double AutopilotMaxWidthDp = 260;   // the longest fixed line of the indicator at scale 1; wider would take the world's taps
     private const double BodyFontDp = 16;
     private const double SlotFontDp = 13;      // a skill bar slot's name, before fitting (T-222)
     private const double SlotFontMinDp = 9;
@@ -93,7 +94,7 @@ public sealed class Hud
     private readonly Button _autopilot = new()
     {
         Visible = false, Alignment = HorizontalAlignment.Left, AutowrapMode = TextServer.AutowrapMode.Off, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
-        SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+        SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter,
     };
     private int _autopilotVersion = -1;
     private int _autopilotQuestVersion = -1;
@@ -640,7 +641,9 @@ public sealed class Hud
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _questPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _tracker.CustomMinimumSize = new Vector2(Dp(LeftColumnDp), buttonHeight);
-        _autopilot.CustomMinimumSize = new Vector2(0, buttonHeight);
+        // Compact, and never wider than the centre column (a wider minimum would push the right column off the safe area).
+        var column = (float)safe.Width - 4 * margin - Dp(LeftColumnDp) - Dp(RightColumnDp);
+        _autopilot.CustomMinimumSize = new Vector2(Mathf.Clamp(column, 0, Dp(AutopilotMaxWidthDp)), buttonHeight);
         _autopilot.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(Dp(TrackerFontDp))));
         _autopilotVersion = -1;
         _skillsButton.OffsetTop = -buttonHeight;

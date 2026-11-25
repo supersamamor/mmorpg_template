@@ -771,7 +771,7 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   or the login ends. **Order:** a ticked quest gets Earlier and Later buttons that swap it one place; not dragging, because a drag inside a scrolling list fights the scroll and needs a precise
   finger on a phone, while a button is a plain 48 dp target and the "#n" stays readable. **Start and Stop** are pinned under the log's title, outside the scroll: Start sends `start_autopilot` (the ticked
   quests in run order, the skill bar's skills in slot order, level 0) and is disabled with nothing ticked, while dead or offline; Stop sends `stop_autopilot` while a run is on. The server still decides;
-  every refusal (`rejected` with `intent` `start_autopilot`) goes on the flash line with its reason, naming the quest or skill. **Indicator:** while a run is running or paused, a 48 dp button in the
+  every refusal (`rejected` with `intent` `start_autopilot`) goes on the flash line with its reason, naming the quest or skill. **Indicator:** while a run is running or paused, a 48 dp high, at most 260 dp wide button in the
   centre column of the top row, under the target frame (so it lies over nothing and nothing lies over it): "Stop autopilot: hunting" and the quest's name, or "Stop autopilot: paused" and what the player can
   do ("Reach level 10 to go on."), trimmed with an ellipsis; a tap sends `stop_autopilot`. Off shows nothing. A run that ends says why on the flash line (finished, stopped, "you took over", died, bag full ...).
   **Only the server's word:** the state is the last `autopilot` message, reset at a new login and told again after a resume; the client never ends, pauses or restarts a run. It sends no message of its own that

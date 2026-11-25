@@ -638,12 +638,6 @@ public static class UiText
 
     // ---- the autopilot (T-605) ----
 
-    /// <summary>The quest log's heading over the autopilot controls.</summary>
-    public const string AutopilotHeading = "Autopilot";
-
-    /// <summary>The line under the heading: how to use it.</summary>
-    public const string AutopilotHelp = "Tick quests and press Start. It plays them in order, with the skills on your skill bar. Moving or acting yourself stops it.";
-
     /// <summary>The log's tick on a quest that is not in the run.</summary>
     public const string AutopilotAdd = "Add to autopilot";
 
@@ -662,7 +656,7 @@ public static class UiText
     /// <summary>The log's button that stops a run.</summary>
     public const string AutopilotStop = "Stop autopilot";
 
-    /// <summary>The log's line under the heading: the run's order, as quest names.</summary>
+    /// <summary>The log's line over Start and Stop: the run's order, as quest names.</summary>
     public static string AutopilotQueue(string names) => "Run order: " + names;
 
     /// <summary>The log's line while nothing is ticked.</summary>
