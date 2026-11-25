@@ -22,6 +22,7 @@ public sealed class CreationPanel
     private readonly Action _tap;
     private readonly LookView? _preview;
     private readonly Control _root = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+    private readonly ColorRect _background = new() { Color = new Color(0.17f, 0.19f, 0.22f), MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly HBoxContainer _columns = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly VBoxContainer _left = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly VBoxContainer _right = new() { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
@@ -54,6 +55,7 @@ public sealed class CreationPanel
         _tap = tap;
         _preview = preview;
         parent.AddChild(_root);
+        _root.AddChild(_background); // the HUD's empty hotbar and buttons would show through the full-screen panel's veil
         _root.AddChild(_columns);
         _columns.AddChild(_left);
         _columns.AddChild(_right);
@@ -151,6 +153,7 @@ public sealed class CreationPanel
         foreach (var group in Groups()) group.Size(_target, gap);
         _root.Position = safe.Position;
         _root.Size = safe.Size;
+        _background.Size = safe.Size;
         _columns.Position = new Vector2(margin, margin);
         _columns.Size = new Vector2(width, safe.Size.Y - 2 * margin);
     }

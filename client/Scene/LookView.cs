@@ -92,12 +92,14 @@ public sealed class LookView
         _looks = looks;
         _job = jobId;
         EnsureStage();
+        Resize();
         if (_visual is not null && _visual.PoolKey == _entities.BodyOf(jobId, looks)) _visual.SetCharacter(jobId, looks); // the same body: the old look stays until the new one is merged
         else
         {
             if (_visual is not null) _entities.Discard(_visual);
             _visual = _entities.Preview(_stage!, jobId, looks);
             _visual.SetDetail(0);
+            _visual.SetOutline(true); // as the world draws a character near the player
             _visual.SetMotion(false, 0, 0);
         }
         _settled = false;
@@ -116,6 +118,7 @@ public sealed class LookView
         _renderPending = _renderNow = false;
         _table.Reset();
         SetMode();
+        _viewport.Size = new Vector2I(2, 2); // the render targets are given back while nothing shows
     }
 
     /// <summary>Once a frame while its screen is open. A still picture that is drawn costs two comparisons.</summary>
@@ -175,6 +178,7 @@ public sealed class LookView
 
     private void Resize()
     {
+        if (!_shown) return;
         var size = Frame.Size;
         if (size.X < 1 || size.Y < 1) return;
         var pixels = new Vector2I(Mathf.Clamp(Mathf.RoundToInt(size.X), 16, 1024), Mathf.Clamp(Mathf.RoundToInt(size.Y), 16, 1024));
@@ -185,7 +189,7 @@ public sealed class LookView
         if (_turning)
         {
             var tall = Mathf.RadToDeg(2 * Mathf.Atan(BodyHeight * 0.56f / Distance));
-            var wide = Mathf.RadToDeg(2 * Mathf.Atan(0.62f / Distance / aspect));
+            var wide = Mathf.RadToDeg(2 * Mathf.Atan(0.5f / Distance / aspect));
             _camera.Fov = Mathf.Max(tall, wide);
             _camera.Position = new Vector3(0, BodyHeight * 0.5f + 0.55f, Distance);
             _camera.LookAtFromPosition(_camera.Position, new Vector3(0, BodyHeight * 0.5f, 0), Vector3.Up);

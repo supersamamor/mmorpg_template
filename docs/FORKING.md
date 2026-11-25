@@ -34,15 +34,22 @@ bigger elite, or a plain alias.
 
 ### Role table (the template's content today)
 
-**Player characters** — one shared `humanoid` rig (THEMES.md §1.3); bodies, faces and hair come from `content/appearance.yaml`.
+**Player characters** — one shared `humanoid` rig (THEMES.md §1.3); bodies, faces and hair come from `content/appearance.yaml`, and a player is drawn on its own body (T-706). What a fork must supply for appearance:
+
+1. a **body** per gender and every **face** and **hairstyle** key of `appearance.yaml` (add or remove options there; keep the ids players may have saved: a removed id is drawn as the default);
+2. the **paint**: skin, cloth and scalp vertex colours by the contract, or named in `recolor` (THEMES.md §1.7);
+3. each **job's look** in `content/jobs/*.yaml`: `look.cloth_color`, and `look.pieces` for a silhouette (hat, tabard, pauldrons; worn-piece models of the theme). The template ships colours only;
+4. `hides_hair` on headgear that swallows the hair.
+
+`validate --theme <theme>` checks all of it. The job models in the table are drawn only when a body is missing (§7.5.1); a fork may point them at a body or leave them to `default`.
 
 | Model key | Job id | Role | Needs |
 |-----------|--------|------|-------|
 | `model.char.wanderer` | `job.wanderer` | Starting job: light melee, everyone begins here | Humanoid; light clothing; reads as a beginner |
 | `model.char.warden` | `job.warden` | Second job: armoured melee, sword and shield | Humanoid; heavy shoulders or a helm |
 | `model.char.spellbinder` | `job.spellbinder` | Second job: caster with a staff | Humanoid; a hat or hood; staff clips (`idle.staff`, `attack.staff`) |
-| `model.char.body_male`, `model.char.body_female` | (appearance) | The bare bodies gear and hair go on | Humanoid; skin is a colour parameter, no baked skin texture |
-| `model.char.face_*`, `model.char.hair_*` | (appearance) | Face and hairstyle options per gender | Faces skinned to `head`; hair attached to `head` |
+| `model.char.body_male`, `model.char.body_female` | (appearance) | What every player is drawn on: gear, face, hair and the job's pieces are merged into it | Humanoid; skin, cloth and scalp are painted vertex colours (THEMES.md §1.7), no baked skin texture |
+| `model.char.face_*`, `model.char.hair_*` | (appearance) | Face and hairstyle options per gender | Faces skinned to `head`; hair attached to `head`; a hairstyle takes the hair colour as a whole |
 
 **NPCs** — humanoid, stand still, talk.
 
@@ -119,8 +126,8 @@ The running example turns the template into **"Saltwind"**, a pirate game. Each 
 
 | | |
 |---|---|
-| **Files** | `content/jobs/*.yaml`; the starting job is `new_character.start_job_id` in `content/balance.yaml`; the job's look is its `model_asset_key` (§1) and, for placeholders, its two identity colours in `themes/default/palette.json` (`models` → `model.char.<job>`: `colors`, `trim`, `look`) |
-| **Rename** | `name`, `description`. The colours of real art are in the art; the placeholders take theirs from the palette (then `dotnet run --project tools/themegen`) |
+| **Files** | `content/jobs/*.yaml`; the starting job is `new_character.start_job_id` in `content/balance.yaml`; the job's look on a character's own body is `look` (`cloth_color`, `pieces`; §1); `model_asset_key` is the fallback body, and the placeholder one takes its two identity colours from `themes/default/palette.json` (`models` → `model.char.<job>`: `colors`, `trim`, `look`) |
+| **Rename** | `name`, `description`. The job's colour on a character is `look.cloth_color`; a changed look changes the client bundle (re-export the reference bundle) |
 | **Stat bonuses and skill tree** | `stat_bonuses` (modifiers whose `value` is an expression over `job_level`), `skills` (each `skill_id`, `max_level`, and `requires` on other skills of the tree), and the `weapon_types` the job may use |
 | **Add or remove a job; the change path** | A new `jobs/<name>.yaml` with `parent_job_id` (the job it changes from) and `requirements` (`min_base_level`, `min_job_level`, `quest_ids`, and `requires_unlock: true` when a quest's `unlock_job` reward must open it, §4.3). Players change job in the skill panel once the requirements hold. Removing a job: delete it, and every reference to it (items' `job_ids`, quests' `job_ids`, dialogue `job_is`) fails `validate` until fixed |
 | **Keep** | The ids, `job_exp_table_id`, the starting job (or change `start_job_id` with it) |

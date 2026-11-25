@@ -19,11 +19,13 @@ namespace Game.Client.Scene;
 public sealed class LookRuns
 {
     private readonly Main _main;
-    private readonly Func<Task> _shot;
+    private readonly Func<string, Task> _shot;
+    private readonly Func<int> _onScreen;
 
-    /// <summary>Prepares the runs. <paramref name="shot"/> saves the screenshot when one is asked for.</summary>
-    public LookRuns(Main main, Func<Task> shot)
+    /// <summary>Prepares the runs. <paramref name="shot"/> saves the screenshot when one is asked for; <paramref name="onScreen"/> counts the entities on screen.</summary>
+    public LookRuns(Main main, Func<string, Task> shot, Func<int>? onScreen = null)
     {
+        _onScreen = onScreen ?? (() => 0);
         _main = main;
         _shot = shot;
     }
@@ -38,7 +40,7 @@ public sealed class LookRuns
         var accounts = main.Session!.Accounts;
         var screen = main.Hud!.Accounts!;
         var before = accounts.Characters.Count;
-        var runs = new LookRuns(main, () => Task.CompletedTask);
+        var runs = new LookRuns(main, _ => Task.CompletedTask);
         if (accounts.Screen == AccountScreen.Characters) runs.Press(screen.NewButton);
         await runs.UntilAsync(() => screen.Creation is { Open: true }, 5, "the creation screen");
         runs.Type(name);
@@ -101,8 +103,9 @@ public sealed class LookRuns
         await FramesAsync(3);
         Check(creation.Open && creator.Look!.Equals(chosen) && creation.NameField.Text == "Look" + tag, "Back kept what was chosen");
         await UntilAsync(() => creation.Preview.Settled, 10, "the preview again");
+        creation.Preview.Table.Reset();
         await SecondsAsync(0.3);
-        await _shot();
+        await _shot(string.Empty);
 
         Press(creation.CreateButton);
         await UntilAsync(() => accounts.Characters.Count == 1 && !accounts.Busy && accounts.Screen == AccountScreen.Characters, 10, "the new character");
@@ -113,6 +116,8 @@ public sealed class LookRuns
         Check(!screen.Pictures[0].Rendering, "the picture does not render every frame");
         Check(creator.Look!.Equals(defaults) && creator.Name.Length == 0, "the next new character starts from the defaults");
         Print("appearance: created; the character list shows it");
+        await SecondsAsync(0.3);
+        await _shot("-list");
 
         Press(screen.Rows[0].Play);
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null && _main.LoadedMap == World.MapId, 15, "entering the world");
@@ -127,6 +132,7 @@ public sealed class LookRuns
         var other = OthersInView().First();
         CheckDrawn((ModelVisual)other.Visual!, defaults, "the second client's character");
         Print($"appearance: the second client's character is drawn as {Describe(other.Appearance!)}");
+        await _shot("-world");
         await UntilAsync(() => !OthersInView().Any(), 90, "the second client leaving");
         Session.Logout(Clocks.Wall());
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy, 10, "bye logout");
@@ -182,8 +188,10 @@ public sealed class LookRuns
             var settled = clock.Elapsed.TotalSeconds;
             await SecondsAsync(1.5);
 
-            double sumDraws = 0, maxDraws = 0, maxTriangles = 0, sumOn = 0, worst = 0, sumProcess = 0;
+            double sumDraws = 0, maxDraws = 0, maxTriangles = 0, sumOn = 0, sumScreen = 0, worst = 0, sumProcess = 0;
             var frames = 0;
+            var maxScreen = 0;
+            var screenAtMax = 0;
             clock.Restart();
             last = 0;
             while (clock.Elapsed.TotalSeconds < 10)
@@ -193,7 +201,10 @@ public sealed class LookRuns
                 last = clock.Elapsed.TotalMilliseconds;
                 var draws = Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
                 sumDraws += draws;
-                maxDraws = Math.Max(maxDraws, draws);
+                var screen = _onScreen();
+                sumScreen += screen;
+                maxScreen = Math.Max(maxScreen, screen);
+                if (draws > maxDraws) (maxDraws, screenAtMax) = (draws, screen);
                 maxTriangles = Math.Max(maxTriangles, Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame));
                 sumProcess += Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000;
                 sumOn += World.Entities.Count(Players);
@@ -201,8 +212,8 @@ public sealed class LookRuns
             }
             var visuals = World.Entities.Where(Players).Select(e => e.Visual).OfType<ModelVisual>().ToList();
             var different = World.Entities.Where(Players).Select(e => e.Visual).OfType<ModelVisual>().Where(v => v.Character is not null).Select(v => v.Character!.Ids).Distinct().Count();
-            Print($"measure: {what}: {sumOn / frames:0.0} players in view, {different} different looks, surfaces per player at most {visuals.Select(v => v.Surfaces).DefaultIfEmpty().Max()}");
-            Print($"measure: {what}: draw calls avg {sumDraws / frames:0.0}, max {maxDraws:0}; triangles max {maxTriangles:0}; {frames / clock.Elapsed.TotalSeconds:0.0} fps, worst frame {worst:0.0} ms, process {sumProcess / frames:0.00} ms a frame");
+            Print($"measure: {what}: {sumOn / frames:0.0} players in view, {sumScreen / frames:0.0} entities on screen (at most {maxScreen}), {different} different looks, surfaces per player at most {visuals.Select(v => v.Surfaces).DefaultIfEmpty().Max()}");
+            Print($"measure: {what}: draw calls avg {sumDraws / frames:0.0}, max {maxDraws:0} (with {screenAtMax} on screen); triangles max {maxTriangles:0}; {frames / clock.Elapsed.TotalSeconds:0.0} fps, worst frame {worst:0.0} ms, process {sumProcess / frames:0.00} ms a frame");
             Print($"measure: {what}: change settled in {settled:0.00} s (worst frame {worstChange:0.0} ms, {entities.Created - created} instances and dressings, {entities.Merged.Built - built} merges, {entities.MergeMainThreadMs - main:0.0} ms of them on the main thread); " +
                   $"{entities.Merged.Cached} merged characters cached; static memory {OS.GetStaticMemoryUsage() / 1048576.0:0.0} MB, video {Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / 1048576.0:0.0} MB");
         }
@@ -225,7 +236,7 @@ public sealed class LookRuns
         if (dress is { Count: > 0 })
             await Phase("all different, dressed", () => presenter.DressOverride = dress);
         Print($"measure: {entities.LookKinds} looks remembered; {_main.Look?.Materials ?? 0} toon materials; adapter {RenderingServer.GetVideoAdapterName()}");
-        await _shot();
+        await _shot(string.Empty);
     }
 
     private static bool Players(EntityView e) => e.Kind == EntityKinds.Player;

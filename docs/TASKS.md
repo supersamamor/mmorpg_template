@@ -134,7 +134,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-702 | Saving characters: whole state in one versioned transaction, loaded before entering the world, crash-safe items between characters | Claude Code | Opus 5.5 | [T-702](../tasks/prompts/T-702.md) | T-701, T-604 | Review | Restricted `Persistence/**` and `Net/**`, limited scope; owner's go-ahead 2026-11-25 |
 | T-704 | Appearance definitions: `appearance.yaml` (gender male/female, skin, faces, hair) + validation | Claude Code | Sonnet 5.5 | [T-704](../tasks/prompts/T-704.md) | T-102, T-209 | Review | Data only, started early; server flow is T-705 |
 | T-705 | Appearance on the server: checked at creation, stored with the character, sent in snapshots | Claude Code | Sonnet 5.5 | [T-705](../tasks/prompts/T-705.md) | T-701, T-702, T-704 | Review | Restricted `Persistence/**` and `Net/**`, the scope in the prompt only (owner's instructions of 2026-11-25) |
-| T-706 | Character creation screen with rotating 3D preview, and drawing appearance in the world | Claude Code | Opus 5.5 | [T-706](../tasks/prompts/T-706.md) | T-206, T-207, T-222, T-403, T-405, T-705 | In Progress | No restricted area |
+| T-706 | Character creation screen with rotating 3D preview, and drawing appearance in the world | Claude Code | Opus 5.5 | [T-706](../tasks/prompts/T-706.md) | T-206, T-207, T-222, T-403, T-405, T-705 | Review | No restricted area |
 
 ## Backlog (prompts written when the previous phase is Done)
 

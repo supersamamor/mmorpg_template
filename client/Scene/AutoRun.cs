@@ -1718,7 +1718,7 @@ public sealed class AutoRun
         if (Array.IndexOf(_args, "--measure-looks") >= 0)
         {
             // T-706: what characters' own looks cost, against the job models of before, on the same crowd in one run.
-            await new LookRuns(_main, ShotAsync).MeasureAsync(wanted, Value("--measure-dress")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            await new LookRuns(_main, ShotAsync, CountOnScreen).MeasureAsync(wanted, Value("--measure-dress")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
             Session.Logout(Clocks.Wall());
             await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen, 10, "bye logout");
             return;

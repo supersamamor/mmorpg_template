@@ -87,6 +87,28 @@ The client draws real art the same way as the placeholders, with no code change:
 - Terrain and props get the toon ramp without outlines. Lighting, sky and haze come from the theme's `scene.environment`; a theme that has none uses `default`'s.
 - To restyle the look itself, a theme provides its own `mat.toon`, `mat.outline` or `scene.environment` (entries tagged `"render"`, VOCABULARY "Render roles").
 
+### 1.7 Appearance: bodies, faces, hairstyles (T-706)
+
+A character is one mesh made of its gender's body, its face, its hairstyle, its job's pieces and its equipment (ARCHITECTURE §7.5.1). `content/appearance.yaml` names the body, face and hairstyle keys and the palettes; a
+theme supplies the models. The character's colours are **vertex colours**: paint what should change with the colours below, and the client replaces them.
+
+| Colour role | Takes | Painted with (the contract; sRGB of glTF `COLOR_0`) | On |
+|-------------|-------|------------------------------------------------------|----|
+| `skin` | The skin tone | `#f1c7a1`, and shades that follow it: `#e9a08a` (cheek) | Body, face |
+| `hair` | The hair colour | A hairstyle as a whole, whatever its paint (its most common colour becomes the hair colour, lighter and darker strands keep their relation). On a body or face (a scalp, brows): `#7a4a2a`, `#c9b79a`, `#3a3040`, `#b5643a`, each on its own | Hairstyle, body, face |
+| `cloth` | The job's `look.cloth_color` | `#efe3c8`, and its shade `#bbb19c` | Body |
+
+- **Other paint:** name a model's own in its manifest entry: `"recolor": { "skin": ["#ffccaa", "#dd9977"], "cloth": [] }`. The first colour of a list becomes the character's, the others keep their relation to it; an empty
+  list means nothing on this model takes that colour. On a hairstyle, naming `hair` colours only that paint, so a ribbon can stay. Names and values are **checked** (`theme.appearance`).
+- **Textured art:** a vertex colour multiplies the texture, so leave skin and cloth white (or grey shading) in the atlas and paint them by vertex colour. A face or hairstyle with a texture of its own stays a second surface: one
+  more draw call per character (**checked** as a warning).
+- **Body without paint:** a body whose skin paint no vertex has shows no skin tone, and one without cloth paint shows no job (**checked** as warnings).
+- **Budgets:** the body with its largest face and hairstyle must be inside 5,000 triangles near and 2,000 far (**checked**, `theme.budget`); faces and hairstyles may have a `Body_LOD1`, and need one when the far sum is too big.
+- **A hairstyle that headgear hides:** `"hides_hair": true` on the worn piece's entry (**checked**: a worn piece, true or false). The hairstyle is then not drawn at all, so the body needs a scalp under it (the placeholder body
+  has one, painted `hair`). `default` has one example, `model.equip.leather_cap`.
+- **Job pieces** (`look.pieces` in `content/jobs/*.yaml`) are worn pieces: exactly one of `attach` and `skinned` (**checked**), and gear in the piece's slot is drawn instead of it.
+- *By eye*, on the creation screen (`run-e2e.ps1 -Run appearance -Windowed -Screenshot shot.png`): every hairstyle on every face, the darkest and lightest tones, and headgear over long hair.
+
 ## 2. Variants
 
 One model can serve several keys. A variant entry names another entry's key in `variant_of` and draws that model, optionally changed:
