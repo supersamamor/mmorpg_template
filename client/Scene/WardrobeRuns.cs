@@ -39,9 +39,8 @@ public sealed class WardrobeRuns
         var screen = hud.Accounts!;
         await FramesAsync(3);
         var tag = new string(System.Security.Cryptography.RandomNumberGenerator.GetItems<char>("abcdefghijklmnopqrstuvwxyz", 10));
-        screen.Username.Text = "e2e-" + tag;
-        screen.Password.Text = Guid.NewGuid().ToString("N"); // thrown away with the run
-        var password = screen.Password.Text;
+        Fill(screen.Username, "e2e-" + tag);
+        Fill(screen.Password, Guid.NewGuid().ToString("N")); // thrown away with the run
         Press(screen.RegisterButton);
         await UntilAsync(() => accounts.Screen == AccountScreen.Characters && !accounts.Busy, 15, "the character list after registering");
         await LookRuns.CreateAsync(_main, "Dress" + tag);
@@ -115,7 +114,6 @@ public sealed class WardrobeRuns
         await UntilAsync(() => World.Own!.Visual is ModelVisual { Settled: true } off && !Drawn(off, outfit), 15, "the own character in its gear");
         Press(panel.CloseButton);
         Print("wardrobe: taken off");
-        _ = password;
         Session.Logout(Clocks.Wall());
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy, 10, "bye logout");
     }
@@ -163,6 +161,8 @@ public sealed class WardrobeRuns
     }
 
     private IEnumerable<EntityView> Others() => World.Entities.Where(e => e.Kind == EntityKinds.Player && e.Id != World.OwnId);
+
+    private static void Fill(LineEdit field, string value) => field.Text = value;
 
     private static void Press(Button button)
     {

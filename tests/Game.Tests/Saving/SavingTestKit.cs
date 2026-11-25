@@ -369,6 +369,7 @@ public static class SavedContent
             {
                 IReadOnlyDictionary<string, int> d => d.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"),
                 IReadOnlyDictionary<string, long> d => d.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"),
+                IReadOnlyDictionary<string, string> d => d.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"),   // jsonb keeps no key order (T-708)
                 var value => value,
             });
         return fields;
