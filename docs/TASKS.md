@@ -135,6 +135,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-704 | Appearance definitions: `appearance.yaml` (gender male/female, skin, faces, hair) + validation | Claude Code | Sonnet 5.5 | [T-704](../tasks/prompts/T-704.md) | T-102, T-209 | Review | Data only, started early; server flow is T-705 |
 | T-705 | Appearance on the server: checked at creation, stored with the character, sent in snapshots | Claude Code | Sonnet 5.5 | [T-705](../tasks/prompts/T-705.md) | T-701, T-702, T-704 | Review | Restricted `Persistence/**` and `Net/**`, the scope in the prompt only (owner's instructions of 2026-11-25) |
 | T-706 | Character creation screen with rotating 3D preview, and drawing appearance in the world | Claude Code | Opus 5.5 | [T-706](../tasks/prompts/T-706.md) | T-206, T-207, T-222, T-403, T-405, T-705 | Review | No restricted area |
+| T-710 | Account leftovers: password change, a session that ends closes its game, `character_in_use` across servers, a failed `ui` run restores preferences, flaky tests, docs of the `saving` and `appearance` runs | Claude Code | Sonnet 5.5 | [T-710](../tasks/prompts/T-710.md) | T-701, T-702, T-706 | Ready | Restricted `Net/**` and `Persistence/**` scopes in the prompt's header; ADR-002 #289, #300, #316 |
 
 ## Backlog (prompts written when the previous phase is Done)
 
@@ -146,7 +147,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-707 | 7 | Appearance art: 2 genders, skin tones, faces, hairstyles in the chosen art style (art direction: ADR-003, storybook toon) | Human / artist | — | Backlog |
 | T-708 | 7 | Cosmetic wardrobe: outfit slots that change only the look (never stats), outfits as data on the shared `humanoid` rig and T-403 attach points, owned outfits saved with the character, a wardrobe panel to pick what shows, others see it in snapshots; the template ships 1–2 placeholder outfits, forks add their own (needs T-702, T-705) | Claude Code | Opus 5.5 | Backlog |
 | T-709 | 7 | Cosmetics store: Apple and Google in-app purchases with receipts checked on the server (never trusted from the client), grants outfits from T-708 atomically, refunds revoke, store compliance; the template ships the hook and a sandbox setup, no real products or keys (needs T-701, T-702, T-703, T-708; restricted `Net/**` and `Persistence/**`) | Claude Code | Opus 5.5 | Backlog |
-| T-710 | 7 | Account leftovers: password-change endpoint and screen, end the live connection when its session is revoked, a failed `ui` run restores stored preferences, the Ctrl+C test, two flaky tests, the `saving` run in the docs and CI bound, `character_in_use` across servers (ADR-002 #289, #300; restricted `Net/**`) | Claude Code | Sonnet 5.5 | Backlog |
+| T-711 | 7 | Textured characters: group merged character materials by image content so a textured body, face and hairstyle are one draw call; stop preloading job models that are only a fallback (ADR-002 #314; before T-707 if its art is textured) | Claude Code | Opus 5.5 | Backlog |
 | T-801 | 8 | Content hot-reload + simple editor | Claude Code | Sonnet 5.5 | Backlog |
 | T-802 | 8 | Mobile build pipeline (Android AAB, iOS on macOS CI, TestFlight / Play internal) | Claude Code | Sonnet 5.5 | Backlog |
 | T-803 | 8 | On-device performance capture vs ARCHITECTURE §9 budgets | Claude Code | Sonnet 5.5 | Backlog |
