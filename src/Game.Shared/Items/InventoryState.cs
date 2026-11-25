@@ -9,7 +9,7 @@ namespace Game.Shared.Items
     /// a change replaces the entry in <see cref="InventoryState"/>, so a copy handed to another thread (an event, a message) never changes. A
     /// <c>with</c> copy (equip, unequip) keeps the cards and the refine level. Equal when every field is, the cards compared in order.
     /// </summary>
-    /// <param name="Id">Unique for the server run (equipment: its instance id, for dupe auditing, ARCHITECTURE §11).</param>
+    /// <param name="Id">Permanent and unique over every character and every server run (equipment: its instance id, for dupe auditing, ARCHITECTURE §11, T-702).</param>
     /// <param name="ItemId">The item (<c>item.*</c>).</param>
     /// <param name="Quantity">How many, 1..<c>max_stack</c> (always 1 for equipment).</param>
     /// <param name="Slot">The equipment slot it is worn in (<see cref="EquipSlots"/>), or null when carried.</param>
@@ -54,12 +54,18 @@ namespace Game.Shared.Items
         /// <summary>Simulated or server time (ms) until which each item id is on cooldown after a use.</summary>
         public Dictionary<string, long> CooldownUntilMs { get; } = new Dictionary<string, long>(StringComparer.Ordinal);
 
+        /// <summary>
+        /// Quest turn-ins (<see cref="Quests.QuestProgress.Token"/>) this bag has paid: items taken and given, currency added. Set with them in one step, so a turn-in whose answer
+        /// was lost (a warp, a save between the two) is never paid twice: the quest sees it here and goes on (T-702). The tokens no active quest holds are forgotten.
+        /// </summary>
+        public HashSet<long> SettledTurnIns { get; } = new HashSet<long>();
+
         /// <summary>Counts every change the owner was told about (the <c>rev</c> of the wire messages).</summary>
         public long Revision { get; set; }
 
         /// <summary>
         /// The character's currency (T-602; engine id <c>currency</c>, never negative). Kept with the bag so one inventory transaction can take items and pay or spend
-        /// currency together (rule 10). Earned from quest rewards; nothing spends it yet (shops are later).
+        /// currency together (rule 10). Earned from quest rewards and sales, spent in shops.
         /// </summary>
         public long Currency { get; set; }
 
@@ -71,6 +77,14 @@ namespace Game.Shared.Items
 
         /// <summary>The <see cref="WeightStates"/> term for <see cref="Weight"/> of <see cref="WeightLimit"/> (kept by the server).</summary>
         public string Load { get; set; } = WeightStates.Normal;
+
+        /// <summary>Puts a loaded character's entries in (T-702), in place of whatever was there; ids must differ. The weight is the caller's to refresh.</summary>
+        public void SetEntries(IEnumerable<InventoryEntry> entries)
+        {
+            if (entries == null) throw new ArgumentNullException(nameof(entries));
+            _entries.Clear();
+            foreach (var entry in entries) Put(entry);
+        }
 
         /// <summary>The entry with this id, or null.</summary>
         public InventoryEntry? Find(long id)

@@ -117,7 +117,7 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
   manifest's asset keys and audio data. The server calls it at start and refuses to run on an error, printing the same lines
   `Game.Tools validate` prints; `validate` adds only the JSON Schema check (YAML documents and `maps/*.grid.json`) and the map scene check (§5.3).
 - **Map instances:** each map runs in its own instance; warps move a character between instances.
-- **Persistence:** player state saved on interval, on map change, and on logout (T-702). Content is never in the DB.
+- **Persistence:** player state is saved on an interval, on map change and when a character leaves ("Saving characters" below, T-702). Content is never in the DB.
   **Base** (T-701, `Game.Server/Persistence`): EF Core with Npgsql. The connection string is the environment variable `GAME_DB_CONNECTION` (not an option: those
   show up in process listings); it is never committed or logged, and database error details (which quote row values) are off. Without it a development server runs with
   the dev login only; any other server refuses to start. At start the applied migrations are compared with the build's: a missing or older schema is migrated in
@@ -125,8 +125,60 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
   `GameDatabase.Open`, which throws on a tick thread (`TickThread`), so database work cannot run there. Tables: `accounts` (`id`, `username`, `password_hash`,
   `created_at`, `password_changed_at`), `account_sessions` (`token_hash`, `account_id`, `created_at`, `expires_at`), `characters` (`id`, `account_id`, `slot`, `name`,
   `name_key`, `job_id`, `created_at`, `deleted_at`). Unique indexes decide: `username`; `name_key` over **every** row (a deleted character keeps its name); and
-  `account_id, slot` over characters that are not deleted. A character's `id` is a GUID, separate from its runtime `EntityId`; T-702 and T-705 hang their data off it.
+  `account_id, slot` over characters that are not deleted. A character's `id` is a GUID, separate from its runtime `EntityId`; the saved state (T-702) and T-705's data hang off it.
   A new table is one row class, its block in `GameDb.OnModelCreating` and `dotnet ef migrations add <Name> --project src/Game.Server --output-dir Persistence/Migrations`.
+- **Saving characters** (T-702; `Game.Server/World/Saving`, `PostgresCharacterStore`). An account's character is loaded before it enters the world and saved as it plays and leaves. Dev-login
+  characters, and every character of a server without a database, live in memory only. The in-memory stores (`IPlayerProgressionStore`, `IInventoryStore`, `ISavePointStore`) stay what the systems
+  use: a loaded character is put into them in its spawn's initializer, before any system sees it, and copied out of them whole.
+  - **What is saved.** Ids and numbers only:
+
+    | state | saved | why |
+    |-------|-------|-----|
+    | map, cell, facing; HP and SP | yes | HP 0 (dead) comes back as if it had pressed respawn: at its save point, else the map's respawn point, with `death.respawn_hp_percent`; the EXP penalty was paid at death |
+    | save point; levels, EXP, job, points, stats, skills; unlocked jobs | yes | |
+    | active quests (step, counters, turn-in number), completed quests, the turn-in counter, rewards owed but not paid yet | yes | see "Nothing is split" |
+    | inventory entries (id, item, quantity, slot, cards, refine), currency, the turn-ins the bag has paid | yes | |
+    | skill cooldowns (row 214), item cooldowns | yes, as time left; time away counts | signing in again must not reset them |
+    | the autopilot's daily usage and when its day began (row 293) | yes | likewise |
+    | what the content has no place for ("Loading") | yes | nothing disappears |
+    | an autopilot run; statuses; an open dialogue, service or shop; a cast, auto-attack, walk or pending pick-up; "in combat" | no | they belong to a moment and a map; statuses end on every map change too. An out-of-combat reset is possible right after signing in: accepted, the character is out of the fight |
+    | stat sheet, weapon, look, weight, load, NPC markers, views, the inventory `rev`, a held quest's reason | no | worked out again from the rest |
+    | items on the ground | no | a crash loses them (see "Between characters") |
+
+  - **Tables.** `server_runs` (`id` from an identity sequence, `started_at`, `seen_at`, `ended_at`), `character_states` (`character_id`, `claim`, `held_by` → run, `version`, `saved_at`, and the state: one
+    column per number or id, `jsonb` for stats, skills, quests, cooldowns and what is set aside; `version` 0 = never saved), `character_items` (`id` primary key over **all** characters,
+    `character_id`, `item_id`, `quantity`, `slot`, `cards`, `refine`, `aside`; one item per worn slot). A check keeps the currency from going negative. T-705, T-708 and T-905 add tables or columns beside these.
+  - **Item ids** are permanent: the run's number, which the database gives to no other run, shifted left 40 bits, plus a counter from 1 (`CharacterSaves.NextItemId`). No restart repeats one, and a
+    tick thread gets one without the database. An entry keeps its id for life; equipment also keeps it from hand to hand.
+  - **A copy** is made on the tick thread that holds the character, in phase 5 (`SaveSystem`), after every system has run and every event of the tick is out, so it is always consistent; the
+    entries in it are immutable. It costs 5 µs and 3.4 KB for a character with 40 entries, 8 skills and 35 quests; 100 due in one tick cost 0.5 ms (max 2 ms) with the database answering
+    nothing; with none due, 2 to 5 µs. The database work runs on up to 4 tasks of its own (100 saves of 40 items: 0.5 s; `GameDatabase.Open` refuses a tick thread).
+  - **When:** every `--save-interval` seconds (60; each character has its own phase), after arriving on a map (entering the world included), in the tick it puts an item down, and last when it leaves:
+    logout, end of the grace period, an account switch, shutdown. A leaving character stays one to three ticks longer, until nothing it began is half done.
+  - **One transaction per save**, with a number: `version` only goes up, so an older copy never overwrites a newer one and the same save twice is harmless (an answer lost after the commit). **Only the
+    newest claim saves:** entering the world counts `claim` up and sets `held_by`; a save whose claim is not the stored one is refused and that server has lost the character. Another server may not claim
+    it while the holder's run is alive (not ended, heard of within 20 s by the database's clock). So two servers, or a late save, never both win. After a crash the next server can enter its characters once those 20 s are over.
+  - **Nothing is split.** Some things span ticks. A quest turn-in keeps its number (`QuestProgress.Token`, per character, never reused) until the step has advanced, and the bag keeps the numbers it has
+    paid (`InventoryState.SettledTurnIns`), set in the step that pays; on every arrival (a warp, a load) a paid turn-in advances and is never asked again (row 264). A completed quest's other rewards are owed
+    (`ProgressionState.OwedRewards`) until combat pays them on whatever map the character is. So a copy at **any** tick of a turn-in comes out right. An item's or a dialogue's effects follow a tick or
+    two after its price: copies, and leaving, wait for them (at most 10 ticks).
+  - **Between characters: the giver's save lands first, or together.** In the tick a saved character puts an item down, `CharacterTicket.PutDown` gives the ground item a link to its next copy (the first one
+    without the item); whoever picks it up takes the link (`DependOn`). `CharacterSaves` writes a copy only when every copy it links to has landed, or in one transaction with those copies (and theirs). A crash at
+    any point therefore finds the item with the giver, with the receiver, or (put down and saved, not yet landed with the receiver) nowhere: **it may be lost, never doubled.** It holds for stacks too,
+    which the primary key alone would not catch. T-903 and T-905 use the same two calls, on both sides for a trade. The primary key is the second line: a save with an item that is another character's is
+    refused whole and reported (`DUPLICATED ITEMS`).
+  - **A lost character** (claimed elsewhere, deleted, or with a duplicated item) is not saved any more: its session gets `bye save_lost` and it leaves. Whoever holds something it gave away after its last landed
+    save is lost with it (for them it is a crash), and what it put down can no longer be picked up.
+  - **Loading.** Claimed and read in one transaction, which also re-checks that the character is not deleted (row 289; a held character cannot be deleted: both take the same row lock). Then `CharacterLoader`
+    checks it against the content; every change is logged. A removed **item** is set aside with its id, cards and refine, and returns to the bag when the content has it again; a removed **card** stays
+    in its socket and does nothing; a stack over `max_stack` splits; a worn item that may not be worn any more goes to the bag. A removed **skill**, or levels above a lower `max_level`, give their points back. A removed
+    **job** leaves the start job at job level 1, with a record of what it was. A removed **quest** (active or completed) or unlocked job is set aside and comes back with it; a quest whose step changed starts
+    that step over. A removed **map** moves the character to its save point, else the start; a **blocked cell**, to the map's respawn point; a save point that is gone is cleared.
+  - **Failure.** A load that fails refuses the login (`bye load_failed`) and changes nothing; a failure is never read as a new character. A failed save is tried again for as long as the server runs (0.5 s doubling
+    to 15 s) with whatever is newest by then, and the character plays on: the player sees nothing. After 30 s it is **at risk** (logged once as an error, counted in `CharacterSaves.Stats`). A character whose last save
+    has not landed cannot be entered again: the login waits up to 3 s, then `bye save_pending`.
+  - **Shutdown.** Every character is asked to leave, the instances go on ticking, and the server waits up to `--save-shutdown-wait` seconds (20) for the saves, without backoff. Any that failed are listed
+    (`NOT SAVED`) and the exit code is 3.
 - **Mobile sessions are flaky** — the network layer assumes drops and app suspension (§10).
 
 ## 4. World space & movement
@@ -312,7 +364,7 @@ New *kind* of behavior = new effect type + tests.
 State machine per quest: `prerequisites → steps[objective] → rewards` (T-602). `QuestSystem` (`Game.Server/World/Quests`, after the inventory in the tick) drives it from the
 event bus only (hard rule 7): it never calls combat, the inventory or dialogue. The rules are pure, `Game.Shared/Quests/QuestRules`.
 - **State** per character, in the progression store (`ProgressionState.ActiveQuests`: `{questId, stepIndex, counters}`, beside `CompletedQuests` and `UnlockedJobs`): not started,
-  active (step and one counter per objective of the step), completed. **In memory until T-702** (with the currency): a server restart forgets them.
+  active (step and one counter per objective of the step), completed. Saved with the character (§3).
 - **Accepting.** A dialogue's `start_quest` raises `QuestStartRequested`; the quest starts when it is known, not active, not completed (unless `repeatable`), the base level, job and
   prerequisite quests are met and fewer than `balance.yaml` `quests.max_active` are active. Each refusal is a "Quest reasons" term the player gets as `rejected` (`intent`
   `dialogue_choice`, `quest`). **Abandoning** (`abandon_quest`) drops the progress and gives nothing back; the items a step would consume stay.
@@ -336,7 +388,9 @@ event bus only (hard rule 7): it never calls combat, the inventory or dialogue. 
   dialogue has a reachable `start_quest` for the quest (and no other NPC's does); every `talk` NPC is placed and has a dialogue. Ids are `ReferenceRule`'s, reach cells `MapGridRule`'s.
 - **The Warden path** (rows 211, 212): Captain Brannoc offers the Warden's Trial to a Wanderer of base level 5; base level 10, three Sting Wasps, then reporting to him completes it
   and unlocks the Warden; `change_job` is then accepted (§6.5); the Warden's Oath (offered once the trial is done) completes when the character is a Warden.
-- **Warp edge case:** a turn-in waits for the inventory of the map it was asked on; a player who warps in that tick has it asked again on arrival (open question in ADR-002).
+- **Paid exactly once** (T-702, row 264): a turn-in has a number (`QuestProgress.Token`) that stays until its step has advanced, and the bag that paid it keeps that number, so a player who warps between the two
+  advances on arrival, and one whose turn-in was not paid yet has it asked again there. The rewards combat pays are kept in `ProgressionState.OwedRewards` until paid, on whichever map. `abandon_quest` waits while a turn-in is
+  being paid (it used to be able to keep the rewards and the quest).
 Dialogue graphs, NPCs and their services are T-601; quests are T-602. The sections below are the dialogue half of this chapter.
 
 #### 6.4.1 NPCs and dialogue (T-601)
@@ -363,7 +417,7 @@ Dialogue graphs, NPCs and their services are T-601; quests are T-602. The sectio
     (`InventoryRules.TryExchange`, all or nothing, rule 10) and answers `DialogueItemsResolved`. Meanwhile the dialogue is `busy`. On a refusal (`missing_item`, `inventory_full`, `too_heavy`) nothing
     changed and the player stays at the node (`rejected` on the wire); on success the other actions run and the dialogue moves on. The inventory change goes out as `inventory_changed` (`exchanged`).
   - **Effects.** `DialogueEffectsRequested` is run by combat's effect runner on its next tick, like a consumable's effects (so they apply one tick later; row 203's edge case).
-  - **Save point.** `ISavePointStore` (in memory until T-702, shared by every instance) holds a character's save point. **The rule:** `teleport` with `to_save_point` and the respawn after death both go
+  - **Save point.** `ISavePointStore` (shared by every instance, saved with the character) holds a character's save point. **The rule:** `teleport` with `to_save_point` and the respawn after death both go
     to it; a character without one uses the respawn point of the map it is on (`CombatContent.RespawnPointFor`). It is forgotten when the character leaves the world.
   - **Services.** `open_service` sets `Entity.OpenService` (and, for `shop`, `Entity.OpenShopId` and `Entity.OpenServiceNpc`) and sends `service_opened`; it stays open until the player walks beyond the talk range, warps, dies, closes or talks to someone else (a
     finished graph leaves it open). **Refine:** with `dialogue.refine_needs_service` (on in `balance.yaml`) the `refine` intent is refused `service_required` unless a `refine` service is open;
@@ -403,7 +457,7 @@ Dialogue graphs, NPCs and their services are T-601; quests are T-602. The sectio
   the same tick is dropped, whichever came first, so an order queued a moment ago never overrules the player; one that arrives while the character is between maps is kept until it arrived. `stop_autopilot`,
   death, leaving the world, the end of the connection (or its takeover), a bag without room for what is wanted, the daily limit and dropping the quest end it too; the character stops. A resume or a
   respawn does not restart it. **The player's order also ends a paused run.** A pause ends by itself when the quest's step or counters move (an `unreachable` one also on another map).
-- **Daily limit.** `daily_limit_minutes` of simulated running time per 24 hours of the server's clock, counted from the first run of that day (the clock has no calendar); pauses are free. In memory with the character (T-702).
+- **Daily limit.** `daily_limit_minutes` of simulated running time per 24 hours of the server's clock, counted from the first run of that day (the clock has no calendar); pauses are free. Saved with the character (T-702), so signing in again does not reset it.
 - **Cost** (Release, sample meadow, the system's own share of a tick): one hunting run 5 us on average; 100 hunting runs 0.27 ms; 100 waiting runs 0.02 ms; 100 runs whose every search fails 0.5 ms. All runs of an
   instance share `searches_per_tick` searches, each within `movement`'s limits; a run whose search failed waits 3 s before the next; what no walk leads to is ruled out without a search.
 - **Limits.** Monsters never block and are never avoided on the way; a monster that moves around all the time is only re-chosen when a fight ends; a `collect` hunts the nearest source, however dangerous; parties are not considered.
@@ -414,7 +468,7 @@ per job level, stat point cost, the stat range and combat clamps come from `bala
 (`BalanceDef`); the max base level is the base EXP table length + 1. Job change requirements from `JobDef`.
 
 **Player skills** (T-502; combat hosts them, `CombatSystem.PlayerSkills.cs`, rules in `Game.Shared/Skills` and `Progression`). State per character is the `ProgressionState`
-in the progression store (in memory until T-702): skill points, learned levels, job, completed quests and unlocked jobs.
+in the progression store (saved with the character, §3): skill points, learned levels, job, completed quests and unlocked jobs.
 - **Learning.** `learn_skill` spends one point on a skill of the current job's tree or a parent job's (`ProgressionRules.LearnSkill`): up to the tree entry's `max_level`
   (else the skill's), only when every `requires` entry is met. Refusals are "Skill reasons" terms (`SkillLearnRefused`).
 - **Job change.** `change_job` to a job whose `parent_job_id` is the current job and whose `requirements` are met (base level, job level, `quest_ids` all in
@@ -529,7 +583,7 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
 - **EXP.** Per monster, the HP each player took since its last full-HP moment. On death the players still on the map share `base_exp` /
   `job_exp` in proportion (largest remainder; ties to the first hitter; the shares add up exactly) through `ProgressionRules`, which raise
   `ExpGained` and `PlayerProgressed` (`LevelUp` / `JobLevelUp`); the sheet takes the new levels and job bonuses. Progression is kept per
-  character in an `IPlayerProgressionStore` shared by all instances (in memory until persistence).
+  character in an `IPlayerProgressionStore` shared by all instances (saved with the character, §3).
 - **Drops.** Each `drop_table_ids` table rolls every entry on its own (`chance`, then a quantity in `min..max`) with the instance random.
   Each drop is an `EntityKind.Item` entity on a random walkable cell within `loot.spread_radius` of the death cell (`ItemDropped`); for
   `loot.priority_ms` only the top damager may take it (`LootRules.MayPickUp`), and after `loot.lifetime_ms` it is despawned
@@ -541,16 +595,16 @@ One system, `Game.Server/World/Inventory` (`inventory`), after combat and before
 (`InventoryRules`, `InventoryState`), shared with the tests. Numbers from `balance.yaml` `inventory` and `new_character.start_items`; the weight limit is the
 derived stat `weight_limit` (`formulas.yaml`).
 
-- **Model.** Per character, an `InventoryState` in an `IInventoryStore` shared by every instance (in memory until T-702, like progression). An **entry** is a
+- **Model.** Per character, an `InventoryState` in an `IInventoryStore` shared by every instance (saved with the character, §3). An **entry** is a
   stack of one item up to its `max_stack`, or one equipment item with its own instance id, its socketed cards (in socket order) and its refine level. Entry ids come from the store,
-  unique for the server run; an equipment item dropped and picked up again keeps its id, cards and refine level (they ride on the ground item, which clients never see them on). Worn entries stay in the inventory (their slot is set), so they count
+  permanent and unique over all characters and server runs (§3 "Item ids"; without a database only for the run); an equipment item dropped and picked up again keeps its id, cards and refine level (they ride on the ground item, which clients never see them on). Worn entries stay in the inventory (their slot is set), so they count
   toward `inventory.max_entries` and the weight, and putting something on never needs room. **Weight** = Σ `weight × quantity`.
 - **Weight states** (`WeightStates`, from the weight as a share of `weight_limit`): `normal`; `burdened` from `inventory.burdened_percent` (50%): no natural
   HP and SP regeneration; `overweight` from `inventory.overweight_percent` (90%): no regeneration and no attacks (§6.7). A pick-up that would pass 100% is
   refused (`too_heavy`). The state is on `Entity.Load`; the limit is re-read whenever the stat sheet changes (a level, STR from equipment), and the owner is told.
 - **Atomic operations.** Every change (pick up, use, equip, unequip, drop) checks everything first and returns an "Item reasons" term with nothing changed;
-  only then does it change the state, in steps that cannot fail, inside one tick. So each one maps onto one database transaction for T-702 without changing
-  the rules. A refusal is an `ItemRefused` event and a `rejected` message.
+  only then does it change the state, in steps that cannot fail, inside one tick. So the state is whole at the end of every tick, which is when it is copied for a save
+  (§3). A refusal is an `ItemRefused` event and a `rejected` message.
 - **Intents** (`PickUp`, `UseItem`, `Equip`, `Unequip`, `DropItem`, `InsertCard`, `RefineItem`; rate-limited like every client message).
   - *Pick up:* the gateway checks the target is a ground item the client sees and stops the auto-attack; the inventory walks the player with `MoveTo`
     until it is within `inventory.pickup_range` (1, Chebyshev) of the item, then checks `LootRules.MayPickUp`, the weight and the free entries, and takes
@@ -579,7 +633,7 @@ derived stat `weight_limit` (`formulas.yaml`).
     Sample data: max +7; +1 and +2 always succeed, then 90/75/60/45/30 %, Temper Shards ×1–3, failures keep up to +4, down at +5 and +6, break at +7.
 - **What other systems read** (hard rule 7, no calls): the sheet's modifiers; `Entity.Weapon` (type, `weapon_atk`, refine, range, element) for combat;
   `Entity.Look` (weapon type and the worn item ids that have a worn visual, in slot order) for the AOI; `Entity.Load` for combat.
-- **Currency** (T-602): one balance per character, `InventoryState.Currency` (in memory until T-702), kept with the bag so one transaction can take items and pay or spend currency;
+- **Currency** (T-602): one balance per character, `InventoryState.Currency`, kept with the bag so one transaction can take items and pay or spend currency;
   sent as `currency` in `inventory` and `inventory_changed` and shown in the bag with the bundle's `currency_name`. Quest rewards and shop sales add to it; shop purchases spend it.
 - **Shops** (T-603, `ShopContent`, `InventorySystem`, `Game.Shared/Shop/ShopRules.cs`). A shop is a `ShopDef` (`shop.*`, `content/shops/`): a stock list of item ids with an optional own price; load
   validation needs at least one row, no item twice, every price from 1 to `ShopRules.MaxUnitPrice` (1,000,000,000; the item's `buy_price` counts when a row sets none) and every item to exist.
@@ -1022,7 +1076,7 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   the allowance is set once at start-up from the engine's debug-build flag and cannot be changed by `client_settings.json` or the command line
   (`TransportPolicy`, MOBILE_BUILD §8.4). The iOS preset still states ATS explicitly; no Android network-security config is shipped (it would need the Gradle export and would not cover these sockets).
 - **Disconnects are normal.** When a socket drops or the app is backgrounded, the server keeps
-  the character in the world for a grace period (`grace-period-ms`, server config, default 60 s), then saves (T-702) and logs it out.
+  the character in the world for a grace period (`grace-period-ms`, server config, default 60 s), then saves it and logs it out.
 - **Resume** (T-210): the client reconnects with a resume token and receives a full snapshot, then deltas (lifecycle step 6 below).
 - **Statuses on the wire** (T-501). Every view record carries the entity's active statuses, `statuses: [{id, stacks, left_ms, debuff}]` (left out when none;
   `debuff` only when true; `left_ms` = simulated ms left at the message's tick), and a delta's `changed` carries the whole list when one starts, stacks, is
@@ -1135,7 +1189,8 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   2. The server checks the protocol version, then the content hash (T-209): a `content` that differs from the server's ends in `bye update_required`; a missing one is accepted in development (logged as a warning) and refused elsewhere. Then it checks the login: a live session and one of its account's characters (T-701, "Accounts" below), or the dev
      login (`name`), which any environment but development refuses. The check may read the database; it runs on the session's receive loop, never on a tick. Messages that arrive meanwhile wait for it, and a
      connection that drops, times out or is shut down meanwhile leaves no slot and no character behind. A `hello` with `resume` goes to step 6.
-  3. The server queues the character with `GameWorld.Spawn(..., initialize)` at `balance.yaml` `new_character`. On the start
+     An account's character that the gateway does not hold is then claimed and loaded (T-702, §3): `bye load_failed`, `save_pending` or (deleted meanwhile) `login_refused` when that fails, with nothing changed.
+  3. The server queues the character with `GameWorld.Spawn(..., initialize)` at `balance.yaml` `new_character`, or where a loaded one was. On the start
      instance's tick, the initializer sets its stats (from the stats pipeline), its display key (the job id) and its view sink, and
      queues `welcome`. The AOI then sends the first `snapshot` in phase 5 of that tick, and deltas follow.
   4. `move`/`stop`/`attack`/`stop_attack`/`respawn` and the item intents are parsed and checked on the socket thread (shape; a cell inside the current map; an
@@ -1148,10 +1203,10 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   6. **Grace period and resume** (T-210). Every `welcome` carries a **resume token** for the character.
      - **The connection ends without `logout`** (the client closed or vanished, idle `timeout`, `too_slow`, a protocol error such as
        `malformed` or `rate_limit`, `server_error`): the character is **not** removed. It is stopped (`StopMove`, `StopAttack`), its view is detached
-       (`AttachView` with no sink), and it stays where it is, visible to others, for `grace-period-ms`. When that ends it leaves the
-       world (T-702 saves it first). A buggy or hostile message must not delete a character, so protocol errors are no exception.
+       (`AttachView` with no sink), and it stays where it is, visible to others, for `grace-period-ms`. When that ends it is saved and leaves
+       the world (§3). A buggy or hostile message must not delete a character, so protocol errors are no exception.
        A character whose session ended before its `welcome` was queued (no token yet) is removed at once.
-     - **`logout`**: `bye logout`, the close frame, and the character leaves on its instance's next tick; its token stops working.
+     - **`logout`**: `bye logout`, the close frame, and the character leaves on its instance's next tick (a saved one within a few ticks, §3); its token stops working.
      - **Resume:** `hello` with `resume` (the protocol version and content hash are still checked first). If the token is live, the
        new session takes the character over wherever it is now (it may have warped since the drop): `welcome` (same `id`, current
        `map`, a **new** token), then a full `snapshot`, then deltas. A session still playing that character (the server had not
@@ -1159,7 +1214,7 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
        `bye resume_failed`. Resume works in every environment; the token check sits in `ILoginService` (T-701 plugs in there).
      - **Abuse:** failed resumes are counted per remote address in a token bucket (`resume-failure-burst`,
        `resume-failures-per-minute`); an address that runs out gets `bye rate_limit` and may not resume for `resume-lockout-ms`.
-     - **Shutdown:** every session gets `bye shutdown`; characters in their grace period leave too (T-702 saves them).
+     - **Shutdown:** every session gets `bye shutdown`; characters in their grace period leave too. Each is saved as it leaves, and the server waits for the saves (§3).
      - **The token:** 256 bits from the OS CSPRNG, base64url without padding (43 characters), bound to one character, **single use and
        rotated** (every successful resume returns a new one). The server keeps only its SHA-256 and
        compares in constant time; tokens never appear in logs (at most a 6-hex-digit fingerprint of the hash). Tokens live in server
@@ -1240,7 +1295,8 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   exists) after 5 and the address (an IPv6 /64 counts as one) after 20, for 5 s doubling to 5 min; attempts count when they start, so a burst gains nothing. Requests and registrations
   per address, creations per account and failed `hello`s per address are limited too. Every table of the limiter is bounded.
 - **Nothing secret in logs:** no password, token, connection string or username (accounts appear by id); records that hold a secret do not print it.
-- Item operations in DB transactions; item instances have unique ids (dupe auditing).
+- Item operations are atomic in the tick and saved whole, in one transaction, giver before receiver (§3 "Between characters"); every item has a permanent id, unique in the database (dupe auditing:
+  a save with another character's item is refused and logged as `DUPLICATED ITEMS`).
 - The client is untrusted (CLAUDE.md rule 11); the client bundle holds display data only.
 - No plaintext outside debug builds (§10): release clients refuse `ws://`. The Android APK carries only what runs on a device (arm64-v8a; the Mono static
   archives are stripped, MOBILE_BUILD §8.3), and CI exports it on every push (MOBILE_BUILD §9).

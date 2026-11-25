@@ -96,8 +96,19 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
 
     /// <inheritdoc />
     public Task<bool> DeleteCharacterAsync(Guid account, Guid character, DateTime now, CancellationToken cancellation) => RunAsync(async db =>
-        await db.Characters.Where(c => c.Id == character && c.AccountId == account && c.DeletedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(c => c.DeletedAt, now), cancellation).ConfigureAwait(false) > 0);
+    {
+        // ADR-002 row 289: entering the world (PostgresCharacterStore.ClaimAsync) takes the same lock first, so either it sees the character deleted, or this sees it held.
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellation).ConfigureAwait(false);
+        var row = await db.Characters.FromSql($"SELECT * FROM characters WHERE id = {character} AND account_id = {account} AND deleted_at IS NULL FOR UPDATE")
+            .SingleOrDefaultAsync(cancellation).ConfigureAwait(false);
+        if (row is null) return false;
+        var holder = await db.CharacterStates.Where(s => s.CharacterId == character).Select(s => s.HeldBy).SingleOrDefaultAsync(cancellation).ConfigureAwait(false);
+        if (holder is { } run && await PostgresCharacterStore.IsAliveAsync(db, run, cancellation).ConfigureAwait(false)) return false;
+        row.DeletedAt = now;
+        await db.SaveChangesAsync(cancellation).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellation).ConfigureAwait(false);
+        return true;
+    });
 
     private static Task<AccountRow?> LockAccountAsync(GameDb db, Guid account, CancellationToken cancellation) =>
         db.Accounts.FromSql($"SELECT * FROM accounts WHERE id = {account} FOR UPDATE").SingleOrDefaultAsync(cancellation);

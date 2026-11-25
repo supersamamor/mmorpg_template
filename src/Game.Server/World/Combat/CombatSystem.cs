@@ -78,8 +78,8 @@ public sealed partial class CombatSystem : ITickSystem
     private List<ItemUsed> _itemResolving = new();
     private List<DialogueEffectsRequested> _dialogueEffects = new();
     private List<DialogueEffectsRequested> _dialogueEffectsRunning = new();
-    private List<QuestRewardsRequested> _questRewards = new();
-    private List<QuestRewardsRequested> _questRewardsRunning = new();
+    private List<EntityId> _questRewards = new();   // players with owed rewards to pay next tick
+    private List<EntityId> _questRewardsRunning = new();
     private readonly List<(int Distance, long Id)> _area = new();
     private EffectRunner? _runner;
     private EffectHost? _host;
@@ -155,6 +155,7 @@ public sealed partial class CombatSystem : ITickSystem
             if (entity.Stats is { } stats && entity.Vitals is { } vitals)
             {
                 vitals.Sync(stats);
+                vitals.EndRestore();
                 entity.Cooldowns?.Advance(_nowMs);
                 // A player carrying at least inventory.burdened_percent of its weight limit does not regenerate (ARCHITECTURE §6.8).
                 if (!entity.Dead && entity.Load == WeightStates.Normal) Regenerate(_ordered[i], vitals, stats, context.DeltaMs);
@@ -242,7 +243,7 @@ public sealed partial class CombatSystem : ITickSystem
         events.Subscribe<SkillRequested>(e => _skillRequests.Add(e));
         events.Subscribe<ItemUsed>(e => _itemUses.Add(e));
         events.Subscribe<DialogueEffectsRequested>(e => _dialogueEffects.Add(e));
-        events.Subscribe<QuestRewardsRequested>(e => _questRewards.Add(e));
+        events.Subscribe<QuestRewardsRequested>(e => _questRewards.Add(e.Player));
 
         // Entities that were there before combat first ran (tests, a system added late) join now.
         foreach (var entity in instance.Entities) Track(entity);
@@ -262,6 +263,7 @@ public sealed partial class CombatSystem : ITickSystem
         if (!_instance!.TryGetEntity(e.Entity, out var entity)) return;
         Track(entity);
         SetUpPlayerSkills(entity);
+        if (entity.Kind == EntityKind.Player && _progressions.TryGet(entity.Id, out var progression) && progression.OwedRewards.Count > 0) _questRewards.Add(entity.Id);
         // Statuses timed on another map's clock end on arrival (StatusEndReasons.Warped); a same-map warp keeps them.
         if (entity.Statuses is { } set && !string.Equals(set.MapId, _instance.MapId, StringComparison.Ordinal))
         {

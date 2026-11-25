@@ -435,7 +435,10 @@ public sealed class InventorySystem : ITickSystem
         _delta.Clear();
         _rules.TryRemove(state, entryId, quantity, _delta);
         var ground = new GroundItem(entry.ItemId, quantity, player.Id, null, _nowMs, _nowMs, _nowMs + _content.Balance.Inventory.DroppedLifetimeMs,
-            equipment ? entry.Id : 0, equipment && entry.Cards.Count > 0 ? entry.Cards : null, equipment ? entry.Refine : 0);
+            equipment ? entry.Id : 0, equipment && entry.Cards.Count > 0 ? entry.Cards : null, equipment ? entry.Refine : 0)
+        {
+            Source = player.Save?.PutDown(),   // T-702: this save goes before that of whoever picks it up
+        };
         var id = context.Spawn(EntityKind.Item, player.Cell, Directions.S, e =>
         {
             e.DefinitionId = ground.ItemId;
@@ -492,17 +495,31 @@ public sealed class InventorySystem : ITickSystem
         foreach (var request in _questItemsRunning)
         {
             if (!_holders.TryGetValue(request.Player.Value, out var holder)) continue;
+            if (holder.State.SettledTurnIns.Contains(request.Token))
+            {
+                context.Publish(new QuestItemsResolved(request.Player, request.Token, null));   // asked twice: it is paid once (T-702)
+                continue;
+            }
             var takes = request.Takes.Select(t => new KeyValuePair<string, int>(t.ItemId, t.Quantity)).ToList();
             var gives = request.Gives.Select(g => new KeyValuePair<string, int>(g.ItemId, g.Quantity)).ToList();
             var reason = _rules.TryExchange(holder.State, takes, gives, holder.State.WeightLimit, _newId, _delta);
             if (reason is null)
             {
+                Settle(request.Player, holder.State, request.Token);
                 if (request.Currency > 0) holder.State.Currency = long.MaxValue - holder.State.Currency < request.Currency ? long.MaxValue : holder.State.Currency + request.Currency;
                 Changed(context, holder, InventoryChanges.Quest, null);
             }
             context.Publish(new QuestItemsResolved(request.Player, request.Token, reason));
         }
         _questItemsRunning.Clear();
+    }
+
+    /// <summary>Remembers that the turn-in is paid, in the step that pays it (T-702), and forgets those whose quests have gone on.</summary>
+    private void Settle(EntityId player, InventoryState bag, long token)
+    {
+        if (_progressions is not null && bag.SettledTurnIns.Count > 0 && _progressions.TryGet(player, out var state))
+            bag.SettledTurnIns.RemoveWhere(paid => !state.ActiveQuests.Values.Any(q => q.Token == paid));
+        bag.SettledTurnIns.Add(token);
     }
 
     // ---- shops (T-603) -------------------------------------------------------------------------------------------------------------------
@@ -659,6 +676,14 @@ public sealed class InventorySystem : ITickSystem
             Refuse(context, holder, MessageTypes.PickUp, ItemReasons.NotYours, target: target.Id.Value);
             return;
         }
+        if (item.Source is { IsLost: true })
+        {
+            // T-702: whoever put it down can no longer be saved without it, so it still has it: this one does not exist.
+            target.GroundItem = null;
+            context.Despawn(target.Id);
+            Refuse(context, holder, MessageTypes.PickUp, ItemReasons.ItemGone, target: target.Id.Value);
+            return;
+        }
         _delta.Clear();
         var reason = _rules.TryAdd(holder.State, item.ItemId, item.Quantity, holder.State.WeightLimit, _newId, _delta, item.InstanceId, item.Cards, item.Refine);
         if (reason is not null)
@@ -666,6 +691,7 @@ public sealed class InventorySystem : ITickSystem
             Refuse(context, holder, MessageTypes.PickUp, reason, target: target.Id.Value);
             return;
         }
+        if (item.Source is { } source) player.Save?.DependOn(source);
         target.GroundItem = null;   // taken: nobody else can pick it up this tick, and combat's expiry skips it
         context.Despawn(target.Id);
         context.Publish(new ItemAcquired(player.Id, item.ItemId, item.Quantity, target.Id));

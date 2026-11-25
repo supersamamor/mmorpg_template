@@ -11,6 +11,11 @@ namespace Game.Server.World.Combat;
 /// </summary>
 public sealed class Vitals
 {
+    private bool _restoring;
+    private int _wantedHp;
+    private int _wantedPercent;
+    private int _wantedSp;
+
     private static readonly int MaxHpStat = StatIndex.IndexOf(DerivedStats.MaxHp);
     private static readonly int MaxSpStat = StatIndex.IndexOf(DerivedStats.MaxSp);
 
@@ -21,6 +26,26 @@ public sealed class Vitals
         MaxSp = Math.Max(0, stats.GetInt(MaxSpStat));
         Hp = MaxHp;
         Sp = MaxSp;
+    }
+
+    /// <summary>
+    /// A loaded character's HP and SP (T-702): they stand until the sheet has its equipment and passives, which raise the maximums in steps as the character enters
+    /// (<see cref="EndRestore"/>). With <paramref name="hpPercent"/> above 0 the HP is that share of the maximum instead, at least 1.
+    /// </summary>
+    internal static Vitals Restore(StatSheet stats, int hp, int sp, int hpPercent = 0)
+    {
+        var vitals = new Vitals(stats) { _restoring = true, _wantedHp = hp, _wantedSp = sp, _wantedPercent = hpPercent };
+        vitals.Want();
+        return vitals;
+    }
+
+    /// <summary>The first tick of a loaded character begins: its maximums are final, and so are its HP and SP.</summary>
+    internal void EndRestore() => _restoring = false;
+
+    private void Want()
+    {
+        Hp = Math.Clamp(_wantedPercent > 0 ? (int)Math.Max(1, (long)MaxHp * _wantedPercent / 100) : Math.Max(1, _wantedHp), 0, MaxHp);
+        Sp = Math.Clamp(_wantedSp, 0, MaxSp);
     }
 
     /// <summary>Current HP, 0..<see cref="MaxHp"/>. 0 means dead (combat sets <see cref="Entity.Dead"/> in the same step).</summary>
@@ -45,6 +70,7 @@ public sealed class Vitals
         StatsVersion = stats.Version;
         MaxHp = Math.Max(0, stats.GetInt(MaxHpStat));
         MaxSp = Math.Max(0, stats.GetInt(MaxSpStat));
+        if (_restoring) Want();
         if (Hp > MaxHp) Hp = MaxHp;
         if (Sp > MaxSp) Sp = MaxSp;
     }
@@ -65,7 +91,13 @@ public sealed class Vitals
 /// <param name="Cards">An equipment item a player dropped: its socketed cards, which it keeps (null for none). Never sent to clients.</param>
 /// <param name="Refine">An equipment item a player dropped: its refine level, which it keeps. Never sent to clients.</param>
 public sealed record GroundItem(string ItemId, int Quantity, EntityId Monster, EntityId? Owner, long DroppedAtMs, long OwnerUntilMs, long ExpiresAtMs,
-    long InstanceId = 0, IReadOnlyList<string>? Cards = null, int Refine = 0);
+    long InstanceId = 0, IReadOnlyList<string>? Cards = null, int Refine = 0)
+{
+    /// <summary>
+    /// An item a saved character put down (T-702): the save of that character without the item, which must land before any save of whoever picks it up. Null for anything else.
+    /// </summary>
+    public Saving.SaveLink? Source { get; init; }
+}
 
 /// <summary>The loot rules as pure functions, so the pickup system (T-401) and the tests use the same answer.</summary>
 public static class LootRules

@@ -72,9 +72,8 @@ public sealed class InventoryContent
 }
 
 /// <summary>
-/// Where each player character's inventory lives while it is in the world: the seam for persistence (T-702), which will load and save the same
-/// <see cref="InventoryState"/> and wrap each <see cref="InventoryRules"/> operation in one transaction. Shared by every instance, so implementations
-/// are thread-safe; a character is in one instance at a time, so its state is only touched from that instance's tick thread.
+/// Where each player character's inventory lives while it is in the world. A saved character's is put here before any system sees it, and copied from here, whole, for a
+/// save (T-702, <c>CharacterKeeper</c>). Shared by every instance, so implementations are thread-safe; a character is in one instance at a time, so its state is only touched from that instance's tick thread.
 /// </summary>
 public interface IInventoryStore
 {
@@ -84,15 +83,18 @@ public interface IInventoryStore
     /// <summary>The character's inventory, if it has one.</summary>
     bool TryGet(EntityId player, out InventoryState state);
 
-    /// <summary>Forgets a character that left the world (persistence would save it here).</summary>
+    /// <summary>Forgets a character that left the world; a saved one has been copied for its last save (T-702).</summary>
     void Release(EntityId player);
 
-    /// <summary>A new entry id, unique for the server run (equipment instance ids come from here too; the database's sequence later).</summary>
+    /// <summary>A new entry id (equipment instance ids come from here too). With a database it is unique for ever (T-702, <c>CharacterSaves.NextItemId</c>).</summary>
     long NextEntryId();
 }
 
-/// <summary>Inventories kept in memory for the server run only, keyed by entity id. Nothing is saved (T-702).</summary>
-public sealed class InMemoryInventoryStore : IInventoryStore
+/// <summary>
+/// Inventories of the characters in the world, in memory, keyed by entity id. <paramref name="newId"/> is the id source of a server with a database (T-702); without one the ids
+/// are only unique for the server run, and nothing is saved.
+/// </summary>
+public sealed class InMemoryInventoryStore(Func<long>? newId = null) : IInventoryStore
 {
     private readonly ConcurrentDictionary<EntityId, InventoryState> _states = new();
     private long _lastId;
@@ -122,5 +124,5 @@ public sealed class InMemoryInventoryStore : IInventoryStore
     public void Release(EntityId player) => _states.TryRemove(player, out _);
 
     /// <inheritdoc />
-    public long NextEntryId() => Interlocked.Increment(ref _lastId);
+    public long NextEntryId() => newId is null ? Interlocked.Increment(ref _lastId) : newId();
 }

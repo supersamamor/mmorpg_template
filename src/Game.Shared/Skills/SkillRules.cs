@@ -162,6 +162,16 @@ namespace Game.Shared.Skills
             foreach (var id in ids) _ready[id] = nowMs + _ready[id];
         }
 
+        /// <summary>A loaded character's times left (T-702), in place of whatever was there; they count from the first <see cref="Resume"/>.</summary>
+        public void Load(IEnumerable<KeyValuePair<string, long>> leftMs)
+        {
+            if (leftMs == null) throw new ArgumentNullException(nameof(leftMs));
+            _ready.Clear();
+            _suspended = true;
+            foreach (var pair in leftMs)
+                if (pair.Value > 0) _ready[pair.Key] = pair.Value;
+        }
+
         /// <summary>Every cooldown still running as (skill, ms left), in id order.</summary>
         public List<KeyValuePair<string, long>> Running()
         {

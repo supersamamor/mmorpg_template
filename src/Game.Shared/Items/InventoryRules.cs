@@ -55,8 +55,8 @@ namespace Game.Shared.Items
     /// <summary>
     /// The inventory rules as plain functions on an <see cref="InventoryState"/> (ARCHITECTURE §6.8), shared by the server and the tests. Every
     /// operation checks everything first and returns an <see cref="ItemReasons"/> term without touching the state when it refuses; only then does
-    /// it change the state, in steps that cannot fail. So an operation applies fully or not at all, and T-702 can wrap each one in one database
-    /// transaction without changing the rules. No I/O, no clock and no random source of its own: time, new ids and the refine roll's
+    /// it change the state, in steps that cannot fail. So an operation applies fully or not at all, and the state is whole whenever a tick ends, which is when it
+    /// is copied for a save (T-702). No I/O, no clock and no random source of its own: time, new ids and the refine roll's
     /// <see cref="IRandom"/> come in as arguments.
     /// </summary>
     public sealed class InventoryRules

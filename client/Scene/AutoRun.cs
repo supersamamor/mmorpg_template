@@ -44,7 +44,7 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 ||
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -80,6 +80,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-dialogue") >= 0) await DialogueRunAsync();
             else if (Array.IndexOf(_args, "--e2e-quests") >= 0) await QuestsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-account") >= 0) await AccountRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-saving") >= 0) await SavingRunAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
@@ -169,6 +170,126 @@ public sealed class AutoRun
         Print($"account: signed in again (the username in another letter case) and in the world as entity {World.OwnId}");
         Session.Logout(Clocks.Wall());
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy, 10, "bye logout");
+    }
+
+    /// <summary>
+    /// T-702's run, against a server with a database: a new account's character raises a stat, accepts a quest, trades with the merchant, takes its weapon off, kills something and walks
+    /// away. The server then stops by itself (it saves) and the script starts another: the client signs back in by itself and finds all of it. Then it changes something
+    /// more, the script kills that server outright, and a third one has what the interval saves had.
+    /// </summary>
+    private async Task SavingRunAsync()
+    {
+        var hud = _main.Hud!;
+        var accounts = Session.Accounts;
+        var bundle = _main.Bundle!;
+        await FramesAsync(3);
+        var screen = hud.Accounts!;
+        var tag = new string(System.Security.Cryptography.RandomNumberGenerator.GetItems<char>("abcdefghijklmnopqrstuvwxyz", 10));
+        Type(screen.Username, "e2e-" + tag);
+        static void Type(LineEdit field, string value) => field.Text = value;
+        screen.Password.Text = Guid.NewGuid().ToString("N"); // thrown away with the run
+        Press(screen.RegisterButton);
+        await UntilAsync(() => accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters && !accounts.Busy, 15, "the character list after registering");
+        await FramesAsync(3);
+        Type(screen.NameField, "Keep" + tag);
+        Press(screen.CreateButton);
+        await UntilAsync(() => accounts.Characters.Count == 1 && !accounts.Busy, 10, "the new character");
+        await FramesAsync(3);
+        Press(screen.Rows[0].Play);
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null && _main.LoadedMap == World.MapId, 15, "entering the world");
+        await UntilAsync(() => Session.Inventory.Known && Session.Stats.Known && Session.Quests.Known && World.Exp is not null, 10, "the own state");
+        Print($"saving: in the world as entity {World.OwnId} on {World.MapId}");
+
+        // A stat, a quest, currency and items, what is worn, EXP, and where it stands.
+        await RaiseFirstStatAsync();
+        var offer = World.Entities.First(e => e.Kind == EntityKinds.Npc && Session.Quests.MarkerFor(e.DisplayKey) == QuestMarkers.Offer);
+        await TapWorldAsync(new Vector3((float)offer.X, 0.8f, (float)offer.Z));
+        await UntilAsync(() => Session.Dialogue.Open, 20, "the quest giver's dialogue");
+        await FramesAsync(2);
+        var greeting = Session.Dialogue.Text;
+        Press(hud.Dialogue!.ChoiceButtons[0].Button);
+        await UntilAsync(() => Session.Dialogue.Text != greeting && Session.Dialogue.Choices.Count > 0, 10, "the quest's offer");
+        Press(hud.Dialogue.ChoiceButtons[0].Button);
+        await UntilAsync(() => Session.Quests.Active.Count == 1, 10, "the quest accepted");
+        Press(hud.Dialogue.CloseButton);
+        await UntilAsync(() => !Session.Dialogue.Open, 10, "the dialogue's end");
+        await ShopStepAsync();
+        Press(hud.BagButton);
+        await FramesAsync(3);
+        Press(hud.Bag!.SlotButtons[EquipSlots.Weapon]);
+        await FramesAsync(2);
+        Press(hud.Bag.Actions.Unequip);
+        await UntilAsync(() => Session.Inventory.InSlot(EquipSlots.Weapon) is null, 10, "the weapon off");
+        Press(hud.BagButton);
+        await FramesAsync(2);
+        var open = NearestOpenCellOutsideSafeZones(CurrentMap(), Own().Cell);
+        await TapCellAsync(open);
+        await UntilAsync(() => !Own().IsWalking && Own().Cell.X == open.X && Own().Cell.Y == open.Y, 30, "leaving the safe zone");
+        await HuntOneAsync(90);
+        await UntilAsync(() => World.Exp is { } e && (e.BaseExp > 0 || e.BaseLevel > 1), 10, "the EXP");
+        await SecondsAsync(2);
+        await UntilAsync(() => !Own().IsWalking, 10, "standing still");
+        var before = Describe();
+        var entity = World.OwnId;
+        Print("saving: before " + before);
+
+        Print("@ changed");
+        await UntilAsync(() => Session.Connection.Notice == ConnectionNotice.ServerShutdown, 150, "bye shutdown");
+        Print("saving: bye shutdown; the client signs in by itself when the next server is up");
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null && Session.Inventory.Known && Session.Stats.Known && Session.Quests.Known && World.Exp is not null, 90, "the next server");
+        await SecondsAsync(1);
+        var after = Describe();
+        Print($"saving: after  {after} (entity {entity} -> {World.OwnId})");
+        Check(after == before, "everything came back");
+
+        // A crash: what was saved on the interval is there, and the dead server's hold on the character runs out.
+        await RaiseFirstStatAsync();
+        before = Describe();
+        await SecondsAsync(4);   // the second server saves every second
+        Print("@ kill-server");
+        await UntilAsync(() => Session.Connection.Phase != ConnectionPhase.Online, 30, "noticing the dead server");
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy, 90, "the resume refused by the third server");
+        var clock = Stopwatch.StartNew();
+        var refusals = new List<ConnectionNotice>();
+        while (clock.Elapsed.TotalSeconds < 60)
+        {
+            await UntilAsync(() => !accounts.Busy && accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters && screen.Rows[0].Play.IsVisibleInTree(), 20, "the character list");
+            await FramesAsync(5);
+            Press(screen.Rows[0].Play);
+            await UntilAsync(() => Session.Connection.Phase is ConnectionPhase.Online or ConnectionPhase.LoginScreen && Session.Connection.Notice != ConnectionNotice.ResumeFailed, 20, "an answer");
+            if (Session.Connection.Phase == ConnectionPhase.Online) break;
+            if (refusals.Count == 0) Print($"saving: refused for now: \"{UiText.Notice(Session.Connection.Notice)}\"");
+            refusals.Add(Session.Connection.Notice);
+            await SecondsAsync(2);
+        }
+        Check(refusals.All(r => r == ConnectionNotice.SavePending), "only ever refused because the dead server held it: " + string.Join(", ", refusals.Distinct()));
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null && Session.Inventory.Known && Session.Stats.Known && Session.Quests.Known && World.Exp is not null, 10, "in the world after the crash");
+        await SecondsAsync(1);
+        after = Describe();
+        Print($"saving: after the crash {after} ({refusals.Count} refusal(s), {clock.Elapsed.TotalSeconds:0} s)");
+        Check(after == before, "the interval saves came back after the crash");
+        Session.Logout(Clocks.Wall());
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy, 10, "bye logout");
+
+        string Describe() =>
+            $"cell {Own().Cell} on {World.MapId}, level {World.Exp!.BaseLevel} exp {World.Exp.BaseExp} job {World.Exp.JobLevel}/{World.Exp.JobExp}, points {Session.Stats.Points}, " +
+            $"stats [{string.Join(" ", Session.Stats.Stats.Select(s => s.Stat + s.Value))}], {bundle.CurrencyName} {Session.Inventory.Currency}, " +
+            $"items [{string.Join(" ", Session.Inventory.Entries.OrderBy(e => e.Id).Select(e => $"#{e.Id}:{e.Item}x{e.Quantity}{(e.Slot is null ? "" : "@" + e.Slot)}+{e.Refine}"))}], " +
+            $"quests [{string.Join(" ", Session.Quests.Active.Select(q => $"{q.Quest}/{q.Step}:{string.Join(",", q.Objectives.Select(o => o.Have))}"))}]";
+    }
+
+    private async Task RaiseFirstStatAsync()
+    {
+        var hud = _main.Hud!;
+        var points = Session.Stats.Points;
+        Press(hud.SkillsButton);
+        await FramesAsync(3);
+        Press(hud.Skills!.StatsButton);
+        await FramesAsync(3);
+        Press(hud.Stats!.RaiseButtons[0].Button);
+        await UntilAsync(() => Session.Stats.Points < points, 10, "a stat raised");
+        Press(hud.Stats.CloseButton);
+        await FramesAsync(3);
     }
 
     private async Task PlayRunAsync()

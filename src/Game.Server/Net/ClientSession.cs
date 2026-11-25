@@ -173,14 +173,11 @@ public sealed class ClientSession : IViewSink
     }
 
     /// <summary>Called on the tick thread when the character is added to its map, before the AOI first sees it.</summary>
-    /// <param name="entity">The new character.</param>
-    /// <param name="start">Where and how new characters start.</param>
+    /// <param name="entity">The character, its state set up.</param>
     /// <param name="token">Its first resume token, or null when the session ended before the gateway linked the character.</param>
-    internal void OnJoinedOnTick(Entity entity, NewCharacters start, string? token)
+    internal void OnJoinedOnTick(Entity entity, string? token)
     {
         Interlocked.Exchange(ref _entity, entity.Id.Value);
-        entity.Stats = start.CreateStats();
-        entity.DefinitionId = start.JobId;
         if (Closing || token is null) return; // the gateway has released it; it leaves on the next tick
         _mapId = entity.MapId;
         Post(new WelcomeMessage(ProtocolVersion.Current, entity.Id.Value, entity.MapId, TickRate.Hz, _gateway.ContentHash, token));
@@ -534,13 +531,35 @@ public sealed class ClientSession : IViewSink
         if (Closing) return; // timed out, or the server is stopping
         DisplayName = login.DisplayName;
         if (_gateway.ClaimAccount(this, login)) return;
-        if (Interlocked.CompareExchange(ref _state, (int)SessionState.Joining, (int)SessionState.AwaitingHello) != (int)SessionState.AwaitingHello) return;
-        if (_gateway.SpawnCharacter(this, login) is not { } id)
+        // T-702: a saved character is loaded before anything of it enters the world. Whatever goes wrong refuses the login and changes nothing.
+        var entered = await _gateway.LoadCharacterAsync(login, stop).ConfigureAwait(false);
+        if (entered?.Refusal is { } refused)
         {
-            Bye(ByeReasons.ServerFull);
+            Bye(refused);
             return;
         }
+        var joined = false;
+        try
+        {
+            joined = TryJoin(login, entered);
+        }
+        finally
+        {
+            if (!joined) _gateway.GiveUp(entered);
+        }
+    }
+
+    /// <summary>Queues the character's spawn; false when the session has ended meanwhile or the server is full, and the character never enters.</summary>
+    private bool TryJoin(LoginResult login, World.Saving.EnterResult? entered)
+    {
+        if (Interlocked.CompareExchange(ref _state, (int)SessionState.Joining, (int)SessionState.AwaitingHello) != (int)SessionState.AwaitingHello) return false;
+        if (_gateway.SpawnCharacter(this, login, entered) is not { } id)
+        {
+            Bye(ByeReasons.ServerFull);
+            return false;
+        }
         Interlocked.CompareExchange(ref _entity, id.Value, 0);
+        return true;
     }
 
     /// <summary>Checks the target against the current map's bounds, then queues the intent; the movement system decides the rest.</summary>

@@ -283,6 +283,7 @@ public sealed class MapInstance
             // nowhere, and its old map already said it left.
             World.ClearLocation(entity.Id, this);
             World.RemovalDone(entity.Id);
+            if (entity.Save is not null) Keep(k => k.Dropped(entity, reason));   // T-702: it is saved with the map it was going to
             return;
         }
         if (!_entities.TryAdd(entity.Id, entity))
@@ -311,6 +312,16 @@ public sealed class MapInstance
 
     private void ApplyRemove(EntityId id)
     {
+        if (World.Keeper is { } keeper && _entities.TryGetValue(id, out var leaving) && leaving.Save is not null)
+        {
+            // T-702: a saved character leaves when nothing it began is half done, and its state is copied here, before any system forgets it.
+            if (World.RemovalPending(id) && !keeper.MayLeave(leaving, _context.TickNumber))
+            {
+                Post(new StructuralChange.Remove(id));
+                return;
+            }
+            Keep(k => k.Leaving(leaving));
+        }
         if (!Detach(id, out var entity))
         {
             // Not here. A world despawn follows the entity: to the instance a warp took it to, or (it is on its way here) to our next tick,
@@ -327,6 +338,20 @@ public sealed class MapInstance
         World.RemovalDone(id);
         World.ClearLocation(id, this);
         Events.Publish(new EntityLeftMap(id, entity.Kind, MapId, entity.Cell, MapChangeReason.Spawn));
+    }
+
+    /// <summary>Runs a keeper's step; one that throws is logged and the structural change goes on.</summary>
+    private void Keep(Action<IEntityKeeper> step)
+    {
+        try
+        {
+            if (World.Keeper is { } keeper) step(keeper);
+        }
+        catch (Exception ex)
+        {
+            Counters.HandlerErrors++;
+            _log.Error($"[{MapId}] tick {_context.TickNumber}: the keeper threw; the character may not have been saved.", ex);
+        }
     }
 
     private void ApplyWarp(StructuralChange.Warp warp)

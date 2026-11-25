@@ -10,6 +10,7 @@ using Game.Server.Net;
 using Game.Server.World;
 using Game.Server.World.Combat;
 using Game.Server.World.Inventory;
+using Game.Server.World.Saving;
 using Game.Shared.Protocol;
 using Game.Shared.World;
 using Game.Tests.Server;
@@ -43,7 +44,17 @@ public sealed class GatewayRig : IAsyncDisposable
         var clock = new SystemClock();
         ContentHash = ClientBundleExporter.Hash(Content);
         var progressions = Progressions;
-        World = new GameWorld(Content.Grids.Values, ServerPipeline.Create(Content, progressions, Inventories, clock), 1, clock, Log);
+        CharacterKeeper? keeper = null;
+        if (accounts?.Characters is { } characters)
+        {
+            // T-702: saved characters, as Program wires them.
+            Saves = new CharacterSaves(characters, accounts.SaveOptions ?? new CharacterSaveOptions(), clock, accounts.Time, Log);
+            Saves.StartAsync().GetAwaiter().GetResult();
+            Saves.Open(new CharacterLoader(Content, Saves.NextItemId));
+            Inventories = new InMemoryInventoryStore(Saves.NextItemId);
+            keeper = new CharacterKeeper(Saves, progressions, Inventories, SavePoints, clock, accounts.Time);
+        }
+        World = new GameWorld(Content.Grids.Values, ServerPipeline.Create(Content, progressions, Inventories, clock, SavePoints, keeper), 1, clock, Log) { Keeper = keeper };
         Start = new NewCharacters(Content);
         ILoginService? login = null;
         var tokens = new ResumeTokens();
@@ -53,8 +64,8 @@ public sealed class GatewayRig : IAsyncDisposable
             login = new AccountLogin(Accounts, new DevLogin(options.Development, options.MaxNameLength, tokens));
         }
         Gateway = new Gateway(World, Start, options, Clock, Log, ContentHash, login, tokens, progress: new OwnProgress(Content, progressions),
-            inventory: new OwnInventory(Content.Balance.Inventory, Inventories));
-        if (Accounts is not null) Accounts.InWorld = Gateway.HoldsCharacter;
+            inventory: new OwnInventory(Content.Balance.Inventory, Inventories), keeper: keeper);
+        if (Accounts is not null) Accounts.InWorld = id => Gateway.HoldsCharacter(id) || Saves?.Holds(id) == true;
         _runners = World.Instances.Select(i => new InstanceRunner(i, clock, Log)).ToList();
     }
 
@@ -63,6 +74,15 @@ public sealed class GatewayRig : IAsyncDisposable
 
     /// <summary>The players' inventories (the inventory systems write them; the gateway's own inventory messages read them).</summary>
     public InMemoryInventoryStore Inventories { get; } = new();
+
+    /// <summary>The players' save points.</summary>
+    public Game.Server.World.Dialogue.InMemorySavePointStore SavePoints { get; } = new();
+
+    /// <summary>The saved characters (T-702), when the rig was started with a store for them.</summary>
+    public CharacterSaves? Saves { get; }
+
+    /// <summary>How the last shutdown's saves ended.</summary>
+    public DrainReport? Drained { get; private set; }
 
     /// <summary>The players' progression (levels, points, skills): tests may set a character up here.</summary>
     public InMemoryProgressionStore Progressions { get; } = new();
@@ -176,13 +196,20 @@ public sealed class GatewayRig : IAsyncDisposable
         await Gateway.ShutdownAsync();
         await Host.StopAsync();
         await Host.DisposeAsync();
+        if (Saves is not null) Drained = await Saves.DrainAsync(TimeSpan.FromMilliseconds(Saves.Options.ShutdownWaitMs));
         foreach (var runner in _runners) runner.Stop();
         if (_certificateFile is not null) File.Delete(_certificateFile);
     }
 }
 
 /// <summary>What a rig's account service runs on (T-701).</summary>
-public sealed record AccountRigOptions(IAccountStore Store, IPasswordHasher Hasher, AccountLimits Limits, TimeProvider Time);
+public sealed record AccountRigOptions(IAccountStore Store, IPasswordHasher Hasher, AccountLimits Limits, TimeProvider Time)
+{
+    /// <summary>Where characters are saved (T-702); null: they live in memory only.</summary>
+    public ICharacterStore? Characters { get; init; }
+
+    public CharacterSaveOptions? SaveOptions { get; init; }
+}
 
 /// <summary>
 /// A protocol client on <see cref="ClientWebSocket"/>: collects every server message (decoded with <see cref="ProtocolJson"/>, as the Godot

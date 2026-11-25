@@ -10,6 +10,7 @@ using Game.Server.World.Dialogue;
 using Game.Server.World.Effects;
 using Game.Server.World.Inventory;
 using Game.Server.World.Quests;
+using Game.Server.World.Saving;
 using Game.Shared.Progression;
 using Game.Shared.Protocol;
 using Game.Shared.Time;
@@ -113,6 +114,7 @@ public sealed class Gateway
     private readonly ConcurrentDictionary<EntityId, CharacterLink> _links = new();
     private readonly ConcurrentDictionary<EntityId, IReadOnlyList<DerivedRecord>> _lastDerived = new();
     private readonly Dictionary<Guid, ClientSession> _accountSessions = new();   // the session each account last logged in with, while it is connected; under the link lock
+    private readonly CharacterKeeper? _keeper;   // T-702: loads and saves the account's characters; null when they live in memory only
     private int _joining;   // logins accepted whose character is not linked yet (each holds a slot); under the link lock
     private readonly ResumeGuard _resumeGuard;
     private readonly CancellationTokenSource _stop = new();
@@ -121,7 +123,7 @@ public sealed class Gateway
 
     /// <summary>Creates the gateway for <paramref name="world"/> and subscribes to its instances' events.</summary>
     public Gateway(GameWorld world, NewCharacters start, GatewayOptions options, IClock clock, IServerLog log, string contentHash, ILoginService? login = null,
-        ResumeTokens? tokens = null, OwnProgress? progress = null, OwnInventory? inventory = null)
+        ResumeTokens? tokens = null, OwnProgress? progress = null, OwnInventory? inventory = null, CharacterKeeper? keeper = null)
     {
         _world = world;
         _start = start;
@@ -133,6 +135,8 @@ public sealed class Gateway
         Login = login ?? new DevLogin(options.Development, options.MaxNameLength, Tokens);
         Progress = progress;
         Inventory = inventory;
+        _keeper = keeper;
+        if (keeper is not null) keeper.Saves.Lost += OnLost;
         _resumeGuard = new ResumeGuard(options);
         if (!world.TryGetInstance(start.MapId, out _)) throw new ArgumentException($"No instance for the start map '{start.MapId}'.", nameof(start));
         foreach (var instance in world.Instances)
@@ -293,7 +297,7 @@ public sealed class Gateway
 
     /// <summary>
     /// Sends <c>bye</c> <c>shutdown</c> to every session, waits (up to the close timeout) for them to end, then removes every character
-    /// it still holds, those in their grace period included (T-702 saves them first). No resume is accepted from here on.
+    /// it still holds, those in their grace period included; each is saved as it leaves (T-702: the host then waits for the saves). No resume is accepted from here on.
     /// </summary>
     public async Task ShutdownAsync()
     {
@@ -364,12 +368,36 @@ public sealed class Gateway
     }
 
     /// <summary>
-    /// Queues the session's new character on the start map, or returns null when the server is full (<see cref="SlotsInUse"/>): nobody is
+    /// The saved character of a login (T-702): claimed and loaded, or refused with a <see cref="ByeReasons"/> term. Null for a dev login and on a server without a database: those
+    /// characters live in memory only. Runs on the session's receive loop, never on a tick.
+    /// </summary>
+    internal async Task<EnterResult?> LoadCharacterAsync(LoginResult login, CancellationToken stop) =>
+        _keeper is not null && login.CharacterId is { } character ? await _keeper.Saves.EnterAsync(character, stop).ConfigureAwait(false) : null;
+
+    /// <summary>A loaded character that never enters: it is given up unchanged.</summary>
+    internal void GiveUp(EnterResult? entered)
+    {
+        if (entered?.Ticket is { } ticket) _keeper!.Saves.GiveUp(ticket);
+    }
+
+    /// <summary>The server can no longer save the character (T-702): its session ends and it leaves at once, as if the server had crashed for it alone.</summary>
+    private void OnLost(CharacterTicket ticket)
+    {
+        lock (_linkLock)
+        {
+            if (_links.Values.FirstOrDefault(l => ReferenceEquals(l.Save, ticket)) is not { } link) return;
+            link.Session?.Bye(ByeReasons.SaveLost);
+            Release(link, "its saves are lost to this server");
+        }
+    }
+
+    /// <summary>
+    /// Queues the session's character, a new one on the start map or a loaded one where it was, or returns null when the server is full (<see cref="SlotsInUse"/>): nobody is
     /// evicted to make room. The character joins on that instance's next tick. There, unless the session has already ended, the gateway links
     /// the character to the session (and to the account's character, when <paramref name="login"/> names one), issues its first resume token,
     /// and the session queues <c>welcome</c>.
     /// </summary>
-    internal EntityId? SpawnCharacter(ClientSession session, LoginResult login)
+    internal EntityId? SpawnCharacter(ClientSession session, LoginResult login, EnterResult? entered = null)
     {
         lock (_linkLock)
         {
@@ -382,21 +410,26 @@ public sealed class Gateway
             _joining++;
             session.HoldsSlot = true;
         }
-        var id = _world.Spawn(EntityKind.Player, _start.MapId, _start.Cell, _start.Facing, entity =>
+        var loaded = entered?.Loaded;
+        var map = loaded?.MapId ?? _start.MapId;
+        var id = _world.Spawn(EntityKind.Player, map, loaded?.Cell ?? _start.Cell, loaded?.Facing ?? _start.Facing, entity =>
         {
+            entity.Stats = loaded is null ? _start.CreateStats() : _start.CreateStats(loaded.Progression);
+            entity.DefinitionId = loaded?.Progression.JobId ?? _start.JobId;
+            if (entity.Save is not null) _keeper!.Enter(entity, loaded);   // before any system sees it, and whatever has become of the session: it is saved as it leaves
             string? token = null;
             lock (_linkLock)
             {
                 FreeJoiningSlot(session); // from here the link holds the slot, or the character leaves
                 if (session.State != SessionState.Closing)
                 {
-                    _links[entity.Id] = new CharacterLink(entity.Id, session.DisplayName, session, login.AccountId, login.CharacterId);
+                    _links[entity.Id] = new CharacterLink(entity.Id, session.DisplayName, session, login.AccountId, login.CharacterId, entity.Save);
                     token = Tokens.Issue(entity.Id);
                 }
             }
-            session.OnJoinedOnTick(entity, _start, token);
-        });
-        Log.Info($"[net] {session.Peer} joined as '{session.DisplayName}' ({id} on {_start.MapId})");
+            session.OnJoinedOnTick(entity, token);
+        }, entered?.Ticket);
+        Log.Info($"[net] {session.Peer} joined as '{session.DisplayName}' ({id} on {map})");
         return id;
     }
 
@@ -528,8 +561,8 @@ public sealed class Gateway
     }
 
     /// <summary>
-    /// The character leaves the world on its instance's next tick and its token stops working. Under the link lock.
-    /// <b>Seam for T-702:</b> save the character here, before it leaves (logout, end of the grace period, shutdown).
+    /// The character leaves the world on its instance's next tick and its token stops working. Under the link lock. A saved character (T-702) stays one to a few ticks longer, until
+    /// nothing it began is half done; its state is copied on the tick thread as it leaves (<c>CharacterKeeper</c>) and it cannot be entered again before that copy has landed.
     /// </summary>
     private void Release(CharacterLink link, string why)
     {

@@ -114,6 +114,236 @@ namespace Game.Server.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Game.Server.Persistence.CharacterStateRow", b =>
+                {
+                    b.Property<Guid>("CharacterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("character_id");
+
+                    b.Property<DateTime?>("AutopilotDayStartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("autopilot_day_started_at");
+
+                    b.Property<long>("AutopilotUsedMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("autopilot_used_ms");
+
+                    b.Property<long>("BaseExp")
+                        .HasColumnType("bigint")
+                        .HasColumnName("base_exp");
+
+                    b.Property<int>("BaseLevel")
+                        .HasColumnType("integer")
+                        .HasColumnName("base_level");
+
+                    b.Property<int>("CellX")
+                        .HasColumnType("integer")
+                        .HasColumnName("cell_x");
+
+                    b.Property<int>("CellY")
+                        .HasColumnType("integer")
+                        .HasColumnName("cell_y");
+
+                    b.Property<long>("Claim")
+                        .HasColumnType("bigint")
+                        .HasColumnName("claim");
+
+                    b.Property<string>("Cooldowns")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("cooldowns");
+
+                    b.Property<long>("Currency")
+                        .HasColumnType("bigint")
+                        .HasColumnName("currency");
+
+                    b.Property<string>("Facing")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("facing");
+
+                    b.Property<long?>("HeldBy")
+                        .HasColumnType("bigint")
+                        .HasColumnName("held_by");
+
+                    b.Property<int>("Hp")
+                        .HasColumnType("integer")
+                        .HasColumnName("hp");
+
+                    b.Property<long>("JobExp")
+                        .HasColumnType("bigint")
+                        .HasColumnName("job_exp");
+
+                    b.Property<string>("JobId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("job_id");
+
+                    b.Property<int>("JobLevel")
+                        .HasColumnType("integer")
+                        .HasColumnName("job_level");
+
+                    b.Property<string>("MapId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("map_id");
+
+                    b.Property<string>("Quests")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("quests");
+
+                    b.Property<int?>("SaveCellX")
+                        .HasColumnType("integer")
+                        .HasColumnName("save_cell_x");
+
+                    b.Property<int?>("SaveCellY")
+                        .HasColumnType("integer")
+                        .HasColumnName("save_cell_y");
+
+                    b.Property<string>("SaveMapId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("save_map_id");
+
+                    b.Property<DateTime?>("SavedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("saved_at");
+
+                    b.Property<string>("SetAside")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("set_aside");
+
+                    b.Property<int>("SkillPoints")
+                        .HasColumnType("integer")
+                        .HasColumnName("skill_points");
+
+                    b.Property<string>("Skills")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("skills");
+
+                    b.Property<int>("Sp")
+                        .HasColumnType("integer")
+                        .HasColumnName("sp");
+
+                    b.Property<int>("StatPoints")
+                        .HasColumnType("integer")
+                        .HasColumnName("stat_points");
+
+                    b.Property<string>("Stats")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("stats");
+
+                    b.Property<long>("TurnInSequence")
+                        .HasColumnType("bigint")
+                        .HasColumnName("turn_in_sequence");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("CharacterId");
+
+                    b.HasIndex("HeldBy")
+                        .HasDatabaseName("ix_character_states_held_by")
+                        .HasFilter("held_by IS NOT NULL");
+
+                    b.ToTable("character_states", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_character_states_counts", "claim >= 1 AND version >= 0 AND turn_in_sequence >= 0");
+
+                            t.HasCheckConstraint("ck_character_states_currency", "currency >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.ItemRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Aside")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("aside");
+
+                    b.PrimitiveCollection<string[]>("Cards")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("cards");
+
+                    b.Property<Guid>("CharacterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("character_id");
+
+                    b.Property<string>("ItemId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("item_id");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<int>("Refine")
+                        .HasColumnType("integer")
+                        .HasColumnName("refine");
+
+                    b.Property<string>("Slot")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("slot");
+
+                    b.HasKey("Id")
+                        .HasName("pk_character_items");
+
+                    b.HasIndex("CharacterId")
+                        .HasDatabaseName("ix_character_items_character_id");
+
+                    b.HasIndex("CharacterId", "Slot")
+                        .IsUnique()
+                        .HasDatabaseName("ux_character_items_slot")
+                        .HasFilter("slot IS NOT NULL");
+
+                    b.ToTable("character_items", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_character_items_quantity", "quantity >= 1 AND refine >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.ServerRunRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<DateTime>("SeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("seen_at");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("server_runs", (string)null);
+                });
+
             modelBuilder.Entity("Game.Server.Persistence.SessionRow", b =>
                 {
                     b.Property<byte[]>("TokenHash")
@@ -146,6 +376,29 @@ namespace Game.Server.Persistence.Migrations
                     b.HasOne("Game.Server.Persistence.AccountRow", null)
                         .WithMany()
                         .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.CharacterStateRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.CharacterRow", null)
+                        .WithOne()
+                        .HasForeignKey("Game.Server.Persistence.CharacterStateRow", "CharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Game.Server.Persistence.ServerRunRow", null)
+                        .WithMany()
+                        .HasForeignKey("HeldBy")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.ItemRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.CharacterStateRow", null)
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

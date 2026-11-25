@@ -62,6 +62,9 @@ public static class UiText
             case ConnectionNotice.ResumeRateLimited: return "Too many reconnect attempts. Please log in again.";
             case ConnectionNotice.LoginRefused: return "The server refused this login.";
             case ConnectionNotice.ServerFull: return "The server is full. Please try again soon.";
+            case ConnectionNotice.LoadFailed: return "Your character could not be loaded. Nothing was lost. Please try again later.";
+            case ConnectionNotice.SavePending: return "Your character is still being saved. Please try again in a moment.";
+            case ConnectionNotice.SaveLost: return "The server lost touch with your character's save. Please log in again.";
             case ConnectionNotice.ConnectionFailed: return "Could not reach the server.";
             case ConnectionNotice.UpdateRequired: return "A new version is required to play. Please update the app.";
             case ConnectionNotice.Replaced: return "You are playing on another connection.";

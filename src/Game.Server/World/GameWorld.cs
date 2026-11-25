@@ -40,6 +40,9 @@ public sealed class GameWorld
         Instances = instances;
     }
 
+    /// <summary>Who saves characters as they leave (T-702), or null when nothing is saved. Set before the instances tick.</summary>
+    public IEntityKeeper? Keeper { get; set; }
+
     /// <summary>Instances in map id order.</summary>
     public IReadOnlyList<MapInstance> Instances { get; }
 
@@ -83,10 +86,14 @@ public sealed class GameWorld
     /// <see cref="Entity.Stats"/>, <see cref="Entity.DefinitionId"/> and <see cref="Entity.View"/> of a joining player. Thread-safe. An
     /// initializer that throws is logged and the entity joins as it is.
     /// </summary>
-    public EntityId Spawn(EntityKind kind, string mapId, GridCell cell, string facing, Action<Entity>? initialize)
+    public EntityId Spawn(EntityKind kind, string mapId, GridCell cell, string facing, Action<Entity>? initialize) => Spawn(kind, mapId, cell, facing, initialize, null);
+
+    /// <summary>The same for a saved character (T-702): <paramref name="save"/> is on the entity from the start, so the <see cref="Keeper"/> hears of it whatever becomes of it.</summary>
+    public EntityId Spawn(EntityKind kind, string mapId, GridCell cell, string facing, Action<Entity>? initialize, Saving.CharacterTicket? save)
     {
         var instance = GetInstanceOrThrow(mapId);
         var entity = CreateEntity(kind, mapId, cell, facing);
+        entity.Save = save;
         _locations[entity.Id] = instance;
         instance.Post(new StructuralChange.Add(entity, MapChangeReason.Spawn, initialize));
         return entity.Id;

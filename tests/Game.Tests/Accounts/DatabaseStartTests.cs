@@ -48,6 +48,10 @@ public class DatabaseStartTests
     public void Migrate_is_an_option()
     {
         ServerOptions.Parse(["--migrate"], out _)!.Migrate.ShouldBeTrue();
+        var saving = ServerOptions.Parse(["--save-interval", "5", "--save-shutdown-wait", "0"], out _)!;
+        (saving.SaveIntervalSeconds, saving.SaveShutdownWaitSeconds).ShouldBe((5, 0));
+        (ServerOptions.Parse([], out _)!.SaveIntervalSeconds, ServerOptions.Parse([], out _)!.SaveShutdownWaitSeconds).ShouldBe((60, 20));
+        foreach (var bad in new[] { "0", "-1", "x", "1.5", "99999" }) ServerOptions.Parse(["--save-interval", bad], out _).ShouldBeNull(bad);
         ServerOptions.Parse([], out _)!.Migrate.ShouldBeFalse();
     }
 }

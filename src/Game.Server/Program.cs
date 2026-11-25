@@ -8,7 +8,9 @@ using Game.Server.Net;
 using Game.Server.Persistence;
 using Game.Server.World;
 using Game.Server.World.Combat;
+using Game.Server.World.Dialogue;
 using Game.Server.World.Inventory;
+using Game.Server.World.Saving;
 
 var options = ServerOptions.Parse(args, out var argError);
 if (options is null)
@@ -72,9 +74,29 @@ if (content is null)
 var seed = options.Seed ?? (ulong)Random.Shared.NextInt64();
 var clock = new SystemClock();
 var progressions = new InMemoryProgressionStore(); // combat writes it; the gateway reads it for each player's own exp messages
-var inventories = new InMemoryInventoryStore(); // the inventory writes it; the gateway reads it for each player's own inventory messages
-var pipeline = ServerPipeline.Create(content, progressions, inventories, clock); // more systems plug in in ServerPipeline: spawns (T-301), combat, ...
-var world = new GameWorld(content.Grids.Values, pipeline, seed, clock, log);
+// Saved characters (T-702): with a database, accounts' characters are loaded before they enter and saved as they play and leave, and item ids are unique for ever.
+CharacterSaves? saves = null;
+if (database is not null)
+{
+    saves = new CharacterSaves(new PostgresCharacterStore(database),
+        new CharacterSaveOptions { IntervalMs = options.SaveIntervalSeconds * 1_000, ShutdownWaitMs = options.SaveShutdownWaitSeconds * 1_000 }, clock, TimeProvider.System, log);
+    try
+    {
+        await saves.StartAsync();
+    }
+    catch (StoreUnavailableException e)
+    {
+        log.Error($"The server run could not be registered: {e.Message}. Refusing to start.");
+        return 1;
+    }
+    saves.Open(new CharacterLoader(content, saves.NextItemId));
+    log.Info($"Saving characters every {options.SaveIntervalSeconds} s; server run {saves.Run}.");
+}
+var inventories = new InMemoryInventoryStore(saves is null ? null : saves.NextItemId); // the inventory writes it; the gateway reads it for each player's own inventory messages
+var savePoints = new InMemorySavePointStore();
+var keeper = saves is null ? null : new CharacterKeeper(saves, progressions, inventories, savePoints, clock, TimeProvider.System);
+var pipeline = ServerPipeline.Create(content, progressions, inventories, clock, savePoints, keeper); // more systems plug in in ServerPipeline: spawns (T-301), combat, ...
+var world = new GameWorld(content.Grids.Values, pipeline, seed, clock, log) { Keeper = keeper };
 var runners = world.Instances.Select(i => new InstanceRunner(i, clock, log, !options.LegacyTimer)).ToList();
 var contentHash = ClientBundleExporter.Hash(content); // the display bundle's hash: a client packed with another one must update (ARCHITECTURE §5.4)
 log.Info($"Content hash: {contentHash}");
@@ -83,17 +105,18 @@ var devLogin = new DevLogin(development, netOptions.MaxNameLength, tokens);
 var accounts = database is null ? null : new AccountService(new PostgresAccountStore(database), new Argon2idHasher(), HashQueue.Default(), new AccountLimits(), content.Balance, clock,
     TimeProvider.System, log);
 var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log, contentHash, accounts is null ? devLogin : new AccountLogin(accounts, devLogin), tokens,
-    progress: new OwnProgress(content, progressions), inventory: new OwnInventory(content.Balance.Inventory, inventories)); // subscribes to instance events: before ticking
+    progress: new OwnProgress(content, progressions), inventory: new OwnInventory(content.Balance.Inventory, inventories), keeper: keeper); // subscribes to instance events: before ticking
 
 GatewayHost host;
 try
 {
-    if (accounts is not null) accounts.InWorld = gateway.HoldsCharacter; // a character in the world is not deleted
+    if (accounts is not null) accounts.InWorld = id => gateway.HoldsCharacter(id) || saves!.Holds(id); // a character in the world, on its way in, or not saved yet is not deleted
     host = await GatewayHost.StartAsync(gateway, accounts: accounts is null ? null : new AccountEndpoints(accounts, log));
 }
 catch (Exception e) when (e is InvalidOperationException or IOException)
 {
     log.Error("Gateway could not start: " + e.Message);
+    if (saves is not null) await saves.DrainAsync(TimeSpan.Zero);
     return 1;
 }
 
@@ -116,11 +139,21 @@ log.Info(options.DurationSeconds is { } d ? $"Running for {d} s." : "Running. Pr
 if (options.DurationSeconds is { } seconds) stop.Wait(TimeSpan.FromSeconds(seconds));
 else stop.Wait();
 
+var unsaved = 0;
 log.Info($"Stopping: saying bye to {gateway.SessionCount} session(s), releasing {gateway.CharactersInGrace} character(s) in their grace period, " +
          "then finishing the current tick of each instance.");
 await gateway.ShutdownAsync();
 await host.StopAsync();
 await host.DisposeAsync();
+if (saves is not null)
+{
+    // The instances still tick: every character leaves on its own, is copied there, and the copies land here.
+    var report = await saves.DrainAsync(TimeSpan.FromMilliseconds(saves.Options.ShutdownWaitMs));
+    var stats = saves.Stats;
+    if (report.Failed.Count == 0) log.Info($"Every character is saved ({report.Took.TotalMilliseconds:0} ms; {stats.Saves} save(s) in {stats.Groups} transaction(s) since the start, {stats.Failures} failed).");
+    else log.Error($"{report.Failed.Count} character(s) NOT SAVED after {report.Took.TotalMilliseconds:0} ms: {string.Join(", ", report.Failed)}.");
+    unsaved = report.Failed.Count;
+}
 if (database is not null) await database.DisposeAsync();
 foreach (var runner in runners) runner.Stop();
 foreach (var runner in runners)
@@ -128,4 +161,4 @@ foreach (var runner in runners)
 log.Info($"Gateway: {gateway.Stats.Accepted} connection(s), {gateway.Stats.MessagesIn} message(s) in, {gateway.Stats.MessagesOut} out " +
          $"({gateway.Stats.BytesOut} bytes), sinks {gateway.Stats.SinkCalls} call(s) in {gateway.Stats.SinkTime.TotalMilliseconds:0.0} ms");
 log.Info("Server stopped.");
-return 0;
+return unsaved == 0 ? 0 : 3;

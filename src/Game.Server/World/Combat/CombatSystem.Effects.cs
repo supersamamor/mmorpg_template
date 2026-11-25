@@ -4,6 +4,7 @@ using Game.Server.World.Quests;
 using Game.Shared.Combat;
 using Game.Shared.Definitions;
 using Game.Shared.Effects;
+using Game.Shared.Progression;
 using Game.Shared.Vocabulary;
 using Game.Shared.World;
 
@@ -102,32 +103,40 @@ public sealed partial class CombatSystem
     }
 
     /// <summary>
-    /// The rewards of quests completed last tick that the progression host pays (T-602): base and job EXP through <see cref="ProgressionRules"/> (levels reach the sheet as
+    /// The rewards of completed quests that the progression host pays (T-602): base and job EXP through <see cref="ProgressionRules"/> (levels reach the sheet as
     /// for a kill), stat and skill points, job unlocks (<c>requires_unlock</c> of a job change), and statuses through the runner. None of them can fail: the quest is
-    /// already completed and its items are in the bag. The store is shared, so a player who left the map still gets the points; a status needs it here and alive.
+    /// already completed and its items are in the bag. They are owed in the character's progression until this step pays them (T-702): a player who warped in between is paid by
+    /// the instance it arrives on, and a saved one when it is loaded. A status needs its bearer alive.
     /// </summary>
     private void PayQuestRewards()
     {
         if (_questRewards.Count == 0) return;
         (_questRewards, _questRewardsRunning) = (_questRewardsRunning, _questRewards);
-        foreach (var reward in _questRewardsRunning)
+        foreach (var player in _questRewardsRunning)
         {
-            if (!_progressions.TryGet(reward.Player, out var state)) continue;
-            var jobLevel = state.JobLevel;
-            var baseResult = _progression.GainBaseExp(state, reward.BaseExp);
-            var jobResult = _progression.GainJobExp(state, reward.JobExp);
-            _progression.AwardPoints(state, reward.StatPoints, reward.SkillPoints);
-            foreach (var job in reward.UnlockJobs) _progression.UnlockJob(state, job);
-            foreach (var change in baseResult.Events) _context!.Publish(new PlayerProgressed(reward.Player, change));
-            foreach (var change in jobResult.Events) _context!.Publish(new PlayerProgressed(reward.Player, change));
-            _combatants.TryGetValue(reward.Player.Value, out var user);
-            if (user is not null && (baseResult.LevelsGained > 0 || jobResult.LevelsGained > 0)) Restat(user.Entity, state, jobLevel != state.JobLevel);
-            if (user is not null && !user.Entity.Dead)
-                foreach (var key in reward.StatusKeys)
-                    if (_content.Effects.TryGetQuestReward(key, out var effects)) _runner!.Run(effects, ActorOf(user), user.Entity.Id.Value, null, 1);
-            _context!.Publish(new QuestRewarded(reward.Player, reward.QuestId, reward.BaseExp, reward.JobExp, reward.StatPoints, reward.SkillPoints, reward.UnlockJobs));
+            if (!_instance!.TryGetEntity(player, out _) || !_progressions.TryGet(player, out var state) || state.OwedRewards.Count == 0) continue;
+            var owed = state.OwedRewards.ToArray();
+            state.OwedRewards.Clear();
+            foreach (var reward in owed) Pay(player, state, reward);
         }
         _questRewardsRunning.Clear();
+    }
+
+    private void Pay(EntityId player, ProgressionState state, OwedQuestRewards reward)
+    {
+        var jobLevel = state.JobLevel;
+        var baseResult = _progression.GainBaseExp(state, reward.BaseExp);
+        var jobResult = _progression.GainJobExp(state, reward.JobExp);
+        _progression.AwardPoints(state, reward.StatPoints, reward.SkillPoints);
+        foreach (var job in reward.UnlockJobs) _progression.UnlockJob(state, job);
+        foreach (var change in baseResult.Events) _context!.Publish(new PlayerProgressed(player, change));
+        foreach (var change in jobResult.Events) _context!.Publish(new PlayerProgressed(player, change));
+        _combatants.TryGetValue(player.Value, out var user);
+        if (user is not null && (baseResult.LevelsGained > 0 || jobResult.LevelsGained > 0)) Restat(user.Entity, state, jobLevel != state.JobLevel);
+        if (user is not null && !user.Entity.Dead)
+            foreach (var key in reward.StatusKeys)
+                if (_content.Effects.TryGetQuestReward(key, out var effects)) _runner!.Run(effects, ActorOf(user), user.Entity.Id.Value, null, 1);
+        _context!.Publish(new QuestRewarded(player, reward.QuestId, reward.BaseExp, reward.JobExp, reward.StatPoints, reward.SkillPoints, reward.UnlockJobs));
     }
 
     /// <summary>
