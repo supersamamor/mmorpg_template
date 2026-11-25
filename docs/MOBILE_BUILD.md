@@ -362,7 +362,7 @@ Every headless Godot step the scripts run (the import, the map export, the Andro
 | release export (`run-e2e.ps1 -ExportTimeoutSeconds`, `-ExportExitSeconds`, `-ExportAttempts`) | 600 s (about 21 s here) | the exe, console exe and `.pck` written by this attempt, then 60 s | 3 (2 on CI) | a hang, before or after writing |
 
 Each attempt prints one line, for example `[godot] import attempt 1/3: ok, exit 0 after 7.3 s`. A stuck attempt's whole process tree is stopped by
-process id (`Stop-ProcessTree`, never by name: other worktrees run Godot too). When the attempts run out, the script exits non-zero.
+process id and creation time (`Stop-ProcessTree`, never by name: other worktrees run Godot too, and Windows reuses ids, T-226). When the attempts run out, the script exits non-zero.
 `run-e2e.ps1` also bounds its client waits: each run keeps its own limit (exit code 124 when it is reached), a client that printed `[e2e] PASS` or `FAIL`
 gets `-ClientExitSeconds` (30 s) to exit (125 and `CLIENT HUNG AT EXIT` otherwise), and every wait for a process that has already exited is bounded too.
 For evidence, set `$env:GODOT_STUCK_HOOK` to a program that takes a process id; it runs before a stuck or held process is stopped.

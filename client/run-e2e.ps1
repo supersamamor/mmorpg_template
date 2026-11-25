@@ -191,20 +191,18 @@ function Start-GameServer([switch] $Easy, [switch] $Items, [switch] $Statuses, [
     }
     Write-Host (Select-String -Path $log -Pattern "Content hash:").Line
     Register-Started $process
-    $child = $null
-    if (Get-Command Get-CimInstance -ErrorAction SilentlyContinue) {   # Windows; on Linux Stop-ProcessTree finds it with ps
-        $child = Get-CimInstance Win32_Process -Filter "ParentProcessId = $($process.Id)" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch '^conhost' } | Select-Object -First 1
-    }
+    # Windows; on Linux Stop-ProcessTree finds it with ps
+    $child = Get-StartedProcesses $process | Where-Object { $_.Name -notmatch '^conhost' } | Select-Object -First 1
     $child = $(if ($child) { Get-Process -Id $child.ProcessId -ErrorAction SilentlyContinue } else { $null })
     if ($child) { $null = $child.Handle; Register-Started $child }
     return [pscustomobject]@{ Process = $process; Child = $child; Log = $log }
 }
 
-# Stop-ProcessTree (godot-path.ps1) stops the whole tree by process id: `dotnet run` starts the server as a child, and Godot's console wrapper the game exe.
+# Stop-ProcessTree (godot-path.ps1) stops the whole tree by process id and creation time: `dotnet run` starts the server as a child, and Godot's console wrapper the game exe.
 function Stop-GameServer($server) {
     if (-not $server) { return }
-    Stop-ProcessTree $server.Process.Id
-    if ($server.Child -and -not $server.Child.HasExited) { Stop-ProcessTree $server.Child.Id }   # in case the tree lookup missed it
+    Stop-ProcessTree $server.Process
+    if ($server.Child -and -not $server.Child.HasExited) { Stop-ProcessTree $server.Child }   # in case the tree lookup missed it
     $null = $server.Process.WaitForExit(10000)
     if ($server.Child) { $null = $server.Child.WaitForExit(10000) }
     Remove-Item $server.Log, "$($server.Log).err" -ErrorAction SilentlyContinue
@@ -265,7 +263,7 @@ function Wait-GodotClient($run, [int] $TimeoutSeconds, [scriptblock] $OnMarker =
             elseif ($clock.Elapsed.TotalSeconds - $engineExitAt -ge 2) {
                 Write-Host "[run-e2e] the client exited (exit code $($run.Engine.ExitCode)) but its console wrapper was held by a leftover process; stopped it"
                 if ($env:GODOT_STUCK_HOOK) { & $env:GODOT_STUCK_HOOK $run.Process.Id | Out-Null }
-                Stop-ProcessTree $run.Process.Id
+                Stop-ProcessTree $run.Process
                 $null = $run.Process.WaitForExit(10000)
                 $held = $run.Engine.ExitCode
                 break
@@ -281,7 +279,7 @@ function Wait-GodotClient($run, [int] $TimeoutSeconds, [scriptblock] $OnMarker =
         }
         if ($stuck) {
             if ($env:GODOT_STUCK_HOOK) { & $env:GODOT_STUCK_HOOK $run.Process.Id | Out-Null }
-            Stop-ProcessTree $run.Process.Id
+            Stop-ProcessTree $run.Process
             $null = $run.Process.WaitForExit(10000)
             break
         }
@@ -561,7 +559,7 @@ finally {
     foreach ($process in $script:started) {
         if (-not $process.HasExited) {
             Write-Host "[run-e2e] stopping a leftover process: $($process.ProcessName) (pid $($process.Id))"
-            Stop-ProcessTree $process.Id
+            Stop-ProcessTree $process
             $null = $process.WaitForExit(10000)
         }
     }
