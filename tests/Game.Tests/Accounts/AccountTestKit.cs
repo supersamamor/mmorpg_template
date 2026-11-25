@@ -66,6 +66,9 @@ public sealed class MemoryAccountStore : IAccountStore
     /// <summary>When set, every call fails: a database that is away.</summary>
     public bool Away { get; set; }
 
+    /// <summary>Runs once, right before the next look-up of an account by its id: what happens between two reads of one request.</summary>
+    public Func<Task>? BeforeFindById { get; set; }
+
     /// <summary>Calls started.</summary>
     public int Calls;
 
@@ -98,6 +101,11 @@ public sealed class MemoryAccountStore : IAccountStore
 
     public async Task<AccountAuth?> FindAccountAsync(Guid id, CancellationToken cancellation)
     {
+        if (BeforeFindById is { } before)
+        {
+            BeforeFindById = null;
+            await before();
+        }
         await Enter(cancellation);
         lock (_lock) return _accounts.TryGetValue(id, out var a) ? new AccountAuth(id, a.Hash, EraseAfter(id)) : null;
     }

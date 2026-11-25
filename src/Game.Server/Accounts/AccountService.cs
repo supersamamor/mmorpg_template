@@ -264,7 +264,8 @@ public sealed class AccountService
                 if (await _store.FindAccountAsync(account, cancellation).ConfigureAwait(false) is not { } auth) return AccountResult<T>.Fail(AccountErrors.InvalidSession);
                 if (secret is null || await _hashes.RunAsync(() => _hasher.Verify(secret, auth.PasswordHash), cancellation).ConfigureAwait(false) == PasswordCheck.Wrong)
                 {
-                    if (attempt > 0) break; // a password change won
+                    // A password change may have won after this session was found: it ended the session with the hash, so it is the session that is refused, and no try is counted.
+                    if (attempt > 0 || await _store.FindSessionAsync(SessionTokens.HashOf(token)!, UtcNow, cancellation).ConfigureAwait(false) is null) break;
                     judged = true;
                     _log.Warn($"[accounts] failed {what} of account {account} from {address}.");
                     return AccountResult<T>.Fail(AccountErrors.InvalidCredentials);
@@ -273,7 +274,7 @@ public sealed class AccountService
                 if (result.Ok) _accountFailures.Succeed(key);
                 return result;
             }
-            return AccountResult<T>.Fail(AccountErrors.InvalidSession); // the change that won ended this session too
+            return AccountResult<T>.Fail(AccountErrors.InvalidSession);
         }
         finally
         {
