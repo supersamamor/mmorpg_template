@@ -24,10 +24,10 @@ public class ClientBundleTests
     // ---- shape ----
 
     private static readonly Shared.ClientContent.ClientBundle Fixture = new(
-        6, ["fire"], ["str"],
+        7, ["fire"], ["str"],
         [new ClientItem("item.a", "A \"quoted\" é", null, "equip", "icon.a", null, ["weapon"], "dagger", "model.a", "sfx.use", null, 2, true)],
         [new ClientSkill("skill.a", "Bolt", "Hits.", 3, false, 6, true, false, ClientAreaShapes.Square, 2, 500, "cast", "icon.s", null, null)],
-        [new ClientJob("job.a", "Jobber", null, null, [], null, null, [new ClientJobSkill("skill.a", null, [new ClientSkillRequirement("skill.b", 2)])])],
+        [new ClientJob("job.a", "Jobber", null, null, [], null, null, [new ClientJobSkill("skill.a", null, [new ClientSkillRequirement("skill.b", 2)])], "#102030", [new ClientJobPiece("model.j", "female", "body"), new ClientJobPiece("model.k", null, null)])],
         [new ClientStatus("status.a", "Stun", null, true, null, null)],
         [new ClientMonster("monster.a", "Blob", "model.m", new ClientMonsterSounds(null, "sfx.hit", "sfx.die"))],
         [new ClientNpc("npc.a", "Guide", "Helper", null, null)],
@@ -36,18 +36,18 @@ public class ClientBundleTests
             [new ClientNpcPlacement("npc.a", new GridCell(0, 0), "s")], [new ClientZone("safe", new GridRect(0, 0, 2, 1))])],
         new ClientAppearance(
             [new ClientGender("male", "Male", "model.b", [new ClientAppearanceOption("face.a", "Calm", "model.f")], [new ClientAppearanceOption("hair.a", "Crop", "model.h")], "face.a", "hair.a")],
-            [new ClientColorOption("skin.a", "Fair", "#F6D9C4")], "skin.a", [new ClientColorOption("haircolor.a", "Raven", "#1E1B1D")], "haircolor.a"),
+            [new ClientColorOption("skin.a", "Fair", "#F6D9C4")], "skin.a", [new ClientColorOption("haircolor.a", "Raven", "#1E1B1D")], "haircolor.a", "job.a"),
         new ClientRefine(1, [new ClientRefineLevel(1, 90, "item.m", 2, "break")]), "crowns");
 
     private static readonly string FixtureBody =
         """
-        {"format_version":6,
+        {"format_version":7,
         HASH
         "currency_name":"crowns",
         "elements":["fire"],"stats":["str"],
         "items":[{"id":"item.a","name":"A @U0022quoted@U0022 @U00E9","kind":"equip","icon":"icon.a","slots":["weapon"],"weapon_type":"dagger","visual":"model.a","use_sfx":"sfx.use","card_slots":2,"refinable":true}],
         "skills":[{"id":"skill.a","name":"Bolt","description":"Hits.","max_level":3,"passive":false,"range":6,"ground":true,"friendly":false,"area_shape":"square","area_radius":2,"cast_time_ms":500,"animation":"cast","icon":"icon.s"}],
-        "jobs":[{"id":"job.a","name":"Jobber","skills":[{"skill":"skill.a","requires":[{"skill":"skill.b","level":2}]}]}],
+        "jobs":[{"id":"job.a","name":"Jobber","skills":[{"skill":"skill.a","requires":[{"skill":"skill.b","level":2}]}],"cloth_color":"#102030","pieces":[{"model":"model.j","gender":"female","slot":"body"},{"model":"model.k"}]}],
         "statuses":[{"id":"status.a","name":"Stun","debuff":true}],
         "monsters":[{"id":"monster.a","name":"Blob","model":"model.m","sounds":{"hit":"sfx.hit","die":"sfx.die"}}],
         "npcs":[{"id":"npc.a","name":"Guide","title":"Helper"}],
@@ -56,7 +56,7 @@ public class ClientBundleTests
         "warps":[{"cell":[1,0],"map":"map.b","target":[0,0]}],"npcs":[{"npc":"npc.a","cell":[0,0],"facing":"s"}],
         "zones":[{"kind":"safe","area":[0,0,2,1]}]}],
         "appearance":{"genders":[{"gender":"male","name":"Male","body":"model.b","faces":[{"id":"face.a","name":"Calm","model":"model.f"}],"hairstyles":[{"id":"hair.a","name":"Crop","model":"model.h"}],"default_face":"face.a","default_hairstyle":"hair.a"}],
-        "skin_tones":[{"id":"skin.a","name":"Fair","color":"#F6D9C4"}],"default_skin_tone":"skin.a","hair_colors":[{"id":"haircolor.a","name":"Raven","color":"#1E1B1D"}],"default_hair_color":"haircolor.a"},
+        "skin_tones":[{"id":"skin.a","name":"Fair","color":"#F6D9C4"}],"default_skin_tone":"skin.a","hair_colors":[{"id":"haircolor.a","name":"Raven","color":"#1E1B1D"}],"default_hair_color":"haircolor.a","start_job":"job.a"},
         "refine":{"max_level":1,"levels":[{"level":1,"success_percent":90,"material":"item.m","material_quantity":2,"failure":"break"}]}}
         """.ReplaceLineEndings("").Replace("@U", ((char)92) + "u"); // @U stands for a JSON unicode escape
 
@@ -87,13 +87,14 @@ public class ClientBundleTests
 
         fields.ShouldBe(
         [
-            "ClientAppearance: Genders,SkinTones,DefaultSkinToneId,HairColors,DefaultHairColorId",
+            "ClientAppearance: Genders,SkinTones,DefaultSkinToneId,HairColors,DefaultHairColorId,StartJobId",
             "ClientAppearanceOption: Id,Name,ModelAssetKey",
             "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Quests,Maps,Appearance,Refine,CurrencyName",
             "ClientColorOption: Id,Name,Color",
             "ClientGender: Gender,Name,BodyModelAssetKey,Faces,Hairstyles,DefaultFaceId,DefaultHairstyleId",
             "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey,UseSfx,EquipSfx,CardSlots,Refinable,ConfirmUse",
-            "ClientJob: Id,Name,Description,ParentJobId,WeaponTypes,ModelAssetKey,IconAssetKey,Skills",
+            "ClientJob: Id,Name,Description,ParentJobId,WeaponTypes,ModelAssetKey,IconAssetKey,Skills,ClothColor,Pieces",
+            "ClientJobPiece: ModelAssetKey,Gender,Slot",
             "ClientJobSkill: SkillId,MaxLevel,Requires",
             "ClientMap: Id,Name,SceneAssetKey,MusicAssetKey,AmbienceAssetKey,Width,Height,Cells,Warps,Npcs,Zones",
             "ClientMonster: Id,Name,ModelAssetKey,Sounds",
@@ -116,7 +117,7 @@ public class ClientBundleTests
     {
         using var doc = JsonDocument.Parse(Export(Content).FileBytes);
         var root = doc.RootElement;
-        root.GetProperty("format_version").GetInt32().ShouldBe(6);
+        root.GetProperty("format_version").GetInt32().ShouldBe(7);
         root.GetProperty("currency_name").GetString().ShouldBe(Content.Balance.CurrencyName);   // T-602: the bag shows the balance with it
         // T-402: card slots and refinable on equipment, and the refine steps as far as a player needs them to decide (chance, material, outcome).
         var vest = root.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("id").GetString() == "item.padded_vest");
@@ -242,7 +243,7 @@ public class ClientBundleTests
             drops: new Registry<DropTableDef>(Content.Drops.All.Select(d => d with { Entries = [new DropEntryDef { ItemId = "item.antidote", Chance = 0.123456 }] })),
             expTables: Registry<ExpTableDef>.Empty(),
             formulas: new FormulaSetDef { PhysicalDamage = secret },
-            balance: new BalanceDef());
+            balance: new BalanceDef { NewCharacter = new NewCharacterBalanceDef { StartJobId = Content.Balance.NewCharacter.StartJobId } }); // the start job is display data (T-706: the creation preview wears its look)
 
         var after = Export(changed);
 

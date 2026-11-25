@@ -14,6 +14,8 @@ namespace Game.Content.Validation;
 /// <para>Contract (T-224): variants (<c>variant_of</c>, <c>tint</c>, <c>scale</c>, <c>outline</c>); every model's <c>Body_LOD0</c>, §9 budgets (triangles, one
 /// material, texture size); a rigged model's skin, <c>Armature</c>, humanoid bones and facing; a living model's height; an animation library's rig, required clips,
 /// clip names and tracks; (warnings) see-through materials, missing outline directions, an origin off the ground.</para>
+/// <para>Appearance (T-706): <c>recolor</c> and <c>hides_hair</c>; a job's pieces are worn pieces; a body with its largest face and hairstyle stays inside the §9
+/// character budgets; (warnings) a body with no skin paint, or no cloth paint while a job has a cloth colour, and a face or hairstyle with a texture of its own.</para>
 /// Every finding names the manifest, the key, the reason and, where there is one, the fix.
 /// </summary>
 public static class ThemeCheck
@@ -47,11 +49,14 @@ public static class ThemeCheck
                 if (key.StartsWith("model.equip.", StringComparison.Ordinal) && Text(entry, "variant_of") is null) CheckEquip(manifest, key, entry, rigs, bodyRigs, issues);
                 if (entry.TryGetProperty("clips", out var clips) && clips.ValueKind == JsonValueKind.Object) CheckClips(manifest, key, clips, issues);
                 CheckRestyle(manifest, key, entry, issues);
+                CheckLookFields(manifest, key, entry, issues);
                 if (Text(entry, "variant_of") is not null) CheckVariant(chain, manifest, key, entry, issues);
             }
         }
 
-        new ContractPass(chain, rigs, issues).Run();
+        var contract = new ContractPass(chain, rigs, issues);
+        contract.Run();
+        CheckAppearance(database, chain, rigs, bodyRigs, contract, issues);
 
         var missing = chain.Select(m => m.Fallback("missing")).FirstOrDefault(k => k is not null);
         foreach (var item in database.Items.All)
@@ -224,6 +229,100 @@ public static class ThemeCheck
         }
     }
 
+    // ---------------- T-706: appearance ----------------
+
+    /// <summary>The manifest fields of a character's looks: <c>recolor</c> (colour role to one painted colour or a list) on models, <c>hides_hair</c> on worn pieces.</summary>
+    private static void CheckLookFields(Manifest manifest, string key, JsonElement entry, List<ValidationIssue> issues)
+    {
+        void Error(string field, string message) => issues.Add(Issue(ValidationSeverity.Error, manifest, key, key + "." + field, ValidationCodes.ThemeAppearance, $"{key}: {message}"));
+        if (entry.TryGetProperty("hides_hair", out var hides))
+        {
+            if (hides.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) Error("hides_hair", "'hides_hair' must be true or false");
+            else if (Text(entry, "attach") is null && Text(entry, "skinned") is null) Error("hides_hair", "only a worn piece ('attach' or 'skinned') can hide the hair");
+        }
+        if (!entry.TryGetProperty("recolor", out var recolor)) return;
+        if (!key.StartsWith("model.", StringComparison.Ordinal)) Error("recolor", "only a model can have 'recolor'");
+        if (recolor.ValueKind != JsonValueKind.Object)
+        {
+            Error("recolor", "'recolor' must be an object of colour role to painted colour(s), e.g. { \"skin\": [\"#f1c7a1\", \"#e9a08a\"] }");
+            return;
+        }
+        foreach (var role in recolor.EnumerateObject())
+        {
+            if (!AppearanceColorRoles.All.Contains(role.Name))
+                Error("recolor." + role.Name, $"'{role.Name}' is not an appearance colour role ({string.Join(", ", AppearanceColorRoles.All.Ordered)})");
+            var good = role.Value.ValueKind switch
+            {
+                JsonValueKind.String => IsColor(role.Value.GetString()!),
+                JsonValueKind.Array => role.Value.EnumerateArray().All(c => c.ValueKind == JsonValueKind.String && IsColor(c.GetString()!)),
+                _ => false,
+            };
+            if (!good) Error("recolor." + role.Name, "must be a painted colour \"#rrggbb\" or a list of them (an empty list: nothing takes this colour)");
+        }
+    }
+
+    /// <summary>The painted colours of a role on a key's entry: its <c>recolor</c>, else the contract's.</summary>
+    private static IReadOnlyList<string> Paint(JsonElement entry, string role, IReadOnlyList<string> contract)
+    {
+        if (!entry.TryGetProperty("recolor", out var recolor) || recolor.ValueKind != JsonValueKind.Object || !recolor.TryGetProperty(role, out var value)) return contract;
+        if (value.ValueKind == JsonValueKind.String) return IsColor(value.GetString()!) ? new[] { value.GetString()! } : Array.Empty<string>();
+        return value.ValueKind == JsonValueKind.Array
+            ? value.EnumerateArray().Where(c => c.ValueKind == JsonValueKind.String).Select(c => c.GetString()!).Where(IsColor).ToList()
+            : Array.Empty<string>();
+    }
+
+    private static void CheckAppearance(ContentDatabase database, List<Manifest> chain, Dictionary<string, IReadOnlySet<string>> rigs, IReadOnlyList<string> bodyRigs,
+        ContractPass contract, List<ValidationIssue> issues)
+    {
+        Manifest? Holder(string key) => chain.FirstOrDefault(m => m.HasFile(key));
+
+        foreach (var key in database.Jobs.All.SelectMany(j => j.Look.Pieces).Select(p => p.ModelAssetKey).Distinct(StringComparer.Ordinal))
+        {
+            if (key.StartsWith("model.equip.", StringComparison.Ordinal)) continue; // checked with the equipment
+            if (chain.FirstOrDefault(m => m.Entries.ContainsKey(key)) is { } first) CheckEquip(first, key, first.Entries[key], rigs, bodyRigs, issues);
+        }
+
+        var clothed = database.Jobs.All.FirstOrDefault(j => j.Look.ClothColor is not null);
+        foreach (var gender in database.Appearance.Genders.Values)
+        {
+            var bodyKey = gender.BodyModelAssetKey;
+            if (Holder(bodyKey) is not { } manifest || contract.ChainFacts(bodyKey) is not { Body0: { } body } facts) continue; // reported elsewhere
+            void Warn(Manifest at, string key, string message) =>
+                issues.Add(Issue(ValidationSeverity.Warning, at, key, key, ValidationCodes.WarnThemeLook, $"{key}: {message}"));
+
+            var entry = manifest.Entries[bodyKey];
+            var skin = Paint(entry, AppearanceColorRoles.Skin, AppearancePaint.Skin);
+            if (skin.Count > 0 && !body.IsPainted(skin))
+                Warn(manifest, bodyKey, $"no vertex is painted with its skin colour ({string.Join(", ", skin)}), so skin tones do not show; paint the skin's vertices with it, or name the colour in 'recolor' (docs/THEMES.md 1.7)");
+            var cloth = Paint(entry, AppearanceColorRoles.Cloth, AppearancePaint.Cloth);
+            if (clothed is not null && cloth.Count > 0 && !body.IsPainted(cloth))
+                Warn(manifest, bodyKey, $"no vertex is painted with its cloth colour ({string.Join(", ", cloth)}), so a job's colour ({clothed.Id}) does not show; paint it, or name the colour in 'recolor' (docs/THEMES.md 1.7)");
+
+            // What every character of this gender draws: the body with its largest face and hairstyle, merged (§9).
+            int lod0 = body.Triangles, lod1 = (facts.Body1 ?? body).Triangles;
+            foreach (var options in new[] { gender.Faces.Select(f => f.ModelAssetKey), gender.Hairstyles.Select(h => h.ModelAssetKey) })
+            {
+                int most0 = 0, most1 = 0;
+                foreach (var key in options.Distinct(StringComparer.Ordinal))
+                {
+                    if (contract.ChainFacts(key) is not { Body0: { } part } partFacts) continue;
+                    most0 = Math.Max(most0, part.Triangles);
+                    most1 = Math.Max(most1, (partFacts.Body1 ?? part).Triangles);
+                    if (partFacts.Textures.Count > 0 && Holder(key) is { } partManifest)
+                        Warn(partManifest, key, "has a texture of its own, so it stays a second surface and every character pays one more draw call for it (§9); colour it with vertex colours instead");
+                }
+                lod0 += most0;
+                lod1 += most1;
+            }
+            if (body.Triangles <= ThemeContract.CharacterLod0Triangles && lod0 > ThemeContract.CharacterLod0Triangles)
+                issues.Add(Issue(ValidationSeverity.Error, manifest, bodyKey, bodyKey, ValidationCodes.ThemeBudget,
+                    $"{bodyKey}: with its largest face and hairstyle it has {lod0} triangles at {ModelFacts.Lod0}, over the {ThemeContract.CharacterLod0Triangles} budget of a character (§9); they are one mesh in the game"));
+            if ((facts.Body1 ?? body).Triangles <= ThemeContract.CharacterLod1Triangles && lod1 > ThemeContract.CharacterLod1Triangles)
+                issues.Add(Issue(ValidationSeverity.Error, manifest, bodyKey, bodyKey, ValidationCodes.ThemeBudget,
+                    $"{bodyKey}: with its largest face and hairstyle it has {lod1} triangles at {ModelFacts.Lod1}, over the {ThemeContract.CharacterLod1Triangles} budget of a far character (§9); give the face and hairstyle a '{ModelFacts.Lod1}' mesh"));
+        }
+    }
+
     private static bool IsColor(string text) => text.Length == 7 && text[0] == '#' && text.Skip(1).All(Uri.IsHexDigit);
 
     // ---------------- T-224: the contract on model and animation files ----------------
@@ -278,7 +377,7 @@ public static class ThemeCheck
         }
 
         /// <summary>The facts of a key through the chain (the first theme whose file exists).</summary>
-        private ModelFacts? ChainFacts(string key)
+        public ModelFacts? ChainFacts(string key)
         {
             foreach (var manifest in _chain)
                 if (manifest.HasFile(key)) return Facts(manifest, key);

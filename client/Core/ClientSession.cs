@@ -31,7 +31,7 @@ public sealed class ClientSession
     /// <summary>Creates a session on the login screen. Without <paramref name="accounts"/> only the dev login works.</summary>
     public ClientSession(ClientConfig config, DisplayBundle bundle, IClientSocket socket, IRandom random, IAccountTransport? accounts = null)
     {
-        Accounts = new AccountFlow(config, accounts);
+        Accounts = new AccountFlow(config, accounts, new CharacterCreator(bundle.Appearance, random));
         _config = config;
         _bundle = bundle;
         _socket = socket;

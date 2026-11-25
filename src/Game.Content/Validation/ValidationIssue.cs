@@ -107,6 +107,8 @@ public static class ValidationCodes
     public const string AppearanceColor = "appearance.color";
     /// <summary>An appearance default points at an option that does not exist (for that gender).</summary>
     public const string AppearanceDefault = "appearance.default";
+    /// <summary>A theme manifest entry's <c>recolor</c> or <c>hides_hair</c> is wrong, or a job's look names a piece that is not a worn piece (T-706, <c>ThemeCheck</c>).</summary>
+    public const string ThemeAppearance = "theme.appearance";
     /// <summary>An effect the effect runner cannot run where it stands (T-501, <c>EffectSupport</c>).</summary>
     public const string EffectUnsupported = "effect.unsupported";
     /// <summary>A theme manifest entry for worn equipment or a weapon clip is wrong, or a theme file is a Git LFS pointer (T-405, <c>ThemeCheck</c>).</summary>

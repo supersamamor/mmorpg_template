@@ -45,8 +45,7 @@ public sealed class ToonLook
     public static ToonLook Mount(Node3D parent, ClientConfig config, ThemeCatalog catalog)
     {
         var plan = config.ToonShading ? RenderPlan.Resolve(catalog) : RenderPlan.Off;
-        if (plan.Environment is { } environment && ResourceLoader.Load<PackedScene>("res://" + environment)?.Instantiate() is Node node) parent.AddChild(node);
-        else AddBuiltInEnvironment(parent, plan.Environment is not null);
+        AddEnvironment(parent, plan.Environment);
         var toon = plan.Toon is { } t ? Load<ShaderMaterial>(t) : null;
         var outline = plan.Outline is { } o ? Load<Material>(o) : null;
         GD.Print($"[client] look: {(toon is null ? "plain (before T-222)" : "toon")}, outlines {(outline is null ? "off" : $"within {config.OutlineDistanceCells:0.#} cells, nearest {config.OutlineMaxCount}")}, environment {(plan.Environment ?? "built-in")}");
@@ -60,8 +59,15 @@ public sealed class ToonLook
         return null;
     }
 
+    /// <summary>Puts the theme's environment scene under <paramref name="parent"/>, or the built-in light and background when there is none (the world, and each preview's small world, T-706).</summary>
+    public static void AddEnvironment(Node parent, string? environment)
+    {
+        if (environment is not null && ResourceLoader.Load<PackedScene>("res://" + environment)?.Instantiate() is Node node) parent.AddChild(node);
+        else AddBuiltInEnvironment(parent, environment is not null);
+    }
+
     /// <summary>The light and background from before T-222: what a theme without an environment gets (and the refusal screens, which come before the theme).</summary>
-    public static void AddBuiltInEnvironment(Node3D parent, bool broken = false)
+    public static void AddBuiltInEnvironment(Node parent, bool broken = false)
     {
         if (broken) GD.PushWarning("[theme] the environment scene could not be instanced; using the built-in light");
         var environment = new Godot.Environment

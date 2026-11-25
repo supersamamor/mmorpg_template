@@ -195,6 +195,71 @@
       ],
       "pattern": "^icon\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
       "description": "UI icon (icon.*)."
+    },
+    "look": {
+      "type": "object",
+      "properties": {
+        "cloth_color": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Colour of the body's cloth as #RRGGBB. Null keeps the colour the body is painted with."
+        },
+        "pieces": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "model_asset_key": {
+                "type": "string",
+                "pattern": "^model\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+                "description": "Piece model (model.*): attach or skinned in the theme manifest, like worn equipment."
+              },
+              "gender": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "male",
+                  "female",
+                  null
+                ],
+                "description": "Gender it is for (Genders). Null: both."
+              },
+              "slot": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "head_top",
+                  "head_mid",
+                  "head_low",
+                  "body",
+                  "weapon",
+                  "shield",
+                  "garment",
+                  "footgear",
+                  "accessory_1",
+                  "accessory_2",
+                  null
+                ],
+                "description": "Equipment slot it stands for (EquipSlots): worn equipment in that slot is drawn instead of it. Null: always drawn."
+              }
+            },
+            "additionalProperties": false,
+            "description": "One piece of a job's look.",
+            "required": [
+              "model_asset_key"
+            ]
+          },
+          "description": "Pieces merged into the body like worn equipment."
+        }
+      },
+      "additionalProperties": false,
+      "description": "How a character of this job is told apart on its own body (T-706, ARCHITECTURE §7.5.1). Cosmetic only."
     }
   },
   "additionalProperties": false,

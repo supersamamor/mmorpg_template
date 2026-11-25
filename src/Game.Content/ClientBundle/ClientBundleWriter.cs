@@ -174,6 +174,14 @@ public static class ClientBundleWriter
                     rw.WriteNumber("level", r.Level);
                 });
         });
+        Opt(w, "cloth_color", j.ClothColor);
+        if (j.Pieces is { Count: > 0 } pieces)
+            Array(w, "pieces", pieces, (pw, p) =>
+            {
+                pw.WriteString("model", p.ModelAssetKey);
+                Opt(pw, "gender", p.Gender);
+                Opt(pw, "slot", p.Slot);
+            });
     }
 
     private static void Appearance(Utf8JsonWriter w, ClientAppearance a)
@@ -193,6 +201,7 @@ public static class ClientBundleWriter
         w.WriteString("default_skin_tone", a.DefaultSkinToneId);
         Array(w, "hair_colors", a.HairColors, ColorOption);
         w.WriteString("default_hair_color", a.DefaultHairColorId);
+        Opt(w, "start_job", a.StartJobId);
         w.WriteEndObject();
     }
 

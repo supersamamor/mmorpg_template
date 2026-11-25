@@ -18,6 +18,7 @@ public class VocabularyTests
         { "Zone kinds", ZoneKinds.All, ["safe", "pvp"] },
         { "Appearance option namespaces", AppearanceIdPrefixes.All, ["face.", "hair.", "skin.", "haircolor."] },
         { "Genders", Genders.All, ["male", "female"] },
+        { "Appearance colour roles", AppearanceColorRoles.All, ["skin", "hair", "cloth"] },
         { "Attach points", AttachPoints.All, ["head", "face", "mouth", "back", "hand_r", "hand_l"] },
         { "Animation ids", AnimationIds.All, ["idle", "walk", "attack", "cast", "hit", "die", "sit", "pick_up"] },
         { "Primary stats", PrimaryStats.All, ["str", "agi", "vit", "int", "dex", "luk"] },

@@ -64,8 +64,8 @@ public sealed class EntityView
     public IReadOnlyList<string> Worn { get; private set; } = Array.Empty<string>();
 
     /// <summary>
-    /// A player: its looks as ids (T-705), from the snapshot or appeared entry that introduced it; fixed until it leaves view (a change never carries it). Null for every other kind. Nothing
-    /// draws it yet (T-706); an id the bundle does not have is kept as it is and must be ignored by whoever draws it.
+    /// A player: its looks as ids (T-705), from the snapshot or appeared entry that introduced it; fixed until it leaves view (a change never carries it). Null for every other kind. An id
+    /// the bundle does not have is kept as it is; <c>AppearanceCatalog</c> draws the default for it.
     /// </summary>
     public AppearanceRecord? Appearance { get; private set; }
 

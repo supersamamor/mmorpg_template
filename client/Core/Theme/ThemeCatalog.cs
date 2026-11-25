@@ -165,7 +165,8 @@ public sealed class ThemeCatalog
         var outlineOff = variant.OutlineOff || (variant.OutlineColor is null && resolved.OutlineOff);
         var outlineColor = variant.OutlineOff ? null : variant.OutlineColor ?? resolved.OutlineColor;
         asset = new ThemeAsset(variant.Key, resolved.File, resolved.Rig, resolved.Anims, resolved.Attach, resolved.Skinned, resolved.Clips, variant.ImpactDelay ?? resolved.ImpactDelay,
-            variant.Effect ?? resolved.Effect, resolved.Render, resolved.VariantOf ?? baseKey, tint, variant.Scale * resolved.Scale, outlineOff, outlineColor);
+            variant.Effect ?? resolved.Effect, resolved.Render, resolved.VariantOf ?? baseKey, tint, variant.Scale * resolved.Scale, outlineOff, outlineColor,
+            resolved.Recolor, resolved.HidesHair);
         return true;
     }
 

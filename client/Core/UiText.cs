@@ -100,6 +100,33 @@ public static class UiText
     /// <summary>The button that creates a character.</summary>
     public const string CreateCharacter = "Create character";
 
+    /// <summary>The button that opens the creation screen (T-706).</summary>
+    public const string NewCharacter = "New character";
+
+    /// <summary>The creation screen's random button.</summary>
+    public const string RandomLook = "Random";
+
+    /// <summary>The creation screen's way back to the character list.</summary>
+    public const string Back = "Back";
+
+    /// <summary>The title over the genders.</summary>
+    public const string CreationGender = "Body";
+
+    /// <summary>The title over the faces.</summary>
+    public const string CreationFace = "Face";
+
+    /// <summary>The title over the hairstyles.</summary>
+    public const string CreationHairstyle = "Hairstyle";
+
+    /// <summary>The title over the skin tones.</summary>
+    public const string CreationSkin = "Skin tone";
+
+    /// <summary>The title over the hair colours.</summary>
+    public const string CreationHairColor = "Hair colour";
+
+    /// <summary>The chosen option's button: marked in words as well as by its frame.</summary>
+    public static string Chosen(string name) => "[ " + name + " ]";
+
     /// <summary>The button that deletes a character.</summary>
     public const string DeleteCharacter = "Delete";
 

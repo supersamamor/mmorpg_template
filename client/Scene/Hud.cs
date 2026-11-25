@@ -150,7 +150,12 @@ public sealed class Hud
     private Rect2I _lastSafe;
 
     /// <summary>Builds the HUD under <paramref name="parent"/>. Without a session, only <see cref="ShowRefusal"/> makes sense.</summary>
-    public Hud(Node parent, ClientConfig config, ClientSession? session, DisplayBundle? bundle)
+    /// <param name="parent">Where it goes.</param>
+    /// <param name="config">Settings.</param>
+    /// <param name="session">The client, or null for a refusal screen only.</param>
+    /// <param name="bundle">The display bundle, or null.</param>
+    /// <param name="looks">Makes a view of a character for the account screens (T-706; true: a turning one), or null.</param>
+    public Hud(Node parent, ClientConfig config, ClientSession? session, DisplayBundle? bundle, Func<bool, LookView>? looks = null)
     {
         _config = config;
         _session = session;
@@ -287,7 +292,7 @@ public sealed class Hud
         _panelBox.AddChild(_panelTitle);
         _panelBox.AddChild(_panelButton);
         _panelButton.Pressed += () => _panelAction?.Invoke();
-        if (session is not null && bundle is not null) _accountPanel = new AccountPanel(_panel, session, bundle, config, _interactive, Tap);
+        if (session is not null && bundle is not null) _accountPanel = new AccountPanel(_panel, session, bundle, config, _interactive, Tap, looks);
         _interactive.Add(_logout);
         _interactive.Add(_uiSize);
         _interactive.Add(_soundButton);

@@ -24,6 +24,7 @@ public sealed class ThemedEntities : IEntityVisualSource
     private readonly ThemeCatalog _catalog;
     private readonly ModelStore _store;
     private readonly EquipmentCatalog _equipment;
+    private readonly AppearanceCatalog _appearance;
     private readonly GearMesher _mesher;
     private readonly ToonLook? _look;
     private readonly Action<ModelVisual> _needsDressing;
@@ -44,8 +45,9 @@ public sealed class ThemedEntities : IEntityVisualSource
         _look = look;
         var threaded = ModelLoading.Threaded(DisplayServer.GetName(), config.ThreadedLoadWithoutRenderer);
         _store = new ModelStore(config.ModelCacheLimit, threaded, message => GD.PushWarning(message), config.PieceLoadAttempts);
-        _equipment = new EquipmentCatalog(catalog, id => bundle.Item(id)?.Visual);
-        _mesher = new GearMesher(config.ModelCacheLimit, threaded);
+        _equipment = new EquipmentCatalog(catalog, id => bundle.Item(id)?.Visual, id => bundle.Item(id)?.Slots);
+        _appearance = new AppearanceCatalog(catalog, _equipment, bundle);
+        _mesher = new GearMesher(config.LookCacheLimit, threaded);
         _gearPreload = new GearPreload(catalog, id => bundle.Item(id)?.Visual, config.GearPreloadLimit);
         _needsDressing = visual =>
         {
@@ -57,7 +59,13 @@ public sealed class ThemedEntities : IEntityVisualSource
     /// <summary>Visuals whose gear changed and is not on yet (for measuring).</summary>
     public int Dressing => _dressing.Count;
 
-    /// <summary>Merged character meshes: cached now, and built so far (for measuring).</summary>
+    /// <summary>The toon look models are drawn with, or null.</summary>
+    public ToonLook? Look => _look;
+
+    /// <summary>Distinct looks resolved and remembered now (for measuring, T-706).</summary>
+    public int LookKinds => _appearance.Count;
+
+    /// <summary>Merged characters: cached now, and built so far (for measuring).</summary>
     public (int Cached, int Built) Merged => (_mesher.Cached, _mesher.Built);
 
     /// <summary>Main-thread milliseconds spent on merges so far (T-222: the merge itself runs on a worker), for measuring.</summary>
@@ -122,12 +130,15 @@ public sealed class ThemedEntities : IEntityVisualSource
 
     /// <inheritdoc />
     public double ImpactDelayOf(EntityView attacker) =>
-        _catalog.ImpactDelayOf(_catalog.ResolveModel(_bundle.ModelKeyOf(attacker.DisplayKey), attacker.Kind), _config.ImpactDelaySeconds);
+        _catalog.ImpactDelayOf(ModelOf(attacker.Kind, attacker.DisplayKey, attacker.Appearance), _config.ImpactDelaySeconds);
 
     /// <summary>Starts loading, in the background, every model the bundle names and the fallback models (so the first sight of one does not wait on the disk).</summary>
     public void Preload()
     {
         foreach (var key in _bundle.ModelKeys) Request(_catalog.ResolveModel(key, string.Empty));
+        if (_bundle.Appearance is { } looks) // the bodies; faces and hairstyles load when someone with them is seen
+            foreach (var gender in looks.Genders)
+                if (_catalog.TryFind(gender.BodyModelAssetKey, out var path, out var asset)) Request(new ModelResolution(gender.BodyModelAssetKey, path, asset, ResolutionLevel.Exact));
         foreach (var kind in new[] { EntityKinds.Player, EntityKinds.Monster, EntityKinds.Npc, EntityKinds.Item }) Request(_catalog.ResolveModel(null, kind));
     }
 
@@ -138,10 +149,39 @@ public sealed class ThemedEntities : IEntityVisualSource
         if (_catalog.ResolveAnimations(resolution.Asset, out var animations) is not null) _store.Request(animations);
     }
 
-    /// <inheritdoc />
-    public IEntityVisual Acquire(string kind, string? displayKey)
+    /// <summary>The model an entity is drawn with: a player's own body when it has looks (T-706), else what its display key names.</summary>
+    private ModelResolution ModelOf(string kind, string? displayKey, AppearanceRecord? looks) =>
+        _config.DrawAppearance && looks is not null && _appearance.Resolve(looks, displayKey) is { } look ? look.Body : _catalog.ResolveModel(_bundle.ModelKeyOf(displayKey), kind);
+
+    /// <summary>
+    /// A visual of its own under <paramref name="parent"/>, for the creation preview and the character list (T-706): the same models, merges and materials as the world's,
+    /// loaded and dressed by the same <see cref="Update"/>, but never pooled. Give it back with <see cref="Discard"/>.
+    /// </summary>
+    public ModelVisual Preview(Node3D parent, string? jobId, AppearanceRecord looks)
     {
-        var resolution = _catalog.ResolveModel(_bundle.ModelKeyOf(displayKey), kind);
+        var visual = new ModelVisual(_store, _catalog, _equipment, _mesher, _needsDressing, ModelOf(EntityKinds.Player, jobId, looks), _appearance, _look);
+        parent.AddChild(visual.Root);
+        visual.SetCharacter(jobId, looks);
+        visual.SetVisible(true);
+        _waiting.Add(visual);
+        return visual;
+    }
+
+    /// <summary>The body a preview of these looks would stand on, so a caller knows whether its visual still fits.</summary>
+    public string BodyOf(string? jobId, AppearanceRecord looks) => ModelOf(EntityKinds.Player, jobId, looks).PoolKey;
+
+    /// <summary>Frees a <see cref="Preview"/> visual.</summary>
+    public void Discard(ModelVisual visual)
+    {
+        _waiting.Remove(visual);
+        _dressing.Remove(visual);
+        visual.Free();
+    }
+
+    /// <inheritdoc />
+    public IEntityVisual Acquire(string kind, string? displayKey, AppearanceRecord? looks = null)
+    {
+        var resolution = ModelOf(kind, displayKey, looks);
         var pooledKey = resolution.PoolKey;
         ModelVisual visual;
         if (_pools.TryGetValue(pooledKey, out var pool) && pool.Count > 0)
@@ -151,9 +191,10 @@ public sealed class ThemedEntities : IEntityVisualSource
         }
         else
         {
-            visual = new ModelVisual(_store, _catalog, _equipment, _mesher, _needsDressing, resolution, _look);
+            visual = new ModelVisual(_store, _catalog, _equipment, _mesher, _needsDressing, resolution, _appearance, _look);
             _parent.AddChild(visual.Root);
         }
+        visual.SetCharacter(displayKey, looks); // before it shows: a pooled one still has the last entity's looks
         visual.SetVisible(true);
         if (!visual.Ready) _waiting.Add(visual);
         return visual;

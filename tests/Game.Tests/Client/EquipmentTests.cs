@@ -262,16 +262,15 @@ public class EquipmentTests
     public void Characters_with_the_same_body_and_pieces_in_any_order_share_one_merged_mesh_key()
     {
         var rig = new Rig();
-        WornPiece P(string item) => rig.Equipment.Resolve(item, "humanoid")!;
+        DressPart P(string item) => new(rig.Equipment.Resolve(item, "humanoid")!, PartRole.Gear);
 
-        var a = WornSet.Key("themes/default/models/hero.glb", 1, new[] { P("item.blade"), P("item.vest"), P("item.buckler") });
-        var b = WornSet.Key("themes/default/models/hero.glb", 1, new[] { P("item.buckler"), P("item.blade_copy"), P("item.vest") });
+        var a = WornSet.Key("themes/default/models/hero.glb", null, new[] { P("item.blade"), P("item.vest"), P("item.buckler") });
+        var b = WornSet.Key("themes/default/models/hero.glb", null, new[] { P("item.buckler"), P("item.blade_copy"), P("item.vest") });
 
         b.ShouldBe(a, "the server's order and which item carries the visual do not matter");
-        WornSet.Key("themes/default/models/hero.glb", 0, new[] { P("item.blade"), P("item.vest"), P("item.buckler") }).ShouldNotBe(a, "each level of detail has its own mesh");
-        WornSet.Key("themes/default/models/other.glb", 1, new[] { P("item.blade"), P("item.vest"), P("item.buckler") }).ShouldNotBe(a, "another body");
-        WornSet.Key("themes/default/models/hero.glb", 1, new[] { P("item.staff"), P("item.vest") }).ShouldNotBe(a, "other gear");
-        WornSet.Key("themes/default/models/hero.glb", 1, new[] { P("item.unknown") }).ShouldContain("!", Case.Sensitive, "a fallback piece is marked");
+        WornSet.Key("themes/default/models/other.glb", null, new[] { P("item.blade"), P("item.vest"), P("item.buckler") }).ShouldNotBe(a, "another body");
+        WornSet.Key("themes/default/models/hero.glb", null, new[] { P("item.staff"), P("item.vest") }).ShouldNotBe(a, "other gear");
+        WornSet.Key("themes/default/models/hero.glb", null, new[] { P("item.unknown") }).ShouldContain("!", Case.Sensitive, "a fallback piece is marked");
     }
 
     // ---- the real pack ----

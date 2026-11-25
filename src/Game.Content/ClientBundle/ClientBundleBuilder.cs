@@ -26,12 +26,12 @@ public static class ClientBundleBuilder
         content.Npcs.All.Select(n => new ClientNpc(n.Id, n.Name, n.Title, n.ModelAssetKey, n.PortraitAssetKey)).ToList(),
         content.Quests.All.Select(q => new ClientQuest(q.Id, q.Name, q.Description, q.GiverNpcId, q.Steps.Select(s => s.Description ?? "").ToList())).ToList(),
         content.Maps.All.Select(m => Map(m, content.GetGrid(m.Id))).ToList(),
-        Appearance(content.Appearance),
+        Appearance(content.Appearance, content.Balance.NewCharacter.StartJobId),
         new ClientRefine(content.Refine.MaxLevel, content.Refine.Levels.Select(l =>
             new ClientRefineLevel(l.Level, l.SuccessPercent, l.MaterialItemId, l.MaterialQuantity, l.Failure)).ToList()),
         content.Balance.CurrencyName);
 
-    private static ClientAppearance Appearance(AppearanceDef a) => new(
+    private static ClientAppearance Appearance(AppearanceDef a, string startJobId) => new(
         Genders.All.Where(a.Genders.ContainsKey).Select(g =>
         {
             var d = a.Genders[g];
@@ -41,7 +41,8 @@ public static class ClientBundleBuilder
                 d.Default.FaceId, d.Default.HairstyleId);
         }).ToList(),
         a.SkinTones.Select(c => new ClientColorOption(c.Id, c.Name, c.Color)).ToList(), a.DefaultSkinToneId,
-        a.HairColors.Select(c => new ClientColorOption(c.Id, c.Name, c.Color)).ToList(), a.DefaultHairColorId);
+        a.HairColors.Select(c => new ClientColorOption(c.Id, c.Name, c.Color)).ToList(), a.DefaultHairColorId,
+        startJobId.Length > 0 ? startJobId : null);
 
     private static ClientMonster Monster(MonsterDef monster)
     {
@@ -85,7 +86,8 @@ public static class ClientBundleBuilder
     private static ClientJob Job(JobDef job) => new(job.Id, job.Name, job.Description, job.ParentJobId, job.WeaponTypes.ToList(),
         job.ModelAssetKey, job.IconAssetKey,
         job.Skills.Select(s => new ClientJobSkill(s.SkillId, s.MaxLevel,
-            s.Requires.Select(r => new ClientSkillRequirement(r.SkillId, r.Level)).ToList())).ToList());
+            s.Requires.Select(r => new ClientSkillRequirement(r.SkillId, r.Level)).ToList())).ToList(),
+        job.Look.ClothColor, job.Look.Pieces.Select(p => new ClientJobPiece(p.ModelAssetKey, p.Gender, p.Slot)).ToList());
 
     private static ClientMap Map(MapDef map, MapGrid grid)
     {

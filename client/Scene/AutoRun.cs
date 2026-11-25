@@ -44,7 +44,7 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-autopilot") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 ||
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-autopilot") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 || Array.IndexOf(args, "--e2e-appearance") >= 0 || Array.IndexOf(args, "--e2e-appearance-watch") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -82,6 +82,8 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-autopilot") >= 0) await AutopilotRunAsync();
             else if (Array.IndexOf(_args, "--e2e-account") >= 0) await AccountRunAsync();
             else if (Array.IndexOf(_args, "--e2e-saving") >= 0) await SavingRunAsync();
+            else if (Value("--e2e-appearance-watch") is { } looks) await new LookRuns(_main, ShotAsync).WatcherAsync(looks);
+            else if (Array.IndexOf(_args, "--e2e-appearance") >= 0) await new LookRuns(_main, ShotAsync).CreatorAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
@@ -127,10 +129,7 @@ public sealed class AutoRun
         Check(accounts.Characters.Count == 0 && accounts.Slots > 0, "a new account has no characters and some slots");
         Print($"account: registered; {accounts.Slots} free slots, names of {accounts.NameMin} to {accounts.NameMax} letters");
 
-        Type(screen.NameField, "Run" + tag);
-        Press(screen.CreateButton);
-        await UntilAsync(() => accounts.Characters.Count == 1 && !accounts.Busy, 10, "the new character");
-        await FramesAsync(3);
+        await LookRuns.CreateAsync(_main, "Run" + tag);
         var character = accounts.Characters[0];
         Print($"account: character in slot {character.Slot}, row \"{screen.Rows[0].Text.Replace("\n", ", ")}\"");
         await ShotAsync();
@@ -192,10 +191,7 @@ public sealed class AutoRun
         Press(screen.RegisterButton);
         await UntilAsync(() => accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters && !accounts.Busy, 15, "the character list after registering");
         await FramesAsync(3);
-        Type(screen.NameField, "Keep" + tag);
-        Press(screen.CreateButton);
-        await UntilAsync(() => accounts.Characters.Count == 1 && !accounts.Busy, 10, "the new character");
-        await FramesAsync(3);
+        await LookRuns.CreateAsync(_main, "Keep" + tag);
         Press(screen.Rows[0].Play);
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null && _main.LoadedMap == World.MapId, 15, "entering the world");
         await UntilAsync(() => Session.Inventory.Known && Session.Stats.Known && Session.Quests.Known && World.Exp is not null, 10, "the own state");
@@ -1719,6 +1715,14 @@ public sealed class AutoRun
         ReportCamera();
         Print($"measure: waiting for {wanted} entities on screen");
         await UntilAsync(() => CountOnScreen() >= wanted, 120, $"{wanted} entities on screen");
+        if (Array.IndexOf(_args, "--measure-looks") >= 0)
+        {
+            // T-706: what characters' own looks cost, against the job models of before, on the same crowd in one run.
+            await new LookRuns(_main, ShotAsync, CountOnScreen).MeasureAsync(wanted, Value("--measure-dress")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+            Session.Logout(Clocks.Wall());
+            await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen, 10, "bye logout");
+            return;
+        }
         if (Value("--measure-dress") is { } dress)
         {
             // T-403: every player drawn wearing these item ids (from the command line, never from code), so a crowd is measured fully equipped.

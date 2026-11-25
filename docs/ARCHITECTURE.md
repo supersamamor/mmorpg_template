@@ -275,7 +275,7 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 - **Whitelist, not blacklist.** `Game.Shared/ClientContent` holds one plain record per definition type, and
   `Game.Content/ClientBundle/ClientBundleBuilder` copies each field by hand. A field added to a server definition reaches the client
   only when someone maps it there; a test fails if a client record gains a field without the table below changing.
-- **Format:** `format_version` (now `6`; 2 added the sound keys, 3 the appearance options, 4 item `card_slots` / `refinable` and the `refine` steps, 5 dropped the dialogue graphs and an NPC's dialogue id: the server runs dialogue, T-601; 6 added `currency_name`, T-602) is the first field. The client refuses a bundle with a version it does not know. Bump it
+- **Format:** `format_version` (now `7`; 2 added the sound keys, 3 the appearance options, 4 item `card_slots` / `refinable` and the `refine` steps, 5 dropped the dialogue graphs and an NPC's dialogue id: the server runs dialogue, T-601; 6 added `currency_name`, T-602; 7 added the looks of jobs and the start job, T-706) is the first field. The client refuses a bundle with a version it does not know. Bump it
   on any change to the bundle's shape.
 - **Canonical output:** compact JSON, UTF-8 without BOM, one final `\n`, fixed property order, lists ordered by id,
   integers and booleans only, non-ASCII (and `<>&'"+`) escaped as `\uXXXX`, null values left out. Two exports of the same content are byte-identical on any OS.
@@ -290,14 +290,14 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 | Items | id, name, description, kind, icon, ground visual, equip slots (card slots for cards), weapon type, worn visual, use and equip sound keys, card slot count and `refinable` (T-402) | prices, weight, stack size, consumable effects and cooldown, weapon attack, element, level and job limits, modifiers (card modifiers too) |
 | Refine (`refine.yaml`) | `max_level`, per level: `success_percent`, material item and quantity, failure outcome (all of it: it is what a player decides on) | — |
 | Skills | id, name, description, max level, passive, target range / ground / friendly, area shape (`square`) and radius, cast time **only if a plain number**, animation id, icon, vfx, sfx | SP cost, cooldown and every other formula, effects and their numbers, passive modifiers, weapon requirement |
-| Jobs | id, name, description, parent job, usable weapon types, model, icon, skill tree (skill, max level, required skills) | stat bonuses, change requirements, EXP table id |
+| Jobs | id, name, description, parent job, usable weapon types, model, icon, skill tree (skill, max level, required skills), look: cloth colour and pieces (model, gender, slot; T-706) | stat bonuses, change requirements, EXP table id |
 | Statuses | id, name, description, buff or debuff, icon, vfx | effects, tick interval, stacks, tags, `prevents_*` flags |
 | Monsters | id, name, model, sound keys (aggro, hit, die) | level, race, size, element, stats, attack range, EXP, drop table links, AI |
 | NPCs | id, name, title, model, portrait | dialogue id |
 | Dialogue | — | the whole graph: nodes, texts, conditions, actions and quest ids (the server runs it and sends one node at a time, T-601) |
 | Quests | id, name, description, giver NPC, display text of each step | prerequisites, objectives and counts, rewards, repeatable flag |
 | Maps | id, name, scene, music, ambience key, width, height, cell flags (`walkable`, `blocks_los`; base64, as in the grid file), warps (cell, target map, target cell), NPC placements, zones | `spawns`, `source_scene_hash` |
-| Appearance | genders (body model, faces, hairstyles, defaults), skin tones and hair colours: ids, names, asset keys, colours | — (cosmetic only) |
+| Appearance | genders (body model, faces, hairstyles, defaults), skin tones and hair colours: ids, names, asset keys, colours; the job a new character starts in (the creation preview wears its look, T-706) | — (cosmetic only) |
 | Elements, stats | element ids and stat ids, for labels | element multipliers, derived-stat formulas |
 | Balance | `currency_name` (the bag shows the balance with it, T-602) | every other number of `balance.yaml` |
 | — | — | drop tables and chances, `formulas.yaml`, `balance.yaml`, EXP tables |
@@ -729,6 +729,14 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
 - **Layout.** Top left: level and EXP, HP and SP with bars. Top centre: connection notice and the target frame (the target's name and an HP bar: only the fraction the server sends, redrawn when the entity's `HpVersion` counter moves; never a number). A level-up pulses the top-left block for `level_up_flash_seconds`. Top right: connection state, the UI size
   button, log out. Bottom: the one-line flash, then the hotbar (slot count, rows and size are client config; a narrow screen shrinks slots to the minimum and then adds rows).
   The login, death, stop and refusal screens are one full-screen panel whose content stays inside the safe area.
+- **Character creation** (T-706, `client/Scene/CreationPanel.cs`, view model `client/Core/Accounts/CharacterCreator.cs`). "New character" in the character list opens it (`AccountScreen.Creation`, a
+  screen of the client's own: the server is asked nothing until Create). Left: the turning 3D preview (`LookView`, §7.5.1) and Random; right: the name, then Body, Face, Hairstyle, Skin tone and Hair
+  colour in a scroll container, and under it, always in reach, the line about the server's answer, Back and Create. Every option is a button of at least the touch target with its **name**, the colours
+  too (a chip of the colour beside "Deep"), and the chosen one is framed and marked `[ Deep ]`, so nothing depends on telling colours apart. An option is as wide as its name and wraps when that is wider than the
+  column. The options are the bundle's only, and the server decides: every refusal is said on the line and keeps the choices; Back keeps them too, as does a session that ended by itself; a created character or
+  signing out starts over from the defaults. **Switching gender** keeps the colours, and a face or hairstyle the other gender has as well; else it takes the one last chosen for that gender, else its default.
+  **Random** draws gender, face, hairstyle and both colours from the injected RNG and keeps the name. The screen has a solid background (the HUD's empty hotbar would show through the panel's veil).
+  **Character select** shows a picture of each character (the same `LookView`, still) beside its name and job. Both are in the `-Run ui` matrix with the longest words: 0 problems in 48 combinations each.
 - **Bag** (T-401, `client/Scene/InventoryPanel.cs`, view model `client/Core/Items/InventoryView.cs`). The Bag button (top right, while online) opens a panel
   over the safe area: the entry count, the weight line and bar (coloured when `burdened` or `overweight`), the ten equipment slots, and the carried entries as
   buttons with icon (theme `icon.*` key from the bundle), name and count, in a scroll container (a phone at 1.5x scrolls), then the selected entry's
@@ -806,8 +814,9 @@ ids (T-401); `EntityView.LookVersion` counts their changes.
 - *One draw call per character (§9):* the body and its pieces are merged into the body's own skinned mesh, per level of detail (`GearMesher`). An attached piece becomes
   part of the skin, weighted fully to its bone, so it follows the bone exactly; a skinned piece keeps its weights, its skin's binds mapped onto the body's. Surfaces whose
   materials differ only in colour (untextured, opaque `StandardMaterial3D`, the same shading) join one surface with the colour baked into the vertex colours; a textured
-  material keeps its own surface, so real art merges into one call only with a shared atlas (§9's one material per character). A merged mesh is cached by body file,
-  level of detail and the set of pieces in any order (`WornSet`), so a crowd in the same gear shares one mesh and one skin. A piece without a LOD1 mesh uses its LOD0 at both levels.
+  material keeps its own surface, so real art merges into one call only with a shared atlas (§9's one material per character). A merged character (both levels of detail together) is
+  cached by body file, the character's colours and the set of parts in any order (`WornSet`, T-706: face, hairstyle and job pieces are parts too, §7.5.1), so a crowd with the same looks and gear shares one mesh
+  and one skin per level. The cache keeps `look_cache_limit` (64) characters, the least recently used go first. A piece without a LOD1 mesh uses its LOD0 at both levels.
 - *Loading:* a piece's file loads through the same `ModelStore` as characters (threaded with a renderer, on the main thread headless: ADR-002 row 141); its meshes are
   taken from the scene once and shared by every character wearing it, and the scene is let go. Making merges shares the per-frame instance budget (`instantiate_per_frame`). Since T-222 the merge runs on a worker over arrays read once per source mesh (§7.9); the character keeps its old look until it is done.
 - *Preloading* (T-405, ADR-002 row 182): `GearPreload` (pure, `client/Core/Theme`) names the worn-visual models to load ahead of need: the pieces worn by characters on screen first,
@@ -831,13 +840,13 @@ Chosen once at character creation; **cosmetic only** (never changes stats or rul
 | Choice | Options (content) | Rendering |
 |--------|-------------------|-----------|
 | Gender | `male`, `female` — one body type and rig each | Selects the body mesh and rig; equipment visuals exist per gender where the mesh differs |
-| Skin tone | A palette of colours | Colour parameter on the body's single material (no extra material) |
-| Face | Face variants per gender | Head texture or shape variant |
-| Hairstyle | Styles per gender, by asset key | Attached to the `head` attach point |
-| Hair colour | A palette of colours | Colour parameter on the hair material |
+| Skin tone | A palette of colours | Baked into the vertex colours where the body and face are painted skin (T-706; no extra material) |
+| Face | Face variants per gender | A part merged into the body's mesh |
+| Hairstyle | Styles per gender, by asset key | Attached to the `head` attach point, merged into the body's mesh |
+| Hair colour | A palette of colours | Baked into the hairstyle's vertex colours |
 
 - **Data, not code:** options live in `content/appearance.yaml` (ids and asset keys). The validator checks every asset key and
-  that each face and hairstyle fits its gender's rig. A face or hairstyle fits when its model has the body's rig, or has no rig and is attached at `head` in the asset manifest. The options are in the client bundle (§5.4). Headgear can declare that it hides the hair.
+  that each face and hairstyle fits its gender's rig. A face or hairstyle fits when its model has the body's rig, or has no rig and is attached at `head` in the asset manifest. The options are in the client bundle (§5.4). Headgear can declare that it hides the hair (`hides_hair` in its manifest entry, §8).
 - **Server authoritative:** the server checks creation choices against `appearance.yaml` and stores them with the character.
   A modified client cannot pick an option that does not exist.
 - **Network:** appearance is a few ids in the view record of a **snapshot / appeared** entry; deltas never repeat it.
@@ -858,10 +867,38 @@ Chosen once at character creation; **cosmetic only** (never changes stats or rul
   (about 135 bytes of JSON a player; about 5 after deflate, as the ids repeat). No `ViewFields` flag exists for it and `changed` records never carry it, so a delta cannot repeat it. At the AOI cap of 50 visible
   entities a snapshot of all players grows by at most about 6.7 KB uncompressed, once. If it ever matters, an index into the bundle's lists (5 small numbers, about 20 bytes) is possible because the client checks
   the bundle's content hash in `hello`; the ids stay until measured on a phone. `GET /account/characters` has the same object per character, so a select screen can draw it.
-- **Client** (`client/Core`): `EntityView.Appearance` (set at `Reset`), `CharacterRecord.Appearance`, and `AccountApi.Write(CreateCharacterRequest)` write and read the ids as they are. Nothing is drawn yet (T-706); an id the
-  bundle does not have is kept as a string and must be ignored (drawn as the default) by whoever draws it.
+- **Client** (`client/Core`): `EntityView.Appearance` (set at `Reset`), `CharacterRecord.Appearance`, and `AccountApi.Write(CreateCharacterRequest)` write and read the ids as they are; an id the
+  bundle does not have is kept as a string and drawn as the default ("Drawing it" below).
 - **Room for outfits (T-708):** an outfit is *worn* cosmetic state that changes, so it must not share fields with the fixed appearance. It travels beside it as its own record field (`"outfit":{"<slot>":"outfit.x",..}`),
   with its own `ViewFields.Outfit` flag so a change record sends it only when it changes, and is saved in its own table or columns. `appearance` stays exactly as is; a client that does not know `outfit` ignores it.
+
+**Drawing it** (T-706; pure rules in `client/Core/Theme/Appearance.cs` and `Recolor.cs`, tested; drawing in `client/Scene/Theme`).
+- *Ids to a look:* `AppearanceCatalog` turns the ids and the job (the display key) into a `CharacterLook` through the bundle and the theme chain: the gender's body, the face, the hairstyle, the colours and what the job
+  adds. Looks are cached, so equal ones share one object. The visual is pooled by its **body**, and stays hidden until its look is on (a pooled one would show the last entity's face for some frames).
+- *Fallbacks* (§7.7; each logged once, never a crash): an id the bundle lacks is drawn as the gender's default (an unknown gender as the first one); a face or hairstyle no theme has, or on another rig, as the gender's
+  default one, and when that is missing too as the missing model, small, at the default point; a body no theme has means the character is drawn by its job's model, as before T-706. So is a player without ids
+  (an older server) and a bundle without options. `draw_appearance` off draws everyone that way, for measuring.
+- *Jobs.* Before T-706 a player was its job's model. Now the body, face and hair are the character's own, so a job shows as **what it adds**, data in `content/jobs/*.yaml`: `look.cloth_color` (the body's cloth takes it) and
+  `look.pieces` (worn-piece models merged like equipment, each with an optional `gender` and an optional equipment `slot`; equipment worn in that slot is drawn instead of the piece). Why: a job model is a whole
+  body with a head, so it cannot keep the chosen face, skin and hair, and a model per job, gender, face and hairstyle is not affordable. A colour needs no art and no draw call and works on every body at once, so it is what
+  the template uses (its three jobs have the identity colours of `palette.json`); colour alone is weak for people who cannot tell colours apart and gives no silhouette (ADR-003 point 3), so a fork adds pieces (a hat, a
+  tabard, pauldrons). The template ships no such art and lists no pieces. `model_asset_key` stays: it is the fallback body. A job change puts the new job's look on the same body at once. Monsters and NPCs are drawn as before.
+- *What is merged* (`DressPlan`), over the body: the face; the hairstyle, unless a worn piece or a drawn job piece has `hides_hair`; the job's pieces whose slot no equipment takes; the worn equipment (§7.5). All in one
+  `GearMesher` merge, so a character stays one surface and one draw call (two with the outline).
+- *Colours* (`Recolor`): baked into the vertex colours during the merge. A model says what it is painted with per colour role (VOCABULARY "Appearance colour roles") in its manifest entry's `recolor`, else the contract's
+  colours (`AppearancePaint`, THEMES.md 1.7): a vertex painted with the first colour of a role's list takes the character's colour, the others in the list keep their relation to the first (a cheek on deep skin is a deep
+  cheek). `skin` and `hair` apply to the body and the face, `cloth` to the body. A hairstyle takes the hair colour as a whole, keeping each vertex's relation to its most common colour, unless its entry names its `hair`
+  paint (then the rest, a ribbon, stays). Glowing vertices (alpha 0) never change. Equipment and job pieces keep their own colours. A textured surface keeps its texture and has only its vertex colours replaced, so skin
+  in an atlas is painted white there and by vertex colour.
+- *Cache.* The template offers 864 looks (2 x 3 faces x 4 hairstyles x 6 skin tones x 6 hair colours), times the jobs' looks, times gear; a crowd is bounded, the product is not. So the mesher keeps at most
+  `look_cache_limit` (64) merged characters, least recently used out first, above the 50 entities a client can see: a crowd of all different characters merges each one once and never thrashes. Characters on screen hold their
+  own meshes, and idle pooled ones too (`pool_idle_limit` per body). Placeholder cost about 0.14 MB of video memory a look, so 9 MB at the limit; art at the §9 limits (5k + 2k triangles) is about 0.4 MB a look, 26 MB.
+  At most two merges run on workers at once, and making the results shares `instantiate_per_frame` (6), so a crowd of 40 new looks comes in over about half a second with no long frame. Measured: §9 "Looks".
+- *Preview and pictures* (`LookView`): `ThemedEntities.Preview` makes a visual of its own from the same models, merges, materials and outline as the world's, in a small world lit by the theme's `scene.environment`, inside a
+  `SubViewport`. The creation preview renders while it is open and turns by itself (`preview_turn_degrees`, 30 a second) or by drag (`Turntable`, pure); a picture in the character list renders once, when the character is
+  dressed. Hidden, both free the character and shrink their render target. The preview wears the start job's look (the bundle's `start_job`) and no equipment.
+- *Outfits (T-708)* join `DressPlan` as parts with a role of their own: an outfit in a slot takes the place of the job piece and the equipment of that slot (only the drawing; `hides_hair` counts), and its piece is part of
+  the `WornSet` key like any other. Its colours stay its own, or it takes colours through `recolor` by giving its role a `Recolor`. Nothing else changes: same merge, same cache, same single surface.
 
 ### 7.6 Animation
 Animation ids (VOCABULARY) are shared by every model on the same rig. Server events
@@ -894,7 +931,7 @@ shrinks them (no animation player, no transparency), so each costs one draw call
 Downloading themes after install is a non-goal. The active theme is the client setting `theme` (default `default`). A theme may be **partial**: lookups search the active
 theme, then `default`, so a theme contains only what it changes.
 
-**Entity visuals** (T-207): `display_key` -> the bundle's model key (a job's `model`, a monster's or NPC's `model`, an item's `ground`) -> the theme's file -> a pooled scene
+**Entity visuals** (T-207; a player with looks is drawn on its own body instead of its job's model, §7.5.1): `display_key` -> the bundle's model key (a job's `model`, a monster's or NPC's `model`, an item's `ground`) -> the theme's file -> a pooled scene
 instance. The pure part (`client/Core/Theme`: manifest parser, `ThemeCatalog` fallback chain) is tested; `client/Scene/Theme` loads and shows. Model contract: faces -Z (north at
 yaw 0), origin on the ground, meshes named `Body_LOD0` and optionally `Body_LOD1` (one material); a rigged model has `Armature/Skeleton3D`, and its clips live in the `anim.*`
 library file on the same skeleton. Animation follows the view model: idle, walk, dead, and one-shot attack and hit when a delta's `hits` name the entity (delayed by the render
@@ -1046,6 +1083,10 @@ mesh skinned to that rig in the body's own mesh space; exactly one of the two. A
 into the character's single draw call. The placeholder pack shows both kinds: weapons, the buckler and the cap are attached, the vest is skinned; the humanoid library
 has `attack.dagger`, `idle.staff` and `attack.staff`.
 
+**Appearance fields** (T-706, §7.5.1; THEMES.md 1.7): `"hides_hair": true` on a worn piece hides the hairstyle while it is worn (`default` has one example, `model.equip.leather_cap`); `"recolor": { "skin": ["#f1c7a1",
+"#e9a08a"], "cloth": "#efe3c8" }` on a body, face or hairstyle names what it is painted with, per colour role (an empty list: nothing takes that colour). `validate` checks both, warns about a body without its skin
+paint (or without cloth paint while a job has a cloth colour) and about a face or hairstyle with a texture of its own, and fails a body that with its largest face and hairstyle is over the §9 character budgets.
+
 **Checked at build time** (T-405, `validate`, `Game.Content/Validation/ThemeCheck.cs`): each `model.equip.*` entry has exactly one of `attach` or `skinned`; an `attach` bone exists in the
 rig of every body model of `appearance.yaml` (the bones are read from the glTF skin); a `skinned` rig is one a model of the theme chain declares; every clip suffix is a weapon type;
 a theme `.glb` that is a Git LFS pointer is an error ("run `git lfs pull`"); an item's worn visual key with no model file in the theme chain is a warning that names the missing
@@ -1098,6 +1139,19 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
 - *Equip frame* (`run-e2e.ps1 -Run items -Windowed`): worst frame from the press of Equip until dressed 58.9 ms before (T-405 build), 84.2 ms with the toon models
   and the merge still on the main thread (the re-dress alone 81.9 ms), **35.1 ms** with the merge on a worker (frames 33 ms at the cap; no frame stands out).
 - None of it has run on a phone (ADR-002 row 112). The toon shader's cost there, the overlay draw count and the shadow map are on the T-803 checklist.
+
+**Looks (T-706, §7.5.1), measured** on the same machine (AMD Radeon integrated, 1280x720 in a window off the screen, 30 fps cap), `tools/loadtest --bots 70 --fighters 0.7 --spare-slots 3` and the client's
+`--measure 36 --measure-looks --measure-dress <dagger, cap, vest, buckler>`: one run on one crowd, 10 s a phase. Bots move between phases, so each peak names how many entities were on screen.
+
+| Phase | Players in view, different looks | Draw calls avg / peak (on screen) | Triangles peak | Worst frame | Putting the looks on | Static / video memory |
+|---|---|---|---|---|---|---|
+| Before: job models (`draw_appearance=0`) | 34.0, 0 | 88.7 / 104 (42) | 56.1k | 36.1 ms | 0.41 s | 57.1 / 36.4 MB |
+| Own looks, all the default | 35.2, 1 | 69.1 / 91 (31) | 66.1k | 35.9 ms | 0.29 s | 57.3 / 36.6 MB |
+| All different | 39.4, 38 | 74.3 / 84 (41) | 65.2k | 35.0 ms | 0.46 s, worst frame 34.3 ms; 67 merges, 88 ms of main thread in all | 58.5 / 45.3 MB |
+| All different, dressed | 38.5, 38 | 80.7 / 90 (36) | 84.7k | 35.1 ms | 0.77 s, worst frame 73.7 ms | 59.7 / 52.7 MB |
+
+Every player is one surface in every phase, so looks add no draw call (the differences are monsters, drops and effects on screen); 30.0 fps throughout; a face and a hairstyle add about 350 triangles at each level (the
+placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms frame is 38 characters changing gear at once. Not run on a phone (ADR-002 row 112).
 
 ## 10. Networking on mobile
 

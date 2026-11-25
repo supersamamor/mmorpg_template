@@ -278,7 +278,8 @@
   },
   "model.equip.leather_cap": {
     "file": "models/equip/leather_cap.glb",
-    "attach": "head"
+    "attach": "head",
+    "hides_hair": true
   },
   "model.equip.oak_staff": {
     "file": "models/equip/oak_staff.glb",

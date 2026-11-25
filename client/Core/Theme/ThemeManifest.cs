@@ -8,8 +8,11 @@ namespace Game.Client.Core.Theme;
 public sealed class ThemeAsset
 {
     internal ThemeAsset(string key, string? file, string? rig, string? anims, string? attach, string? skinned, IReadOnlyDictionary<string, string> clips, double? impactDelay, string? effect,
-        string? render = null, string? variantOf = null, ThemeColor? tint = null, double scale = 1, bool outlineOff = false, ThemeColor? outlineColor = null)
+        string? render = null, string? variantOf = null, ThemeColor? tint = null, double scale = 1, bool outlineOff = false, ThemeColor? outlineColor = null,
+        RecolorPaint? recolor = null, bool hidesHair = false)
     {
+        Recolor = recolor ?? RecolorPaint.Contract;
+        HidesHair = hidesHair;
         VariantOf = variantOf;
         Tint = tint;
         Scale = scale;
@@ -77,6 +80,12 @@ public sealed class ThemeAsset
 
     /// <summary>True when the entry changes how its model is drawn (a tint, a scale other than 1, or an outline override).</summary>
     public bool Restyled => Tint is not null || Scale != 1 || OutlineOff || OutlineColor is not null;
+
+    /// <summary>The painted colours of this model that a character's own colours replace (T-706, <c>recolor</c>); the contract's where the entry says nothing.</summary>
+    public RecolorPaint Recolor { get; }
+
+    /// <summary>A worn piece that hides the hairstyle (T-706, <c>hides_hair</c>): while it is worn, the hairstyle is not drawn.</summary>
+    public bool HidesHair { get; }
 
     /// <summary>The render role this entry fills (a <see cref="RenderRoles"/> term such as <c>toon</c>), or null: how a theme names its toon material, outline and environment (T-222).</summary>
     public string? Render { get; }
@@ -172,7 +181,24 @@ public sealed class ThemeManifest
                 if (clip.Value.ValueKind == JsonValueKind.String) clips[clip.Name] = clip.Value.GetString()!;
         var outlineOff = entry.TryGetProperty("outline", out var outline) && outline.ValueKind == JsonValueKind.False;
         return new ThemeAsset(key, Text(entry, "file"), Text(entry, "rig"), Text(entry, "anims"), Text(entry, "attach"), Text(entry, "skinned"), clips, Number(entry, "impact_delay"), Text(entry, "effect"),
-            Text(entry, "render"), Text(entry, "variant_of"), Color(entry, "tint"), Number(entry, "scale") is { } scale && scale > 0 ? scale : 1, outlineOff, Color(entry, "outline"));
+            Text(entry, "render"), Text(entry, "variant_of"), Color(entry, "tint"), Number(entry, "scale") is { } scale && scale > 0 ? scale : 1, outlineOff, Color(entry, "outline"),
+            Paint(entry), entry.TryGetProperty("hides_hair", out var hides) && hides.ValueKind == JsonValueKind.True);
+    }
+
+    private static RecolorPaint? Paint(JsonElement entry)
+    {
+        if (!entry.TryGetProperty("recolor", out var recolor) || recolor.ValueKind != JsonValueKind.Object) return null;
+        var roles = new Dictionary<string, IReadOnlyList<ThemeColor>>(StringComparer.Ordinal);
+        foreach (var role in recolor.EnumerateObject())
+        {
+            var colors = new List<string>();
+            if (role.Value.ValueKind == JsonValueKind.String) colors.Add(role.Value.GetString()!);
+            else if (role.Value.ValueKind == JsonValueKind.Array)
+                foreach (var color in role.Value.EnumerateArray())
+                    if (color.ValueKind == JsonValueKind.String) colors.Add(color.GetString()!);
+            roles[role.Name] = RecolorPaint.Parse(colors);
+        }
+        return new RecolorPaint(roles);
     }
 
     private static ThemeColor? Color(JsonElement entry, string name) => Text(entry, name) is { } text && ThemeColor.TryParse(text, out var color) ? color : (ThemeColor?)null;

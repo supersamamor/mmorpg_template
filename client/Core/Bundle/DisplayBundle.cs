@@ -118,6 +118,7 @@ public sealed class DisplayBundle
     private readonly Dictionary<string, JobDisplay> _jobs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, NpcDisplay> _npcs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, QuestDisplay> _quests = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, JobLook> _jobLooks = new(StringComparer.Ordinal);
     private readonly List<RefineStep> _refineSteps = new List<RefineStep>();
 
     private DisplayBundle(int formatVersion, string contentHash)
@@ -184,6 +185,12 @@ public sealed class DisplayBundle
     /// <summary>A job's display data and skill tree (T-502), or null for an id the bundle does not have.</summary>
     public JobDisplay? Job(string? jobId) => jobId is not null && _jobs.TryGetValue(jobId, out var job) ? job : null;
 
+    /// <summary>What a job adds to a character's body (T-706); <see cref="JobLook.None"/> for an id the bundle does not have or a job that adds nothing.</summary>
+    public JobLook JobLookOf(string? jobId) => jobId is not null && _jobLooks.TryGetValue(jobId, out var look) ? look : JobLook.None;
+
+    /// <summary>The character-creation options (T-706), or null in a bundle without them: characters are then drawn by their job's model.</summary>
+    public ClientAppearance? Appearance { get; private set; }
+
     /// <summary>Every job id the bundle has, in id order (T-222: the scripted run's look gallery draws each job's model; no job id is in client code).</summary>
     public IReadOnlyList<string> JobIds => _jobs.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
 
@@ -218,7 +225,11 @@ public sealed class DisplayBundle
                     result._names[id] = Text(entry, "name");
                     ReadSounds(result, list, id, entry);
                     if (list == "skills") result._skills[id] = ReadSkill(id, result._names[id], entry);
-                    if (list == "jobs") result._jobs[id] = ReadJob(id, result._names[id], entry);
+                    if (list == "jobs")
+                    {
+                        result._jobs[id] = ReadJob(id, result._names[id], entry);
+                        result._jobLooks[id] = ReadJobLook(entry);
+                    }
                     if (list == "items") result._items[id] = ReadItem(id, result._names[id], entry);
                     if (list == "npcs") result._npcs[id] = new NpcDisplay(id, result._names[id], OptionalText(entry, "title"), OptionalText(entry, "portrait"));
                     if (list == "quests") result._quests[id] = ReadQuest(id, result._names[id], entry);
@@ -241,6 +252,7 @@ public sealed class DisplayBundle
                 result._names[data.Id] = data.Name;
             }
             ReadRefine(result, root);
+            result.Appearance = ReadAppearance(root);
             result.CurrencyName = OptionalText(root, "currency_name") ?? string.Empty;
             bundle = result;
             return BundleStatus.Ok;
@@ -314,6 +326,39 @@ public sealed class DisplayBundle
             }
         }
         return new JobDisplay(id, name, OptionalText(entry, "description"), OptionalText(entry, "parent"), skills);
+    }
+
+    private static JobLook ReadJobLook(JsonElement entry)
+    {
+        var pieces = new List<ClientJobPiece>();
+        if (entry.TryGetProperty("pieces", out var list) && list.ValueKind == JsonValueKind.Array)
+            foreach (var piece in list.EnumerateArray()) pieces.Add(new ClientJobPiece(Text(piece, "model"), OptionalText(piece, "gender"), OptionalText(piece, "slot")));
+        var cloth = OptionalText(entry, "cloth_color");
+        return cloth is null && pieces.Count == 0 ? JobLook.None : new JobLook(cloth, pieces);
+    }
+
+    private static ClientAppearance? ReadAppearance(JsonElement root)
+    {
+        if (!root.TryGetProperty("appearance", out var a) || a.ValueKind != JsonValueKind.Object) return null;
+        var genders = new List<ClientGender>();
+        foreach (var g in a.GetProperty("genders").EnumerateArray())
+            genders.Add(new ClientGender(Text(g, "gender"), Text(g, "name"), Text(g, "body"), Options(g, "faces"), Options(g, "hairstyles"), Text(g, "default_face"), Text(g, "default_hairstyle")));
+        if (genders.Count == 0) return null;
+        return new ClientAppearance(genders, Colors(a, "skin_tones"), Text(a, "default_skin_tone"), Colors(a, "hair_colors"), Text(a, "default_hair_color"), OptionalText(a, "start_job"));
+
+        static List<ClientAppearanceOption> Options(JsonElement gender, string name)
+        {
+            var options = new List<ClientAppearanceOption>();
+            foreach (var o in gender.GetProperty(name).EnumerateArray()) options.Add(new ClientAppearanceOption(Text(o, "id"), Text(o, "name"), Text(o, "model")));
+            return options;
+        }
+
+        static List<ClientColorOption> Colors(JsonElement appearance, string name)
+        {
+            var colors = new List<ClientColorOption>();
+            foreach (var o in appearance.GetProperty(name).EnumerateArray()) colors.Add(new ClientColorOption(Text(o, "id"), Text(o, "name"), Text(o, "color")));
+            return colors;
+        }
     }
 
     private static int Int(JsonElement element, string name, int fallback) =>
@@ -426,3 +471,10 @@ public sealed record JobSkillDisplay(string SkillId, int? MaxLevel, IReadOnlyLis
 
 /// <summary>A job and its skill tree (T-502).</summary>
 public sealed record JobDisplay(string Id, string Name, string? Description, string? Parent, IReadOnlyList<JobSkillDisplay> Skills);
+
+/// <summary>What a job adds to a character's body (T-706, ARCHITECTURE 7.5.1): the colour of its cloth (<c>#RRGGBB</c>, or null) and its pieces.</summary>
+public sealed record JobLook(string? ClothColor, IReadOnlyList<ClientJobPiece> Pieces)
+{
+    /// <summary>A job that adds nothing.</summary>
+    public static readonly JobLook None = new JobLook(null, Array.Empty<ClientJobPiece>());
+}

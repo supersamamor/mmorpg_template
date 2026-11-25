@@ -31,3 +31,6 @@ stat_bonuses:
 weapon_types: [unarmed, dagger, sword_1h, sword_2h, axe, mace]
 model_asset_key: model.char.warden
 icon_asset_key: icon.job.warden
+# The look of the job on a character's own body (ARCHITECTURE 7.5.1): the body's cloth takes this colour. A fork can add worn pieces here ("pieces").
+look:
+  cloth_color: "#2f6fa8"

@@ -34,6 +34,9 @@ Options defined inside `content/appearance.yaml` (ARCHITECTURE §7.5.1), not reg
 ## Genders
 `male`, `female` (character creation; one body type and rig each; cosmetic only)
 
+## Appearance colour roles
+`skin`, `hair`, `cloth` (T-706: the painted colours of a character's models that its own colours replace, in a manifest entry's `recolor`; `skin` takes the skin tone, `hair` the hair colour, `cloth` the job's `look.cloth_color`)
+
 ## Asset key prefixes
 | Prefix      | Asset                                              |
 |-------------|----------------------------------------------------|
