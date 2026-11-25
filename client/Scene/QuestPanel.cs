@@ -1,4 +1,5 @@
 using Game.Client.Core;
+using Game.Client.Core.Autopilot;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Quests;
 using Game.Shared.Vocabulary;
@@ -26,6 +27,21 @@ public sealed class QuestPanel
     private readonly VBoxContainer _box = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly Label _title = Wrapped(UiText.QuestLogTitle);
     private readonly Button _close = new() { Text = UiText.Close };
+    // The autopilot controls (T-605) are pinned under the title, outside the scroll: the ticks are in the rows, Start and Stop are always in reach.
+    private readonly VBoxContainer _autoBox = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+    // One line, trimmed with an ellipsis: it is pinned outside the scroll, so a long run order must not grow the panel past the safe area (the log's rows have the full names).
+    private readonly Label _autoLine = new()
+    {
+        Text = UiText.AutopilotNothingTicked, AutowrapMode = TextServer.AutowrapMode.Off, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
+        MouseFilter = Control.MouseFilterEnum.Ignore,
+    };
+    private readonly HBoxContainer _autoButtons = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+    private readonly Button _start = new() { Text = UiText.AutopilotStart };
+    private readonly Button _stop = new() { Text = UiText.AutopilotStop };
+    private readonly List<(Button Tick, Button? Earlier, Button? Later, string Quest)> _autopilotRows = new();
+    private int _shownAutopilot = -1;
+    private bool _shownDead;
+    private bool _shownOnline;
     private readonly ScrollContainer _scroll = new() { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
     private readonly VBoxContainer _content = new() { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
     private readonly List<Control> _rows = new();
@@ -57,6 +73,15 @@ public sealed class QuestPanel
         header.AddChild(_title);
         header.AddChild(_close);
         _box.AddChild(header);
+        _box.AddChild(_autoBox);
+        _autoBox.AddChild(_autoLine);
+        _autoBox.AddChild(_autoButtons);
+        _autoButtons.AddChild(_start);
+        _autoButtons.AddChild(_stop);
+        _start.Pressed += () => { _tap(); _session.StartAutopilot(); };
+        _stop.Pressed += () => { _tap(); _session.StopAutopilot(); };
+        _interactive.Add(_start);
+        _interactive.Add(_stop);
         _box.AddChild(_scroll);
         _scroll.AddChild(_content);
         _close.Pressed += () => { _tap(); SetOpen(false); };
@@ -73,6 +98,15 @@ public sealed class QuestPanel
 
     /// <summary>Each active quest's Track and Abandon buttons (for the scripted run).</summary>
     public IReadOnlyList<(Button Track, Button Abandon, string Quest)> QuestButtons => _questButtons;
+
+    /// <summary>The Start and Stop buttons of the autopilot (for the scripted run).</summary>
+    public (Button Start, Button Stop) AutopilotButtons => (_start, _stop);
+
+    /// <summary>Each active quest's autopilot tick and its order buttons (the order buttons exist only while the quest is ticked).</summary>
+    public IReadOnlyList<(Button Tick, Button? Earlier, Button? Later, string Quest)> AutopilotRows => _autopilotRows;
+
+    /// <summary>The line over Start and Stop: the run's order (for the scripted run).</summary>
+    public string AutopilotText => _autoLine.Text;
 
     /// <summary>Every line the panel shows, joined with <c> | </c> (for the scripted run).</summary>
     public string Text => string.Join(" | ", _rows.OfType<Label>().Select(l => l.Text));
@@ -102,10 +136,16 @@ public sealed class QuestPanel
         _content.AddThemeConstantOverride("separation", gap);
         _title.CustomMinimumSize = new Vector2(Mathf.Max(0, _width - dp(24) - dp(96) - gap), 0);
         _close.CustomMinimumSize = new Vector2(dp(96), target);
+        _autoLine.CustomMinimumSize = new Vector2(Mathf.Max(0, _width - dp(24)), 0);
+        _autoBox.AddThemeConstantOverride("separation", gap);
+        _autoButtons.AddThemeConstantOverride("separation", gap);
+        _start.CustomMinimumSize = new Vector2(dp(140), target);
+        _stop.CustomMinimumSize = new Vector2(dp(140), target);
         _safeSize = safeSize;
         _center.Position = Vector2.Zero;
         _center.Size = safeSize;
         _shownVersion = -1;
+        _shownAutopilot = -1;
     }
 
     /// <summary>Rebuilds the rows from the quest book when it changed. Nothing while closed.</summary>
@@ -122,9 +162,16 @@ public sealed class QuestPanel
             DrawSamples();
             return;
         }
-        if (_shownVersion == book.Version) return;
+        var autopilot = _session.Autopilot;
+        var dead = _session.Ui.Dead;
+        var online = _session.Connection.Phase == Game.Client.Core.Net.ConnectionPhase.Online;
+        if (_shownVersion == book.Version && _shownAutopilot == autopilot.Version && _shownDead == dead && _shownOnline == online) return;
         _shownVersion = book.Version;
+        _shownAutopilot = autopilot.Version;
+        _shownDead = dead;
+        _shownOnline = online;
         Clear();
+        DrawAutopilotHeader(autopilot, dead);
 
         Heading(UiText.ActiveQuests);
         if (book.Active.Count == 0) Line(UiText.NoActiveQuests, dim: true);
@@ -146,11 +193,49 @@ public sealed class QuestPanel
             buttons.AddChild(abandon);
             Add(buttons);
             _questButtons.Add((track, abandon, id));
+            AddAutopilotRow(autopilot, id);
         }
 
         Heading(UiText.CompletedQuests);
         if (book.Completed.Count == 0) Line(UiText.NoCompletedQuests, dim: true);
         foreach (var id in book.Completed) Line(_bundle.Quest(id)?.Name ?? id, dim: true);
+    }
+
+    // Start needs a tick and a living, connected character; the server still decides and a refusal goes on the flash line. Stop works while a run is on or paused.
+    private void DrawAutopilotHeader(AutopilotModel autopilot, bool dead)
+    {
+        _autoLine.Text = autopilot.Ticked.Count == 0
+            ? UiText.AutopilotNothingTicked
+            : UiText.AutopilotQueue(string.Join(", ", autopilot.Ticked.Select(id => _bundle.Quest(id)?.Name ?? id)));
+        _start.Disabled = autopilot.Ticked.Count == 0 || dead || _session.Connection.Phase != Game.Client.Core.Net.ConnectionPhase.Online;
+        _stop.Disabled = !autopilot.On;
+    }
+
+    // The tick, and while ticked the two order buttons. Order buttons rather than dragging: a drag inside a scrolling list competes with the scroll on a phone and needs a
+    // precise finger; a button is a plain touch target, one step per tap, and the order stays readable as "#n" on the tick.
+    private void AddAutopilotRow(AutopilotModel autopilot, string quest)
+    {
+        var order = autopilot.OrderOf(quest);
+        var row = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        row.AddThemeConstantOverride("separation", Mathf.RoundToInt(_dp(6)));
+        var tick = Button(order > 0 ? UiText.AutopilotTicked(order) : UiText.AutopilotAdd, 88);
+        tick.Pressed += () => { _tap(); _session.Autopilot.Toggle(quest, _session.Quests); };
+        row.AddChild(tick);
+        Button? earlier = null;
+        Button? later = null;
+        if (order > 0)
+        {
+            earlier = Button(UiText.AutopilotEarlier, 88);
+            later = Button(UiText.AutopilotLater, 88);
+            earlier.Disabled = order == 1;
+            later.Disabled = order == autopilot.Ticked.Count;
+            earlier.Pressed += () => { _tap(); _session.Autopilot.MoveEarlier(quest); };
+            later.Pressed += () => { _tap(); _session.Autopilot.MoveLater(quest); };
+            row.AddChild(earlier);
+            row.AddChild(later);
+        }
+        Add(row);
+        _autopilotRows.Add((tick, earlier, later, quest));
     }
 
     /// <summary>Fills the log with the longest lines it can show (and opens it), so a layout check sees the worst case; <see cref="ClearSamples"/> ends it (T-406).</summary>
@@ -173,6 +258,9 @@ public sealed class QuestPanel
 
     private void DrawSamples()
     {
+        _autoLine.Text = UiText.AutopilotQueue(string.Join(", ", Enumerable.Repeat(_sampleName + " of the Far Northern Reaches", 3)));
+        _start.Disabled = false;
+        _stop.Disabled = false;
         Heading(UiText.ActiveQuests);
         for (var q = 0; q < 4; q++)
         {
@@ -184,6 +272,12 @@ public sealed class QuestPanel
             buttons.AddChild(Button(UiText.Track));
             buttons.AddChild(Button(UiText.ConfirmAbandon));
             Add(buttons);
+            var ticks = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+            ticks.AddThemeConstantOverride("separation", Mathf.RoundToInt(_dp(6)));
+            ticks.AddChild(Button(UiText.AutopilotTicked(10), 88));
+            ticks.AddChild(Button(UiText.AutopilotEarlier, 88));
+            ticks.AddChild(Button(UiText.AutopilotLater, 88));
+            Add(ticks);
         }
         Heading(UiText.CompletedQuests);
         for (var c = 0; c < 6; c++) Line(_sampleName + " " + _sampleName, dim: true);
@@ -210,6 +304,7 @@ public sealed class QuestPanel
         foreach (var button in _rowButtons) _interactive.Remove(button);
         _rowButtons.Clear();
         _questButtons.Clear();
+        _autopilotRows.Clear();
         foreach (var row in _rows) row.QueueFree();
         _rows.Clear();
     }
@@ -226,9 +321,9 @@ public sealed class QuestPanel
         Add(label);
     }
 
-    private Button Button(string text)
+    private Button Button(string text, double widthDp = 140)
     {
-        var button = new Button { Text = text, CustomMinimumSize = new Vector2(_dp(140), _target) };
+        var button = new Button { Text = text, CustomMinimumSize = new Vector2(_dp(widthDp), _target) };
         _rowButtons.Add(button);
         _interactive.Add(button);
         return button;

@@ -154,12 +154,15 @@ public sealed class DialoguePanel
     public void Refresh()
     {
         var view = _session.Dialogue;
-        if (_holder.Visible != view.Open)
+        // The talk the autopilot starts (a turn-in) is the server's, for about two ticks: the panel stays down while the run plays, so it never covers the HUD's autopilot
+        // indicator and the player cannot end the run by pressing it by accident. The indicator says "talking". A paused run shows it: the player may need it.
+        var show = view.Open && !_session.Autopilot.Running;
+        if (_holder.Visible != show)
         {
-            _holder.Visible = view.Open;
+            _holder.Visible = show;
             _shownVersion = -1;
         }
-        if (!view.Open) return;
+        if (!show) return;
         if (_holder.Size != _safeSize) _holder.Size = _safeSize;
         if (_shownVersion == view.Version) return;
         _shownVersion = view.Version;

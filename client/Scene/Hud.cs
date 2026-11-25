@@ -88,6 +88,16 @@ public sealed class Hud
         SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin,
     };
     private int _questVersion = -1;
+    // The autopilot indicator (T-605): in the centre column under the target frame, so no other part of the top row can cover it and it covers none. It shows only while a run is
+    // on or paused: what it does and the quest, or why it waits and what to do about it. A touch target; a tap stops the run. Trimmed to the column like the tracker.
+    private readonly Button _autopilot = new()
+    {
+        Visible = false, Alignment = HorizontalAlignment.Left, AutowrapMode = TextServer.AutowrapMode.Off, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
+        SizeFlagsHorizontal = Control.SizeFlags.ExpandFill,
+    };
+    private int _autopilotVersion = -1;
+    private int _autopilotQuestVersion = -1;
+    private bool _autopilotOnline;
     private readonly Button _skillsButton = new() { Text = UiText.Skills, Visible = false };
     private readonly List<ColorRect> _sweeps = new();   // one cooldown overlay per hotbar slot (T-502)
     private string? _pendingShown;
@@ -176,6 +186,8 @@ public sealed class Hud
         _targetFrame.AddChild(targetBox);
         _center.AddChild(_banner);
         _center.AddChild(_targetFrame);
+        _center.AddChild(_autopilot);
+        _autopilot.Pressed += () => { Tap(); _session?.StopAutopilot(); };
 
         _right.AddChild(_connection);
         _right.AddChild(_uiSize);
@@ -258,6 +270,7 @@ public sealed class Hud
         }
         _interactive.Add(_skillsButton);
         _interactive.Add(_tracker);
+        _interactive.Add(_autopilot);
 
         _infoTitle.HorizontalAlignment = HorizontalAlignment.Left;
         var infoBox = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -352,6 +365,8 @@ public sealed class Hud
         _tracker.Text = longName + " of the Far Northern Reaches\n" + UiText.QuestHeld(QuestReasons.InventoryFull) + "\n"
             + string.Join("\n", Enumerable.Range(0, QuestBook.MaxTrackerLines - 2).Select(i => UiText.QuestObjective(QuestObjectiveTypes.Kill, longName, 99999, 99999)));
         _tracker.Visible = true;
+        _autopilot.Text = UiText.AutopilotPausedTitle + "\n" + UiText.AutopilotPause(AutopilotPauses.NeedsEquip, longName + " of the Far Northern Reaches");
+        _autopilot.Visible = true;
         ShowInfo(longName, UiText.EntityKind(EntityKinds.Item, true), new Vector2((float)_metrics.CanvasWidth, (float)_metrics.CanvasHeight));
     }
 
@@ -363,6 +378,7 @@ public sealed class Hud
         _connectionVersion = -1;
         _hotbarVersion = -1;
         _questVersion = -1;
+        _autopilotVersion = -1;
         _slotText.Clear(); // a new scale: every slot fits its font again
         _shownTarget = -1;
     }
@@ -624,6 +640,9 @@ public sealed class Hud
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _questPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _tracker.CustomMinimumSize = new Vector2(Dp(LeftColumnDp), buttonHeight);
+        _autopilot.CustomMinimumSize = new Vector2(0, buttonHeight);
+        _autopilot.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(Dp(TrackerFontDp))));
+        _autopilotVersion = -1;
         _skillsButton.OffsetTop = -buttonHeight;
         // The status lines of the left column stop growing with the UI scale at 1 (T-408): they are read-outs, not touch targets, and at 1.25-1.5 on a 360 dp phone their wrapped
         // text pushed the tracker into the Skills button. The bars, the tracker button and every touch target still scale.
@@ -751,7 +770,29 @@ public sealed class Hud
             _tracker.Text = _session.Quests.TrackerText(_bundle);
         }
         _questPanel?.Refresh();
+        RefreshAutopilot();
     }
+
+    /// <summary>The autopilot indicator: redrawn when the run, the quest log (a pause's level or item comes from it) or the connection changed.</summary>
+    private void RefreshAutopilot()
+    {
+        if (_session is null || _bundle is null) return;
+        var autopilot = _session.Autopilot;
+        var online = _session.Connection.Phase == ConnectionPhase.Online;
+        if (_autopilotVersion == autopilot.Version && _autopilotQuestVersion == _session.Quests.Version && _autopilotOnline == online) return;
+        _autopilotVersion = autopilot.Version;
+        _autopilotQuestVersion = _session.Quests.Version;
+        _autopilotOnline = online;
+        _autopilot.Visible = online && autopilot.On;
+        if (!_autopilot.Visible) return;
+        var quest = autopilot.Quest is { } id ? _bundle.Quest(id)?.Name ?? id : string.Empty;
+        _autopilot.Text = autopilot.Paused
+            ? UiText.AutopilotPausedTitle + "\n" + UiText.AutopilotPause(autopilot.Reason, autopilot.PauseDetail(_bundle, _session.Quests))
+            : UiText.AutopilotRunning(autopilot.Doing) + "\n" + quest;
+    }
+
+    /// <summary>The autopilot indicator (T-605), for the scripted run: shown only while a run is on or paused.</summary>
+    public Button Autopilot => _autopilot;
 
     /// <summary>The quest log panel (T-602).</summary>
     public QuestPanel? Quests => _questPanel;
@@ -920,6 +961,24 @@ public sealed class Hud
             if (mine.Intersects(control.GetGlobalRect())) found.Add($"{control.GetType().Name}\"{(control as Button)?.Text}\" {Describe(control.GetGlobalRect())}");
         }
         if (_targetFrame.IsVisibleInTree() && mine.Intersects(_targetFrame.GetGlobalRect())) found.Add($"the target frame {Describe(_targetFrame.GetGlobalRect())}");
+        return found;
+    }
+
+    /// <summary>
+    /// Everything else in the HUD that the autopilot indicator (T-605) lies over now, as "name (rect)": the buttons, the tracker, the bars' texts, the target frame, the banner and
+    /// the flash line. The layout check wants none. Empty while the indicator is hidden.
+    /// </summary>
+    public List<string> AutopilotOverlaps()
+    {
+        var found = new List<string>();
+        if (!_autopilot.IsVisibleInTree()) return found;
+        var mine = _autopilot.GetGlobalRect().Grow(-0.6f);
+        foreach (var control in _slots.Cast<Control>().Concat([_skillsButton, _bagButton, _uiSize, _soundButton, _logout, _tracker, _levels, _hpText, _spText, _hpBar, _spBar, _expBar,
+                     _statusRow, _targetFrame, _banner, _flash, _connection]))
+        {
+            if (!control.IsVisibleInTree()) continue;
+            if (mine.Intersects(control.GetGlobalRect())) found.Add($"{control.GetType().Name}\"{(control as Button)?.Text ?? (control as Label)?.Text}\" {Describe(control.GetGlobalRect())}");
+        }
         return found;
     }
 

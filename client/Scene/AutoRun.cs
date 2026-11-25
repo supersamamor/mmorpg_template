@@ -44,7 +44,7 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 ||
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-autopilot") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -79,6 +79,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-stats") >= 0) await StatsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-dialogue") >= 0) await DialogueRunAsync();
             else if (Array.IndexOf(_args, "--e2e-quests") >= 0) await QuestsRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-autopilot") >= 0) await AutopilotRunAsync();
             else if (Array.IndexOf(_args, "--e2e-account") >= 0) await AccountRunAsync();
             else if (Array.IndexOf(_args, "--e2e-saving") >= 0) await SavingRunAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
@@ -1285,6 +1286,199 @@ public sealed class AutoRun
         Check(hud.Quests.Text.Contains(quest.Name, StringComparison.Ordinal), "the log lists the completed quest");
         Press(hud.Quests.CloseButton);
         Print("quests: offered, accepted, counted, tracked, logged, turned in and rewarded");
+    }
+
+    /// <summary>
+    /// T-605's run, against the quests content copy (weak monsters, every slime drops globs): accept First Hunt through the guide's dialogue, tick it in the quest log, press
+    /// Start, and watch the server's run through the HUD indicator until First Hunt is turned in with no input from here, and the flash says it finished. Then accept the next
+    /// quest, start again and tap the indicator to stop, start once more and walk to end it by manual input, which the flash line must say.
+    /// </summary>
+    private async Task AutopilotRunAsync()
+    {
+        await LoginAsync();
+        var hud = _main.Hud!;
+        var quests = Session.Quests;
+        var auto = Session.Autopilot;
+        var dialogue = Session.Dialogue;
+        var panel = hud.Dialogue!;
+        var log = hud.Quests!;
+        var bundle = _main.Bundle!;
+        var presenter = _main.Presenter!;
+        await UntilAsync(() => quests.Known, 10, "the quest log after the snapshot");
+        EntityView? Marked() => World.Entities.FirstOrDefault(e => e.Kind == EntityKinds.Npc && quests.MarkerFor(e.DisplayKey) == QuestMarkers.Offer);
+        await UntilAsync(() => Marked() is not null && presenter.QuestMarkCount > 0, 10, "an NPC with a quest to offer");
+        var guide = Marked()!;
+        Check(!hud.Autopilot.Visible, "the indicator shows nothing while the autopilot is off");
+
+        // Accepts what the guide offers: the greeting's quest choice leads to the offer (or starts the quest), whose first choice accepts it.
+        async Task AcceptAsync(int before)
+        {
+            await TapWorldAsync(new Vector3((float)guide.X, 0.8f, (float)guide.Z));
+            await UntilAsync(() => dialogue.Open, 30, "the guide's dialogue");
+            for (var step = 0; step < 8 && quests.Active.Count == before; step++)
+            {
+                await FramesAsync(3);
+                // The greeting lists the quest choices first, then "something else" and "not right now": the offer is the third from the end. Later nodes: the first choice.
+                var choices = panel.ChoiceButtons;
+                Press(choices[choices.Count >= 3 ? choices.Count - 3 : 0].Button);
+                await SecondsAsync(0.6);
+            }
+            Check(quests.Active.Count == before + 1, "the quest was accepted through the dialogue");
+            for (var step = 0; step < 6 && dialogue.Open; step++)
+            {
+                Press(panel.CloseButton);
+                await SecondsAsync(0.4);
+            }
+            await UntilAsync(() => !dialogue.Open, 10, "the dialogue's end");
+        }
+
+        async Task OpenLogAsync()
+        {
+            if (!log.Open) Press(hud.Tracker);
+            await FramesAsync(3);
+            Check(log.Open, "the quest log is open");
+        }
+
+        async Task CloseLogAsync()
+        {
+            if (log.Open) Press(log.CloseButton);
+            await FramesAsync(3);
+        }
+
+        async Task TickAndStartAsync(string questId, int place)
+        {
+            await OpenLogAsync();
+            var (start, stop) = log.AutopilotButtons;
+            if (!auto.IsTicked(questId))
+            {
+                Check(start.Disabled, "Start is disabled while nothing is ticked");
+                Check(stop.Disabled, "Stop is disabled while no run is on");
+                Press(log.AutopilotRows.First(r => r.Quest == questId).Tick);
+                await FramesAsync(3);
+            }
+            Check(auto.OrderOf(questId) == place, $"the ticked quest is number {place} in the run");
+            Check(log.AutopilotRows.First(r => r.Quest == questId).Tick.Text == UiText.AutopilotTicked(place), "the tick shows the place in the run");
+            Check(!log.AutopilotButtons.Start.Disabled, "Start is enabled with a quest ticked");
+            Print($"autopilot: ticked; the log says \"{log.AutopilotText}\"");
+            Press(log.AutopilotButtons.Start);
+            await UntilAsync(() => auto.On, 10, "the server's autopilot message (running or paused)");
+            await CloseLogAsync();
+            await FramesAsync(3);
+        }
+
+        // ---- the first run: First Hunt, to the end ----
+        await AcceptAsync(0);
+        var questId = quests.Active[0].Quest;
+        var questName = bundle.Quest(questId)!.Name;
+        Print($"autopilot: accepted {questName}");
+        await OpenLogAsync();
+        Check(log.AutopilotButtons.Start.Disabled && log.AutopilotButtons.Stop.Disabled, "Start and Stop are disabled before a tick and a run");
+        Check(log.AutopilotRows.Any(r => r.Quest == questId && r.Earlier is null), "the order buttons come with the tick, not before");
+        await CloseLogAsync();
+
+        var states = new List<string>();
+        var dialogueShownWhileRunning = false;
+        var indicatorMissing = 0;
+        void Watch()
+        {
+            var line = $"{auto.Mode}/{auto.Doing ?? auto.Reason}";
+            if (states.Count == 0 || states[^1] != line) states.Add(line);
+            if (auto.Running && panel.Open) dialogueShownWhileRunning = true;
+            if (auto.On && !hud.Autopilot.Visible) indicatorMissing++;
+        }
+        await TickAndStartAsync(questId, 1);
+        Print($"autopilot: running; indicator \"{hud.Autopilot.Text.Replace('\n', '|')}\"");
+        Check(hud.Autopilot.Visible, "the indicator shows while the run is on");
+        await ShotAsync("-autopilot");
+        var clock = Stopwatch.StartNew();
+        while (!quests.Completed.Contains(questId) && clock.Elapsed.TotalSeconds < 540)
+        {
+            Watch();
+            if (!auto.On && auto.Reason != null && !quests.Completed.Contains(questId)) break;
+            await FrameAsync();
+        }
+        Watch();
+        Print($"autopilot: the run went through {string.Join(" -> ", states)}");
+        Check(quests.Completed.Contains(questId), $"the autopilot turned First Hunt in on its own (it ended with {auto.Mode}/{auto.Reason})");
+        await UntilAsync(() => !auto.On, 30, "the end of the run");
+        await FramesAsync(2);
+        Check(auto.Reason == AutopilotStops.Finished, $"the run ended as finished (it said {auto.Reason})");
+        Check(Session.Ui.Flash == UiText.AutopilotEnded(AutopilotStops.Finished), "the flash line says why it ended");
+        Check(!hud.Autopilot.Visible, "the indicator is gone when the run is over");
+        Check(!dialogueShownWhileRunning, "the dialogue panel stayed down while the run played, so it never covered the indicator");
+        Check(indicatorMissing == 0, "the indicator showed for the whole run");
+        Check(auto.Ticked.Count == 0, "the tick of the completed quest is gone");
+        Print($"autopilot: finished; flash \"{Session.Ui.Flash}\"");
+
+        // ---- the second run: stop by a tap, then end by walking ----
+        while ((World.Exp?.BaseLevel ?? 1) < 2)
+        {
+            await HuntOneAsync(60);
+            await SecondsAsync(1);
+        }
+        await UntilAsync(() => Marked() is not null, 10, "the guide's next offer");
+        await AcceptAsync(0);
+        var second = quests.Active[0].Quest;
+        Print($"autopilot: accepted {bundle.Quest(second)!.Name}");
+        await TickAndStartAsync(second, 1);
+        Print($"autopilot: second run {auto.Mode}/{auto.Doing ?? auto.Reason}; indicator \"{hud.Autopilot.Text.Replace('\n', '|')}\"");
+        Check(hud.Autopilot.Visible, "the indicator shows while the second run is on");
+        Check(hud.Autopilot.Size.Y >= hud.Metrics.UnitsPerDp * 48 - 1, "the indicator is a 48 dp touch target");
+        if (auto.Paused) Check(hud.Autopilot.Text.Contains(UiText.AutopilotPause(auto.Reason, auto.PauseDetail(bundle, quests)), StringComparison.Ordinal), "a pause says what the player can do");
+
+        // The budget (ARCHITECTURE section 9) with the indicator on: draw calls per frame with it showing and hidden, and what the frame path allocates while nothing arrives.
+        await MeasureIndicatorAsync(hud);
+
+        Press(hud.Autopilot);
+        await UntilAsync(() => !auto.On, 10, "the stop");
+        await FramesAsync(2);
+        Check(auto.Reason == AutopilotStops.Stopped, $"a tap on the indicator stops the run (the server said {auto.Reason})");
+        Check(Session.Ui.Flash == UiText.AutopilotEnded(AutopilotStops.Stopped), "the flash says it was stopped");
+        Check(!hud.Autopilot.Visible, "the indicator is gone after the stop");
+        Check(auto.IsTicked(second), "the tick stays for the next start");
+
+        await TickAndStartAsync(second, 1);
+        var open = NearestOpenCellOutsideSafeZones(CurrentMap(), Own().Cell);
+        await TapCellAsync(open);   // the player's own order
+        await UntilAsync(() => !auto.On, 10, "the manual input to end the run");
+        await FramesAsync(2);
+        Check(auto.Reason == AutopilotStops.ManualInput, $"walking ends the run by manual input (the server said {auto.Reason})");
+        Check(Session.Ui.Flash == UiText.AutopilotEnded(AutopilotStops.ManualInput), "the flash says the player took over");
+        Print($"autopilot: manual input; flash \"{Session.Ui.Flash}\"");
+        Print("autopilot: ticked, started, played, turned in, finished, stopped by a tap and ended by walking");
+    }
+
+    private async Task MeasureIndicatorAsync(Hud hud)
+    {
+        OS.LowProcessorUsageMode = false;
+        await SecondsAsync(1);
+        double With = 0, Without = 0;
+        var frames = 0;
+        _main.CountAllocations = true;
+        var clock = Stopwatch.StartNew();
+        while (clock.Elapsed.TotalSeconds < 3)
+        {
+            await FrameAsync();
+            With += Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
+            frames++;
+        }
+        _main.CountAllocations = false;
+        var (bytes, quietFrames, _, _) = _main.Allocations;
+        hud.Autopilot.Visible = false;
+        await FramesAsync(3);
+        var framesOff = 0;
+        clock.Restart();
+        while (clock.Elapsed.TotalSeconds < 2)
+        {
+            await FrameAsync();
+            Without += Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
+            framesOff++;
+        }
+        hud.Autopilot.Visible = true;
+        await FramesAsync(2);
+        OS.LowProcessorUsageMode = true;
+        Print($"autopilot: measure: draw calls with the indicator showing avg {With / frames:0.0}, hidden {Without / framesOff:0.0}; the indicator adds {With / frames - Without / framesOff:0.0}");
+        Print($"autopilot: measure: the frame path allocated {bytes} bytes in {quietFrames} quiet frames with the indicator showing ({(quietFrames > 0 ? bytes / (double)quietFrames : 0):0.0} bytes per frame); {hud.NodeCount} UI nodes");
     }
 
     private static void Press(Button button) => button.EmitSignal(BaseButton.SignalName.Pressed);
