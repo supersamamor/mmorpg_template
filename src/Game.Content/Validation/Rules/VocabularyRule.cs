@@ -52,6 +52,16 @@ public sealed class VocabularyRule : IValidationRule
             if (item.Card is { } card) CheckList(context, item.Id, "card.slots", card.Slots, EquipSlots.All, "equip slot");
         }
 
+        foreach (var outfit in db.Outfits.All)
+        {
+            CheckList(context, outfit.Id, "takes_colors", outfit.TakesColors, AppearanceColorRoles.All, "appearance colour role");
+            for (var i = 0; i < outfit.Pieces.Count; i++)
+            {
+                Check(context, outfit.Id, $"pieces[{i}].slot", outfit.Pieces[i].Slot, OutfitSlots.All, "outfit slot");
+                if (outfit.Pieces[i].Gender is { } gender) Check(context, outfit.Id, $"pieces[{i}].gender", gender, Genders.All, "gender");
+            }
+        }
+
         foreach (var m in db.Monsters.All)
         {
             Check(context, m.Id, "race", m.Race, MonsterRaces.All, "monster race");

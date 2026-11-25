@@ -162,7 +162,11 @@ public static class Pack
             var r = Rig.Get(rig ?? skinned!);
             var lod0 = new MeshBuilder();
             var bone = r.Index(skinned is not null ? "spine" : "head");
-            if (skinned is not null)
+            if (skinned is not null && OutfitShapes.Skinned(lod0, r, look))
+            {
+                // an outfit piece (T-708)
+            }
+            else if (skinned is not null)
             {
                 // A garment just outside the T-222 torso and belt.
                 lod0.Cylinder(bone, new Vector3(0, 1.21f, 0), 0.215f, 0.255f, 0.4f, 16, look.Primary);
@@ -191,6 +195,8 @@ public static class Pack
                 m.Dome(-1, headLocal + new Vector3(0, 0.025f, 0.015f), Rigs.HeadRadii + new Vector3(0.025f), MathF.PI * 0.52f, 0.45f, 16, 6, look.Hair);
                 if (hash % 2 == 0) m.Box(-1, headLocal + new Vector3(0, -0.14f, 0.3f), new Vector3(0.22f, 0.32f, 0.08f), look.Hair); // long at the back
                 else m.Ellipsoid(-1, headLocal + new Vector3(0, 0.36f, 0.05f), new Vector3(0.09f, 0.08f, 0.09f), 10, 6, look.Hair); // a topknot
+                break;
+            case "head" when OutfitShapes.Head(m, headLocal, look): // an outfit piece (T-708)
                 break;
             case "head": // headgear: a cap with a brim at the front
                 m.Dome(-1, headLocal + new Vector3(0, 0.03f, 0), Rigs.HeadRadii + new Vector3(0.035f), MathF.PI * 0.4f, 0.2f, 16, 5, look.Primary);

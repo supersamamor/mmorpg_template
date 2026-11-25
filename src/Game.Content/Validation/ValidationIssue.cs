@@ -64,6 +64,8 @@ public static class ValidationCodes
 
     /// <summary>A shop (T-603) is unusable: no stock, an item twice, or a price that is not from 1 to the maximum.</summary>
     public const string ShopInvalid = "shop.invalid";
+    /// <summary>An outfit (T-708) is unusable: no pieces, two pieces for one slot and gender, or a key of the wrong kind.</summary>
+    public const string OutfitInvalid = "outfit.invalid";
     /// <summary>A quest with no steps or objectives, or a count, level, radius or reward amount out of range, or prerequisites that loop (T-602).</summary>
     public const string QuestInvalid = "quest.invalid";
     /// <summary>A quest's giver or turn-in NPC cannot be reached: not placed, no dialogue, or no <c>start_quest</c> for it (T-602).</summary>

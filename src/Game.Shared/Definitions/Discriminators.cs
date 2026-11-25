@@ -51,7 +51,8 @@ namespace Game.Shared.Definitions
             (RewardTypes.SkillPoint, typeof(SkillPointReward)),
             (RewardTypes.StatPoint, typeof(StatPointReward)),
             (RewardTypes.UnlockJob, typeof(UnlockJobReward)),
-            (RewardTypes.Status, typeof(StatusReward)));
+            (RewardTypes.Status, typeof(StatusReward)),
+            (RewardTypes.Outfit, typeof(OutfitReward)));
 
         /// <summary><see cref="DialogueConditionDef"/> subtypes by <see cref="DialogueConditionTypes"/> value.</summary>
         public static readonly IReadOnlyDictionary<string, System.Type> DialogueConditions = Table(

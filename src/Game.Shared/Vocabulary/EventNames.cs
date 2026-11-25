@@ -240,6 +240,15 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>QuestRewardsRequested</c> (T-602): a completed quest's EXP, points, job unlocks and statuses, for combat (the progression host) to apply.</summary>
         public const string QuestRewardsRequested = "QuestRewardsRequested";
 
+        /// <summary><c>OutfitGranted</c> (T-708): a player owns an outfit it did not own before.</summary>
+        public const string OutfitGranted = "OutfitGranted";
+
+        /// <summary><c>WardrobeChanged</c> (T-708): a player chose what shows in an outfit slot, or turned the hide switch.</summary>
+        public const string WardrobeChanged = "WardrobeChanged";
+
+        /// <summary><c>OutfitRefused</c> (T-708): a <c>set_outfit</c> was refused; nothing changed.</summary>
+        public const string OutfitRefused = "OutfitRefused";
+
         /// <summary><c>QuestRewarded</c> (T-602): combat paid a completed quest's EXP, points and job unlocks (and statuses).</summary>
         public const string QuestRewarded = "QuestRewarded";
 
@@ -336,6 +345,9 @@ namespace Game.Shared.Vocabulary
             QuestRewarded,
             QuestMarkersChanged,
             AutopilotChanged,
-            AutopilotRefused);
+            AutopilotRefused,
+            OutfitGranted,
+            WardrobeChanged,
+            OutfitRefused);
     }
 }

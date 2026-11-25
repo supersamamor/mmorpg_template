@@ -121,6 +121,9 @@ namespace Game.Shared.Quests
 
         /// <summary>Statuses applied, as indices into the quest's rewards (their compiled effects are keyed by <see cref="QuestRules.RewardKey"/>).</summary>
         public List<int> StatusRewards { get; } = new List<int>();
+
+        /// <summary>Outfit ids to grant (T-708).</summary>
+        public List<string> Outfits { get; } = new List<string>();
     }
 
     /// <summary>
@@ -357,6 +360,7 @@ namespace Game.Shared.Quests
                         if (!split.UnlockJobs.Contains(u.JobId)) split.UnlockJobs.Add(u.JobId);
                         break;
                     case StatusReward _: split.StatusRewards.Add(i); break;
+                    case OutfitReward outfit: split.Outfits.Add(outfit.OutfitId); break;
                 }
             }
             return split;

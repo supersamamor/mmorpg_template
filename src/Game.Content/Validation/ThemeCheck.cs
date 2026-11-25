@@ -14,6 +14,7 @@ namespace Game.Content.Validation;
 /// <para>Contract (T-224): variants (<c>variant_of</c>, <c>tint</c>, <c>scale</c>, <c>outline</c>); every model's <c>Body_LOD0</c>, §9 budgets (triangles, one
 /// material, texture size); a rigged model's skin, <c>Armature</c>, humanoid bones and facing; a living model's height; an animation library's rig, required clips,
 /// clip names and tracks; (warnings) see-through materials, missing outline directions, an origin off the ground.</para>
+/// <para>Outfits (T-708): their pieces are worn pieces; (warning) an outfit that takes a colour none of its pieces is painted with.</para>
 /// <para>Appearance (T-706): <c>recolor</c> and <c>hides_hair</c>; a job's pieces are worn pieces; a body with its largest face and hairstyle stays inside the §9
 /// character budgets; (warnings) a body with no skin paint, or no cloth paint while a job has a cloth colour, and a face or hairstyle with a texture of its own.</para>
 /// Every finding names the manifest, the key, the reason and, where there is one, the fix.
@@ -276,10 +277,33 @@ public static class ThemeCheck
     {
         Manifest? Holder(string key) => chain.FirstOrDefault(m => m.HasFile(key));
 
-        foreach (var key in database.Jobs.All.SelectMany(j => j.Look.Pieces).Select(p => p.ModelAssetKey).Distinct(StringComparer.Ordinal))
+        var worn = database.Jobs.All.SelectMany(j => j.Look.Pieces).Select(p => p.ModelAssetKey).Concat(database.Outfits.All.SelectMany(o => o.Pieces).Select(p => p.ModelAssetKey));
+        foreach (var key in worn.Distinct(StringComparer.Ordinal))
         {
             if (key.StartsWith("model.equip.", StringComparison.Ordinal)) continue; // checked with the equipment
             if (chain.FirstOrDefault(m => m.Entries.ContainsKey(key)) is { } first) CheckEquip(first, key, first.Entries[key], rigs, bodyRigs, issues);
+        }
+
+        foreach (var outfit in database.Outfits.All)
+        {
+            // An outfit that takes a colour needs a piece painted with it (T-708).
+            foreach (var role in outfit.TakesColors)
+            {
+                if (ContractPaint(role) is not { } paint) continue; // an unknown role is the vocabulary rule's error
+                Manifest? at = null;
+                var painted = false;
+                foreach (var key in outfit.Pieces.Select(p => p.ModelAssetKey).Distinct(StringComparer.Ordinal))
+                {
+                    if (Holder(key) is not { } holder || contract.ChainFacts(key) is not { Body0: { } piece }) continue; // reported elsewhere
+                    at ??= holder;
+                    var colors = Paint(holder.Entries[key], role, paint);
+                    painted |= colors.Count > 0 && piece.IsPainted(colors);
+                }
+                if (at is null || painted) continue;
+                var first = outfit.Pieces[0].ModelAssetKey;
+                issues.Add(Issue(ValidationSeverity.Warning, at, first, first, ValidationCodes.WarnThemeLook,
+                    $"{outfit.Id}: takes the character's {role} colour, but no piece has a vertex painted with it; paint it with the contract's colours, or name yours in 'recolor' (docs/THEMES.md 1.8)"));
+            }
         }
 
         var clothed = database.Jobs.All.FirstOrDefault(j => j.Look.ClothColor is not null);
@@ -322,6 +346,14 @@ public static class ThemeCheck
                     $"{bodyKey}: with its largest face and hairstyle it has {lod1} triangles at {ModelFacts.Lod1}, over the {ThemeContract.CharacterLod1Triangles} budget of a far character (§9); give the face and hairstyle a '{ModelFacts.Lod1}' mesh"));
         }
     }
+
+    private static IReadOnlyList<string>? ContractPaint(string role) => role switch
+    {
+        AppearanceColorRoles.Skin => AppearancePaint.Skin,
+        AppearanceColorRoles.Hair => AppearancePaint.Hair,
+        AppearanceColorRoles.Cloth => AppearancePaint.Cloth,
+        _ => null,
+    };
 
     private static bool IsColor(string text) => text.Length == 7 && text[0] == '#' && text.Skip(1).All(Uri.IsHexDigit);
 

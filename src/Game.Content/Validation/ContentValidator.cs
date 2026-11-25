@@ -17,6 +17,7 @@ public static class ContentValidator
         new JobChainRule(),
         new DialogueRule(),
         new ShopRule(),
+        new OutfitRule(),
         new QuestRule(),
         new FormulaRule(),
         new BalanceRule(),

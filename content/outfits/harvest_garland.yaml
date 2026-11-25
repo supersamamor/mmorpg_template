@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../../schemas/outfit.schema.json
+# An outfit only changes how a character looks (ARCHITECTURE 7.5.2). It covers the slots it has pieces for; weapon and shield always show.
+id: outfit.harvest_garland
+name: Harvest Garland
+description: A ring of flowers and a festival sash. Goes well with a full basket.
+icon_asset_key: icon.outfit.harvest_garland
+pieces:
+  - { slot: head, model_asset_key: model.outfit.harvest_wreath }
+  - { slot: body, model_asset_key: model.outfit.harvest_sash }

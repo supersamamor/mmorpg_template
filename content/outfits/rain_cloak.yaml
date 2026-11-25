@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=../../schemas/outfit.schema.json
+# The coat is cut per gender and takes the job's cloth colour; the hood hides the hair (themes/default/asset-manifest.json).
+id: outfit.rain_cloak
+name: Rain Cloak
+description: Waxed cloth against a wet week in the Vale. Its colour is your trade's.
+icon_asset_key: icon.outfit.rain_cloak
+takes_colors: [cloth]
+pieces:
+  - { slot: head, model_asset_key: model.outfit.rain_hood }
+  - { slot: body, model_asset_key: model.outfit.rain_coat_male, gender: male }
+  - { slot: body, model_asset_key: model.outfit.rain_coat_female, gender: female }
+  - { slot: back, model_asset_key: model.outfit.rain_cape }

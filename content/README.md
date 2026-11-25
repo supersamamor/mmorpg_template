@@ -19,6 +19,7 @@ Read [`docs/VOCABULARY.md`](../docs/VOCABULARY.md) for ids, enums and formula va
 | `quests/` | `quest.schema.json` | `quest.*` — prerequisites, steps, rewards |
 | `npcs/` | `npc.schema.json` | `npc.*` |
 | `dialogue/` | `dialogue.schema.json` | `dialogue.*` — node graphs |
+| `outfits/` | `outfit.schema.json` | `outfit.*` — what a character can show in place of its gear (T-708). Looks only: no stats, effects, requirements, prices or drops |
 | `drops/` | `drop_table.schema.json` | `drop.*` |
 | `maps/` | `map.schema.json`, `map-grid.schema.json` | `map.*` metadata, plus the logic grid `<name>.grid.json` named by its `grid_file` (format: ARCHITECTURE §5.3). Exported from the map's authoring scene: [docs/MAP_AUTHORING.md](../docs/MAP_AUTHORING.md) |
 | `formulas.yaml` | `formula_set.schema.json` | derived stats, damage, hit and crit formulas |

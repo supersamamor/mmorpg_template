@@ -63,6 +63,7 @@ public static class ClientBundleWriter
             Array(w, "npcs", bundle.Npcs, Npc);
             Array(w, "quests", bundle.Quests, Quest);
             Array(w, "maps", bundle.Maps, Map);
+            Array(w, "outfits", bundle.Outfits ?? [], Outfit);
             Appearance(w, bundle.Appearance);
             Refine(w, bundle.Refine);
             w.WriteEndObject();
@@ -217,6 +218,21 @@ public static class ClientBundleWriter
         w.WriteString("id", o.Id);
         w.WriteString("name", o.Name);
         w.WriteString("color", o.Color);
+    }
+
+    private static void Outfit(Utf8JsonWriter w, ClientOutfit o)
+    {
+        w.WriteString("id", o.Id);
+        w.WriteString("name", o.Name);
+        Opt(w, "description", o.Description);
+        w.WriteString("icon", o.IconAssetKey);
+        if (o.TakesColors.Count > 0) Strings(w, "takes_colors", o.TakesColors);
+        Array(w, "pieces", o.Pieces, (pw, p) =>
+        {
+            pw.WriteString("slot", p.Slot);
+            pw.WriteString("model", p.ModelAssetKey);
+            Opt(pw, "gender", p.Gender);
+        });
     }
 
     private static void Status(Utf8JsonWriter w, ClientStatus s)

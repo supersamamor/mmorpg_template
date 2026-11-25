@@ -159,6 +159,12 @@ namespace Game.Shared.Protocol
         /// <summary><c>autopilot</c> (T-604, server to client, owner only): whether the autopilot runs, what it does, and why it paused or ended. On change only.</summary>
         public const string Autopilot = "autopilot";
 
+        /// <summary><c>set_outfit</c> (T-708): choose what shows in an outfit slot, or turn the switch that hides outfits.</summary>
+        public const string SetOutfit = "set_outfit";
+
+        /// <summary><c>wardrobe</c> (T-708, owner only): the owned outfits and what is chosen.</summary>
+        public const string Wardrobe = "wardrobe";
+
         /// <summary><c>pong</c> (server → client): answer to <c>ping</c>.</summary>
         public const string Pong = "pong";
 
@@ -166,10 +172,10 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot, SetOutfit);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);

@@ -30,6 +30,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>shop.</c>: Shop (<c>shop.meadow_goods</c>), T-603.</summary>
         public const string Shop = "shop.";
 
+        /// <summary><c>outfit.</c>: Outfit (<c>outfit.rain_cloak</c>), cosmetic only, T-708.</summary>
+        public const string Outfit = "outfit.";
+
         /// <summary><c>map.</c>: Map (<c>map.starter_town</c>).</summary>
         public const string Map = "map.";
 
@@ -50,6 +53,7 @@ namespace Game.Shared.Vocabulary
             Npc,
             Dialogue,
             Shop,
+            Outfit,
             Map,
             Drop,
             Exp);

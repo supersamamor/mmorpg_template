@@ -18,3 +18,6 @@ rewards:
   - { type: exp, base: 40, job: 25 }
   - { type: item, item_id: item.healing_draught, count: 5 }
   - { type: currency, amount: 150 }
+  # The two placeholder outfits (T-708), so that every new character has something in its wardrobe early. They change nothing but looks.
+  - { type: outfit, outfit_id: outfit.harvest_garland }
+  - { type: outfit, outfit_id: outfit.rain_cloak }

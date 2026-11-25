@@ -26,6 +26,7 @@ public sealed class SchemaGenerator
         ("npc", typeof(NpcDef)),
         ("dialogue", typeof(DialogueDef)),
         ("shop", typeof(ShopDef)),
+        ("outfit", typeof(OutfitDef)),
         ("drop_table", typeof(DropTableDef)),
         ("map", typeof(MapDef)),
         ("map-grid", typeof(MapGridFile)),
@@ -138,7 +139,8 @@ public sealed class SchemaGenerator
 
         string? pattern = null;
         if (name == nameof(IDefinition.Id)) pattern = SchemaRules.IdPattern(declaringType);
-        var isEnum = SchemaRules.Enums.TryGetValue(name, out var vocabulary);
+        var vocabulary = SchemaRules.EnumOf(declaringType, name);
+        var isEnum = vocabulary is not null;
         if (!isEnum) pattern ??= SchemaRules.ReferencePattern(name) ?? SchemaRules.AssetKeyPattern(name) ?? SchemaRules.SoundKeyPattern(declaringType, name);
         if (pattern is not null) target["pattern"] = pattern;
         if (isEnum) target["enum"] = EnumArray(target, vocabulary!.Ordered);
