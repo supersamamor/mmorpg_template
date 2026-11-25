@@ -677,10 +677,10 @@ public static class ProtocolJson
     // ---- shared pieces (also used by ViewMessageWriter) ----
 
     private static void WriteRecord(Utf8JsonWriter w, EntityRecord e) =>
-        WriteRecord(w, e.Id, e.Kind, e.DisplayKey, e.Cell, e.Facing, e.Next, e.Speed, e.Hp, e.Dead, e.Quantity, e.Mine, e.Weapon, e.Worn, e.Statuses);
+        WriteRecord(w, e.Id, e.Kind, e.DisplayKey, e.Cell, e.Facing, e.Next, e.Speed, e.Hp, e.Dead, e.Quantity, e.Mine, e.Weapon, e.Worn, e.Statuses, e.Appearance);
 
     internal static void WriteRecord(Utf8JsonWriter w, long id, string kind, string? displayKey, GridCell cell, string facing, GridCell? next, double speed,
-        double? hp, bool dead, int quantity, bool? mine, string? weapon = null, IReadOnlyList<string>? worn = null, IReadOnlyList<StatusRecord>? statuses = null)
+        double? hp, bool dead, int quantity, bool? mine, string? weapon = null, IReadOnlyList<string>? worn = null, IReadOnlyList<StatusRecord>? statuses = null, AppearanceRecord? appearance = null)
     {
         w.WriteStartObject();
         w.WriteNumber("id", id);
@@ -697,7 +697,46 @@ public static class ProtocolJson
         if (weapon is not null) w.WriteString("weapon", weapon);
         if (worn is { Count: > 0 }) WriteStrings(w, "worn", worn);
         if (statuses is { Count: > 0 }) WriteStatuses(w, statuses);
+        if (appearance is not null) WriteAppearance(w, "appearance", appearance);
         w.WriteEndObject();
+    }
+
+    /// <summary><c>"appearance":{"gender":..,"skin":..,"face":..,"hair":..,"hair_color":..}</c> (T-705): ids only. Also the shape in the account endpoints.</summary>
+    internal static void WriteAppearance(Utf8JsonWriter w, string name, AppearanceRecord appearance)
+    {
+        w.WriteStartObject(name);
+        w.WriteString("gender", appearance.Gender);
+        w.WriteString("skin", appearance.Skin);
+        w.WriteString("face", appearance.Face);
+        w.WriteString("hair", appearance.Hair);
+        w.WriteString("hair_color", appearance.HairColor);
+        w.WriteEndObject();
+    }
+
+    /// <summary>Reads an appearance object; null when it is not one, or lacks a part (the client then draws the defaults).</summary>
+    private static AppearanceRecord? ReadAppearance(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject)
+        {
+            reader.Skip();
+            return null;
+        }
+        string? gender = null, skin = null, face = null, hair = null, hairColor = null;
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var name = reader.GetString();
+            reader.Read();
+            switch (name)
+            {
+                case "gender": gender = reader.TokenType == JsonTokenType.String ? reader.GetString() : null; break;
+                case "skin": skin = reader.TokenType == JsonTokenType.String ? reader.GetString() : null; break;
+                case "face": face = reader.TokenType == JsonTokenType.String ? reader.GetString() : null; break;
+                case "hair": hair = reader.TokenType == JsonTokenType.String ? reader.GetString() : null; break;
+                case "hair_color": hairColor = reader.TokenType == JsonTokenType.String ? reader.GetString() : null; break;
+                default: reader.Skip(); break;
+            }
+        }
+        return gender is null || skin is null || face is null || hair is null || hairColor is null ? null : new AppearanceRecord(gender, skin, face, hair, hairColor);
     }
 
     /// <summary><c>"statuses":[{"id":..,"stacks":..,"left_ms":..,"debuff":true},...]</c> (T-501); <c>debuff</c> only when true.</summary>
@@ -1025,6 +1064,7 @@ public static class ProtocolJson
             string? weapon = null;
             List<string>? worn = null;
             List<StatusRecord>? statuses = null;
+            AppearanceRecord? appearance = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var name = reader.GetString();
@@ -1045,10 +1085,11 @@ public static class ProtocolJson
                     case "weapon": weapon = String(ref reader); break;
                     case "worn": worn = ReadStrings(ref reader); break;
                     case "statuses": statuses = ReadStatuses(ref reader); break;
+                    case "appearance": appearance = ReadAppearance(ref reader); break;
                     default: reader.Skip(); break;
                 }
             }
-            into.Add(new EntityRecord(id, kind ?? throw Bad(), key, cell, facing ?? throw Bad(), next, speed, hp, dead, quantity, mine, weapon, worn, statuses));
+            into.Add(new EntityRecord(id, kind ?? throw Bad(), key, cell, facing ?? throw Bad(), next, speed, hp, dead, quantity, mine, weapon, worn, statuses, appearance));
         }
     }
 

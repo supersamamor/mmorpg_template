@@ -60,7 +60,7 @@ public sealed class GatewayRig : IAsyncDisposable
         var tokens = new ResumeTokens();
         if (accounts is not null)
         {
-            Accounts = new AccountService(accounts.Store, accounts.Hasher, new HashQueue(4, 64, TimeSpan.FromSeconds(10)), accounts.Limits, Content.Balance, Clock, accounts.Time, Log);
+            Accounts = new AccountService(accounts.Store, accounts.Hasher, new HashQueue(4, 64, TimeSpan.FromSeconds(10)), accounts.Limits, Content.Balance, Content.Appearance, Clock, accounts.Time, Log);
             login = new AccountLogin(Accounts, new DevLogin(options.Development, options.MaxNameLength, tokens));
         }
         Gateway = new Gateway(World, Start, options, Clock, Log, ContentHash, login, tokens, progress: new OwnProgress(Content, progressions),

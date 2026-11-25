@@ -144,7 +144,7 @@ internal sealed class AoiEntry
 
     public ObserverState? Observer;
 
-    public EntityView ToView() => new(Entity.Id, Entity.Kind, DisplayKey, Cell, Facing, Next, Speed, HpPercent, Dead, Quantity, LootOwner, Look, Statuses);
+    public EntityView ToView() => new(Entity.Id, Entity.Kind, DisplayKey, Cell, Facing, Next, Speed, HpPercent, Dead, Quantity, LootOwner, Look, Statuses, Entity.Appearance);
 }
 
 /// <summary>What one observer currently knows: the entities of its last snapshot or delta, by entity id.</summary>

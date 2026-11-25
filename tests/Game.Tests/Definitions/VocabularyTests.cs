@@ -60,7 +60,7 @@ public class VocabularyTests
         { "Refine results", RefineResults.All, ["success", "keep", "down", "break"] },
         { "Hit results", HitResults.All, ["hit", "crit", "miss", "status"] },
         { "Currency", Currencies.All, ["currency"] },
-        { "Account errors", AccountErrors.All, ["invalid_request", "invalid_username", "invalid_password", "username_taken", "invalid_credentials", "invalid_session", "rate_limited", "invalid_name", "name_taken", "no_free_slot", "unknown_character", "character_in_use", "unavailable"] },
+        { "Account errors", AccountErrors.All, ["invalid_request", "invalid_username", "invalid_password", "username_taken", "invalid_credentials", "invalid_session", "rate_limited", "invalid_name", "invalid_appearance", "name_taken", "no_free_slot", "unknown_character", "character_in_use", "unavailable"] },
         { "Formula functions", FormulaFunctions.All, ["min", "max", "floor", "ceil", "round", "clamp", "pow", "sqrt"] },
     };
 

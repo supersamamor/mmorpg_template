@@ -75,6 +75,26 @@ namespace Game.Server.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("deleted_at");
 
+                    b.Property<string>("FaceId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("face_id");
+
+                    b.Property<string>("Gender")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("gender");
+
+                    b.Property<string>("HairColorId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("hair_color_id");
+
+                    b.Property<string>("HairstyleId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("hairstyle_id");
+
                     b.Property<string>("JobId")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -92,6 +112,11 @@ namespace Game.Server.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("name_key");
+
+                    b.Property<string>("SkinToneId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("skin_tone_id");
 
                     b.Property<int>("Slot")
                         .HasColumnType("integer")

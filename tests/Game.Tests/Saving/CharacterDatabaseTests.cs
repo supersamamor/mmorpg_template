@@ -37,7 +37,7 @@ public sealed class CharacterDatabaseTests(DatabaseFixture fixture, Xunit.Abstra
         var account = Guid.NewGuid();
         (await Accounts.TryCreateAccountAsync(account, "u" + Guid.NewGuid().ToString("N")[..16], "hash", Now, default)).ShouldBeTrue();
         var name = UniqueName();
-        var (outcome, character) = await Accounts.CreateCharacterAsync(account, Guid.NewGuid(), name, CharacterNameRules.Key(name), "job.wanderer", 3, Now, default);
+        var (outcome, character) = await Accounts.CreateCharacterAsync(account, Guid.NewGuid(), name, CharacterNameRules.Key(name), "job.wanderer", 3, null, Now, default);
         outcome.ShouldBe(CreateCharacterOutcome.Created);
         return (account, character!.Id);
     }

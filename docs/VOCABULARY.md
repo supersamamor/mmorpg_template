@@ -288,6 +288,7 @@ In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`,
 "Equipment slots" order): players only, what they hold and wear; a change sends both.
 `statuses` (T-501): every entity's active statuses, each `{id, stacks, left_ms, debuff}` (`left_ms`: simulated ms left at the message's tick; `debuff` only when
 true), sent when one starts, stacks, is refreshed or ends (the whole list; empty when none is left), never per tick; never a chance, a number or the applier. A ground item's record also has `quantity` (it never changes).
+A player's record in a snapshot or an `appeared` entry also has `appearance` (T-705): `{gender, skin, face, hair, hair_color}`, ids from `appearance.yaml`; it is not a view field, a `changed` record never carries it.
 A delta may also carry `hits` (this tick's attacks the client can see: `[attacker, target, amount, result]` with a "Hit results" term) and
 `vitals` (the client's own `hp`, `max_hp`, `sp`, `max_sp`, when they changed; also in every snapshot).
 
@@ -396,8 +397,8 @@ item intent (`shop_buy` and `shop_sell` included), instead; the session goes on.
 
 ## Account errors
 The `error` of a refused account request (T-701, ARCHITECTURE §10 "Accounts"): `invalid_request`, `invalid_username`, `invalid_password`, `username_taken`,
-`invalid_credentials`, `invalid_session`, `rate_limited`, `invalid_name`, `name_taken`, `no_free_slot`, `unknown_character`, `character_in_use`, `unavailable`.
-`invalid_credentials` answers an unknown username and a wrong password alike. `rate_limited` and `unavailable` come with `retry_after` (seconds).
+`invalid_credentials`, `invalid_session`, `rate_limited`, `invalid_name`, `invalid_appearance`, `name_taken`, `no_free_slot`, `unknown_character`, `character_in_use`, `unavailable`.
+Appearance refusals (T-705): an id is unknown, or a face or hairstyle is not the chosen gender's. `invalid_credentials` answers an unknown username and a wrong password alike. `rate_limited` and `unavailable` come with `retry_after` (seconds).
 
 ## Account terms
 **Account**: who signs in (a username and a password). **Session token**: proves a sign-in to the account endpoints and in `hello`; stored on the server as its SHA-256.

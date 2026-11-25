@@ -42,16 +42,43 @@ namespace Game.Shared.Protocol
         public override string ToString() => "SessionAnswer { *** }";
     }
 
-    /// <summary>The body of a character creation: <c>{"name":"Ada"}</c>. Appearance (T-705) adds fields here; unknown fields are ignored.</summary>
+    /// <summary>
+    /// The body of a character creation: <c>{"name":"Ada"}</c>, optionally with <c>"appearance":{"gender":"female","skin":"skin.tan","face":"face.female_calm","hair":"hair.female_bob","hair_color":"haircolor.golden"}</c>
+    /// (T-705). Unknown fields are ignored.
+    /// </summary>
     /// <param name="Name">The name as typed.</param>
-    public sealed record CreateCharacterRequest(string Name);
+    /// <param name="Appearance">The looks chosen, or null for the defaults.</param>
+    public sealed record CreateCharacterRequest(string Name, AppearanceChoice? Appearance = null);
+
+    /// <summary>
+    /// What a creation request chooses of the looks (T-705, ARCHITECTURE §7.5.1). Every part is optional; one left out gets the default of the gender chosen (or of the default
+    /// gender, the first term of <c>Genders</c>, when no gender is given): the face and hairstyle by that gender's <c>default</c>, the colours by the file's defaults.
+    /// </summary>
+    /// <param name="Gender">A "Genders" term.</param>
+    /// <param name="Skin">A skin tone id (<c>skin.*</c>).</param>
+    /// <param name="Face">A face id (<c>face.*</c>) of the gender.</param>
+    /// <param name="Hair">A hairstyle id (<c>hair.*</c>) of the gender.</param>
+    /// <param name="HairColor">A hair colour id (<c>haircolor.*</c>).</param>
+    public sealed record AppearanceChoice(string? Gender = null, string? Skin = null, string? Face = null, string? Hair = null, string? HairColor = null);
+
+    /// <summary>
+    /// A character's looks as ids (T-705): <c>{"gender":"male","skin":"skin.light","face":"face.male_calm","hair":"hair.male_crop","hair_color":"haircolor.chestnut"}</c>.
+    /// Cosmetic only; the client finds models and colours in its bundle and ignores an id the bundle does not have.
+    /// </summary>
+    /// <param name="Gender">A "Genders" term.</param>
+    /// <param name="Skin">Skin tone id.</param>
+    /// <param name="Face">Face id.</param>
+    /// <param name="Hair">Hairstyle id.</param>
+    /// <param name="HairColor">Hair colour id.</param>
+    public sealed record AppearanceRecord(string Gender, string Skin, string Face, string Hair, string HairColor);
 
     /// <summary>One character of the account: <c>{"id":"...","slot":0,"name":"Ada","job":"job.x"}</c>.</summary>
     /// <param name="Id">Its permanent id (a GUID): what <c>hello</c> names. Not the runtime entity id.</param>
     /// <param name="Slot">Its slot, from 0.</param>
     /// <param name="Name">Its name.</param>
     /// <param name="Job">Its job id (the name is in the client's bundle).</param>
-    public sealed record CharacterRecord(string Id, int Slot, string Name, string Job);
+    /// <param name="Appearance">Its looks (T-705), so a select screen can draw it; null when the answer has none.</param>
+    public sealed record CharacterRecord(string Id, int Slot, string Name, string Job, AppearanceRecord? Appearance = null);
 
     /// <summary>The account's characters and the rules for a new one: <c>{"slots":3,"name_min":3,"name_max":16,"characters":[...]}</c>.</summary>
     /// <param name="Slots">How many slots an account has.</param>

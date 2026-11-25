@@ -53,6 +53,7 @@ public sealed class AccountService
     private readonly HashQueue _hashes;
     private readonly AccountLimits _limits;
     private readonly CharacterNameRules _names;
+    private readonly AppearanceRules _looks;
     private readonly int _maxSlots;
     private readonly string _startJobId;
     private readonly IClock _clock;
@@ -67,13 +68,14 @@ public sealed class AccountService
     private readonly string _dummyHash;
 
     /// <summary>Creates the service. <paramref name="clock"/> drives the limits, <paramref name="time"/> the stored times (session expiry).</summary>
-    public AccountService(IAccountStore store, IPasswordHasher hasher, HashQueue hashes, AccountLimits limits, BalanceDef balance, IClock clock, TimeProvider time, IServerLog log)
+    public AccountService(IAccountStore store, IPasswordHasher hasher, HashQueue hashes, AccountLimits limits, BalanceDef balance, AppearanceDef appearance, IClock clock, TimeProvider time, IServerLog log)
     {
         _store = store;
         _hasher = hasher;
         _hashes = hashes;
         _limits = limits;
         _names = new CharacterNameRules(balance.Characters);
+        _looks = new AppearanceRules(appearance, log);
         _maxSlots = balance.Characters.MaxSlots;
         _startJobId = balance.NewCharacter.StartJobId;
         _clock = clock;
@@ -191,16 +193,23 @@ public sealed class AccountService
         new CharactersAnswer(_maxSlots, _names.MinLength, _names.MaxLength,
             (await _store.ListCharactersAsync(account, cancellation).ConfigureAwait(false)).Select(Record).ToList()), cancellation);
 
-    /// <summary>Creates a character in the account's lowest free slot.</summary>
-    public Task<AccountResult<CharacterRecord>> CreateAsync(string? token, string name, CancellationToken cancellation) => WithSessionAsync<CharacterRecord>(token, async account =>
+    /// <summary>The rules for looks, which the gateway also uses for a login that has no character (the dev login).</summary>
+    public AppearanceRules Looks => _looks;
+
+    /// <summary>Creates a character with the default looks.</summary>
+    public Task<AccountResult<CharacterRecord>> CreateAsync(string? token, string name, CancellationToken cancellation) => CreateAsync(token, name, null, cancellation);
+
+    /// <summary>Creates a character in the account's lowest free slot, with the looks asked for (parts left out get the defaults) or refused with <c>invalid_appearance</c> (T-705).</summary>
+    public Task<AccountResult<CharacterRecord>> CreateAsync(string? token, string name, AppearanceChoice? appearance, CancellationToken cancellation) => WithSessionAsync<CharacterRecord>(token, async account =>
     {
         if (_names.Normalize(name) is not { } clean) return AccountResult<CharacterRecord>.Fail(AccountErrors.InvalidName);
+        if (_looks.Choose(appearance) is not { } looks) return AccountResult<CharacterRecord>.Fail(AccountErrors.InvalidAppearance);
         if (!_creates.TryTake(account.ToString(), _clock.NowMilliseconds)) return AccountResult<CharacterRecord>.Fail(AccountErrors.RateLimited, _creates.RetryAfterMs);
         var (outcome, character) = await _store.CreateCharacterAsync(account, Guid.CreateVersion7(_time.GetUtcNow()), clean, CharacterNameRules.Key(clean), _startJobId, _maxSlots,
-            UtcNow, cancellation).ConfigureAwait(false);
+            looks, UtcNow, cancellation).ConfigureAwait(false);
         return outcome switch
         {
-            CreateCharacterOutcome.Created => Logged(account, $"created character {character!.Id}", Record(character)),
+            CreateCharacterOutcome.Created => Logged(account, $"created character {character!.Id}", Record(character) with { Appearance = looks }),
             CreateCharacterOutcome.NameTaken => AccountResult<CharacterRecord>.Fail(AccountErrors.NameTaken),
             _ => AccountResult<CharacterRecord>.Fail(AccountErrors.NoFreeSlot),
         };
@@ -227,13 +236,13 @@ public sealed class AccountService
             ? AccountResult<CharacterLogin>.Fail(AccountErrors.UnknownCharacter)
             : await WithSessionAsync<CharacterLogin>(token, async account =>
                 await _store.FindCharacterAsync(account, id, cancellation).ConfigureAwait(false) is { } found
-                    ? new CharacterLogin(account, found)
+                    ? new CharacterLogin(account, found, _looks.Resolve(found.Id, found.Appearance))
                     : AccountResult<CharacterLogin>.Fail(AccountErrors.UnknownCharacter), cancellation).ConfigureAwait(false);
         if (result.Ok || result.Error == AccountErrors.Unavailable) _helloFailures.Undo(address);
         return result;
     }
 
-    private static CharacterRecord Record(CharacterEntry c) => new(c.Id.ToString("D"), c.Slot, c.Name, c.JobId);
+    private CharacterRecord Record(CharacterEntry c) => new(c.Id.ToString("D"), c.Slot, c.Name, c.JobId, _looks.Resolve(c.Id, c.Appearance));
 
     private async Task<NewSession?> OpenSessionAsync(Guid account, string expectedHash, string? rehash, CancellationToken cancellation)
     {
@@ -270,5 +279,5 @@ public sealed class AccountService
     }
 }
 
-/// <summary>Who a <c>hello</c> signs in as.</summary>
-public sealed record CharacterLogin(Guid Account, CharacterEntry Character);
+/// <summary>Who a <c>hello</c> signs in as, and how it looks now (<see cref="AppearanceRules.Resolve"/>).</summary>
+public sealed record CharacterLogin(Guid Account, CharacterEntry Character, AppearanceRecord Appearance);

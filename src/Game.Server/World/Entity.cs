@@ -111,6 +111,12 @@ public sealed class Entity
     public WornLook? Look { get; set; }
 
     /// <summary>
+    /// A player's looks as ids (T-705): chosen at creation and checked by the server, set once when the character enters and never changed while it is in the world
+    /// (a warp keeps it). Cosmetic only: no rule reads it. Null for every other kind. Sent in snapshot and appeared entries, never in a change.
+    /// </summary>
+    public Game.Shared.Protocol.AppearanceRecord? Appearance { get; set; }
+
+    /// <summary>
     /// A player's <see cref="WeightStates"/> term: <c>burdened</c> stops natural regeneration, <c>overweight</c> also stops attacks (ARCHITECTURE §6.8).
     /// Set by the inventory, read by combat. <c>normal</c> for everything else.
     /// </summary>

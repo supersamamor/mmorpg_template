@@ -133,7 +133,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-701 | Accounts, login and character slots: EF Core + PostgreSQL base, account endpoints, sessions, sign-in and character-select screens | Claude Code | Opus 5.5 | [T-701](../tasks/prompts/T-701.md) | T-210, T-214, T-704 | Review | Restricted `Net/**` and `Persistence/**`, limited scope approved by owner 2026-11-25 |
 | T-702 | Saving characters: whole state in one versioned transaction, loaded before entering the world, crash-safe items between characters | Claude Code | Opus 5.5 | [T-702](../tasks/prompts/T-702.md) | T-701, T-604 | Review | Restricted `Persistence/**` and `Net/**`, limited scope; owner's go-ahead 2026-11-25 |
 | T-704 | Appearance definitions: `appearance.yaml` (gender male/female, skin, faces, hair) + validation | Claude Code | Sonnet 5.5 | [T-704](../tasks/prompts/T-704.md) | T-102, T-209 | Review | Data only, started early; server flow is T-705 |
-| T-705 | Appearance on the server: checked at creation, stored with the character, sent in snapshots | Claude Code | Sonnet 5.5 | [T-705](../tasks/prompts/T-705.md) | T-701, T-702, T-704 | Ready | Restricted `Persistence/**` and `Net/**`, the scope in the prompt only (owner's instructions of 2026-11-25) |
+| T-705 | Appearance on the server: checked at creation, stored with the character, sent in snapshots | Claude Code | Sonnet 5.5 | [T-705](../tasks/prompts/T-705.md) | T-701, T-702, T-704 | Review | Restricted `Persistence/**` and `Net/**`, the scope in the prompt only (owner's instructions of 2026-11-25) |
 
 ## Backlog (prompts written when the previous phase is Done)
 

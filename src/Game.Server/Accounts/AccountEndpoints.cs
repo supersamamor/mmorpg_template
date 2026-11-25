@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Globalization;
 using System.Text.Json;
+using Game.Server.Net;
 using Game.Server.World;
 using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
@@ -96,12 +97,12 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
                 }).ConfigureAwait(false);
                 return;
             case AccountPaths.Characters when path == AccountPaths.Characters && HttpMethods.IsPost(method):
-                if (await ReadAsync(context, "name").ConfigureAwait(false) is not [var name])
+                if (await ReadAsync(context, ParseCreate).ConfigureAwait(false) is not { } create)
                 {
                     await FailAsync(context, AccountErrors.InvalidRequest).ConfigureAwait(false);
                     return;
                 }
-                await AnswerAsync(context, await service.CreateAsync(Token(context), name, cancel).ConfigureAwait(false), StatusCodes.Status201Created, Write).ConfigureAwait(false);
+                await AnswerAsync(context, await service.CreateAsync(Token(context), create.Name, create.Appearance, cancel).ConfigureAwait(false), StatusCodes.Status201Created, Write).ConfigureAwait(false);
                 return;
             case AccountPaths.Characters when path != AccountPaths.Characters && HttpMethods.IsDelete(method):
                 if (!Guid.TryParseExact(path[(AccountPaths.Characters.Length + 1)..], "D", out var id))
@@ -139,7 +140,11 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
     /// The string fields of the request's JSON object, in the order asked for, or null: not JSON by its content type, longer than <see cref="MaxBodyBytes"/>, not
     /// arriving in time, not one object, a field missing, given twice or not a string. Unknown fields are ignored.
     /// </summary>
-    private static async Task<string[]?> ReadAsync(HttpContext context, params string[] fields)
+    private static async Task<string[]?> ReadAsync(HttpContext context, params string[] fields) => await ReadAsync(context, utf8 => Parse(utf8, fields)).ConfigureAwait(false);
+
+    private delegate T? BodyParser<T>(ReadOnlySpan<byte> utf8) where T : class;
+
+    private static async Task<T?> ReadAsync<T>(HttpContext context, BodyParser<T> parse) where T : class
     {
         var request = context.Request;
         if (request.ContentType is not { } type || !type.Split(';')[0].Trim().Equals("application/json", StringComparison.OrdinalIgnoreCase)) return null;
@@ -157,7 +162,7 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
                 if (read == 0) break;
                 count += read;
             }
-            return count > MaxBodyBytes ? null : Parse(buffer.AsSpan(0, count), fields);
+            return count > MaxBodyBytes ? null : parse(buffer.AsSpan(0, count));
         }
         catch (Exception e) when (e is BadHttpRequestException || (e is OperationCanceledException && !context.RequestAborted.IsCancellationRequested))
         {
@@ -193,12 +198,82 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
         }
     }
 
+    /// <summary>
+    /// A creation body: <c>"name"</c> (a string), and optionally <c>"appearance"</c>, an object of optional strings (<c>gender</c>, <c>skin</c>, <c>face</c>, <c>hair</c>,
+    /// <c>hair_color</c>; null means left out). Anything of another type, a repeated field, or an unknown field inside the appearance is a bad request; unknown fields outside it
+    /// are ignored.
+    /// </summary>
+    internal static CreateCharacterRequest? ParseCreate(ReadOnlySpan<byte> utf8)
+    {
+        try
+        {
+            string? name = null;
+            AppearanceChoice? choice = null;
+            var seenAppearance = false;
+            var reader = new Utf8JsonReader(utf8, new JsonReaderOptions { MaxDepth = 4 });
+            if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return null;
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var field = reader.GetString();
+                reader.Read();
+                switch (field)
+                {
+                    case "name":
+                        if (reader.TokenType != JsonTokenType.String || name is not null) return null;
+                        name = reader.GetString();
+                        break;
+                    case "appearance":
+                        if (seenAppearance) return null;
+                        seenAppearance = true;
+                        if (reader.TokenType == JsonTokenType.Null) break;
+                        if (ParseChoice(ref reader) is not { } parsed) return null;
+                        choice = parsed;
+                        break;
+                    default:
+                        reader.Skip();
+                        break;
+                }
+            }
+            if (reader.TokenType != JsonTokenType.EndObject || reader.Read() || name is null) return null;
+            return new CreateCharacterRequest(name, choice);
+        }
+        catch (Exception e) when (e is JsonException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private static AppearanceChoice? ParseChoice(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject) return null;
+        string? gender = null, skin = null, face = null, hair = null, hairColor = null;
+        bool g = false, s = false, f = false, h = false, c = false;
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var field = reader.GetString();
+            reader.Read();
+            if (reader.TokenType is not (JsonTokenType.String or JsonTokenType.Null)) return null;
+            var value = reader.GetString();
+            switch (field)
+            {
+                case "gender" when !g: gender = value; g = true; break;
+                case "skin" when !s: skin = value; s = true; break;
+                case "face" when !f: face = value; f = true; break;
+                case "hair" when !h: hair = value; h = true; break;
+                case "hair_color" when !c: hairColor = value; c = true; break;
+                default: return null;
+            }
+        }
+        return reader.TokenType == JsonTokenType.EndObject ? new AppearanceChoice(gender, skin, face, hair, hairColor) : null;
+    }
+
     private static void Write(Utf8JsonWriter w, CharacterRecord character)
     {
         w.WriteString("id", character.Id);
         w.WriteNumber("slot", character.Slot);
         w.WriteString("name", character.Name);
         w.WriteString("job", character.Job);
+        if (character.Appearance is { } looks) ProtocolJson.WriteAppearance(w, "appearance", looks);
     }
 
     private static Task AnswerAsync<T>(HttpContext context, AccountResult<T> result, int status, Action<Utf8JsonWriter, T>? write) where T : class

@@ -416,6 +416,7 @@ public sealed class Gateway
         {
             entity.Stats = loaded is null ? _start.CreateStats() : _start.CreateStats(loaded.Progression);
             entity.DefinitionId = loaded?.Progression.JobId ?? _start.JobId;
+            entity.Appearance = login.Appearance ?? _start.Appearance;   // T-705: from the account's character (stored, as content shows it), else the defaults (dev login); fixed from here
             if (entity.Save is not null) _keeper!.Enter(entity, loaded);   // before any system sees it, and whatever has become of the session: it is saved as it leaves
             string? token = null;
             lock (_linkLock)

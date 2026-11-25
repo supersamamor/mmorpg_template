@@ -14,13 +14,15 @@ namespace Game.Server.Net;
 /// The outcome of a login: a display name for a new character (with the account and the permanent character id it stands for, unless it is a dev login), the
 /// character a resume token belongs to, or a refusal (a <see cref="ByeReasons"/> term).
 /// </summary>
-public sealed record LoginResult(string? DisplayName, string? Refusal, EntityId? Character = null, Guid? AccountId = null, Guid? CharacterId = null)
+public sealed record LoginResult(string? DisplayName, string? Refusal, EntityId? Character = null, Guid? AccountId = null, Guid? CharacterId = null,
+    AppearanceRecord? Appearance = null)
 {
     /// <summary>Accepted.</summary>
     public static LoginResult Accept(string displayName) => new(displayName, null);
 
     /// <summary>Accepted: <paramref name="account"/> plays its character <paramref name="character"/>.</summary>
-    public static LoginResult Play(string displayName, Guid account, Guid character) => new(displayName, null, null, account, character);
+    public static LoginResult Play(string displayName, Guid account, Guid character, AppearanceRecord? appearance = null) =>
+        new(displayName, null, null, account, character, appearance);
 
     /// <summary>Refused for <paramref name="reason"/>.</summary>
     public static LoginResult Refuse(string reason) => new(null, reason);
@@ -85,7 +87,7 @@ public sealed class AccountLogin(AccountService accounts, DevLogin dev) : ILogin
     {
         if (hello.Session is not { } session || hello.Character is not { } character) return dev.Login(hello);
         var result = await accounts.ResolveAsync(session, character, AddressKeys.Of(address), cancellation).ConfigureAwait(false);
-        if (result.Ok) return LoginResult.Play(result.Value.Character.Name, result.Value.Account, result.Value.Character.Id);
+        if (result.Ok) return LoginResult.Play(result.Value.Character.Name, result.Value.Account, result.Value.Character.Id, result.Value.Appearance);
         return LoginResult.Refuse(result.Error switch
         {
             AccountErrors.RateLimited => ByeReasons.RateLimit,
@@ -116,6 +118,7 @@ public sealed class NewCharacters
         Cell = new GridCell(start.StartX, start.StartY);
         Facing = start.StartFacing;
         JobId = start.StartJobId;
+        Appearance = new AppearanceRules(content.Appearance).Defaults;
     }
 
     /// <summary>Start map id.</summary>
@@ -129,6 +132,9 @@ public sealed class NewCharacters
 
     /// <summary>Start job id; also the character's display key.</summary>
     public string JobId { get; }
+
+    /// <summary>The looks of a player that has none stored (T-705): the dev login's.</summary>
+    public AppearanceRecord Appearance { get; }
 
     /// <summary>The stat sheet of a loaded character (T-702): its levels, stats and job, the way a new character's is built; equipment and passives come as it enters.</summary>
     public StatSheet CreateStats(ProgressionState state)

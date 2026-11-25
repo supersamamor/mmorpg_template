@@ -319,7 +319,7 @@ public sealed class AoiSystem : ITickSystem, IOutboundPhase
             if (nowMs < item.OwnerUntilMs) owner = item.Owner;
         }
         return new EntityView(entity.Id, entity.Kind, entity.DefinitionId, cell, facing, next, speed, hp, entity.Dead, quantity, owner, entity.Look,
-            entity.StatusLook);
+            entity.StatusLook, entity.Appearance);
     }
 
     private static void Store(AoiEntry entry, in EntityView v)

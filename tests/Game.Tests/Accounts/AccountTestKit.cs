@@ -58,7 +58,7 @@ public sealed class MemoryAccountStore : IAccountStore
     private readonly object _lock = new();
     private readonly Dictionary<Guid, (string Username, string Hash)> _accounts = new();
     private readonly Dictionary<string, (Guid Account, DateTime Created, DateTime Expires)> _sessions = new();
-    private readonly Dictionary<Guid, (Guid Account, int Slot, string Name, string Key, string Job, bool Deleted)> _characters = new();
+    private readonly Dictionary<Guid, (Guid Account, int Slot, string Name, string Key, string Job, bool Deleted, AppearanceChoice? Look)> _characters = new();
 
     /// <summary>When set, every call waits for it first: a slow database.</summary>
     public TaskCompletionSource? Gate { get; set; }
@@ -157,18 +157,18 @@ public sealed class MemoryAccountStore : IAccountStore
         await Enter(cancellation);
         lock (_lock)
             return _characters.Where(c => c.Value.Account == account && !c.Value.Deleted).OrderBy(c => c.Value.Slot)
-                .Select(c => new CharacterEntry(c.Key, c.Value.Slot, c.Value.Name, c.Value.Job)).ToList();
+                .Select(c => new CharacterEntry(c.Key, c.Value.Slot, c.Value.Name, c.Value.Job, c.Value.Look)).ToList();
     }
 
     public async Task<CharacterEntry?> FindCharacterAsync(Guid account, Guid character, CancellationToken cancellation)
     {
         await Enter(cancellation);
         lock (_lock)
-            return _characters.TryGetValue(character, out var c) && c.Account == account && !c.Deleted ? new CharacterEntry(character, c.Slot, c.Name, c.Job) : null;
+            return _characters.TryGetValue(character, out var c) && c.Account == account && !c.Deleted ? new CharacterEntry(character, c.Slot, c.Name, c.Job, c.Look) : null;
     }
 
     public async Task<(CreateCharacterOutcome Outcome, CharacterEntry? Character)> CreateCharacterAsync(Guid account, Guid character, string name, string nameKey, string jobId,
-        int maxSlots, DateTime now, CancellationToken cancellation)
+        int maxSlots, AppearanceRecord? appearance, DateTime now, CancellationToken cancellation)
     {
         await Enter(cancellation);
         lock (_lock)
@@ -177,8 +177,9 @@ public sealed class MemoryAccountStore : IAccountStore
             var slot = Enumerable.Range(0, maxSlots).Where(s => !used.Contains(s)).Cast<int?>().FirstOrDefault();
             if (slot is null) return (CreateCharacterOutcome.NoFreeSlot, null);
             if (_characters.Values.Any(c => c.Key == nameKey)) return (CreateCharacterOutcome.NameTaken, null);
-            _characters.Add(character, (account, slot.Value, name, nameKey, jobId, false));
-            return (CreateCharacterOutcome.Created, new CharacterEntry(character, slot.Value, name, jobId));
+            var look = appearance is null ? null : new AppearanceChoice(appearance.Gender, appearance.Skin, appearance.Face, appearance.Hair, appearance.HairColor);
+            _characters.Add(character, (account, slot.Value, name, nameKey, jobId, false, look));
+            return (CreateCharacterOutcome.Created, new CharacterEntry(character, slot.Value, name, jobId, look));
         }
     }
 
@@ -206,7 +207,7 @@ public sealed class ServiceRig
     public ServiceRig(IPasswordHasher? hasher = null, AccountLimits? limits = null, IAccountStore? store = null)
     {
         Hasher = hasher ?? new FakeHasher();
-        Service = new AccountService(store ?? Memory, Hasher, new HashQueue(4, 64, TimeSpan.FromSeconds(10)), limits ?? new AccountLimits(), TestGrids.SampleContent.Balance, Clock, Time, Log);
+        Service = new AccountService(store ?? Memory, Hasher, new HashQueue(4, 64, TimeSpan.FromSeconds(10)), limits ?? new AccountLimits(), TestGrids.SampleContent.Balance, TestGrids.SampleContent.Appearance, Clock, Time, Log);
     }
 
     public IPasswordHasher Hasher { get; }

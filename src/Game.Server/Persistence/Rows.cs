@@ -36,7 +36,7 @@ public sealed class SessionRow
 }
 
 /// <summary>
-/// Table <c>characters</c>: who exists. What a character owns or has done is in <see cref="CharacterStateRow"/> and <see cref="ItemRow"/>, its looks are T-705: all hang off <see cref="Id"/>.
+/// Table <c>characters</c>: who exists. What a character owns or has done is in <see cref="CharacterStateRow"/> and <see cref="ItemRow"/>, its looks (T-705) are on this row: all hang off <see cref="Id"/>.
 /// </summary>
 public sealed class CharacterRow
 {
@@ -57,6 +57,24 @@ public sealed class CharacterRow
 
     /// <summary>Its job id, for the character list: what it was at its last save.</summary>
     public string JobId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Its looks (T-705, ARCHITECTURE §7.5.1): ids from <c>appearance.yaml</c>, chosen at creation and never changed. Each is null for a character that existed before T-705 (and for
+    /// one created without): content's defaults apply at load, and nothing is written back. An id the content has lost stays here; it is replaced only when shown.
+    /// </summary>
+    public string? Gender { get; set; }
+
+    /// <summary>Skin tone id, or null (see <see cref="Gender"/>).</summary>
+    public string? SkinToneId { get; set; }
+
+    /// <summary>Face id, or null.</summary>
+    public string? FaceId { get; set; }
+
+    /// <summary>Hairstyle id, or null.</summary>
+    public string? HairstyleId { get; set; }
+
+    /// <summary>Hair colour id, or null.</summary>
+    public string? HairColorId { get; set; }
 
     /// <summary>When it was created (UTC).</summary>
     public DateTime CreatedAt { get; set; }

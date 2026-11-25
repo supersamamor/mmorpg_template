@@ -1,4 +1,5 @@
 using Game.Server.Accounts;
+using Game.Shared.Protocol;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 
@@ -70,16 +71,18 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
     /// <inheritdoc />
     public Task<IReadOnlyList<CharacterEntry>> ListCharactersAsync(Guid account, CancellationToken cancellation) => RunAsync<IReadOnlyList<CharacterEntry>>(async db =>
         await db.Characters.Where(c => c.AccountId == account && c.DeletedAt == null).OrderBy(c => c.Slot)
-            .Select(c => new CharacterEntry(c.Id, c.Slot, c.Name, c.JobId)).ToListAsync(cancellation).ConfigureAwait(false));
+            .Select(c => new CharacterEntry(c.Id, c.Slot, c.Name, c.JobId, new AppearanceChoice(c.Gender, c.SkinToneId, c.FaceId, c.HairstyleId, c.HairColorId)))
+            .ToListAsync(cancellation).ConfigureAwait(false));
 
     /// <inheritdoc />
     public Task<CharacterEntry?> FindCharacterAsync(Guid account, Guid character, CancellationToken cancellation) => RunAsync(db =>
         db.Characters.Where(c => c.Id == character && c.AccountId == account && c.DeletedAt == null)
-            .Select(c => new CharacterEntry(c.Id, c.Slot, c.Name, c.JobId)).SingleOrDefaultAsync(cancellation));
+            .Select(c => new CharacterEntry(c.Id, c.Slot, c.Name, c.JobId, new AppearanceChoice(c.Gender, c.SkinToneId, c.FaceId, c.HairstyleId, c.HairColorId)))
+            .SingleOrDefaultAsync(cancellation));
 
     /// <inheritdoc />
     public Task<(CreateCharacterOutcome Outcome, CharacterEntry? Character)> CreateCharacterAsync(Guid account, Guid character, string name, string nameKey, string jobId, int maxSlots,
-        DateTime now, CancellationToken cancellation) => RunAsync<(CreateCharacterOutcome, CharacterEntry?)>(async db =>
+        AppearanceRecord? appearance, DateTime now, CancellationToken cancellation) => RunAsync<(CreateCharacterOutcome, CharacterEntry?)>(async db =>
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellation).ConfigureAwait(false);
         // One creation per account at a time, so two at once take two slots; the index on (account, slot) is the backstop.
@@ -88,10 +91,12 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
         var slot = 0;
         while (used.Contains(slot)) slot++;
         if (used.Count >= maxSlots || slot >= maxSlots) return (CreateCharacterOutcome.NoFreeSlot, null);
-        db.Characters.Add(new CharacterRow { Id = character, AccountId = account, Slot = slot, Name = name, NameKey = nameKey, JobId = jobId, CreatedAt = now });
+        db.Characters.Add(new CharacterRow { Id = character, AccountId = account, Slot = slot, Name = name, NameKey = nameKey, JobId = jobId, CreatedAt = now,
+            Gender = appearance?.Gender, SkinToneId = appearance?.Skin, FaceId = appearance?.Face, HairstyleId = appearance?.Hair, HairColorId = appearance?.HairColor });
         if (!await TrySaveAsync(db, GameDb.CharacterNameIndex, cancellation).ConfigureAwait(false)) return (CreateCharacterOutcome.NameTaken, null);
         await transaction.CommitAsync(cancellation).ConfigureAwait(false);
-        return (CreateCharacterOutcome.Created, new CharacterEntry(character, slot, name, jobId));
+        return (CreateCharacterOutcome.Created, new CharacterEntry(character, slot, name, jobId,
+            appearance is null ? null : new AppearanceChoice(appearance.Gender, appearance.Skin, appearance.Face, appearance.Hair, appearance.HairColor)));
     });
 
     /// <inheritdoc />
