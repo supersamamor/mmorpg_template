@@ -226,6 +226,18 @@ reached by a warp at the end of the pier, with spawns of crabs and eels and its 
 *Pirate:* `item.iron_blade` → "Cutlass" (still `sword_1h`), `item.oak_staff` → "Driftwood Staff", `item.padded_vest` → "Sailcloth Vest",
 `item.healing_draught` → "Grog"; a flintlock needs a ranged weapon type the vocabulary has (`bow`, with an `attack_range` above 1) or a new one (code).
 
+### 4.7.1 Outfits (looks only)
+
+| | |
+|---|---|
+| **Files** | `content/outfits/*.yaml` (ARCHITECTURE §7.5.2): `name`, `description`, `icon_asset_key`, `takes_colors`, `pieces` (`slot`, `model_asset_key`, optional `gender`) |
+| **Add one** | A new file with a new `outfit.*` id; a piece per outfit slot it covers (`head`, `face`, `body`, `back`, `feet`), one per gender where the bodies differ; the models in the theme as worn pieces (THEMES.md §1.8). Give it to characters with a quest reward `{ type: outfit, outfit_id: outfit.x }` (or, later, T-709's store). Run validate, bundle, `validate --theme <theme>` |
+| **Never** | Give an outfit stats, effects, requirements, a price or a drop: the loader refuses the fields and no item, shop or drop table may name an outfit. An outfit that changes what a character can do is a store selling power, which this template does not support; make an item instead |
+| **Keep** | Outfit ids that players own (a removed one is kept with them and comes back with the content); the outfit slots |
+| **Caught by** | `validate` (unknown slot, colour role, gender or key; two pieces for one slot and gender), `validate --theme` (a piece that is not a worn piece; a colour no piece is painted with), `OutfitTests` |
+
+*Pirate:* "Harvest Garland" → "Captain's Tricorn" (a `head` piece), "Rain Cloak" → "Storm Coat"; the First Hunt reward lines stay or move to another quest.
+
 ### 4.8 Words on screen
 
 | | |
@@ -270,7 +282,7 @@ Run the commands after each step, in PowerShell from the repository root. Short 
 4. **Skills and statuses** (§4.2). Run validate, bundle, tests. After a new effect type: `dotnet run --project src/Game.Tools -- schema`, then
    `git diff --exit-code schemas/` shows only the intended change; run `dotnet run --project src/Game.Tools -- schema` again and expect no diff; then tests.
 5. **Jobs** (§4.1). Run validate, bundle, tests; re-tune with `dotnet run --project src/Game.Tools -- stats --job <job> --level <n> --duel <monster>`.
-6. **Items, prices and shops** (§4.7). Run validate, bundle; after new keys in `default`, `dotnet run --project tools/themegen`, then
+6. **Items, prices and shops** (§4.7), and **outfits** (§4.7.1). Run validate, bundle; after new keys in `default`, `dotnet run --project tools/themegen`, then
    `dotnet run --project tools/themegen -- --check`; then tests.
 7. **Monsters and drops** (§4.6). Run validate, bundle, `stats --duel` per monster, then the golden snapshots:
    `$env:UPDATE_GOLDEN = "1"; dotnet test --filter "FullyQualifiedName~BalanceGoldenTests"; Remove-Item Env:UPDATE_GOLDEN`. Review the diff, redo the

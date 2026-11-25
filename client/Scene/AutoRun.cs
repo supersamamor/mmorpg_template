@@ -45,6 +45,7 @@ public sealed class AutoRun
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
         Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-autopilot") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 || Array.IndexOf(args, "--e2e-appearance") >= 0 || Array.IndexOf(args, "--e2e-appearance-watch") >= 0 ||
+        Array.IndexOf(args, "--e2e-wardrobe") >= 0 || Array.IndexOf(args, "--e2e-wardrobe-watch") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -84,6 +85,8 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-saving") >= 0) await SavingRunAsync();
             else if (Value("--e2e-appearance-watch") is { } looks) await new LookRuns(_main, ShotAsync).WatcherAsync(looks);
             else if (Array.IndexOf(_args, "--e2e-appearance") >= 0) await new LookRuns(_main, ShotAsync).CreatorAsync();
+            else if (Value("--e2e-wardrobe-watch") is { } outfit) await new WardrobeRuns(_main, ShotAsync).WatcherAsync(outfit);
+            else if (Array.IndexOf(_args, "--e2e-wardrobe") >= 0) await new WardrobeRuns(_main, ShotAsync).WearerAsync();
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();

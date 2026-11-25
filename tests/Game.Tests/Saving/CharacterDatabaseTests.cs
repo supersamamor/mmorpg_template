@@ -87,6 +87,34 @@ public sealed class CharacterDatabaseTests(DatabaseFixture fixture, Xunit.Abstra
     }
 
     [DatabaseFact]
+    public async Task Owned_outfits_are_a_set_that_each_save_replaces_and_the_database_keeps_each_once()
+    {
+        var run = await Store.StartRunAsync(default);
+        var (_, character) = await CharacterAsync();
+        var ticket = await ClaimAsync(Store, character, run);
+        async Task<List<string>> OutfitsAsync()
+        {
+            await using var db = Database.Open();
+            return await db.Outfits.AsNoTracking().Where(o => o.CharacterId == character).OrderBy(o => o.OutfitId).Select(o => o.OutfitId).ToListAsync();
+        }
+        foreach (var owned in new[] { new[] { "outfit.a", "outfit.b" }, ["outfit.b"], ["outfit.b", "outfit.c", "outfit.c"], [] })
+        {
+            (await Store.SaveAsync([Save(ticket, With() with { Outfits = owned })], default)).ShouldBeOfType<SaveResult.Saved>();
+            (await OutfitsAsync()).ShouldBe(owned.Distinct().Order(StringComparer.Ordinal).ToList());
+        }
+        (await Store.SaveAsync([Save(ticket, With() with { Outfits = ["outfit.kept_whatever_the_content_says"], OutfitSlots = new Dictionary<string, string> { ["head"] = "outfit.x" } })], default))
+            .ShouldBeOfType<SaveResult.Saved>();
+        var back = await Store.ClaimAsync(character, run, default);
+        (back.State!.Outfits.Single(), back.State.OutfitSlots["head"]).ShouldBe(("outfit.kept_whatever_the_content_says", "outfit.x"));
+        await using var direct = Database.Open();
+        await Should.ThrowAsync<DbUpdateException>(async () =>
+        {
+            direct.Outfits.Add(new OutfitRow { CharacterId = character, OutfitId = "outfit.kept_whatever_the_content_says" });
+            await direct.SaveChangesAsync();
+        });
+    }
+
+    [DatabaseFact]
     public async Task A_character_that_was_never_saved_is_new_and_a_claim_alone_does_not_change_that()
     {
         var run = await Store.StartRunAsync(default);

@@ -142,12 +142,14 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
     | the autopilot's daily usage and when its day began (row 293) | yes | likewise |
     | what the content has no place for ("Loading") | yes | nothing disappears |
     | an autopilot run; statuses; an open dialogue, service or shop; a cast, auto-attack, walk or pending pick-up; "in combat" | no | they belong to a moment and a map; statuses end on every map change too. An out-of-combat reset is possible right after signing in: accepted, the character is out of the fight |
+    | owned outfits (each once), what each outfit slot shows, the hide switch (T-708) | yes | an id the content has lost is kept and ignored, and comes back with it |
     | stat sheet, weapon, look, weight, load, NPC markers, views, the inventory `rev`, a held quest's reason | no | worked out again from the rest |
     | items on the ground | no | a crash loses them (see "Between characters") |
 
   - **Tables.** `server_runs` (`id` from an identity sequence, `started_at`, `seen_at`, `ended_at`), `character_states` (`character_id`, `claim`, `held_by` → run, `version`, `saved_at`, and the state: one
     column per number or id, `jsonb` for stats, skills, quests, cooldowns and what is set aside; `version` 0 = never saved), `character_items` (`id` primary key over **all** characters,
-    `character_id`, `item_id`, `quantity`, `slot`, `cards`, `refine`, `aside`; one item per worn slot). A check keeps the currency from going negative. T-705, T-708 and T-905 add tables or columns beside these.
+    `character_id`, `item_id`, `quantity`, `slot`, `cards`, `refine`, `aside`; one item per worn slot), and (T-708) `character_outfits` (`character_id`, `outfit_id`; the primary key keeps each outfit once) with `outfit_slots` (`jsonb`) and `outfits_hidden` on
+    `character_states`. A check keeps the currency from going negative. T-705 and T-905 add tables or columns beside these.
   - **Item ids** are permanent: the run's number, which the database gives to no other run, shifted left 40 bits, plus a counter from 1 (`CharacterSaves.NextItemId`). No restart repeats one, and a
     tick thread gets one without the database. An entry keeps its id for life; equipment also keeps it from hand to hand.
   - **A copy** is made on the tick thread that holds the character, in phase 5 (`SaveSystem`), after every system has run and every event of the tick is out, so it is always consistent; the
@@ -221,7 +223,7 @@ Any failure prevents startup and is reported with file + path.
 `JobDef`, `SkillDef`, `ItemDef` (consumable | equip | card | etc), `MonsterDef`,
 `StatusDef` (buffs/debuffs), `QuestDef`, `NpcDef`, `DialogueDef`, `DropTableDef`,
 `MapDef` (metadata + grid reference), `ExpTableDef`, `ElementTableDef`.
-Singleton root files: `FormulaSetDef` (`formulas.yaml`), `BalanceDef` (`balance.yaml`: stat/skill point rules, stat range, damage and chance clamps, movement and path search limits, AOI bucket size and view radius, new-character start, monster AI timings). `AppearanceDef` (`appearance.yaml`: character-creation options, cosmetic only, §7.5.1).
+Singleton root files: `FormulaSetDef` (`formulas.yaml`), `BalanceDef` (`balance.yaml`: stat/skill point rules, stat range, damage and chance clamps, movement and path search limits, AOI bucket size and view radius, new-character start, monster AI timings). `AppearanceDef` (`appearance.yaml`: character-creation options, cosmetic only, §7.5.1). `OutfitDef` (`content/outfits/`, T-708: looks only, §7.5.2).
 
 ### 5.3 Maps
 A map has three parts that share its id:
@@ -275,7 +277,7 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 - **Whitelist, not blacklist.** `Game.Shared/ClientContent` holds one plain record per definition type, and
   `Game.Content/ClientBundle/ClientBundleBuilder` copies each field by hand. A field added to a server definition reaches the client
   only when someone maps it there; a test fails if a client record gains a field without the table below changing.
-- **Format:** `format_version` (now `7`; 2 added the sound keys, 3 the appearance options, 4 item `card_slots` / `refinable` and the `refine` steps, 5 dropped the dialogue graphs and an NPC's dialogue id: the server runs dialogue, T-601; 6 added `currency_name`, T-602; 7 added the looks of jobs and the start job, T-706) is the first field. The client refuses a bundle with a version it does not know. Bump it
+- **Format:** `format_version` (now `8`; 2 added the sound keys, 3 the appearance options, 4 item `card_slots` / `refinable` and the `refine` steps, 5 dropped the dialogue graphs and an NPC's dialogue id: the server runs dialogue, T-601; 6 added `currency_name`, T-602; 7 added the looks of jobs and the start job, T-706; 8 added the outfits, T-708) is the first field. The client refuses a bundle with a version it does not know. Bump it
   on any change to the bundle's shape.
 - **Canonical output:** compact JSON, UTF-8 without BOM, one final `\n`, fixed property order, lists ordered by id,
   integers and booleans only, non-ASCII (and `<>&'"+`) escaped as `\uXXXX`, null values left out. Two exports of the same content are byte-identical on any OS.
@@ -297,6 +299,7 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 | Dialogue | — | the whole graph: nodes, texts, conditions, actions and quest ids (the server runs it and sends one node at a time, T-601) |
 | Quests | id, name, description, giver NPC, display text of each step | prerequisites, objectives and counts, rewards, repeatable flag |
 | Maps | id, name, scene, music, ambience key, width, height, cell flags (`walkable`, `blocks_los`; base64, as in the grid file), warps (cell, target map, target cell), NPC placements, zones | `spawns`, `source_scene_hash` |
+| Outfits (T-708) | id, name, description, icon, the colour roles it takes, pieces (slot, model, gender) | — (an outfit has nothing else: no stats, effects, requirements, prices or drops) |
 | Appearance | genders (body model, faces, hairstyles, defaults), skin tones and hair colours: ids, names, asset keys, colours; the job a new character starts in (the creation preview wears its look, T-706) | — (cosmetic only) |
 | Elements, stats | element ids and stat ids, for labels | element multipliers, derived-stat formulas |
 | Balance | `currency_name` (the bag shows the balance with it, T-602) | every other number of `balance.yaml` |
@@ -774,6 +777,12 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   (from the bundle), objectives and a held reason, each with Track and Abandon (asks once more before sending `abandon_quest`), then the completed quests. **Markers:** a "!" drawn
   by a billboard shader above every NPC the server marks, gold to offer and green to turn in, one multimesh (one draw call, none when no NPC is marked), rewritten only when the
   markers or the NPCs in view change. The client decides no count, step or completion; quest changes go on the flash line. The bag's first line shows the currency.
+- **Wardrobe** (T-708, `client/Scene/WardrobePanel.cs`, view model `client/Core/Outfits/WardrobeBook.cs`). Opened with the Outfits button in the bag's header (the full phone HUD has no room for
+  another button; it has a Bag button back), as the stats are opened from the skills. Left: a turning preview (`LookView`) of the own character drawn from **its own view record**, the one everyone else gets (its
+  looks, worn gear and shown outfits), so it shows exactly what others see, and the switch that hides every outfit ("Hide outfits" / "Show outfits"). Right, in a scroll container: one row per outfit slot that an
+  owned outfit has a piece for on this character's gender, each with "My gear" and one button per such outfit (icon and name); the chosen one is framed and marked `[ Name ]`. Under them a line that says outfits are
+  looks only. It sends `set_outfit` only; what is chosen is the server's `wardrobe`, and a refusal goes on the flash line. A new outfit is said on the flash line ("New outfit: ..."). It redraws only when the
+  wardrobe or the own character's gender changes; the preview renders every frame only while it is open (it is freed when it closes). It is in the `-Run ui` matrix with the longest words (48 combinations).
 - **Quest autopilot** (T-605, view model `client/Core/Autopilot/AutopilotModel.cs`, controls in `QuestPanel`, indicator in `Hud`). **Ticks:** each active quest in the log has a tick ("Add to
   autopilot", then "Autopilot: #n" with its place in the run); a tick is this player's own wish, kept only in memory, sent nowhere until Start, and dropped when the quest is completed or abandoned
   or the login ends. **Order:** a ticked quest gets Earlier and Later buttons that swap it one place; not dragging, because a drag inside a scrolling list fights the scroll and needs a precise
@@ -869,8 +878,7 @@ Chosen once at character creation; **cosmetic only** (never changes stats or rul
   the bundle's content hash in `hello`; the ids stay until measured on a phone. `GET /account/characters` has the same object per character, so a select screen can draw it.
 - **Client** (`client/Core`): `EntityView.Appearance` (set at `Reset`), `CharacterRecord.Appearance`, and `AccountApi.Write(CreateCharacterRequest)` write and read the ids as they are; an id the
   bundle does not have is kept as a string and drawn as the default ("Drawing it" below).
-- **Room for outfits (T-708):** an outfit is *worn* cosmetic state that changes, so it must not share fields with the fixed appearance. It travels beside it as its own record field (`"outfit":{"<slot>":"outfit.x",..}`),
-  with its own `ViewFields.Outfit` flag so a change record sends it only when it changes, and is saved in its own table or columns. `appearance` stays exactly as is; a client that does not know `outfit` ignores it.
+- **Outfits** (T-708) are worn cosmetic state that changes, so they do not share fields with the fixed appearance: §7.5.2.
 
 **Drawing it** (T-706; pure rules in `client/Core/Theme/Appearance.cs` and `Recolor.cs`, tested; drawing in `client/Scene/Theme`).
 - *Ids to a look:* `AppearanceCatalog` turns the ids and the job (the display key) into a `CharacterLook` through the bundle and the theme chain: the gender's body, the face, the hairstyle, the colours and what the job
@@ -897,8 +905,37 @@ Chosen once at character creation; **cosmetic only** (never changes stats or rul
 - *Preview and pictures* (`LookView`): `ThemedEntities.Preview` makes a visual of its own from the same models, merges, materials and outline as the world's, in a small world lit by the theme's `scene.environment`, inside a
   `SubViewport`. The creation preview renders while it is open and turns by itself (`preview_turn_degrees`, 30 a second) or by drag (`Turntable`, pure); a picture in the character list renders once, when the character is
   dressed. Hidden, both free the character and shrink their render target. The preview wears the start job's look (the bundle's `start_job`) and no equipment.
-- *Outfits (T-708)* join `DressPlan` as parts with a role of their own: an outfit in a slot takes the place of the job piece and the equipment of that slot (only the drawing; `hides_hair` counts), and its piece is part of
-  the `WornSet` key like any other. Its colours stay its own, or it takes colours through `recolor` by giving its role a `Recolor`. Nothing else changes: same merge, same cache, same single surface.
+- *Outfits (T-708)* join `DressPlan` as parts with a role of their own (§7.5.2).
+
+### 7.5.2 Outfits (T-708)
+Something a character owns and shows in place of its gear. **An outfit only ever changes how a character looks**: it has no modifiers, effects, requirements, price or drop, and cannot have them.
+- **Data, not code** (`content/outfits/*.yaml`, `OutfitDef`): `id` (`outfit.*`), `name`, `description`, `icon_asset_key`, `takes_colors` (colour roles, VOCABULARY "Appearance colour roles") and `pieces`
+  (`slot`, an "Outfit slots" term; `model_asset_key`; optional `gender`). The slots it covers are the ones that have a piece; a slot has one piece for everyone or at most one per gender. The loader knows no
+  other field, so `modifiers`, `effects`, `buy_price` or a drop table in an outfit file is a load error, and no item, shop or drop table can name an `outfit.*` id (the reference rule says it is not an item).
+  `validate` checks the terms, that pieces are `model.*` keys of the manifest, and (`validate --theme`) that they are worn pieces (`attach` or `skinned`), and warns when an outfit takes a colour none of its
+  pieces is painted with. The template has two placeholder outfits from `themegen`, the Harvest Garland (a wreath and a sash) and the Rain Cloak (a hood that hides the hair, a coat cut per gender that takes
+  the job's cloth colour, a cape). The first quest (First Hunt) gives both, so every character has a wardrobe early; a character that completed it before T-708 has none.
+- **Slots** (VOCABULARY "Outfit slots") are a set of their own and vocabulary, not data: which equipment slots one covers is part of drawing a character, the client and the server must agree on the words,
+  and the set is small and fixed. `head` covers `head_top`; `face` `head_mid` and `head_low`; `body`; `back` the garment; `feet` the footgear. **Nothing covers the weapon and the shield**: what a character
+  fights with stays readable (and its weapon-type clips stay right), and an accessory has no look.
+- **Owning** (`ProgressionState.Wardrobe`, `WardrobeState`): a set of ids, each once, saved with the character in T-702's transaction (`character_outfits`, §3). **The one primitive** is
+  `WardrobeRules.Grant`: the reward type `outfit` uses it when a quest's rewards are paid (owed like its other rewards until then, so nothing is lost or given twice), and the server intent `GrantOutfit` uses it
+  for whatever grants outfits elsewhere (T-709's store). Granting what is owned does nothing. Outfits belong to the **character**, not the account, as everything else that is saved: a deleted character's
+  outfits go with it (soft-deleted with it, erased with the account). T-709 must therefore keep its purchases per account and deliver each to a character (and again, to another, after a deletion, as its
+  restore rule says); the grant is idempotent, so delivering twice is harmless.
+- **Content changes:** an owned or chosen id the content has lost is kept and ignored (not told, not drawn), like a look (T-705), and comes back with the content; the load notes it.
+- **Choosing** (`OutfitSystem`, `set_outfit`): one intent sets what shows in a slot (an outfit, or nothing), or turns the switch that hides every outfit (the choices stay). The server checks, in order:
+  the slot, that the outfit exists, that it is owned, that it has a piece for the slot, and one for the character's gender, and answers a refusal with an "Outfit reasons" term. Looks only, so it works in a
+  fight and while dead; the session's rate limit is the only limit. A choice survives a save and a reconnect (it is part of the saved state, and a resume keeps the entity).
+- **Others see it:** `Entity.Outfit` (an immutable `OutfitLook`, set by the outfit system and read only by the AOI) is the record field `outfit` (`{"head":"outfit.x"}`, left out when none shows) of a
+  snapshot and an `appeared` entry, and a change has its own `ViewFields.Outfit` flag: the change record carries the whole field once (`{}` when it goes). Not the job change's way (the display key), because
+  outfits are several ids and change apart from the job. Measured on the wire (`GatewayOutfitTests`): a player's record grows by 38 bytes with one outfit and 97 with three slots (from 313 for a snapshot of one
+  record with looks and a weapon); a change is an 85-byte delta, once, to each observer. Hidden outfits send nothing.
+- **Drawing** (`DressPlan`, `AppearanceCatalog.ResolveOutfit`): an outfit's pieces are parts of the one merged mesh (`PartRole.Outfit`), the gender's piece for each shown slot. In the drawing only they take
+  the place of the worn equipment whose slots they cover (an item that fits several slots gives way when any of them is covered: the record does not say which it is worn in) and of the job's pieces of those
+  slots; `hides_hair` counts for what is drawn (a hood hides the hair; a wreath over a cap that hides it lets it show). A piece takes the colours its outfit names through its `recolor` or the contract's paint,
+  and is part of the `WornSet` key with them. Same merge, same cache, still one surface and one draw call. An outfit the bundle lacks, or with no piece for the slot and gender, is left out (one warning) and the
+  gear shows. Measured: §9 "Outfits".
 
 ### 7.6 Animation
 Animation ids (VOCABULARY) are shared by every model on the same rig. Server events
@@ -1153,6 +1190,8 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
 Every player is one surface in every phase, so looks add no draw call (the differences are monsters, drops and effects on screen); 30.0 fps throughout; a face and a hairstyle add about 350 triangles at each level (the
 placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms frame is 38 characters changing gear at once. Not run on a phone (ADR-002 row 112).
 
+**Outfits (T-708, §7.5.2), measured:** see the table filled by the T-708 measuring run below.
+
 ## 10. Networking on mobile
 
 - **TLS required:** `wss://` everywhere except local dev. Cleartext `ws://` is allowed only in
@@ -1173,7 +1212,7 @@ placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms
 - **Snapshot / delta shape** (T-204, T-307, T-401): a view record is `id, kind, display_key, cell, facing, next, speed, hp, dead` (`next` and
   `speed` only while walking, `hp` only for entities that fight, `dead` only when true; a ground item adds `quantity` and `mine`; a player adds `weapon`, its
   weapon type, and `worn`, the item ids it wears that have a worn visual, left out when empty: the client finds the visuals in its bundle for T-403, and never gets stats; and, in a snapshot or an `appeared` entry only,
-  `appearance`, its looks as ids, T-705); a delta is
+  `appearance`, its looks as ids, T-705; and `outfit`, the outfits it shows by slot, in every record and, when they change, in a change, T-708); a delta is
   `appeared` (records), `changed` (id + changed fields only), `disappeared` (ids), each ordered by entity id, plus `hits` and `vitals`.
   A walker produces one change per cell reached, not per tick; the client interpolates from `cell` to `next`.
 - **Combat on the wire** (T-307). Others' HP is a fraction rounded to 0.01 (`hp`), sent only when that rounded value changes, so exact HP
@@ -1241,6 +1280,7 @@ placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms
   | `abandon_quest` | C→S | `quest`: drop an active quest, its progress is lost; may come back `rejected` (`not_active`, with `quest`) (T-602) |
   | `start_autopilot` | C→S | `quests` (active quest ids, in the order to play), `skills` (`[["skill.x",level],...]`: the shortcut slots in order; level 0 = the learned one; may be left out). Replaces a run in progress; may come back `rejected` with an "Autopilot reasons" term and the `quest` or `skill` (T-604) |
   | `stop_autopilot` | C→S | none: switch it off; ignored when it is off (T-604) |
+  | `set_outfit` | C→S | either `slot` (an "Outfit slots" term) and `outfit` (left out: nothing), or `hidden` (true hides every outfit, false shows the choices again); a request, it may come back `rejected` (`intent` `set_outfit`, an "Outfit reasons" term, `slot`, `item` the outfit) (T-708) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
@@ -1259,6 +1299,7 @@ placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms
   | `shop` | S→C (owner) | `npc`, `shop` (the `shop.*` id), `max_quantity`, `stock` (`[{item, price}]`, in display order), `sell` (`[{item, price}]`: what a shop pays per unit for every item it buys). Sent right after `service_opened` for the `shop` service (T-603) |
   | `quest_log` | S→C (owner) | `active` (`[{quest, step, objectives:[{type, target?, have, need}], held?}]`, by id; `step` indexes the bundle's step texts), `completed` (quest ids), `offer`, `turn_in` (NPC ids for the markers). After every snapshot and whenever the markers change; it replaces what the client had (T-602) |
   | `quest` | S→C (owner) | `change` (a "Quest changes" term), `quest`, `state` (the quest as it is now, the shape of an `active` entry; absent for `completed` and `abandoned`) (T-602) |
+  | `wardrobe` | S→C (owner) | `owned` (outfit ids the content has, by id), `chosen` (`{"<slot>":"outfit.x"}`, also while hidden), `hidden` (only when true). After every snapshot and every change; it replaces what the client had (T-708) |
   | `autopilot` | S→C (owner) | `mode` (an "Autopilot modes" term), `quest` (while running or paused), `doing` (an "Autopilot activities" term, while running), `reason` (why it paused or ended). On change only, and once after the first snapshot of a connection that took over a character that has had a run. Never anything about monsters, spawns or routes (T-604) |
   | `skills` | S→C (owner) | `job`, `points` (unspent), `levels` (`[["skill.x",2],...]`), `cooldowns` (`[["skill.x",ms left],...]`), `jobs` (the jobs `change_job` would accept now). After every snapshot, a learn, a job change and a level (T-502) |
   | `stats` | S→C (owner) | `points` (unspent stat points), `stats` (`[["str",3,2],...]`: stat id, base value, the cost of its next +1, 0 at the maximum), `derived` (`[["atk",12],...]`: `DerivedStats.Panel`, floored from the sheet). After every snapshot, a raise, a stat reset, a level, a job change, a learned skill, a skill reset and a gear change (T-503). The client never computes a cost or a derived value |

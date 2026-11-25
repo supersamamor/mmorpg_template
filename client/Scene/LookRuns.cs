@@ -235,6 +235,17 @@ public sealed class LookRuns
         });
         if (dress is { Count: > 0 })
             await Phase("all different, dressed", () => presenter.DressOverride = dress);
+        // T-708: the same crowd, also in every outfit slot the bundle's outfits have for each one's gender. They replace the gear of those slots in the same one merge.
+        var outfits = _main.Bundle!.Outfits;
+        if (outfits.Count > 0)
+            await Phase(dress is { Count: > 0 } ? "all different, dressed, in outfits" : "all different, in outfits", () =>
+            {
+                var byGender = options.Genders.ToDictionary(g => g.Gender, g => (IReadOnlyList<ShownOutfit>)OutfitSlots.All.Ordered
+                    .Select(slot => outfits.FirstOrDefault(o => Game.Client.Core.Outfits.OutfitPieces.Find(o, slot, g.Gender) is not null) is { } o ? new ShownOutfit(slot, o.Id) : (ShownOutfit?)null)
+                    .Where(s => s is not null).Select(s => s!.Value).ToList());
+                presenter.OutfitOverride = e => byGender[Nth(options, e.Id).Gender];
+                presenter.Redraw();
+            });
         Print($"measure: {entities.LookKinds} looks remembered; {_main.Look?.Materials ?? 0} toon materials; adapter {RenderingServer.GetVideoAdapterName()}");
         await _shot(string.Empty);
     }

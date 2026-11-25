@@ -33,6 +33,10 @@ public class AppearanceDrawingTests
           "model.equip.vest": { "file": "models/vest.glb", "skinned": "humanoid" },
           "model.job.robe": { "file": "models/robe.glb", "skinned": "humanoid" },
           "model.job.helm": { "file": "models/helm.glb", "attach": "head", "hides_hair": true },
+          "model.outfit.hood": { "file": "models/hood.glb", "attach": "head", "hides_hair": true },
+          "model.outfit.wreath": { "file": "models/wreath.glb", "attach": "head" },
+          "model.outfit.coat_m": { "file": "models/coat_m.glb", "skinned": "humanoid", "recolor": { "cloth": ["#112233"] } },
+          "model.outfit.coat_f": { "file": "models/coat_f.glb", "skinned": "humanoid" },
           "model.missing": { "file": "models/missing.glb" },
           "fallbacks": { "missing": "model.missing", "player": "model.char.hero" }
         }
@@ -46,6 +50,14 @@ public class AppearanceDrawingTests
             new ClientGender("female", "Female", "model.body.f", [new("face.f1", "One", "model.face.f1")], [new("hair.lost", "Lost", "model.hair.lost")], "face.f1", "hair.lost"),
         ],
         [new("skin.a", "A", "#804020"), new("skin.b", "B", "#FFE0C0")], "skin.a", [new("haircolor.a", "A", "#202020"), new("haircolor.b", "B", "#D0A040")], "haircolor.a", "job.plain");
+
+    /// <summary>Two outfits (T-708): a hood and a coat cut per gender that takes the cloth colour, and a wreath for everyone.</summary>
+    private static readonly ClientOutfit[] Outfits =
+    [
+        new("outfit.cloak", "Cloak", null, "icon.c", [AppearanceColorRoles.Cloth],
+            [new("head", "model.outfit.hood", null), new("body", "model.outfit.coat_m", "male"), new("body", "model.outfit.coat_f", "female")]),
+        new("outfit.wreath", "Wreath", null, "icon.w", [], [new("head", "model.outfit.wreath", null)]),
+    ];
 
     private static readonly AppearanceRecord Male = new("male", "skin.a", "face.m1", "hair.m1", "haircolor.a");
 
@@ -76,6 +88,16 @@ public class AppearanceDrawingTests
             DressPlan.Fill(look, items.Select(Worn).ToList(), parts);
             return parts;
         }
+
+        /// <summary>T-708: dressed in gear and in outfits by slot.</summary>
+        public List<DressPart> Dress(CharacterLook? look, ShownOutfit[] outfit, params string[] items)
+        {
+            var pieces = new List<OutfitPart>();
+            Looks.ResolveOutfit(outfit, look?.Ids.Gender, "humanoid", pieces);
+            var parts = new List<DressPart>();
+            DressPlan.Fill(look, items.Select(Worn).ToList(), pieces, parts);
+            return parts;
+        }
     }
 
     private static DisplayBundle Bundle(ClientAppearance options)
@@ -87,7 +109,7 @@ public class AppearanceDrawingTests
             new ClientJob("job.robed", "Robed", null, null, [], "model.char.hero", null, [], null,
                 [new ClientJobPiece("model.job.robe", null, "body"), new ClientJobPiece("model.job.helm", "male", "head_top")]),
         };
-        var bundle = new ClientBundle(ClientBundle.CurrentFormatVersion, [], [], [], [], jobs, [], [], [], [], [], options);
+        var bundle = new ClientBundle(ClientBundle.CurrentFormatVersion, [], [], [], [], jobs, [], [], [], [], [], options, Outfits: Outfits);
         DisplayBundle.TryRead(ClientBundleWriter.Export(bundle).FileBytes, out var read, out _).ShouldBe(BundleStatus.Ok);
         return read!;
     }
@@ -467,5 +489,67 @@ public class AppearanceDrawingTests
                 mesh.IsPainted(["#00ff00"]).ShouldBeFalse();
             }
         }
+    }
+
+    // ---- outfits (T-708) ----
+
+    private static ShownOutfit[] Wearing(params (string Slot, string Outfit)[] shown) => shown.Select(s => new ShownOutfit(s.Slot, s.Outfit)).ToArray();
+
+    [Fact]
+    public void An_outfit_takes_the_place_of_the_gear_and_the_job_pieces_of_the_slots_it_covers_in_the_drawing_only()
+    {
+        var rig = new Rig();
+        var look = rig.Looks.Resolve(Male, "job.robed")!;
+        static string[] Keys(IEnumerable<DressPart> parts) => parts.Select(p => p.Role + ":" + p.Piece.VisualKey).ToArray();
+
+        Keys(rig.Dress(look, "item.vest", "item.crown")).ShouldBe(["Face:model.face.m1", "Hair:model.hair.m1", "Gear:model.equip.vest", "Gear:model.equip.crown"]);
+        Keys(rig.Dress(look, Wearing(("body", "outfit.cloak")), "item.vest", "item.crown"))
+            .ShouldBe(["Face:model.face.m1", "Hair:model.hair.m1", "Gear:model.equip.crown", "Outfit:model.outfit.coat_m"], "the coat covers the vest; the crown on the head stays");
+        Keys(rig.Dress(look, Wearing(("head", "outfit.wreath")), "item.cap"))
+            .ShouldBe(["Face:model.face.m1", "Hair:model.hair.m1", "Job:model.job.robe", "Outfit:model.outfit.wreath"], "a wreath over the cap: the cap and its hiding of the hair are gone, and the helm of the job too");
+        Keys(rig.Dress(look, Wearing(("head", "outfit.cloak"))))
+            .ShouldBe(["Face:model.face.m1", "Job:model.job.robe", "Outfit:model.outfit.hood"], "the hood hides the hair, and takes the job's helm's place");
+        Keys(rig.Dress(rig.Looks.Resolve(Female, "job.plain"), Wearing(("body", "outfit.cloak"))))
+            .ShouldBe(["Face:model.face.f1", "Hair:model.hair.lost", "Outfit:model.outfit.coat_f"], "each gender its own cut");
+        Keys(rig.Dress(look, Wearing(("body", "outfit.unknown"), ("feet", "outfit.wreath")), "item.vest"))
+            .ShouldBe(["Face:model.face.m1", "Job:model.job.helm", "Gear:model.equip.vest"], "what the bundle cannot draw is left out, and the gear and the job show");
+        rig.Warnings.Count(w => w.Contains("drawing the gear", StringComparison.Ordinal)).ShouldBe(2);
+    }
+
+    [Fact]
+    public void An_outfits_piece_takes_the_colours_it_names_and_is_its_own_mesh()
+    {
+        var rig = new Rig();
+        var look = rig.Looks.Resolve(Male, "job.blue")!;
+        var coat = rig.Dress(look, Wearing(("body", "outfit.cloak"))).Single(p => p.Role == PartRole.Outfit);
+        coat.TakesColors.ShouldBe([AppearanceColorRoles.Cloth]);
+        ShouldBeNear(look.ColorsOf(coat).Apply(Linear("#112233"), default), Linear("#2040c0"), "the coat's own cloth paint takes the job's colour");
+        ShouldBeNear(look.ColorsOf(coat).Apply(Linear(AppearancePaint.Cloth[0]), default), Linear(AppearancePaint.Cloth[0]), "its recolor names its paint, the contract's is left");
+        var wreath = rig.Dress(look, Wearing(("head", "outfit.wreath"))).Single(p => p.Role == PartRole.Outfit);
+        look.ColorsOf(wreath).IsNone.ShouldBeTrue("an outfit that takes no colours keeps its own");
+
+        var plain = WornSet.Key(look.Body.PoolKey, look, rig.Dress(look));
+        var dressed = WornSet.Key(look.Body.PoolKey, look, rig.Dress(look, Wearing(("body", "outfit.cloak"))));
+        dressed.ShouldNotBe(plain);
+        WornSet.Key(look.Body.PoolKey, look, rig.Dress(look, Wearing(("body", "outfit.cloak")))).ShouldBe(dressed, "the same outfit shares the merged mesh");
+        WornSet.Key("b", look, [coat]).ShouldNotBe(WornSet.Key("b", look, [new DressPart(coat.Piece, PartRole.Gear)]), "the same file worn as gear keeps its colours: another mesh");
+    }
+
+    [Fact]
+    public void The_wardrobe_book_holds_the_servers_word_and_its_rows_fit_the_gender()
+    {
+        var book = new Game.Client.Core.Outfits.WardrobeBook(Bundle(Options));
+        var gained = new List<string>();
+        book.Apply(new WardrobeMessage(["outfit.cloak"], [new ShownOutfit("body", "outfit.cloak")], false), gained);
+        gained.ShouldBeEmpty("the first wardrobe of a login is no news");
+        book.Apply(new WardrobeMessage(["outfit.cloak", "outfit.wreath"], [new ShownOutfit("body", "outfit.cloak")], true), gained);
+        gained.ShouldBe(["outfit.wreath"]);
+        (book.Hidden, book.Chosen("body"), book.Chosen("head")).ShouldBe((true, "outfit.cloak", (string?)null));
+        book.Rows("male").Select(r => (r.Slot, string.Join(",", r.Outfits.Select(o => o.Id)), r.Chosen))
+            .ShouldBe([("head", "outfit.cloak,outfit.wreath", (string?)null), ("body", "outfit.cloak", "outfit.cloak")]);
+        book.Rows(null).Select(r => r.Slot).ShouldBe(["head"], "no gender, no coat");
+        var version = book.Version;
+        book.Reset();
+        (book.Known, book.Owned.Count, book.Version > version).ShouldBe((false, 0, true));
     }
 }

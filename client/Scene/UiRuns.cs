@@ -86,6 +86,12 @@ public sealed class UiRuns
         await FramesAsync(3);
         await LayoutMatrixAsync("quest log open");
         quests.ClearSamples();
+        var wardrobe = Hud.Wardrobe!;   // T-708: five slots of the longest names, the switch and the line under them
+        wardrobe.ShowSamples(LongName);
+        await FramesAsync(3);
+        await LayoutMatrixAsync("wardrobe open");
+        Check(Hud.Blocks(wardrobe.HideButton.GetGlobalRect().GetCenter()), "a touch on the wardrobe never reaches the world");
+        wardrobe.ClearSamples();
         Hud.SetScale(scaleBefore, false);
         Hud.ForceRefresh();
         await FramesAsync(3);
