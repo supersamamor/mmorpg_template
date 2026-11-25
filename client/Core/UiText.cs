@@ -153,7 +153,7 @@ public static class UiText
     public const string RepeatPassword = "New password again";
 
     /// <summary>What a password change does besides.</summary>
-    public const string PasswordHelp = "Every other device is signed out, and a game running there ends.";
+    public const string PasswordHelp = "This signs out every other device and ends a game running there.";
 
     /// <summary>The refusal of a password change whose current password is wrong.</summary>
     public const string WrongCurrentPassword = "The current password is wrong.";

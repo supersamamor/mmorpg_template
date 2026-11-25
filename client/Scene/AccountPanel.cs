@@ -255,7 +255,7 @@ public sealed class AccountPanel
         var screen = _samples is null ? flow.Screen : _sampleScreen;
         var characters = _samples ?? flow.Characters;
         _title.Text = screen == AccountScreen.SignIn ? UiText.SignInTitle : screen == AccountScreen.Password ? UiText.PasswordTitle : UiText.CharactersTitle;
-        Set(_notice, UiText.Notice(connection.Notice));
+        Set(_notice, screen == AccountScreen.Password ? string.Empty : UiText.Notice(connection.Notice)); // how the last game ended is said on the screens around it
         if (_samples is null)
             Set(_accountNotice, flow.Busy ? UiText.AccountBusy
                 : screen == AccountScreen.Password && flow.Notice == AccountNotice.Refused && flow.Error == AccountErrors.InvalidCredentials ? UiText.WrongCurrentPassword
