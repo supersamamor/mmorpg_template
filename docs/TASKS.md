@@ -129,6 +129,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | ID | Task | Agent | Model | Prompt | Depends on | Status | Notes |
 |----|------|-------|-------|--------|------------|--------|-------|
 | T-701 | Accounts, login and character slots: EF Core + PostgreSQL base, account endpoints, sessions, sign-in and character-select screens | Claude Code | Opus 5.5 | [T-701](../tasks/prompts/T-701.md) | T-210, T-214, T-704 | Review | Restricted `Net/**` and `Persistence/**`, limited scope approved by owner 2026-11-25 |
+| T-702 | Saving characters: whole state in one versioned transaction, loaded before entering the world, crash-safe items between characters | Claude Code | Opus 5.5 | [T-702](../tasks/prompts/T-702.md) | T-701, T-604 | In Progress | Restricted `Persistence/**` and `Net/**`, limited scope; owner's go-ahead 2026-11-25 |
 | T-704 | Appearance definitions: `appearance.yaml` (gender male/female, skin, faces, hair) + validation | Claude Code | Sonnet 5.5 | [T-704](../tasks/prompts/T-704.md) | T-102, T-209 | Review | Data only, started early; server flow is T-705 |
 
 ## Backlog (prompts written when the previous phase is Done)
@@ -138,7 +139,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
 | T-225 | 2 | AI asset pipeline for forks (after T-224): scripts drive a 3D generation API (Meshy, Tripo or Rodin; key from an environment variable, never committed) from an approved brief, then cleanup in headless Blender, rigging or scripted motion, import through the T-224 tool, and an in-game review loop (scripted runs, screenshots at the game camera next to existing art, ThemeCheck and §9 budgets) that adjusts scale, tint, outline and pose for consistency, retrying within a set credit limit. Art is generated in a fork only | Claude Code | Opus 5.5 | Backlog |
 | T-605 | 6 | Quest autopilot, client: an autopilot toggle per quest in the log (tick several, shown in run order), an on/off indicator and the current action on the HUD, the reason when it pauses, in the `-Run ui` check (needs T-604) | Claude Code | Sonnet 5.5 | Backlog |
-| T-702 | 7 | Persistence (EF Core + Postgres), transactional inventory | Claude Code | Opus 5.5 | Backlog |
 | T-703 | 7 | Store compliance: account deletion, Sign in with Apple, privacy disclosures | Claude Code | Sonnet 5.5 | Backlog |
 | T-705 | 7 | Appearance on the server: checked at creation, stored with the character, sent in snapshots (needs T-701, T-702, T-704) | Claude Code | Sonnet 5.5 | Backlog |
 | T-706 | 7 | Character creation screen with rotating 3D preview (needs T-206, T-207, T-705) | Claude Code | Sonnet 5.5 | Backlog |
