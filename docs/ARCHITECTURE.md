@@ -1190,7 +1190,17 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
 Every player is one surface in every phase, so looks add no draw call (the differences are monsters, drops and effects on screen); 30.0 fps throughout; a face and a hairstyle add about 350 triangles at each level (the
 placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms frame is 38 characters changing gear at once. Not run on a phone (ADR-002 row 112).
 
-**Outfits (T-708, §7.5.2), measured:** see the table filled by the T-708 measuring run below.
+**Outfits (T-708, §7.5.2), measured** on the same machine and the same way as "Looks" (one windowed run off the screen, `--measure 36 --measure-looks --measure-dress <dagger, cap, vest, buckler>`), with a last
+phase that also puts every player in the template's outfits in every slot they have for its gender (head, body and back: they replace the cap and the vest; the dagger and buckler stay):
+
+| Phase | Players in view, different looks | Draw calls avg / peak (on screen) | Triangles peak | Worst frame | Putting it on | Static / video memory |
+|---|---|---|---|---|---|---|
+| Before: job models | 37.9, 0 | 75.0 / 82 (32) | 53.3k | 38.1 ms | 0.49 s | 56.0 / 35.8 MB |
+| All different, dressed (no outfits) | 39.7, 34 | 73.9 / 77 (37) | 73.6k | 43.6 ms | 0.65 s, worst frame 112.6 ms | 59.3 / 49.7 MB |
+| All different, dressed, in outfits | 36.7, 26 | 72.4 / 79 (35) | 96.9k | 48.7 ms | 0.61 s, worst frame 41.8 ms; 43 merges, 90 ms of main thread in all | 58.8 / 52.0 MB |
+
+Every player is one surface in every phase, so outfits add no draw call; 30.0 fps throughout. The placeholder outfits are rounder than the gear they replace (a hood, a long coat, a cape), hence the triangles,
+still well inside 150k. Not run on a phone (ADR-002 row 112).
 
 ## 10. Networking on mobile
 
