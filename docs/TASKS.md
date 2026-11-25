@@ -80,6 +80,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-222 | Storybook toon rendering (ADR-003): toon material, near-only outlines, lighting and haze, toon placeholders | Claude Code | Opus 5.5 | [T-222](../tasks/prompts/T-222.md) | T-403, T-405, T-501, T-502 | Review | Starts when T-502 and T-405 are merged (shared client and themegen files); ADR-003 |
 | T-223 | Quiet test runs: `BannedSymbolsTests` starts `dotnet build` with `CreateNoWindow`, so no Windows Terminal window pops up on the desktop | Lead | Opus 5.5 | — | T-104 | Review | Lead fix on the user's request; ADR-002 #270 |
 | T-224 | Theme kit for forks: theme contract (`docs/THEMES.md`), manifest variants (tint, scale), import tool from a mapping file, fork guide (`docs/FORKING.md`); tested on a generated synthetic pack | Claude Code | Opus 5.5 | [T-224](../tasks/prompts/T-224.md) | T-405, T-222, T-407 | Review | Template keeps the placeholder theme; no downloads |
+| T-226 | Safe process cleanup: the client scripts stop a child process only if it was created after its parent, so a reused process id can never hit an unrelated process | Lead | Opus 5.5 | — | T-221 | Review | Found by T-702; ADR-002 #301 |
 
 ## Phase 3 — Combat loop
 
@@ -123,6 +124,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-602 | Quest state machine on the event bus: objectives, turn-in, atomic rewards, currency balance, quest conditions in dialogue, quest log and tracker, the Warden path | Claude Code | Opus 5.5 | [T-602](../tasks/prompts/T-602.md) | T-601, T-404 | Review | Touches `Net/**` for quest messages and the currency field only (standing approval 2026-11-18); ADR-002 #211, #212, #253 |
 | T-603 | Shop NPC service: buy and sell for currency in one inventory transaction, shops as data, merchant NPC, shop panel | Claude Code | Sonnet 5.5 | [T-603](../tasks/prompts/T-603.md) | T-601, T-602 | Review | Touches `Net/**` for shop intents and the shop message only (standing approval 2026-11-18); ADR-002 #251, #268 |
 | T-604 | Quest autopilot, server: plays a player's ticked quests in sequence (travel, hunt, gather, walk, talk, turn in) through the same intents and rules as manual play | Claude Code | Opus 5.5 | [T-604](../tasks/prompts/T-604.md) | T-502, T-601, T-602, T-701 | Review | Restricted `Net/**`, limited scope approved by owner 2026-11-25 |
+| T-605 | Quest autopilot, client: an autopilot tick per quest in the log, run order, start and stop, an on/off indicator with the current action on the HUD, pause and end reasons | Claude Code | Sonnet 5.5 | [T-605](../tasks/prompts/T-605.md) | T-604 | In Progress | No restricted area |
 
 ## Phase 7 — Persistence & accounts
 
@@ -138,14 +140,13 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 |----|-------|------|-------|-------|--------|
 | T-306 | 3 | Default theme sound pack: music, ambience, combat, UI and event sounds (CC0 libraries, AI audio or a sound designer) | Human / sound designer | — | Backlog |
 | T-225 | 2 | AI asset pipeline for forks (after T-224): scripts drive a 3D generation API (Meshy, Tripo or Rodin; key from an environment variable, never committed) from an approved brief, then cleanup in headless Blender, rigging or scripted motion, import through the T-224 tool, and an in-game review loop (scripted runs, screenshots at the game camera next to existing art, ThemeCheck and §9 budgets) that adjusts scale, tint, outline and pose for consistency, retrying within a set credit limit. Art is generated in a fork only | Claude Code | Opus 5.5 | Backlog |
-| T-605 | 6 | Quest autopilot, client: an autopilot toggle per quest in the log (tick several, shown in run order), an on/off indicator and the current action on the HUD, the reason when it pauses, in the `-Run ui` check (needs T-604) | Claude Code | Sonnet 5.5 | Backlog |
 | T-703 | 7 | Store compliance: account deletion, Sign in with Apple, privacy disclosures | Claude Code | Sonnet 5.5 | Backlog |
 | T-705 | 7 | Appearance on the server: checked at creation, stored with the character, sent in snapshots (needs T-701, T-702, T-704) | Claude Code | Sonnet 5.5 | Backlog |
 | T-706 | 7 | Character creation screen with rotating 3D preview (needs T-206, T-207, T-705) | Claude Code | Sonnet 5.5 | Backlog |
 | T-707 | 7 | Appearance art: 2 genders, skin tones, faces, hairstyles in the chosen art style (art direction: ADR-003, storybook toon) | Human / artist | — | Backlog |
 | T-708 | 7 | Cosmetic wardrobe: outfit slots that change only the look (never stats), outfits as data on the shared `humanoid` rig and T-403 attach points, owned outfits saved with the character, a wardrobe panel to pick what shows, others see it in snapshots; the template ships 1–2 placeholder outfits, forks add their own (needs T-702, T-705) | Claude Code | Opus 5.5 | Backlog |
 | T-709 | 7 | Cosmetics store: Apple and Google in-app purchases with receipts checked on the server (never trusted from the client), grants outfits from T-708 atomically, refunds revoke, store compliance; the template ships the hook and a sandbox setup, no real products or keys (needs T-701, T-702, T-703, T-708; restricted `Net/**` and `Persistence/**`) | Claude Code | Opus 5.5 | Backlog |
-| T-710 | 7 | Account leftovers: password-change endpoint and screen, end the live connection when its session is revoked, a failed `ui` run restores stored preferences, the Ctrl+C test (ADR-002 #289; restricted `Net/**`) | Claude Code | Sonnet 5.5 | Backlog |
+| T-710 | 7 | Account leftovers: password-change endpoint and screen, end the live connection when its session is revoked, a failed `ui` run restores stored preferences, the Ctrl+C test, two flaky tests, the `saving` run in the docs and CI bound, `character_in_use` across servers (ADR-002 #289, #300; restricted `Net/**`) | Claude Code | Sonnet 5.5 | Backlog |
 | T-801 | 8 | Content hot-reload + simple editor | Claude Code | Sonnet 5.5 | Backlog |
 | T-802 | 8 | Mobile build pipeline (Android AAB, iOS on macOS CI, TestFlight / Play internal) | Claude Code | Sonnet 5.5 | Backlog |
 | T-803 | 8 | On-device performance capture vs ARCHITECTURE §9 budgets | Claude Code | Sonnet 5.5 | Backlog |
