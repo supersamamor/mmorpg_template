@@ -4,6 +4,7 @@ using System.Net.WebSockets;
 using Game.Server.Hosting;
 using Game.Server.World;
 using Game.Server.World.Aoi;
+using Game.Server.World.Autopilot;
 using Game.Server.World.Combat;
 using Game.Server.World.Dialogue;
 using Game.Server.World.Effects;
@@ -12,6 +13,7 @@ using Game.Server.World.Quests;
 using Game.Shared.Progression;
 using Game.Shared.Protocol;
 using Game.Shared.Time;
+using Game.Shared.Vocabulary;
 using Game.Shared.World;
 
 namespace Game.Server.Net;
@@ -192,6 +194,9 @@ public sealed class Gateway
             events.Subscribe<QuestAbandoned>(e => Owner(e.Player)?.Post(new QuestMessage(Game.Shared.Vocabulary.QuestChanges.Abandoned, e.QuestId, null)));
             events.Subscribe<QuestRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(e.Intent, e.Reason, null, Quest: e.QuestId)));
             events.Subscribe<QuestMarkersChanged>(e => PostQuests(e.Player));
+            // Autopilot (T-604), owner only: its status when it changes, and a refused start as rejected.
+            events.Subscribe<AutopilotChanged>(e => Owner(e.Player)?.Post(AutopilotStatus(e.Status)));
+            events.Subscribe<AutopilotRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(MessageTypes.StartAutopilot, e.Reason, null, Skill: e.SkillId, Quest: e.QuestId)));
             events.Subscribe<QuestRewarded>(e =>
             {
                 PostExp(e.Player);
@@ -342,6 +347,7 @@ public sealed class Gateway
                     link.Session = session;
                     token = Tokens.Issue(link.Character); // the replaced session's token stops working
                     session.OnResumed(link.Character, link.DisplayName, map, token);
+                    Enqueue(new StopAutopilot(link.Character, AutopilotStops.Disconnected));   // T-604: the new session has not asked for it
                     Enqueue(new AttachView(link.Character, session));
                     Enqueue(new RequestSnapshot(link.Character));
                 }
@@ -428,6 +434,7 @@ public sealed class Gateway
                     // Welcome first, then the view: the AOI snapshots a new sink in the tick that attaches it. Inside the lock so that a drop
                     // (grace: detach) or a warp arrival (re-attach) cannot queue its view change between these.
                     session.OnResumed(id, link.DisplayName, map, token);
+                    Enqueue(new StopAutopilot(id, AutopilotStops.Disconnected));   // T-604: a resume never plays on (a dropped session's run ended with its grace period's start)
                     Enqueue(new AttachView(id, session));
                     Enqueue(new RequestSnapshot(id));
                 }
@@ -515,6 +522,7 @@ public sealed class Gateway
         link.GraceEndsMs = Clock.NowMilliseconds + Options.GracePeriodMs;
         Enqueue(new StopMove(link.Character));
         Enqueue(new StopAttack(link.Character));   // a dropped player does not farm on: stopped means stopped (it can still be attacked)
+        Enqueue(new StopAutopilot(link.Character, AutopilotStops.Disconnected));   // T-604: nothing plays on without its player
         Enqueue(new AttachView(link.Character, null));
         Log.Info($"[net] '{link.DisplayName}' ({link.Character}) waits {Options.GracePeriodMs} ms for a resume.");
     }
@@ -575,6 +583,15 @@ public sealed class Gateway
     {
         if (Progress?.QuestsFor(player) is { } quests) Owner(player)?.Post(quests);
     }
+
+    /// <summary>Tick thread of the player's instance: the status of the character's last autopilot run (T-604), if it has had one.</summary>
+    internal void PostAutopilot(string mapId, EntityId player)
+    {
+        if (Owner(player) is { } session && _world.TryGetInstance(mapId, out var instance) && instance.TryGetEntity(player, out var entity) && entity.Autopilot is { } run)
+            session.Post(AutopilotStatus(run.Status));
+    }
+
+    private static AutopilotMessage AutopilotStatus(AutopilotStatus status) => new(status.Mode, status.QuestId, status.Doing, status.Reason);
 
     /// <summary>Tick thread of the player's instance (the only thread that touches its skills and cooldowns).</summary>
     internal void PostSkills(string mapId, EntityId player)

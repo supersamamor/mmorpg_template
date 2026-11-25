@@ -87,6 +87,36 @@ public sealed class BalanceRule : IValidationRule
             Range(context, "shop.max_buy_quantity", "must be at least 1.");
         StartItems(context, balance.NewCharacter);
         Characters(context, balance.Characters);
+        Autopilot(context, balance);
+    }
+
+    /// <summary>The autopilot's limits and timings are usable, and one walk of a journey fits a path search (T-604).</summary>
+    private static void Autopilot(ValidationContext context, BalanceDef balance)
+    {
+        var a = balance.Autopilot;
+        if (a.MaxQuests < 1)
+            Range(context, "autopilot.max_quests", "must be at least 1.");
+        if (a.MaxSkills < 0)
+            Range(context, "autopilot.max_skills", "must not be negative.");
+        if (a.DailyLimitMinutes < 0 || a.DailyLimitMinutes > 24 * 60)
+            Range(context, "autopilot.daily_limit_minutes", "must be from 0 (no limit) to 1440.");
+        if (a.NoProgressMs <= 0)
+            Range(context, "autopilot.no_progress_ms", "must be above 0.");
+        if (a.DecideIntervalMs <= 0)
+            Range(context, "autopilot.decide_interval_ms", "must be above 0.");
+        if (a.SearchesPerTick < 1)
+            Range(context, "autopilot.searches_per_tick", "must be at least 1.");
+        if (a.LegCells < 1 || (balance.Movement.MaxPathLength > 0 && a.LegCells > balance.Movement.MaxPathLength))
+            Range(context, "autopilot.leg_cells", $"must be from 1 to movement.max_path_length ({balance.Movement.MaxPathLength}).");
+        var sight = Math.Max(0, balance.Aoi.ViewRadius) * Math.Max(0, balance.Aoi.BucketSize);
+        if (a.GatherRange < 0 || (sight > 0 && a.GatherRange > sight))
+            Range(context, "autopilot.gather_range", $"must be from 0 to what every player is sure to see (aoi.view_radius x aoi.bucket_size, {sight}).");
+        if (a.SupportBelowPercent < 0 || a.SupportBelowPercent > 100)
+            Range(context, "autopilot.support_below_percent", "must be from 0 to 100.");
+        if (a.RetaliateMs < 0)
+            Range(context, "autopilot.retaliate_ms", "must not be negative.");
+        if (a.AvoidMs < 0)
+            Range(context, "autopilot.avoid_ms", "must not be negative.");
     }
 
     /// <summary>There is a slot, the name lengths are ordered and fit the database column, and every letter and separator entry can be read.</summary>

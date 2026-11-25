@@ -373,6 +373,41 @@ Dialogue graphs, NPCs and their services are T-601; quests are T-602. The sectio
     (required for `shop`, refused for any other service; checked at load). The shop is data (`content/shops/*.yaml`, `ShopDef`): its stock, each row an item id and an optional own `price`
     (else the item's `buy_price`); §6.8 has the trading rules.
 
+#### 6.4.2 Quest autopilot (T-604)
+`AutopilotSystem` (`Game.Server/World/Autopilot`) plays a player's ticked quests, one after the other: it travels, hunts, gathers, walks, talks and turns in. It runs after the quest system. Numbers:
+`balance.yaml` `autopilot`; terms: VOCABULARY "Autopilot ...". The rules that need no world are pure, in `Game.Shared/Autopilot` (what may start, the next objective, skills, dialogue) and
+`Game.Shared/World` (`DistanceField`, `TravelMap`, `Pathfinder.FindNearest`).
+- **It only decides.** It queues the intents a player would (`MoveTo`, `StopMove`, `AttackTarget`, `StopAttack`, `UseSkill`, `PickUp`, `TalkTo`, `DialogueChoose`, `DialogueClose`) on its instance's
+  queue, and the systems that own them check them as ever: range, cooldown, SP, loot priority, weight, safe zones. It grants, teleports and bypasses nothing, calls no other system (rule 7: events and
+  intents only), draws no randomness, and tells the client nothing of monsters, spawns or routes (rule 11). It aims only at what the player is sure to see (`aoi.view_radius` x `aoi.bucket_size`
+  cells) and walks up to anything farther first.
+- **The run** is on `Entity.Autopilot`, so it follows the character through warps; it is not stored. Each thought (every `decide_interval_ms`, or at once on the event it waits for) starts from
+  what is true now, so a warp, a stolen kill or a vanished item needs no handling of its own. A finished quest moves on to the next of the list, skipping what is no longer active; the list's end is `finished`.
+- **Objectives.** The current step's next unmet one: first what it can play (`kill`, `collect`, `reach`) in list order, then what only the player may do (`level`, `job`, `equip`, `use_item`:
+  it pauses), then `talk`, which is the turn-in.
+- **Hunting.** The nearest living wanted monster by walking distance (one bounded search outwards; not in a safe zone, not one that proved unreachable within `avoid_ms`). `collect` hunts every monster whose drop
+  table has the item. Between fights it fetches ground items an unmet `collect` objective of the step wants, and no others, within `gather_range` and when the loot priority allows. From a safe zone it
+  steps out first. With nothing alive in reach it goes to the nearest spawn area and waits there. **Retaliation:** on a journey, to an item or to an NPC it walks on when attacked; at the
+  hunting ground, between fights, an attacker blocks the plan (it keeps hitting a character that waits or looks for a target), so whatever hit it within `retaliate_ms` is fought first.
+- **Skills** (`AutopilotSkill`): the shortcut slots in slot order; the first one that is learned, allowed with the weapon, off cooldown and affordable (the same rules combat checks, so nothing is sent to be
+  refused) and that has a use; else the auto-attack. Hostile skills with a range go on the target; hostile areas around the user when the target is within the smallest of them; friendly skills on the player
+  only, and only when they would do something (`heal` / `restore_sp` below `support_below_percent`, a status not on yet, something to cleanse). **Ground skills** only when aimed at enemies and every effect is
+  a hostile `area` with `damage` in it, on the target's cell. Never: passive, `teleport`, `summon`, `reset_*`. No consumables at all.
+- **Travel.** "Nearest" is the fewest warps, then the shortest walk. `TravelMap` is built at boot: a distance field (one integer and one byte per cell) for every warp and every place a quest objective needs
+  (NPC, `reach` cell, spawn area), and what is left of each journey after each warp. A route is then array reads, with no search. Fields go around warp cells that are not meant; a journey is
+  walked in legs of at most `leg_cells`, shortened while a shortest walk could cross such a warp, halved when a leg is refused.
+- **Dialogue.** A `talk` counts when it starts, so the dialogue is closed as soon as the quest moved. Otherwise `AutopilotRules.ChooseDialogue` picks, among what is shown, a choice whose actions are all
+  `start_quest` for ticked quests, or one without any action that is about a step of a ticked quest (`quest_step`, or `quest_state` `active`); else a choice (or continue) without actions that leads there over such ones.
+  Any other action (service, effects, save point, items, another quest) is never picked. Nothing safe: it closes the dialogue and pauses.
+- **Ending.** The player's own order ends the run: the gateway queues `ManualInput` just before it. `ManualInput` and `StopAutopilot` are `ICancelsAutomation`: every `Automated` intent of the character drained in
+  the same tick is dropped, whichever came first, so an order queued a moment ago never overrules the player; one that arrives while the character is between maps is kept until it arrived. `stop_autopilot`,
+  death, leaving the world, the end of the connection (or its takeover), a bag without room for what is wanted, the daily limit and dropping the quest end it too; the character stops. A resume or a
+  respawn does not restart it. **The player's order also ends a paused run.** A pause ends by itself when the quest's step or counters move (an `unreachable` one also on another map).
+- **Daily limit.** `daily_limit_minutes` of simulated running time per 24 hours of the server's clock, counted from the first run of that day (the clock has no calendar); pauses are free. In memory with the character (T-702).
+- **Cost** (Release, sample meadow, the system's own share of a tick): one hunting run 5 us on average; 100 hunting runs 0.27 ms; 100 waiting runs 0.02 ms; 100 runs whose every search fails 0.5 ms. All runs of an
+  instance share `searches_per_tick` searches, each within `movement`'s limits; a run whose search failed waits 3 s before the next; what no walk leads to is ruled out without a search.
+- **Limits.** Monsters never block and are never avoided on the way; a monster that moves around all the time is only re-chosen when a fight ends; a `collect` hunts the nearest source, however dangerous; parties are not considered.
+
 ### 6.5 Progression
 Base level + job level, separate EXP tables. Stat points per base level and skill points
 per job level, stat point cost, the stat range and combat clamps come from `balance.yaml`
@@ -1064,6 +1099,8 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   | `shop_buy` | C→S | `item` (a stock item id), `quantity`: buy from the open shop; the price is the server's. Comes back `inventory_changed` (`shop_buy`, with the new `currency`) or `rejected` (`intent` `shop_buy`, `reason` an "Item reasons" term, `item`) (T-603) |
   | `shop_sell` | C→S | `entry` (a carried inventory entry), `quantity`: sell to the open shop at the item's sell price. Comes back `inventory_changed` (`shop_sell`) or `rejected` (`intent` `shop_sell`, `entry`) (T-603) |
   | `abandon_quest` | C→S | `quest`: drop an active quest, its progress is lost; may come back `rejected` (`not_active`, with `quest`) (T-602) |
+  | `start_autopilot` | C→S | `quests` (active quest ids, in the order to play), `skills` (`[["skill.x",level],...]`: the shortcut slots in order; level 0 = the learned one; may be left out). Replaces a run in progress; may come back `rejected` with an "Autopilot reasons" term and the `quest` or `skill` (T-604) |
+  | `stop_autopilot` | C→S | none: switch it off; ignored when it is off (T-604) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
@@ -1082,6 +1119,7 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   | `shop` | S→C (owner) | `npc`, `shop` (the `shop.*` id), `max_quantity`, `stock` (`[{item, price}]`, in display order), `sell` (`[{item, price}]`: what a shop pays per unit for every item it buys). Sent right after `service_opened` for the `shop` service (T-603) |
   | `quest_log` | S→C (owner) | `active` (`[{quest, step, objectives:[{type, target?, have, need}], held?}]`, by id; `step` indexes the bundle's step texts), `completed` (quest ids), `offer`, `turn_in` (NPC ids for the markers). After every snapshot and whenever the markers change; it replaces what the client had (T-602) |
   | `quest` | S→C (owner) | `change` (a "Quest changes" term), `quest`, `state` (the quest as it is now, the shape of an `active` entry; absent for `completed` and `abandoned`) (T-602) |
+  | `autopilot` | S→C (owner) | `mode` (an "Autopilot modes" term), `quest` (while running or paused), `doing` (an "Autopilot activities" term, while running), `reason` (why it paused or ended). On change only, and once after the first snapshot of a connection that took over a character that has had a run. Never anything about monsters, spawns or routes (T-604) |
   | `skills` | S→C (owner) | `job`, `points` (unspent), `levels` (`[["skill.x",2],...]`), `cooldowns` (`[["skill.x",ms left],...]`), `jobs` (the jobs `change_job` would accept now). After every snapshot, a learn, a job change and a level (T-502) |
   | `stats` | S→C (owner) | `points` (unspent stat points), `stats` (`[["str",3,2],...]`: stat id, base value, the cost of its next +1, 0 at the maximum), `derived` (`[["atk",12],...]`: `DerivedStats.Panel`, floored from the sheet). After every snapshot, a raise, a stat reset, a level, a job change, a learned skill, a skill reset and a gear change (T-503). The client never computes a cost or a derived value |
   | `cooldown` | S→C (owner) | `skill`, `ms`: the skill went on cooldown when its cast ended (T-502) |
@@ -1102,7 +1140,8 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
      queues `welcome`. The AOI then sends the first `snapshot` in phase 5 of that tick, and deltas follow.
   4. `move`/`stop`/`attack`/`stop_attack`/`respawn` and the item intents are parsed and checked on the socket thread (shape; a cell inside the current map; an
      attack target the client currently sees, not itself, a monster) and queued as `MoveTo`/`StopMove`+`StopAttack`/`AttackTarget`/
-     `StopAttack`/`Respawn` wherever the character is now. When the connection drops, the grace period stops both walking and attacking. Warps are followed through the world's entity directory. Each session has a token-bucket rate
+     `StopAttack`/`Respawn` wherever the character is now. When the connection drops, the grace period stops walking, attacking and the autopilot.
+     Before a move, stop, attack, skill, item, dialogue, shop or respawn message's own intent goes `ManualInput`, which ends an autopilot run (§6.4.2); `ping`, `learn_skill`, `raise_stat`, `change_job` and `abandon_quest` do not. Warps are followed through the world's entity directory. Each session has a token-bucket rate
      limit: messages over it are dropped and counted, and sustained flooding ends in `bye rate_limit`.
   5. Malformed JSON, an unknown type, an oversize message, a wrong version, a message before `hello`, or silence longer than
      `idle-timeout-ms` all end in `bye <reason>` and the close frame.

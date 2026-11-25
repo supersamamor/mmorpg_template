@@ -153,6 +153,11 @@ public sealed class Entity
     /// <summary>The NPC entity the open service belongs to (T-603), or null. The shop checks the player is still within talking range of it.</summary>
     public EntityId? OpenServiceNpc { get; set; }
 
+    /// <summary>
+    /// A player's last quest autopilot run (T-604), or null before its first. Kept by the autopilot system; it travels with the entity across warps, like <see cref="Vitals"/>.
+    /// </summary>
+    public Autopilot.AutopilotRun? Autopilot { get; set; }
+
     /// <summary>A player's skill cooldowns (T-502), kept by combat; null for everything else.</summary>
     public Game.Shared.Skills.SkillCooldowns? Cooldowns { get; set; }
 

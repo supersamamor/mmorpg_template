@@ -212,6 +212,32 @@ The `change` of a `quest` message (T-602): `accepted`, `progress` (a counter mov
 What the client shows over an NPC for the player (T-602; in `quest_log` `offer` and `turn_in`): `offer` (the NPC gives a quest that is `available`), `turn_in`
 (talking to it would complete the current step of an active quest: every other objective of the step is met).
 
+## Autopilot
+The quest autopilot (T-604, ARCHITECTURE §6.4.2) plays a player's ticked quests on the server. **Run**: one list of quests, from its start until it ends.
+
+## Autopilot modes
+The `mode` of an `autopilot` message: `running`, `paused` (it waits; it goes on by itself when the quest moves), `off` (the run is over).
+
+## Autopilot activities
+The `doing` of an `autopilot` message while `running`: `travelling` (to a hunting ground, an NPC, a cell or a warp), `hunting` (after a monster, or fighting it), `gathering` (picking a
+wanted item up), `talking` (with the NPC, or turning the step in), `waiting` (at the hunting ground, nothing left to hunt until it respawns).
+
+## Autopilot reasons
+Why a `start_autopilot` was refused, in `AutopilotRefused` and on the wire as `rejected` (`intent` `start_autopilot`, with the `quest` or `skill` it is about). Nothing changed: a run in
+progress goes on. Checked in this order: `disabled` (`autopilot.enabled` is false), `dead`, `time_limit` (today's `autopilot.daily_limit_minutes` are used up), `empty_queue`, `too_many_quests`
+(`autopilot.max_quests`), `unknown_quest`, `duplicate_quest`, `not_active` (the character does not have it), `too_many_skills` (`autopilot.max_skills`), `unknown_skill`, `not_learned`,
+`passive_skill`, `level_too_high` (above the learned level).
+
+## Autopilot pauses
+The `reason` of an `autopilot` message with `mode` `paused`: `needs_level`, `needs_job`, `needs_equip`, `needs_item_use` (only the player may do what is left of the step), `no_source` (nothing
+placed on any map gives what the objective wants), `unreachable` (no way there, warps included), `no_progress` (nothing got done for `autopilot.no_progress_ms`), `no_safe_choice` (the NPC's
+dialogue offers nothing the autopilot may pick).
+
+## Autopilot stops
+The `reason` of an `autopilot` message with `mode` `off`: `finished` (every quest of the list is done), `stopped` (`stop_autopilot`), `manual_input` (the player's own order), `died`, `logout` (the
+character left the world), `disconnected` (the connection ended, or another took the character over), `bag_full` (a wanted item or a turn-in does not fit, or the load is too heavy to fight),
+`time_limit`, `quest_abandoned` (the player dropped the quest it was playing).
+
 ## Dialogue condition types
 The `type` of a choice's `conditions` entry (T-601); a choice is shown only when every condition holds (ARCHITECTURE §6.4).
 `base_level` (`min`, `max`: either may be left out), `job_level` (`min`, `max`), `job_is` (`job_id`), `job_is_not` (`job_id`), `has_item` (`item_id`, `quantity`, default 1; the bag, worn pieces excluded),
@@ -247,7 +273,8 @@ Any reason other than `finished` ends the services the dialogue opened too.
 `SkillCastStarted`, `SkillRequested`, `SkillUsed`, `SkillRefused`, `SkillCastEnded`, `SkillCooldownStarted`, `SkillLearnRefused`, `JobChangeRefused`,
 `StatRaised`, `StatRaiseRefused`, `StatsReset`, `SkillsReset`,
 `DialogueShown`, `DialogueEnded`, `DialogueRefused`, `ServiceOpened`, `ShopOpened`, `QuestStartRequested`, `SavePointSet`, `DialogueEffectsRequested`, `DialogueItemsRequested`, `DialogueItemsResolved`,
-`QuestProgressed`, `QuestAbandoned`, `QuestRefused`, `QuestItemsRequested`, `QuestItemsResolved`, `QuestRewardsRequested`, `QuestRewarded`, `QuestMarkersChanged`
+`QuestProgressed`, `QuestAbandoned`, `QuestRefused`, `QuestItemsRequested`, `QuestItemsResolved`, `QuestRewardsRequested`, `QuestRewarded`, `QuestMarkersChanged`,
+`AutopilotChanged`, `AutopilotRefused`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -347,9 +374,9 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `pong`, `bye`
-Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`.
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `pong`, `bye`
+Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,

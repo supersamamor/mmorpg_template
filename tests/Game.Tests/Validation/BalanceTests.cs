@@ -93,6 +93,11 @@ public class BalanceTests : IDisposable
         balance.Loot.PriorityMs.ShouldBe(3000);
         balance.Loot.LifetimeMs.ShouldBe(60000);
         balance.Loot.SpreadRadius.ShouldBe(1);
+        balance.Autopilot.ShouldBe(new Game.Shared.Definitions.AutopilotBalanceDef
+        {
+            Enabled = true, MaxQuests = 10, MaxSkills = 12, DailyLimitMinutes = 0, NoProgressMs = 120000, DecideIntervalMs = 300, SearchesPerTick = 4, LegCells = 24, GatherRange = 12,
+            SupportBelowPercent = 60, RetaliateMs = 3000, AvoidMs = 10000,
+        });
 
         var points = Formula.Compile(balance.Progression.StatPointsPerBaseLevel, FormulaSymbols.BaseLevelOnly);
         var ctx = new FormulaContext(FormulaSymbols.BaseLevelOnly);
@@ -125,6 +130,29 @@ public class BalanceTests : IDisposable
         var c = load.Database!.Balance.Combat;
         load.Database.Formulas.HitChance.ShouldContain($"{c.MinHitChance}, {c.MaxHitChance}");
         load.Database.Formulas.CritChance.ShouldContain($"{c.MinCritChance}, {c.MaxCritChance}");
+    }
+
+    [Theory]
+    [InlineData("max_quests: 10", "max_quests: 0", "autopilot.max_quests")]
+    [InlineData("max_skills: 12", "max_skills: -1", "autopilot.max_skills")]
+    [InlineData("daily_limit_minutes: 0", "daily_limit_minutes: -1", "autopilot.daily_limit_minutes")]
+    [InlineData("daily_limit_minutes: 0", "daily_limit_minutes: 1441", "autopilot.daily_limit_minutes")]
+    [InlineData("no_progress_ms: 120000", "no_progress_ms: 0", "autopilot.no_progress_ms")]
+    [InlineData("decide_interval_ms: 300", "decide_interval_ms: 0", "autopilot.decide_interval_ms")]
+    [InlineData("searches_per_tick: 4", "searches_per_tick: 0", "autopilot.searches_per_tick")]
+    [InlineData("leg_cells: 24", "leg_cells: 0", "autopilot.leg_cells")]
+    [InlineData("leg_cells: 24", "leg_cells: 65", "autopilot.leg_cells")]
+    [InlineData("gather_range: 12", "gather_range: -1", "autopilot.gather_range")]
+    [InlineData("gather_range: 12", "gather_range: 13", "autopilot.gather_range")]
+    [InlineData("support_below_percent: 60", "support_below_percent: 101", "autopilot.support_below_percent")]
+    [InlineData("retaliate_ms: 3000", "retaliate_ms: -1", "autopilot.retaliate_ms")]
+    [InlineData("avoid_ms: 10000", "avoid_ms: -1", "autopilot.avoid_ms")]
+    public void Autopilot_numbers_out_of_range_are_errors(string from, string to, string path)
+    {
+        Edit(from, to);
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);
+        (issue.File, issue.Path).ShouldBe(("balance.yaml", path));
+        issue.Line.ShouldBeGreaterThan(0);
     }
 
     [Fact]

@@ -158,6 +158,24 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.AbandonQuest;
     }
 
+    /// <summary>
+    /// <c>start_autopilot</c> (T-604): the server plays the active quests <see cref="Quests"/>, in this order, casting <see cref="Skills"/> (the shortcut slots, in slot order) as their
+    /// rules allow. Replaces a run in progress. May come back <see cref="RejectedMessage"/> with an "Autopilot reasons" term and the <c>quest</c> or <c>skill</c> it is about.
+    /// <c>{"type":"start_autopilot","quests":["quest.first_hunt"],"skills":[["skill.twin_strike",2]]}</c>.
+    /// </summary>
+    public sealed record StartAutopilotMessage(IReadOnlyList<string> Quests, IReadOnlyList<SkillLevelRecord> Skills) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.StartAutopilot;
+    }
+
+    /// <summary><c>stop_autopilot</c> (T-604): switch the autopilot off; the character stops where it is. Ignored when it is off. <c>{"type":"stop_autopilot"}</c>.</summary>
+    public sealed record StopAutopilotMessage : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.StopAutopilot;
+    }
+
     /// <summary><c>stop_attack</c>: stop auto-attacking (a walk goes on). <c>{"type":"stop_attack"}</c>.</summary>
     public sealed record StopAttackMessage : ClientMessage
     {
@@ -480,11 +498,26 @@ namespace Game.Shared.Protocol
     /// <param name="Stat">The primary stat of a refused <c>raise_stat</c> (reason: a "Stat reasons" term), if any.</param>
     /// <param name="Quest">The quest of a refused start (<c>intent</c> <c>dialogue_choice</c>, the choice that asked for it) or <c>abandon_quest</c> (reason: a "Quest reasons" term), if any (T-602).</param>
     /// <param name="Item">The item of a refused <c>shop_buy</c> (T-603), if any.</param>
+    /// <remarks>A refused <c>start_autopilot</c> (T-604) has an "Autopilot reasons" term, with the <c>Quest</c> or <c>Skill</c> it is about.</remarks>
     public sealed record RejectedMessage(string Intent, string Reason, GridCell? Cell, long? Target = null, long? Entry = null, string? Slot = null, string? Skill = null, string? Stat = null,
         string? Quest = null, string? Item = null) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Rejected;
+    }
+
+    /// <summary>
+    /// <c>autopilot</c> (T-604, owner only): sent when any of it changes, and once after the first snapshot of a connection that takes over a character that has had a run.
+    /// <c>{"type":"autopilot","mode":"running","quest":"quest.first_hunt","doing":"hunting"}</c>, <c>{"type":"autopilot","mode":"off","reason":"finished"}</c>.
+    /// </summary>
+    /// <param name="Mode">An "Autopilot modes" term.</param>
+    /// <param name="Quest">The quest it plays, while running or paused.</param>
+    /// <param name="Doing">An "Autopilot activities" term, while running.</param>
+    /// <param name="Reason">An "Autopilot pauses" term while paused, an "Autopilot stops" term when off.</param>
+    public sealed record AutopilotMessage(string Mode, string? Quest, string? Doing, string? Reason) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Autopilot;
     }
 
     /// <summary>

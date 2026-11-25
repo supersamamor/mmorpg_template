@@ -55,6 +55,19 @@ namespace Game.Shared.Skills
             return false;
         }
 
+        /// <summary>
+        /// What casting a skill costs in SP: its <c>sp_cost</c> formula at <paramref name="level"/> with the caster's numbers, floored, never below 0. The one rule combat charges by
+        /// and the autopilot (T-604) looks ahead with. <paramref name="scratch"/> is overwritten.
+        /// </summary>
+        public static int SpCost(StatSheet caster, Formula cost, int level, FormulaContext scratch)
+        {
+            if (caster == null) throw new ArgumentNullException(nameof(caster));
+            scratch.Clear();
+            caster.WriteTo(scratch);
+            scratch[FormulaSymbols.Default.SlotOf(FormulaVariables.SkillLevel)] = level;
+            return (int)Math.Max(0, Math.Min(Math.Floor(cost.Evaluate(scratch) + 1e-9), int.MaxValue));
+        }
+
         /// <summary>The modifier source of a passive skill: <c>skill:&lt;id&gt;</c>.</summary>
         public static string PassiveSource(string skillId) => "skill:" + skillId;
 

@@ -50,6 +50,12 @@ public class ProtocolJsonTests
         { "abandon_quest", new AbandonQuestMessage("quest.first_hunt"), """{"type":"abandon_quest","quest":"quest.first_hunt"}""" },
         { "shop_buy", new ShopBuyMessage("item.healing_draught", 5), """{"type":"shop_buy","item":"item.healing_draught","quantity":5}""" },
         { "shop_sell", new ShopSellMessage(12, 3), """{"type":"shop_sell","entry":12,"quantity":3}""" },
+        {
+            "start_autopilot", new StartAutopilotMessage(["quest.first_hunt", "quest.gear_up"], [new SkillLevelRecord("skill.twin_strike", 2), new SkillLevelRecord("skill.second_wind", 1)]),
+            """{"type":"start_autopilot","quests":["quest.first_hunt","quest.gear_up"],"skills":[["skill.twin_strike",2],["skill.second_wind",1]]}"""
+        },
+        { "start_autopilot without skills", new StartAutopilotMessage(["quest.first_hunt"], []), """{"type":"start_autopilot","quests":["quest.first_hunt"],"skills":[]}""" },
+        { "stop_autopilot", new StopAutopilotMessage(), """{"type":"stop_autopilot"}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -98,6 +104,12 @@ public class ProtocolJsonTests
             """[[42,7,13,"crit"],[7,42,0,"miss"]],"vitals":{"hp":38,"max_hp":50,"sp":9,"max_sp":11}}"""
         },
         { "delta, only hits", new DeltaMessage(6, [], [], [], [new HitRecord(3, 4, 5, "hit")]), """{"type":"delta","tick":6,"hits":[[3,4,5,"hit"]]}""" },
+        {
+            "autopilot running", new AutopilotMessage("running", "quest.first_hunt", "hunting", null),
+            """{"type":"autopilot","mode":"running","quest":"quest.first_hunt","doing":"hunting"}"""
+        },
+        { "autopilot paused", new AutopilotMessage("paused", "quest.gear_up", null, "needs_equip"), """{"type":"autopilot","mode":"paused","quest":"quest.gear_up","reason":"needs_equip"}""" },
+        { "autopilot off", new AutopilotMessage("off", null, null, "finished"), """{"type":"autopilot","mode":"off","reason":"finished"}""" },
         { "rejected", new RejectedMessage("move", "no_path", new GridCell(30, 2)), """{"type":"rejected","intent":"move","reason":"no_path","cell":[30,2]}""" },
         {
             "rejected attack", new RejectedMessage("attack", "target_gone", null, 99),
@@ -253,7 +265,8 @@ public class ProtocolJsonTests
         Encoding.UTF8.GetString(ProtocolJson.ToBytes(message)).ShouldBe(json, what);
         var read = ProtocolJson.ReadClient(Encoding.UTF8.GetBytes(json));
         read.Error.ShouldBeNull(what);
-        read.Message.ShouldBe(message, what);
+        read.Message!.GetType().ShouldBe(message.GetType(), what);
+        Encoding.UTF8.GetString(ProtocolJson.ToBytes(read.Message!)).ShouldBe(json, what); // records may hold lists, so compare re-encoded
     }
 
     [Theory]
@@ -311,6 +324,14 @@ public class ProtocolJsonTests
     [InlineData("""{"type":"shop_sell","entry":12}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"shop_sell","quantity":1}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"refine","entry":1.5}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"start_autopilot"}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"start_autopilot","quests":"quest.first_hunt"}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"start_autopilot","quests":[7]}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"start_autopilot","quests":["quest.a"],"skills":[["skill.a"]]}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"start_autopilot","quests":["quest.a"],"skills":[["skill.a",1.5]]}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"start_autopilot","quests":["quest.a"],"skills":[["skill.a",99999999999]]}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"start_autopilot","quests":["quest.a"],"skills":["skill.a"]}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"autopilot","mode":"off"}""", ByeReasons.UnknownType)]
     [InlineData("""{"type":"refine_result","entry":1,"item":"item.x","result":"success","refine":1}""", ByeReasons.UnknownType)]
     public void Bad_client_messages_name_their_reason(string json, string reason)
     {
@@ -324,6 +345,30 @@ public class ProtocolJsonTests
     {
         ProtocolJson.ReadClient("""{"name":"Ada","extra":{"a":[1,2]},"version":1,"type":"hello"}"""u8).Message
             .ShouldBe(new HelloMessage(1, "Ada"));
+    }
+
+    public static TheoryData<string> ClientTypes => [.. MessageTypes.ClientToServer];
+
+    [Theory]
+    [MemberData(nameof(ClientTypes))]
+    public void The_autopilots_lists_are_unknown_fields_in_every_other_message(string type)
+    {
+        if (type == MessageTypes.StartAutopilot) return;
+        foreach (var (_, message, json) in ClientGolden.Select(r => ((string)r[0], (ClientMessage)r[1], (string)r[2])).Where(g => g.Item2.Type == type))
+            foreach (var extra in new[] { "\"quests\":7", "\"quests\":[7]", "\"skills\":\"x\"", "\"skills\":[[\"a\",1.5]]", "\"skills\":[[\"a\",99999999999]]" })
+            {
+                var read = ProtocolJson.ReadClient(Encoding.UTF8.GetBytes(json[..^1] + "," + extra + "}"));
+                read.Error.ShouldBeNull(type + " with " + extra);
+                Encoding.UTF8.GetString(ProtocolJson.ToBytes(read.Message!)).ShouldBe(json);
+            }
+    }
+
+    [Fact]
+    public void Start_autopilot_is_read_in_any_field_order()
+    {
+        var read = ProtocolJson.ReadClient("""{"skills":[["skill.a",1]],"extra":[],"quests":["quest.a"],"type":"start_autopilot"}"""u8).Message.ShouldBeOfType<StartAutopilotMessage>();
+        read.Quests.ShouldBe(["quest.a"]);
+        read.Skills.ShouldBe([new SkillLevelRecord("skill.a", 1)]);
     }
 
     [Fact]

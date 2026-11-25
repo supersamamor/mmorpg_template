@@ -18,6 +18,25 @@ public interface IDeadEntityIntent : IIntent
 {
 }
 
+/// <summary>
+/// An intent that takes an entity out of the hands of whatever plays it on the server (T-604): the player's own input, or a stop. Every <see cref="Automated"/> intent of the
+/// entity drained in the same tick is dropped, whichever came first, so an order the server queued a moment ago never overrules the player's. One that arrives while the entity is
+/// between maps is kept for the tick after it arrived instead of being dropped.
+/// </summary>
+public interface ICancelsAutomation : IIntent
+{
+}
+
+/// <summary>
+/// An intent the server queued on a player's behalf (T-604, the autopilot). It is routed and checked exactly as <c>Intent</c> itself; the wrapper only says whose idea it was
+/// (<see cref="ICancelsAutomation"/>).
+/// </summary>
+public sealed record Automated(IIntent Intent) : IIntent
+{
+    /// <inheritdoc />
+    public EntityId Entity => Intent.Entity;
+}
+
 /// <summary>Outcome of offering an intent to the world or an instance.</summary>
 public enum EnqueueResult
 {
