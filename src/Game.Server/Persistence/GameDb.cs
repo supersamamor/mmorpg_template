@@ -31,6 +31,9 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
     /// <summary>Live sign-ins.</summary>
     public DbSet<SessionRow> Sessions => Set<SessionRow>();
 
+    /// <summary>The longest appearance id a column holds (T-705); ids are checked against the content before they are stored.</summary>
+    public const int AppearanceIdLength = 128;
+
     /// <summary>Characters, deleted ones included.</summary>
     public DbSet<CharacterRow> Characters => Set<CharacterRow>();
 
@@ -78,6 +81,11 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
             e.Property(c => c.Name).HasColumnName("name").HasMaxLength(CharacterNameRules.LongestAllowed);
             e.Property(c => c.NameKey).HasColumnName("name_key").HasMaxLength(CharacterNameRules.LongestAllowed);
             e.Property(c => c.JobId).HasColumnName("job_id").HasMaxLength(128);
+            e.Property(c => c.Gender).HasColumnName("gender").HasMaxLength(AppearanceIdLength);
+            e.Property(c => c.SkinToneId).HasColumnName("skin_tone_id").HasMaxLength(AppearanceIdLength);
+            e.Property(c => c.FaceId).HasColumnName("face_id").HasMaxLength(AppearanceIdLength);
+            e.Property(c => c.HairstyleId).HasColumnName("hairstyle_id").HasMaxLength(AppearanceIdLength);
+            e.Property(c => c.HairColorId).HasColumnName("hair_color_id").HasMaxLength(AppearanceIdLength);
             e.Property(c => c.CreatedAt).HasColumnName("created_at");
             e.Property(c => c.DeletedAt).HasColumnName("deleted_at");
             e.HasIndex(c => c.NameKey).IsUnique().HasDatabaseName(CharacterNameIndex);

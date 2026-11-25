@@ -843,6 +843,26 @@ Chosen once at character creation; **cosmetic only** (never changes stats or rul
 - **Network:** appearance is a few ids in the view record of a **snapshot / appeared** entry; deltas never repeat it.
 - **Client:** the creation screen shows a rotating 3D preview of the choices.
 
+**On the server** (T-705). The ids are `AppearanceRecord { gender, skin, face, hair, hair_color }` (`Game.Shared`).
+- **Creation:** `POST /account/characters` takes an optional `"appearance":{"gender":..,"skin":..,"face":..,"hair":..,"hair_color":..}`; every part is optional. `AppearanceRules.Choose` checks each id against
+  `appearance.yaml` (the face and hairstyle must belong to the chosen gender; an id of the wrong palette is unknown) and answers a bad one with `invalid_appearance`; nothing is created then, and no name is taken.
+  A part left out is the default of the gender chosen. **A request without a gender gets the first term of `Genders` (`male`)**: the vocabulary is code, its order is fixed, and every `appearance.yaml` must offer every
+  term, so that gender's own defaults always exist; a content id would make the default depend on the file's key order. An appearance of the wrong type, a repeated or unknown field in it is `invalid_request`.
+- **Storage:** five nullable id columns on `characters` (`gender`, `skin_tone_id`, `face_id`, `hairstyle_id`, `hair_color_id`), written in the creation's own transaction. Ids only: no content in the migration.
+  A NULL part means "the content's default": characters that existed before T-705 have all five NULL and show the defaults of the content of the day; a load never writes anything back.
+- **Content changes:** at login and in the list, `AppearanceRules.Resolve` shows the default for any stored id the file no longer offers (a removed gender: the default gender and its defaults; a face or hairstyle the
+  gender lacks: the gender's default), and logs one warning per character and server run. The row keeps the old id, so putting the option back restores the look.
+- **In the world:** `Entity.Appearance` is set once in the spawn initializer (`Gateway.SpawnCharacter`) from the login (`LoginResult.Appearance`; the dev login and a login without a character get
+  `NewCharacters.Appearance`, the defaults), is never reassigned, follows warps (the entity object moves) and is read by nothing but the AOI: cosmetic only. A resume keeps the entity, so the looks too.
+- **Wire:** an `EntityRecord` of a snapshot or an `appeared` entry for a player has `"appearance":{"gender":"female","skin":"skin.deep","face":"face.female_sly","hair":"hair.female_curls","hair_color":"haircolor.ember"}`
+  (about 135 bytes of JSON a player; about 5 after deflate, as the ids repeat). No `ViewFields` flag exists for it and `changed` records never carry it, so a delta cannot repeat it. At the AOI cap of 50 visible
+  entities a snapshot of all players grows by at most about 6.7 KB uncompressed, once. If it ever matters, an index into the bundle's lists (5 small numbers, about 20 bytes) is possible because the client checks
+  the bundle's content hash in `hello`; the ids stay until measured on a phone. `GET /account/characters` has the same object per character, so a select screen can draw it.
+- **Client** (`client/Core`): `EntityView.Appearance` (set at `Reset`), `CharacterRecord.Appearance`, and `AccountApi.Write(CreateCharacterRequest)` write and read the ids as they are. Nothing is drawn yet (T-706); an id the
+  bundle does not have is kept as a string and must be ignored (drawn as the default) by whoever draws it.
+- **Room for outfits (T-708):** an outfit is *worn* cosmetic state that changes, so it must not share fields with the fixed appearance. It travels beside it as its own record field (`"outfit":{"<slot>":"outfit.x",..}`),
+  with its own `ViewFields.Outfit` flag so a change record sends it only when it changes, and is saved in its own table or columns. `appearance` stays exactly as is; a client that does not know `outfit` ignores it.
+
 ### 7.6 Animation
 Animation ids (VOCABULARY) are shared by every model on the same rig. Server events
 (`attack`, `cast`, `hit`, `die`) map to animation ids. The client may delay a damage number to
@@ -1098,7 +1118,8 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   event on the server only (`SkillCastStarted`); cast bars are T-502.
 - **Snapshot / delta shape** (T-204, T-307, T-401): a view record is `id, kind, display_key, cell, facing, next, speed, hp, dead` (`next` and
   `speed` only while walking, `hp` only for entities that fight, `dead` only when true; a ground item adds `quantity` and `mine`; a player adds `weapon`, its
-  weapon type, and `worn`, the item ids it wears that have a worn visual, left out when empty: the client finds the visuals in its bundle for T-403, and never gets stats); a delta is
+  weapon type, and `worn`, the item ids it wears that have a worn visual, left out when empty: the client finds the visuals in its bundle for T-403, and never gets stats; and, in a snapshot or an `appeared` entry only,
+  `appearance`, its looks as ids, T-705); a delta is
   `appeared` (records), `changed` (id + changed fields only), `disappeared` (ids), each ordered by entity id, plus `hits` and `vitals`.
   A walker produces one change per cell reached, not per tick; the client interpolates from `cell` to `next`.
 - **Combat on the wire** (T-307). Others' HP is a fraction rounded to 0.01 (`hp`), sent only when that rounded value changes, so exact HP
@@ -1248,8 +1269,8 @@ and the client's `--measure 40 --fight` (crowd numbers vary with how many bots s
   | `POST /account/register` | `username`, `password` | 201 `token`, `expires_in` (seconds): registered and signed in |
   | `POST /account/login` | `username`, `password` | 200 `token`, `expires_in` |
   | `POST /account/logout` | token | 204; the session has ended |
-  | `GET /account/characters` | token | 200 `slots`, `name_min`, `name_max`, `characters` (`[{id, slot, name, job}]`, by slot) |
-  | `POST /account/characters` | token, `name` | 201 `id`, `slot`, `name`, `job` (the lowest free slot; appearance is T-705) |
+  | `GET /account/characters` | token | 200 `slots`, `name_min`, `name_max`, `characters` (`[{id, slot, name, job, appearance}]`, by slot) |
+  | `POST /account/characters` | token, `name`, optional `appearance` (§7.5.1) | 201 `id`, `slot`, `name`, `job`, `appearance` (the lowest free slot); 400 `invalid_appearance` |
   | `DELETE /account/characters/{id}` | token | 204 (a soft delete: the row and its name stay); `character_in_use` while it is in the world |
 
   Status: 400 invalid, 401 `invalid_credentials` / `invalid_session`, 404 `unknown_character`, 409 taken / full / in use, 429 `rate_limited`, 503 `unavailable`.

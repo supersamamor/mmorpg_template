@@ -27,6 +27,9 @@ namespace Game.Shared.Vocabulary
         /// <summary>The character name does not follow the rules of <c>balance.yaml</c> <c>characters</c>.</summary>
         public const string InvalidName = "invalid_name";
 
+        /// <summary>An appearance id is unknown, or a face or hairstyle is not one of the chosen gender's (T-705).</summary>
+        public const string InvalidAppearance = "invalid_appearance";
+
         /// <summary>Another character has this name (whatever its letter case).</summary>
         public const string NameTaken = "name_taken";
 
@@ -44,7 +47,7 @@ namespace Game.Shared.Vocabulary
 
         /// <summary>Every account error.</summary>
         public static readonly VocabularySet All = new VocabularySet(
-            InvalidRequest, InvalidUsername, InvalidPassword, UsernameTaken, InvalidCredentials, InvalidSession, RateLimited, InvalidName, NameTaken,
+            InvalidRequest, InvalidUsername, InvalidPassword, UsernameTaken, InvalidCredentials, InvalidSession, RateLimited, InvalidName, InvalidAppearance, NameTaken,
             NoFreeSlot, UnknownCharacter, CharacterInUse, Unavailable);
     }
 }

@@ -132,7 +132,7 @@ public sealed class ViewMessageWriter
 
     private void Record(in EntityView v, EntityId observer, long tick) =>
         ProtocolJson.WriteRecord(_writer, v.Id.Value, KindTerm(v.Kind), v.DisplayKey, v.Cell, v.Facing, v.Next, v.Speed, HpFraction(v), v.Dead, v.Quantity,
-            Mine(v, observer), v.Look?.WeaponType, v.Look?.Worn, Statuses(v, tick));
+            Mine(v, observer), v.Look?.WeaponType, v.Look?.Worn, Statuses(v, tick), v.Appearance);
 
     /// <summary>
     /// The view's statuses as wire records (T-501), with the time each has left at <paramref name="tick"/>; the list is reused, so it is only valid

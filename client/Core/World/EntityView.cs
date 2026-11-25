@@ -63,6 +63,12 @@ public sealed class EntityView
     /// <summary>A player: the item ids it wears that have a worn visual (look each one up in the bundle); empty for none and for other kinds.</summary>
     public IReadOnlyList<string> Worn { get; private set; } = Array.Empty<string>();
 
+    /// <summary>
+    /// A player: its looks as ids (T-705), from the snapshot or appeared entry that introduced it; fixed until it leaves view (a change never carries it). Null for every other kind. Nothing
+    /// draws it yet (T-706); an id the bundle does not have is kept as it is and must be ignored by whoever draws it.
+    /// </summary>
+    public AppearanceRecord? Appearance { get; private set; }
+
     /// <summary>Counts changes to <see cref="Weapon"/> and <see cref="Worn"/>, so a visual re-dresses only when they changed (T-403).</summary>
     public int LookVersion { get; private set; }
 
@@ -129,6 +135,7 @@ public sealed class EntityView
         Mine = record.Mine ?? false;
         Weapon = record.Weapon;
         Worn = record.Worn ?? Array.Empty<string>();
+        Appearance = record.Appearance;
         LookVersion++;
         StartedStatuses.Clear();
         SetStatuses(record.Statuses, now, announce: false);

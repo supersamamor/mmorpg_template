@@ -95,7 +95,18 @@ public static class AccountJson
     });
 
     /// <summary>The body of a character creation.</summary>
-    public static byte[] Write(CreateCharacterRequest request) => Object(w => w.WriteString("name", request.Name));
+    public static byte[] Write(CreateCharacterRequest request) => Object(w =>
+    {
+        w.WriteString("name", request.Name);
+        if (request.Appearance is not { } choice) return;
+        w.WriteStartObject("appearance");
+        if (choice.Gender is not null) w.WriteString("gender", choice.Gender);
+        if (choice.Skin is not null) w.WriteString("skin", choice.Skin);
+        if (choice.Face is not null) w.WriteString("face", choice.Face);
+        if (choice.Hair is not null) w.WriteString("hair", choice.Hair);
+        if (choice.HairColor is not null) w.WriteString("hair_color", choice.HairColor);
+        w.WriteEndObject();
+    });
 
     /// <summary>Reads a new session, or null.</summary>
     public static SessionAnswer? ReadSession(byte[] utf8) => Read(utf8, root =>
@@ -114,7 +125,16 @@ public static class AccountJson
         root.GetProperty("error").GetString() is { Length: > 0 } error ? new AccountErrorAnswer(error, root.TryGetProperty("retry_after", out var retry) ? retry.GetInt64() : 0) : null);
 
     private static CharacterRecord Character(JsonElement item) =>
-        new CharacterRecord(Text(item, "id"), item.GetProperty("slot").GetInt32(), Text(item, "name"), Text(item, "job"));
+        new CharacterRecord(Text(item, "id"), item.GetProperty("slot").GetInt32(), Text(item, "name"), Text(item, "job"), Looks(item));
+
+    /// <summary>The character's looks (T-705), or null when the answer has none or a part is missing; an id is taken as it is, the bundle is not asked.</summary>
+    private static AppearanceRecord? Looks(JsonElement item)
+    {
+        if (!item.TryGetProperty("appearance", out var a) || a.ValueKind != JsonValueKind.Object) return null;
+        string? Part(string name) => a.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        var (gender, skin, face, hair, color) = (Part("gender"), Part("skin"), Part("face"), Part("hair"), Part("hair_color"));
+        return gender is null || skin is null || face is null || hair is null || color is null ? null : new AppearanceRecord(gender, skin, face, hair, color);
+    }
 
     private static string Text(JsonElement item, string field) => item.GetProperty(field).GetString() ?? throw new FormatException(field);
 

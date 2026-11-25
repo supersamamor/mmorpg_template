@@ -329,9 +329,10 @@ namespace Game.Shared.Protocol
     /// <param name="Worn">A player: the item ids it wears that have a worn visual, in "Equipment slots" order (the client finds each visual in its
     /// bundle); null or empty when none. Never stats.</param>
     /// <param name="Statuses">Its active statuses (T-501), in application order; null or empty when none. Left out of the JSON when empty.</param>
+    /// <param name="Appearance">A player: its looks as ids (T-705), in <c>snapshot</c> entries and <c>appeared</c> entries only; null for every other kind. Never in a change.</param>
     public sealed record EntityRecord(long Id, string Kind, string? DisplayKey, GridCell Cell, string Facing, GridCell? Next, double Speed,
         double? Hp = null, bool Dead = false, int Quantity = 0, bool? Mine = null, string? Weapon = null, IReadOnlyList<string>? Worn = null,
-        IReadOnlyList<StatusRecord>? Statuses = null);
+        IReadOnlyList<StatusRecord>? Statuses = null, AppearanceRecord? Appearance = null);
 
     /// <summary>
     /// One status on an entity, as every observer is told (ARCHITECTURE §10, T-501): <c>{"id":"status.poison","stacks":1,"left_ms":7400,"debuff":true}</c>.

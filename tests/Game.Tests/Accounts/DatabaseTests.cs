@@ -96,7 +96,7 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
     }
 
     private Task<(CreateCharacterOutcome Outcome, CharacterEntry? Character)> CreateAsync(Guid account, string name, int slots = 3) =>
-        Store.CreateCharacterAsync(account, Guid.NewGuid(), name, CharacterNameRules.Key(name), "job.x", slots, Now, default);
+        Store.CreateCharacterAsync(account, Guid.NewGuid(), name, CharacterNameRules.Key(name), "job.x", slots, null, Now, default);
 
     private static byte[] Token() => SessionTokens.HashOf(SessionTokens.New())!;
 
@@ -243,7 +243,7 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
     public async Task Only_the_hash_of_a_token_is_stored()
     {
         var time = new FakeTime();
-        var service = new AccountService(Store, new FakeHasher(), HashQueue.Default(), new AccountLimits(), TestGrids.SampleContent.Balance, new ManualClock(), time, new ListLog());
+        var service = new AccountService(Store, new FakeHasher(), HashQueue.Default(), new AccountLimits(), TestGrids.SampleContent.Balance, TestGrids.SampleContent.Appearance, new ManualClock(), time, new ListLog());
         var token = (await service.RegisterAsync(Unique("u"), ServiceRig.Password, "a", default)).Value!.Token;
         await using var db = fixture.Database.Open();
         var row = await db.Sessions.SingleAsync(s => s.TokenHash == SessionTokens.HashOf(token));
@@ -378,7 +378,7 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
         var text = fixture.NewConnectionString();
         await using var database = new GameDatabase(text);
         await database.MigrateAsync();
-        var service = new AccountService(new PostgresAccountStore(database), new FakeHasher(), HashQueue.Default(), new AccountLimits(), TestGrids.SampleContent.Balance, new ManualClock(), new FakeTime(), new ListLog());
+        var service = new AccountService(new PostgresAccountStore(database), new FakeHasher(), HashQueue.Default(), new AccountLimits(), TestGrids.SampleContent.Balance, TestGrids.SampleContent.Appearance, new ManualClock(), new FakeTime(), new ListLog());
         var user = Unique("u");
         (await service.RegisterAsync(user, ServiceRig.Password, "a", default)).Ok.ShouldBeTrue();
         var name = new NpgsqlConnectionStringBuilder(text).Database;

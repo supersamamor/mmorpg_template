@@ -109,7 +109,7 @@ public sealed class SavingDatabaseBudgetTests(DatabaseFixture fixture, ITestOutp
         for (var i = 0; i < 100; i++)
         {
             var name = "b" + string.Concat(i.ToString("000").Select(c => (char)('a' + (c - '0'))));
-            var (_, character) = await accounts.CreateCharacterAsync(account, Guid.NewGuid(), name, CharacterNameRules.Key(name), "job.wanderer", 200, DateTime.UtcNow, default);
+            var (_, character) = await accounts.CreateCharacterAsync(account, Guid.NewGuid(), name, CharacterNameRules.Key(name), "job.wanderer", 200, null, DateTime.UtcNow, default);
             var claim = await store.ClaimAsync(character!.Id, run, default);
             tickets.Add(new CharacterTicket(character.Id) { Claim = claim.Claim });
             states.Add(SavedContent.Full(() => ++n, DateTime.UtcNow) with

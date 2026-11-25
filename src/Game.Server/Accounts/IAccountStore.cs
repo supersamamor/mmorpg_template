@@ -1,3 +1,5 @@
+using Game.Shared.Protocol;
+
 namespace Game.Server.Accounts;
 
 /// <summary>An account's id and stored password hash.</summary>
@@ -8,7 +10,12 @@ public sealed record AccountAuth(Guid Id, string PasswordHash)
 }
 
 /// <summary>A character that is not deleted.</summary>
-public sealed record CharacterEntry(Guid Id, int Slot, string Name, string JobId);
+/// <param name="Id">Permanent id.</param>
+/// <param name="Slot">Slot.</param>
+/// <param name="Name">Name.</param>
+/// <param name="JobId">Job at its last save.</param>
+/// <param name="Appearance">The ids stored with it at creation (T-705); a part is null when none was stored (a character from before T-705): the default applies at load.</param>
+public sealed record CharacterEntry(Guid Id, int Slot, string Name, string JobId, AppearanceChoice? Appearance = null);
 
 /// <summary>How creating a character ended.</summary>
 public enum CreateCharacterOutcome
@@ -64,9 +71,12 @@ public interface IAccountStore
     /// <summary>The account's character with this id, or null (also when it is another account's, or deleted).</summary>
     Task<CharacterEntry?> FindCharacterAsync(Guid account, Guid character, CancellationToken cancellation);
 
-    /// <summary>Creates a character in the account's lowest free slot. The unique index on <paramref name="nameKey"/> decides who gets the name.</summary>
+    /// <summary>
+    /// Creates a character in the account's lowest free slot, with its <paramref name="appearance"/> (T-705; null stores none, so the defaults apply), in one transaction. The unique index on <paramref name="nameKey"/>
+    /// decides who gets the name.
+    /// </summary>
     Task<(CreateCharacterOutcome Outcome, CharacterEntry? Character)> CreateCharacterAsync(Guid account, Guid character, string name, string nameKey, string jobId, int maxSlots,
-        DateTime now, CancellationToken cancellation);
+        AppearanceRecord? appearance, DateTime now, CancellationToken cancellation);
 
     /// <summary>Marks the account's character deleted; false when it has no such character.</summary>
     Task<bool> DeleteCharacterAsync(Guid account, Guid character, DateTime now, CancellationToken cancellation);

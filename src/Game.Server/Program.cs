@@ -102,7 +102,7 @@ var contentHash = ClientBundleExporter.Hash(content); // the display bundle's ha
 log.Info($"Content hash: {contentHash}");
 var tokens = new ResumeTokens();
 var devLogin = new DevLogin(development, netOptions.MaxNameLength, tokens);
-var accounts = database is null ? null : new AccountService(new PostgresAccountStore(database), new Argon2idHasher(), HashQueue.Default(), new AccountLimits(), content.Balance, clock,
+var accounts = database is null ? null : new AccountService(new PostgresAccountStore(database), new Argon2idHasher(), HashQueue.Default(), new AccountLimits(), content.Balance, content.Appearance, clock,
     TimeProvider.System, log);
 var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log, contentHash, accounts is null ? devLogin : new AccountLogin(accounts, devLogin), tokens,
     progress: new OwnProgress(content, progressions), inventory: new OwnInventory(content.Balance.Inventory, inventories), keeper: keeper); // subscribes to instance events: before ticking

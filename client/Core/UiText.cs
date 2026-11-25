@@ -141,6 +141,7 @@ public static class UiText
                     ? "Too many tries. Please wait " + retryAfterSeconds.ToString(CultureInfo.InvariantCulture) + " seconds."
                     : "Too many tries. Please wait a moment.";
             case AccountErrors.InvalidName: return "That name cannot be used. Use letters, with single dashes or apostrophes between them at most.";
+            case AccountErrors.InvalidAppearance: return "That look is not available. Pick another.";
             case AccountErrors.NameTaken: return "That name is taken.";
             case AccountErrors.NoFreeSlot: return "You have no free character slot.";
             case AccountErrors.UnknownCharacter: return "That character no longer exists.";

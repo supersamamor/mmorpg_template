@@ -21,8 +21,11 @@ namespace Game.Server.World.Aoi;
 /// into a per-observer "may I pick it up" flag and never sends the id.</param>
 /// <param name="Look">A player's weapon type and worn item ids (<see cref="Entity.Look"/>), or null for every other kind. Display data only.</param>
 /// <param name="Statuses">Its statuses (<see cref="Entity.StatusLook"/>, T-501): ids, stacks, end times and the debuff flag only; null when it never had one.</param>
+/// <param name="Appearance">A player's looks (<see cref="Entity.Appearance"/>, T-705): ids only, fixed while it is in the world, so no <see cref="ViewFields"/> flag exists for it
+/// and a change record never carries it. Null for every other kind.</param>
 public readonly record struct EntityView(EntityId Id, EntityKind Kind, string? DisplayKey, GridCell Cell, string Facing, GridCell? Next, double Speed,
-    int HpPercent = -1, bool Dead = false, int Quantity = 0, EntityId? LootOwner = null, Inventory.WornLook? Look = null, Effects.StatusLook? Statuses = null);
+    int HpPercent = -1, bool Dead = false, int Quantity = 0, EntityId? LootOwner = null, Inventory.WornLook? Look = null, Effects.StatusLook? Statuses = null,
+    Game.Shared.Protocol.AppearanceRecord? Appearance = null);
 
 /// <summary>The HP bar others see: a whole percentage, so exact HP never leaks, that reads 0 only at 0 HP and 100 only at full HP.</summary>
 public static class HpBar
