@@ -1324,11 +1324,13 @@ placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms
   | `POST /account/login` | `username`, `password` | 200 `token`, `expires_in` |
   | `POST /account/logout` | token | 204; the session has ended |
   | `POST /account/password` | token, `current`, `new` | 200 `token`, `expires_in`: the password is changed, every session of the account has ended, and this is the caller's new one (T-710) |
+  | `POST /account/delete` | token, `password` | 200 `erased_in` (seconds): every session of the account has ended, nobody can sign in, and it will be erased (T-703) |
+  | `POST /account/keep` | `username`, `password` | 200 `token`, `expires_in`: the deletion is taken back and the player signed in (T-703) |
   | `GET /account/characters` | token | 200 `slots`, `name_min`, `name_max`, `characters` (`[{id, slot, name, job, appearance}]`, by slot) |
   | `POST /account/characters` | token, `name`, optional `appearance` (§7.5.1) | 201 `id`, `slot`, `name`, `job`, `appearance` (the lowest free slot); 400 `invalid_appearance` |
   | `DELETE /account/characters/{id}` | token | 204 (a soft delete: the row and its name stay); `character_in_use` while it is in the world, on this server or another (T-710) |
 
-  Status: 400 invalid, 401 `invalid_credentials` / `invalid_session`, 404 `unknown_character`, 409 taken / full / in use, 429 `rate_limited`, 503 `unavailable`.
+  Status: 400 invalid, 401 `invalid_credentials` / `invalid_session`, 404 `unknown_character`, 409 taken / full / in use / `account_deleting`, 429 `rate_limited`, 503 `unavailable`.
   - **Slots and names** come from `balance.yaml` `characters` (slots, name lengths, letters, separators). Names that differ in letter case are the same name.
   - **An account plays one character at a time.** A login with the character the gateway already holds (played elsewhere, or in its grace period) takes it over where it
     stands, as a resume would: the old session gets `bye replaced` and its resume token stops working. A login with another character ends the first one (`bye replaced`,
@@ -1342,6 +1344,11 @@ placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms
   - **Password change** (T-710). The caller proves the current password although it is signed in, so a stolen session cannot take the account. It gets a new session at once: it has just shown
     the password, and everyone else is out. If that last step fails the answer is `invalid_session` (sign in with the new password). The account's lock for wrong current passwords is kept under
     its id, apart from the sign-in's lock under its username: a stolen session must not be able to lock the owner out. The address's lock is the same one.
+  - **Account deletion** (T-703; what a fork owes the stores: docs/STORE_COMPLIANCE.md). A request proves the password again, under the rules of a password change, ends every session with its game and sets `accounts.erase_after`
+    (`--account-erase-days`, default 14). While it is set a sign-in answers `account_deleting`, a session cannot be added and a character cannot be made, whatever raced the request: all of them lock the account's row. `keep`
+    takes it back. `AccountEraser` then erases what is due in one transaction per account, a pass a minute on a task of its own: the account's row first (one that another server is at is skipped), then its characters in the
+    order a save locks them. A character held by a live run puts it off; entering the world takes the same lock, so a character is entered or erased, never both; a save that comes late finds nothing and is refused as lost.
+    Usernames and character names become free. `account_deletions` keeps the account's id and the two times, for support and for cleaning a restored backup. The cascade rules stay: nothing but this removes an account.
   - **The client** (`client/Core/Accounts`, `Scene/AccountPanel`) keeps the session token in memory only: Godot offers no secure storage (Keychain, Keystore) without
     native code. The password is never kept. A restarted app signs in again. `TransportPolicy.AccountBase` gives the endpoints' address: a release build has none for `ws://`.
 - **Client resume flow** (for T-206):
@@ -1395,8 +1402,8 @@ placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms
 - The client is untrusted (CLAUDE.md rule 11); the client bundle holds display data only.
 - No plaintext outside debug builds (§10): release clients refuse `ws://`. The Android APK carries only what runs on a device (arm64-v8a; the Mono static
   archives are stripped, MOBILE_BUILD §8.3), and CI exports it on every push (MOBILE_BUILD §9).
-- Store rules: in-app account deletion (Apple and Google require it); Sign in with Apple if any
-  other third-party login is offered; iOS privacy manifest and Play data-safety form kept current.
+- Store rules (docs/STORE_COMPLIANCE.md): in-app account deletion (built: T-703); Sign in with Apple only if another
+  third-party login is offered (the template has none); iOS privacy manifest and Play data-safety form kept current.
 
 ## 12. Admin panel & live operations
 A live game needs staff tooling: player support, moderation, fixing mistakes, and watching

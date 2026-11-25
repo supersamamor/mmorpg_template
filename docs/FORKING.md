@@ -238,7 +238,12 @@ reached by a warp at the end of the pier, with spawns of crabs and eels and its 
 *Pirate:* `currency_name: doubloons`; `UiText.BagTitle` "Sea chest", `UiText.Respawn` "Back aboard"; the title "Saltwind" and the package
 `com.example.saltwind`.
 
-## 5. Licences
+## 5. Stores and privacy
+
+`docs/STORE_COMPLIANCE.md` says what the template stores about players, the answers for the stores' privacy forms, how account deletion works and what a fork must add (a privacy policy, a web page for
+deletion requests, support). Whatever a fork stores about a person must be erased with the account.
+
+## 6. Licences
 
 - **CC0 packs** (public domain, for example many low-poly packs from community artists): may be committed to the fork's theme and shipped. Keep a
   `themes/<theme>/CREDITS.md` with the pack's name, author, source and licence anyway; it costs nothing and helps the next person.
@@ -251,7 +256,7 @@ reached by a warp at the end of the pier, with spawns of crabs and eels and its 
 - **This template** keeps only its own generated placeholders. No pack, real or trial, is ever committed here; trial themes are `eval-*` and git-ignored.
 - Original names and designs only: the template's systems are inspired by classic MMORPGs, but a fork must not copy another game's names, data tables or art.
 
-## 6. Checklist: a full re-theme, in order
+## 7. Checklist: a full re-theme, in order
 
 Run the commands after each step, in PowerShell from the repository root. Short names used below: **validate** is
 `dotnet run --project src/Game.Tools -- validate`; **bundle** is `dotnet run --project src/Game.Tools -- export-client content/client-content.reference.json`;

@@ -24,7 +24,7 @@ public sealed class AccountRow
 
 /// <summary>
 /// Table <c>account_deletions</c> (T-703): that an account was asked to be deleted, and when it was erased. It holds no personal data: the id of an account that is gone leads nowhere. It
-/// refers to no table, because it outlives what it is about; after a restored backup it says which accounts to erase again. A request that is taken back leaves no row.
+/// refers to no table, because it outlives what it is about; a copy of it says which accounts to erase again after a backup was restored (docs/STORE_COMPLIANCE.md §6). A request that is taken back leaves no row.
 /// </summary>
 public sealed class AccountDeletionRow
 {

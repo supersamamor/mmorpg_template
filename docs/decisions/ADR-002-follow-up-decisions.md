@@ -525,3 +525,14 @@ When writing these prompts, copy in the decisions listed:
 | 323 | Row 289's Ctrl+C test (T-710) | **Checked:** `ServerProcessTests` had nothing wrong; a test of Ctrl+C with a database, a player in the world and its save was missing and is added. |
 | 324 | A failed `ui` run left its preferences behind (T-710) | **Fixed for every scripted run:** they use a preferences file of their own that starts empty, so a run that fails or is killed changes nothing. |
 | 325 | CI's time bound for the scripted runs was from T-216 (T-710) | **Corrected** to 135 minutes for the step and 240 for the job. CI has no PostgreSQL in that job: `account`, `saving` and `appearance` are skipped there. |
+
+## Addendum — T-703 (2026-11-25, done by the lead)
+| # | Question (source) | Decision |
+|---|---|---|
+| 326 | Whether deletion is at once or after a wait (T-703) | **Decided:** a wait of 14 days (`--account-erase-days`, 0 to 90). Apple and Google ask for a real deletion and to say how long it takes, not for an instant one; the wait protects an account that was taken over. Nothing works meanwhile but taking it back with the password. |
+| 327 | What happens to names (T-703; T-701 keeps a deleted *character's* name taken) | **Decided:** erasing an account frees its username and character names. Keeping them keeps something about the person, and a hashed name is guessed easily. |
+| 328 | What is kept (T-703) | **Decided:** `account_deletions`: the account's id and two times, so support can answer and a restored backup can be cleaned (docs/STORE_COMPLIANCE.md §6). |
+| 329 | Sign in with Apple (T-703's backlog row) | **Not built:** it is asked for only beside a third-party login, and the template has none. A fork that adds one builds it then. |
+| 330 | The iOS privacy manifest is set in the export preset, with flag values read from the pinned engine's own tables (T-703) | **Open:** Godot exports C# projects to iOS only on a Mac, so the generated file is unverified. Compare it at the first Mac build (T-802). Store rules: Google's deletion page was read in full; Apple's 4.8 and 5.1.1(v) and parts of the Data safety page only as summaries. Read them again before submitting. |
+| 331 | A player who forgot the password cannot delete in the app: no e-mail is stored (T-703) | **Open:** support by hand until password reset exists (row 289, "later"); a fork must say how in its policy. |
+| 332 | T-703's `Persistence/**` changes are inside its header's scope: one migration (`AccountDeletion`), the store's request, cancel, list and erase, and refusing a session or a character for an account that waits. `Net/**` is unchanged (T-703) | **Decided.** |

@@ -401,8 +401,8 @@ item intent (`shop_buy` and `shop_sell` included), instead; the session goes on.
 
 ## Account errors
 The `error` of a refused account request (T-701, ARCHITECTURE §10 "Accounts"): `invalid_request`, `invalid_username`, `invalid_password`, `same_password`, `username_taken`,
-`invalid_credentials`, `invalid_session`, `rate_limited`, `invalid_name`, `invalid_appearance`, `name_taken`, `no_free_slot`, `unknown_character`, `character_in_use`, `unavailable`.
-Appearance refusals (T-705): an id is unknown, or a face or hairstyle is not the chosen gender's. `invalid_credentials` answers an unknown username and a wrong password alike, and a password change whose current password is wrong. `same_password` (T-710): a password change to the one the account has. `rate_limited` and `unavailable` come with `retry_after` (seconds).
+`invalid_credentials`, `account_deleting`, `invalid_session`, `rate_limited`, `invalid_name`, `invalid_appearance`, `name_taken`, `no_free_slot`, `unknown_character`, `character_in_use`, `unavailable`.
+Appearance refusals (T-705): an id is unknown, or a face or hairstyle is not the chosen gender's. `invalid_credentials` answers an unknown username and a wrong password alike, and a password change whose current password is wrong. `same_password` (T-710): a password change to the one the account has. `account_deleting` (T-703): the account waits to be erased, told only to someone who has its password; it comes with `erased_in` (seconds). `rate_limited` and `unavailable` come with `retry_after` (seconds).
 
 ## Account terms
 **Account**: who signs in (a username and a password). **Session token**: proves a sign-in to the account endpoints and in `hello`; stored on the server as its SHA-256.

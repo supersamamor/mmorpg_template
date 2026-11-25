@@ -24,7 +24,7 @@
 #   .\client\run-e2e.ps1 -Run autopilot                 tick First Hunt in the quest log, Start, watch the HUD indicator while the server plays it to the turn-in with no input from the client and says
 #                                                         finished; then start another quest, stop it with a tap on the indicator, start again and end it by walking (T-605; the quests content copy)
 #   .\client\run-e2e.ps1 -Run account                     register, create a character, enter the world, drop and resume, log out, sign out, sign in again and enter the world with
-#                                                         the same character (T-701); another device changes the password: put out, signed in with the new one, changed back (T-710). Needs PostgreSQL: $env:GAME_TEST_DB_CONNECTION; it uses its own database, mmo_e2e, on that server
+#                                                         the same character (T-701); another device changes the password: put out, signed in with the new one, changed back (T-710); delete the account, keep it, delete it again (T-703). Needs PostgreSQL: $env:GAME_TEST_DB_CONNECTION; it uses its own database, mmo_e2e, on that server
 #   .\client\run-e2e.ps1 -Run saving                      a new account's character changes stats, quest, items, currency, gear, EXP and place; its server stops (and saves) and the next one has it
 #                                                         all; that one is killed outright and the third has its interval saves (T-702). Needs PostgreSQL like account; about 3 minutes
 #   .\client\run-e2e.ps1 -Run appearance                  make a character with looks other than the defaults on the creation screen, enter and see it drawn with them; a second client (always
