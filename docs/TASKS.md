@@ -124,7 +124,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-602 | Quest state machine on the event bus: objectives, turn-in, atomic rewards, currency balance, quest conditions in dialogue, quest log and tracker, the Warden path | Claude Code | Opus 5.5 | [T-602](../tasks/prompts/T-602.md) | T-601, T-404 | Review | Touches `Net/**` for quest messages and the currency field only (standing approval 2026-11-18); ADR-002 #211, #212, #253 |
 | T-603 | Shop NPC service: buy and sell for currency in one inventory transaction, shops as data, merchant NPC, shop panel | Claude Code | Sonnet 5.5 | [T-603](../tasks/prompts/T-603.md) | T-601, T-602 | Review | Touches `Net/**` for shop intents and the shop message only (standing approval 2026-11-18); ADR-002 #251, #268 |
 | T-604 | Quest autopilot, server: plays a player's ticked quests in sequence (travel, hunt, gather, walk, talk, turn in) through the same intents and rules as manual play | Claude Code | Opus 5.5 | [T-604](../tasks/prompts/T-604.md) | T-502, T-601, T-602, T-701 | Review | Restricted `Net/**`, limited scope approved by owner 2026-11-25 |
-| T-605 | Quest autopilot, client: an autopilot tick per quest in the log, run order, start and stop, an on/off indicator with the current action on the HUD, pause and end reasons | Claude Code | Sonnet 5.5 | [T-605](../tasks/prompts/T-605.md) | T-604 | In Progress | No restricted area |
+| T-605 | Quest autopilot, client: an autopilot tick per quest in the log, run order, start and stop, an on/off indicator with the current action on the HUD, pause and end reasons | Claude Code | Sonnet 5.5 | [T-605](../tasks/prompts/T-605.md) | T-604 | Review | No restricted area |
 
 ## Phase 7 — Persistence & accounts
 

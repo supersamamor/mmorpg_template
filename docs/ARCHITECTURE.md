@@ -766,6 +766,17 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   (from the bundle), objectives and a held reason, each with Track and Abandon (asks once more before sending `abandon_quest`), then the completed quests. **Markers:** a "!" drawn
   by a billboard shader above every NPC the server marks, gold to offer and green to turn in, one multimesh (one draw call, none when no NPC is marked), rewritten only when the
   markers or the NPCs in view change. The client decides no count, step or completion; quest changes go on the flash line. The bag's first line shows the currency.
+- **Quest autopilot** (T-605, view model `client/Core/Autopilot/AutopilotModel.cs`, controls in `QuestPanel`, indicator in `Hud`). **Ticks:** each active quest in the log has a tick ("Add to
+  autopilot", then "Autopilot: #n" with its place in the run); a tick is this player's own wish, kept only in memory, sent nowhere until Start, and dropped when the quest is completed or abandoned
+  or the login ends. **Order:** a ticked quest gets Earlier and Later buttons that swap it one place; not dragging, because a drag inside a scrolling list fights the scroll and needs a precise
+  finger on a phone, while a button is a plain 48 dp target and the "#n" stays readable. **Start and Stop** are pinned under the log's title, outside the scroll: Start sends `start_autopilot` (the ticked
+  quests in run order, the skill bar's skills in slot order, level 0) and is disabled with nothing ticked, while dead or offline; Stop sends `stop_autopilot` while a run is on. The server still decides;
+  every refusal (`rejected` with `intent` `start_autopilot`) goes on the flash line with its reason, naming the quest or skill. **Indicator:** while a run is running or paused, a 48 dp button in the
+  centre column of the top row, under the target frame (so it lies over nothing and nothing lies over it): "Stop autopilot: hunting" and the quest's name, or "Stop autopilot: paused" and what the player can
+  do ("Reach level 10 to go on."), trimmed with an ellipsis; a tap sends `stop_autopilot`. Off shows nothing. A run that ends says why on the flash line (finished, stopped, "you took over", died, bag full ...).
+  **Only the server's word:** the state is the last `autopilot` message, reset at a new login and told again after a resume; the client never ends, pauses or restarts a run. It sends no message of its own that
+  counts as manual input (the dialogue and shop panels send `dialogue_close` only from their Close buttons); the dialogue a turn-in opens stays down while a run plays, so it cannot cover the indicator or be
+  pressed by mistake (a paused run shows it).
 - **Where the client's own words live (ADR-002 row 120).** In `client/Core/UiText.cs`: one static class of constants and small formatting functions in English, and nowhere
   else (a test fails on a literal assigned to a text property in `client/Scene`). Why: the refusal and update screens must read even when the bundle, theme or any data
   file is missing or broken, which rules out loading them; the pure core and its tests can use them; a typo or a missing word is a compile error; and the number of

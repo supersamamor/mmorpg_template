@@ -636,6 +636,102 @@ public static class UiText
         _ => string.Empty,
     };
 
+    // ---- the autopilot (T-605) ----
+
+    /// <summary>The quest log's heading over the autopilot controls.</summary>
+    public const string AutopilotHeading = "Autopilot";
+
+    /// <summary>The line under the heading: how to use it.</summary>
+    public const string AutopilotHelp = "Tick quests and press Start. It plays them in order, with the skills on your skill bar. Moving or acting yourself stops it.";
+
+    /// <summary>The log's tick on a quest that is not in the run.</summary>
+    public const string AutopilotAdd = "Add to autopilot";
+
+    /// <summary>The log's tick on a quest in the run, with its place (1 for the first).</summary>
+    public static string AutopilotTicked(int order) => "Autopilot: #" + order.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>Moves a ticked quest earlier in the run.</summary>
+    public const string AutopilotEarlier = "Earlier";
+
+    /// <summary>Moves a ticked quest later in the run.</summary>
+    public const string AutopilotLater = "Later";
+
+    /// <summary>The log's button that starts the run.</summary>
+    public const string AutopilotStart = "Start autopilot";
+
+    /// <summary>The log's button that stops a run.</summary>
+    public const string AutopilotStop = "Stop autopilot";
+
+    /// <summary>The log's line under the heading: the run's order, as quest names.</summary>
+    public static string AutopilotQueue(string names) => "Run order: " + names;
+
+    /// <summary>The log's line while nothing is ticked.</summary>
+    public const string AutopilotNothingTicked = "Nothing ticked yet.";
+
+    /// <summary>What the autopilot does (an "Autopilot activities" term), for the indicator.</summary>
+    public static string AutopilotDoing(string? doing) => doing switch
+    {
+        AutopilotActivities.Travelling => "travelling",
+        AutopilotActivities.Hunting => "hunting",
+        AutopilotActivities.Gathering => "gathering",
+        AutopilotActivities.Talking => "talking",
+        AutopilotActivities.Waiting => "waiting",
+        _ => "playing",
+    };
+
+    /// <summary>The indicator's first line while a run plays: the tap stops it.</summary>
+    public static string AutopilotRunning(string? doing) => "Stop autopilot: " + AutopilotDoing(doing);
+
+    /// <summary>The indicator's first line while a run waits: the tap stops it.</summary>
+    public const string AutopilotPausedTitle = "Stop autopilot: paused";
+
+    /// <summary>
+    /// What the player can do about a pause (an "Autopilot pauses" term); <paramref name="detail"/> is the level, job or item's name it waits for, when known.
+    /// </summary>
+    public static string AutopilotPause(string? reason, string? detail) => reason switch
+    {
+        AutopilotPauses.NeedsLevel => detail is null ? "Raise your level to go on." : "Reach level " + detail + " to go on.",
+        AutopilotPauses.NeedsJob => detail is null ? "Change your job to go on." : "Become " + detail + " to go on.",
+        AutopilotPauses.NeedsEquip => detail is null ? "Put on the gear it needs to go on." : "Wear " + detail + " to go on.",
+        AutopilotPauses.NeedsItemUse => detail is null ? "Use the item it needs to go on." : "Use " + detail + " to go on.",
+        AutopilotPauses.NoSource => "Nothing gives what it needs. Take over.",
+        AutopilotPauses.Unreachable => "No way there. Take over.",
+        AutopilotPauses.NoProgress => "Nothing is moving. Take over.",
+        AutopilotPauses.NoSafeChoice => "It needs your choice. Take over.",
+        _ => "Waiting for you.",
+    };
+
+    /// <summary>The flash when a run ends (an "Autopilot stops" term): always says why.</summary>
+    public static string AutopilotEnded(string? reason) => reason switch
+    {
+        AutopilotStops.Finished => "Autopilot finished: every quest is done.",
+        AutopilotStops.Stopped => "Autopilot stopped.",
+        AutopilotStops.ManualInput => "Autopilot stopped: you took over.",
+        AutopilotStops.Died => "Autopilot stopped: you died.",
+        AutopilotStops.Logout or AutopilotStops.Disconnected => "Autopilot stopped: the connection ended.",
+        AutopilotStops.BagFull => "Autopilot stopped: your bag is full.",
+        AutopilotStops.TimeLimit => "Autopilot stopped: no time left today.",
+        AutopilotStops.QuestAbandoned => "Autopilot stopped: you dropped its quest.",
+        _ => "Autopilot stopped.",
+    };
+
+    /// <summary>The flash for a refused start (an "Autopilot reasons" term); <paramref name="about"/> is the display name of the quest or skill it is about, if any.</summary>
+    public static string AutopilotRefused(string reason, string? about = null) => reason switch
+    {
+        AutopilotReasons.Disabled => "Autopilot is switched off here.",
+        AutopilotReasons.Dead => "You cannot use autopilot while dead.",
+        AutopilotReasons.TimeLimit => "No autopilot time left today.",
+        AutopilotReasons.EmptyQueue => "Tick a quest first.",
+        AutopilotReasons.TooManyQuests => "Too many quests ticked.",
+        AutopilotReasons.UnknownQuest or AutopilotReasons.NotActive => about is null ? "A ticked quest is not active." : about + " is not active.",
+        AutopilotReasons.DuplicateQuest => about is null ? "A quest is ticked twice." : about + " is ticked twice.",
+        AutopilotReasons.TooManySkills => "Too many skills on the skill bar.",
+        AutopilotReasons.UnknownSkill or AutopilotReasons.NotLearned => about is null ? "A skill on the bar is not learned." : about + " is not learned.",
+        AutopilotReasons.PassiveSkill => about is null ? "A passive skill cannot be used." : about + " is passive.",
+        AutopilotReasons.LevelTooHigh => about is null ? "A skill is above its learned level." : about + " is above its learned level.",
+        _ => "Autopilot could not start.",
+    };
+
     /// <summary>The flash for a refused quest start or abandon (a "Quest reasons" term).</summary>
     public static string QuestRefused(string reason) => reason switch
     {

@@ -1,4 +1,5 @@
 using Game.Client.Core.Accounts;
+using Game.Client.Core.Autopilot;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Combat;
 using Game.Client.Core.Dialogue;
@@ -66,6 +67,9 @@ public sealed class ClientSession
     /// <summary>The quest log, the tracked quest and the NPC markers (T-602). The server decides every count and step; this only holds what it sent.</summary>
     public QuestBook Quests { get; } = new QuestBook();
 
+    /// <summary>The autopilot (T-605): the ticked quests and their order, and the server's last word on the run. The server decides every step of a run; this only holds what it said.</summary>
+    public AutopilotModel Autopilot { get; } = new AutopilotModel();
+
     /// <summary>Raised for each <c>quest</c> change (after <see cref="Quests"/> took it).</summary>
     public event Action<QuestMessage>? QuestChanged;
 
@@ -117,6 +121,7 @@ public sealed class ClientSession
         Dialogue.Reset();
         Shop.Reset();
         Quests.Reset();
+        Autopilot.Reset();
         Skills.Reset();
         Stats.Reset();
         Numbers.Clear();
@@ -131,6 +136,7 @@ public sealed class ClientSession
     {
         if (Connection.Version == _noticeVersion) return;
         _noticeVersion = Connection.Version;
+        if (Connection.Phase is ConnectionPhase.LoginScreen or ConnectionPhase.Stopped) Autopilot.Reset();   // a run belongs to the session that ended
         if (_characterId is not null && Connection.Phase == ConnectionPhase.LoginScreen) Accounts.Refresh();
     }
 
@@ -202,6 +208,27 @@ public sealed class ClientSession
 
     /// <summary>The dialogue panel's Close button: end the dialogue and any service it opened. The panel closes when the server says it ended.</summary>
     public void CloseDialogue() => SendItem(new DialogueCloseMessage());
+
+    /// <summary>
+    /// The quest log's Start button (T-605): <c>start_autopilot</c> with the ticked quests in run order and the skill bar's skills in slot order. Does nothing with nothing ticked,
+    /// while dead or offline; the server still decides and a refusal comes back as a flash line. Returns true when it was sent. Replaces a run in progress.
+    /// </summary>
+    public bool StartAutopilot()
+    {
+        if (Connection.Phase != ConnectionPhase.Online || Ui.Dead) return false;
+        Autopilot.Prune(Quests);
+        if (Autopilot.BuildStart(Skills, Hotbar.SlotCount) is not { } start) return false;
+        Send(start);
+        return true;
+    }
+
+    /// <summary>The HUD indicator's tap and the log's Stop button (T-605): <c>stop_autopilot</c>. Does nothing while no run is on (the server would ignore it).</summary>
+    public bool StopAutopilot()
+    {
+        if (Connection.Phase != ConnectionPhase.Online || !Autopilot.On) return false;
+        Send(new StopAutopilotMessage());
+        return true;
+    }
 
     /// <summary>The shop panel's Buy button (T-603): <paramref name="quantity"/> units of the stock item <paramref name="item"/>. Sends the item and the count, never a price; the server answers with the new bag and balance, or a refusal.</summary>
     public void ShopBuy(string item, int quantity) => SendItem(new ShopBuyMessage(item, quantity));
@@ -382,9 +409,11 @@ public sealed class ClientSession
                 break;
             case QuestLogMessage log:
                 Quests.Apply(log);
+                Autopilot.Prune(Quests);
                 break;
             case QuestMessage quest:
                 Quests.Apply(quest);
+                Autopilot.Prune(Quests);
                 Ui.OnQuest(quest, viewNow);
                 QuestChanged?.Invoke(quest);
                 break;
@@ -398,6 +427,9 @@ public sealed class ClientSession
             case ServiceOpenedMessage service:
                 Dialogue.ServiceOpened(service.Service);
                 ServiceOpened?.Invoke(service);
+                break;
+            case AutopilotMessage autopilot:
+                if (Autopilot.Apply(autopilot)) Ui.OnAutopilotEnded(autopilot.Reason, viewNow);
                 break;
             case RejectedMessage rejected:
                 if (rejected.Intent == MessageTypes.Refine && rejected.Reason == Game.Shared.Vocabulary.ItemReasons.ServiceRequired) Dialogue.ServiceClosed();

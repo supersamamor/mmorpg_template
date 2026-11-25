@@ -111,6 +111,9 @@ public sealed class UiState
         if (UiText.QuestChange(message.Change, _bundle.Quest(message.Quest)?.Name ?? message.Quest) is { Length: > 0 } text) SetFlash(text, now);
     }
 
+    /// <summary>An <c>autopilot</c> message ended a run (T-605): the flash line says why, so a stop is never a surprise.</summary>
+    public void OnAutopilotEnded(string? reason, double now) => SetFlash(UiText.AutopilotEnded(reason), now);
+
     /// <summary><c>refine_result</c>: the outcome goes on the flash line (success, kept, down a level, broke), with the item's name and level from the server.</summary>
     public void OnRefineResult(RefineResultMessage result, double now) =>
         SetFlash(UiText.RefineResult(_bundle.NameOf(result.Item), result.Result, result.Refine), now);
@@ -118,6 +121,11 @@ public sealed class UiState
     /// <summary><c>rejected</c>: quietly take back what the tap showed; a refused item intent says why on the flash line.</summary>
     public void OnRejected(RejectedMessage rejected, double now = 0)
     {
+        if (rejected.Intent == MessageTypes.StartAutopilot)
+        {
+            SetFlash(UiText.AutopilotRefused(rejected.Reason, rejected.Quest is { } q ? _bundle.Quest(q)?.Name ?? q : rejected.Skill is { } sk ? _bundle.Skill(sk)?.Name ?? sk : null), now);   // nothing changed: a run in progress goes on
+            return;
+        }
         if (IsItemIntent(rejected.Intent))
         {
             if (UiText.ItemRefused(rejected.Reason) is { Length: > 0 } why) SetFlash(why, now);
