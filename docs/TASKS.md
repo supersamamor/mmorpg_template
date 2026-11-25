@@ -135,7 +135,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-704 | Appearance definitions: `appearance.yaml` (gender male/female, skin, faces, hair) + validation | Claude Code | Sonnet 5.5 | [T-704](../tasks/prompts/T-704.md) | T-102, T-209 | Review | Data only, started early; server flow is T-705 |
 | T-705 | Appearance on the server: checked at creation, stored with the character, sent in snapshots | Claude Code | Sonnet 5.5 | [T-705](../tasks/prompts/T-705.md) | T-701, T-702, T-704 | Review | Restricted `Persistence/**` and `Net/**`, the scope in the prompt only (owner's instructions of 2026-11-25) |
 | T-706 | Character creation screen with rotating 3D preview, and drawing appearance in the world | Claude Code | Opus 5.5 | [T-706](../tasks/prompts/T-706.md) | T-206, T-207, T-222, T-403, T-405, T-705 | Review | No restricted area |
-| T-710 | Account leftovers: password change, a session that ends closes its game, `character_in_use` across servers, a failed `ui` run restores preferences, flaky tests, docs of the `saving` and `appearance` runs | Claude Code | Sonnet 5.5 | [T-710](../tasks/prompts/T-710.md) | T-701, T-702, T-706 | In Progress | Restricted `Net/**` and `Persistence/**` scopes in the prompt's header; ADR-002 #289, #300, #316 |
+| T-710 | Account leftovers: password change, a session that ends closes its game, `character_in_use` across servers, a failed `ui` run restores preferences, flaky tests, docs of the `saving` and `appearance` runs | Claude Code | Sonnet 5.5 | [T-710](../tasks/prompts/T-710.md) | T-701, T-702, T-706 | Review | Restricted `Net/**` and `Persistence/**` scopes in the prompt's header; ADR-002 #289, #300, #316 |
 
 ## Backlog (prompts written when the previous phase is Done)
 
