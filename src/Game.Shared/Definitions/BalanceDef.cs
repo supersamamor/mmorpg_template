@@ -57,6 +57,9 @@ namespace Game.Shared.Definitions
 
         /// <summary>Character slots and what a character may be called (T-701, ARCHITECTURE §10).</summary>
         public CharactersBalanceDef Characters { get; init; } = new CharactersBalanceDef();
+
+        /// <summary>Quest autopilot (T-604, ARCHITECTURE §6.4.2).</summary>
+        public AutopilotBalanceDef Autopilot { get; init; } = new AutopilotBalanceDef();
     }
 
     /// <summary>Character slots and names (T-701): the <c>characters</c> section of <c>balance.yaml</c>. Whether a name is free is decided by the database.</summary>

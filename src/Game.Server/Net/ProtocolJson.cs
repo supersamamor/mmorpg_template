@@ -41,6 +41,9 @@ public static class ProtocolJson
             int? version = null, quantity = null, level = null, amount = null, index = null;
             long? seq = null, target = null, entry = null, card = null;
             GridCell? cell = null;
+            // start_autopilot's lists (T-604): where they begin; they are read once the type is known, so in any other message they stay unknown fields, ignored whatever they hold
+            Utf8JsonReader questsAt = default, skillsAt = default;
+            bool hasQuests = false, hasSkills = false;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var key = reader.GetString();
@@ -48,6 +51,16 @@ public static class ProtocolJson
                 switch (key)
                 {
                     case "type": type = String(ref reader); break;
+                    case "quests":
+                        questsAt = reader;
+                        hasQuests = true;
+                        reader.Skip();
+                        break;
+                    case "skills":
+                        skillsAt = reader;
+                        hasSkills = true;
+                        reader.Skip();
+                        break;
                     case "card": card = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var cd) ? cd : throw Bad(); break;
                     case "version": version = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var v) ? v : throw Bad(); break;
                     case "name": name = String(ref reader); break;
@@ -104,6 +117,9 @@ public static class ProtocolJson
                 MessageTypes.AbandonQuest => quest is { } dropped ? new AbandonQuestMessage(dropped) : null,
                 MessageTypes.ShopBuy => itemId is { } bought && quantity is { } units ? new ShopBuyMessage(bought, units) : null,
                 MessageTypes.ShopSell => entry is { } sold && quantity is { } amountSold ? new ShopSellMessage(sold, amountSold) : null,
+                MessageTypes.StartAutopilot => hasQuests
+                    ? new StartAutopilotMessage(ReadStrings(ref questsAt), hasSkills ? ReadLevels(ref skillsAt) : []) : null,
+                MessageTypes.StopAutopilot => new StopAutopilotMessage(),
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -205,6 +221,10 @@ public static class ProtocolJson
                 w.WriteNumber("entry", sell.Entry);
                 w.WriteNumber("quantity", sell.Quantity);
                 break;
+            case StartAutopilotMessage start:
+                WriteStrings(w, "quests", start.Quests);
+                WriteLevels(w, "skills", start.Skills);
+                break;
         }
         w.WriteEndObject();
     }
@@ -279,15 +299,7 @@ public static class ProtocolJson
             case SkillsMessage skills:
                 w.WriteString("job", skills.Job);
                 w.WriteNumber("points", skills.Points);
-                w.WriteStartArray("levels");
-                foreach (var l in skills.Levels)
-                {
-                    w.WriteStartArray();
-                    w.WriteStringValue(l.Skill);
-                    w.WriteNumberValue(l.Level);
-                    w.WriteEndArray();
-                }
-                w.WriteEndArray();
+                WriteLevels(w, "levels", skills.Levels);
                 w.WriteStartArray("cooldowns");
                 foreach (var c in skills.Cooldowns)
                 {
@@ -448,6 +460,12 @@ public static class ProtocolJson
                     WriteQuestEntry(w, state);
                 }
                 break;
+            case AutopilotMessage autopilot:
+                w.WriteString("mode", autopilot.Mode);
+                if (autopilot.Quest is not null) w.WriteString("quest", autopilot.Quest);
+                if (autopilot.Doing is not null) w.WriteString("doing", autopilot.Doing);
+                if (autopilot.Reason is not null) w.WriteString("reason", autopilot.Reason);
+                break;
             case PongMessage pong:
                 w.WriteNumber("seq", pong.Seq);
                 break;
@@ -505,7 +523,7 @@ public static class ProtocolJson
             long? npc = null;
             bool more = false;
             List<DialogueChoiceRecord>? choices = null;
-            string? quest = null, change = null;
+            string? quest = null, change = null, mode = null, doing = null;
             long currency = 0;
             string? shopId = null;
             int maxQuantity = 0;
@@ -589,6 +607,8 @@ public static class ProtocolJson
                     case "sell": shopSell = ReadStock(ref reader); break;
                     case "quest": quest = String(ref reader); break;
                     case "change": change = String(ref reader); break;
+                    case "mode": mode = String(ref reader); break;
+                    case "doing": doing = String(ref reader); break;
                     case "state": questState = ReadQuestEntry(ref reader); break;
                     case "active":
                         if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
@@ -636,6 +656,7 @@ public static class ProtocolJson
                 MessageTypes.QuestLog => new QuestLogMessage((IReadOnlyList<QuestEntryRecord>?)questsActive ?? Array.Empty<QuestEntryRecord>(),
                     (IReadOnlyList<string>?)completed ?? Array.Empty<string>(), (IReadOnlyList<string>?)offer ?? Array.Empty<string>(), (IReadOnlyList<string>?)turnIn ?? Array.Empty<string>()),
                 MessageTypes.Quest => change is null || quest is null ? null : new QuestMessage(change, quest, questState),
+                MessageTypes.Autopilot => mode is null ? null : new AutopilotMessage(mode, quest, doing, reason),
                 MessageTypes.Pong => new PongMessage(seq),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason),
                 null => null,
@@ -1130,6 +1151,28 @@ public static class ProtocolJson
         return list;
     }
 
+    /// <summary>Skill levels as <c>[["skill.x",n],...]</c>.</summary>
+    private static void WriteLevels(Utf8JsonWriter w, string name, IReadOnlyList<SkillLevelRecord> levels)
+    {
+        w.WriteStartArray(name);
+        foreach (var l in levels)
+        {
+            w.WriteStartArray();
+            w.WriteStringValue(l.Skill);
+            w.WriteNumberValue(l.Level);
+            w.WriteEndArray();
+        }
+        w.WriteEndArray();
+    }
+
+    /// <summary>What <see cref="WriteLevels"/> writes; anything else is malformed.</summary>
+    private static List<SkillLevelRecord> ReadLevels(ref Utf8JsonReader reader)
+    {
+        var pairs = ReadPairs(ref reader);
+        if (reader.TokenType != JsonTokenType.EndArray) throw Bad();
+        return pairs.ConvertAll(l => new SkillLevelRecord(l.Item1, l.Item2));
+    }
+
     /// <summary><c>[["name",n],...]</c> as (name, number) pairs.</summary>
     private static List<(string, int)> ReadPairs(ref Utf8JsonReader reader)
     {
@@ -1140,7 +1183,7 @@ public static class ProtocolJson
             reader.Read();
             var name = String(ref reader) ?? throw Bad();
             reader.Read();
-            var n = reader.GetInt32();
+            if (reader.TokenType != JsonTokenType.Number || !reader.TryGetInt32(out var n)) throw Bad();
             if (!reader.Read() || reader.TokenType != JsonTokenType.EndArray) throw Bad();
             list.Add((name, n));
         }

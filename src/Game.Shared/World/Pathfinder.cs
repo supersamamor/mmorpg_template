@@ -36,6 +36,7 @@ namespace Game.Shared.World
         private int[] _parent = Array.Empty<int>();
         private int[] _seen = Array.Empty<int>();    // == _generation: _g and _parent are valid for this search
         private int[] _closed = Array.Empty<int>();  // == _generation: already expanded
+        private int[] _goal = Array.Empty<int>();    // FindNearest: 1 + the index of the goal on the cell, 0 for none; all 0 between searches
         private HeapEntry[] _heap = new HeapEntry[64];
         private int _heapCount;
         private int _generation;
@@ -133,6 +134,104 @@ namespace Game.Shared.World
                 }
             }
 
+            LastNodesExpanded = expanded;
+            return PathStatus.NoPath;
+        }
+
+        /// <summary>
+        /// Finds the goal with the shortest walk from <paramref name="start"/> (T-604): one search outwards in cost order that stops at the first goal it expands, so it costs what
+        /// the nearest goal is away, however many there are. The same rules, costs and <paramref name="limits"/> as <see cref="FindPath"/>; equal walks go to the lower cell index, then
+        /// the lower goal index. On <see cref="PathStatus.Found"/> <paramref name="path"/> holds the cells to walk (empty when a goal is the start) and <paramref name="goalIndex"/>
+        /// the goal's index; on any other status it is empty and the index is -1. Goals off the map or not walkable are never found.
+        /// </summary>
+        public PathStatus FindNearest(MapGrid grid, GridCell start, IReadOnlyList<GridCell> goals, PathLimits limits, List<GridCell> path, out int goalIndex)
+        {
+            if (grid == null) throw new ArgumentNullException(nameof(grid));
+            if (goals == null) throw new ArgumentNullException(nameof(goals));
+            if (path == null) throw new ArgumentNullException(nameof(path));
+            path.Clear();
+            goalIndex = -1;
+            LastNodesExpanded = 0;
+            if (!grid.InBounds(start.X, start.Y)) return PathStatus.OutOfBounds;
+            if (!grid.IsWalkable(start.X, start.Y)) return PathStatus.StartNotWalkable;
+
+            var width = grid.Width;
+            Prepare(width * grid.Height);
+            if (_goal.Length < _g.Length) _goal = new int[_g.Length];
+            var any = false;
+            for (var i = goals.Count - 1; i >= 0; i--)   // backwards: the lowest index stays
+            {
+                if (!grid.IsWalkable(goals[i].X, goals[i].Y)) continue;
+                _goal[goals[i].Y * width + goals[i].X] = i + 1;
+                any = true;
+            }
+            if (!any) return PathStatus.NoPath;
+
+            var status = Flood(grid, start, limits, path, out goalIndex);
+            for (var i = 0; i < goals.Count; i++)
+                if (grid.InBounds(goals[i].X, goals[i].Y)) _goal[goals[i].Y * width + goals[i].X] = 0;
+            return status;
+        }
+
+        private PathStatus Flood(MapGrid grid, GridCell start, PathLimits limits, List<GridCell> path, out int goalIndex)
+        {
+            goalIndex = -1;
+            var width = grid.Width;
+            var startIndex = start.Y * width + start.X;
+            _g[startIndex] = 0;
+            _parent[startIndex] = -1;
+            _seen[startIndex] = _generation;
+            _heapCount = 0;
+            Push(startIndex, 0, 0);
+
+            var farthest = (long)limits.MaxPathLength * DiagonalCost;   // a walk of at most that many steps never costs more
+            var expanded = 0;
+            while (_heapCount > 0)
+            {
+                var current = Pop();
+                if (_closed[current] == _generation) continue;
+                _closed[current] = _generation;
+                if (_g[current] > farthest)
+                {
+                    LastNodesExpanded = expanded;
+                    return PathStatus.TooLong;   // and so is everything after it
+                }
+                if (_goal[current] > 0)
+                {
+                    LastNodesExpanded = expanded;
+                    var status = Build(current, width, limits, path);
+                    if (status == PathStatus.Found) goalIndex = _goal[current] - 1;
+                    return status;   // the nearest is too long a walk: so is every other
+                }
+                if (expanded >= limits.MaxNodesExpanded)
+                {
+                    LastNodesExpanded = expanded;
+                    return PathStatus.NodeLimit;
+                }
+                expanded++;
+
+                var cx = current % width;
+                var cy = current / width;
+                var g = _g[current];
+                for (var d = 0; d < GridDirection.Count; d++)
+                {
+                    var dx = GridDirection.StepXOf(d);
+                    var dy = GridDirection.StepYOf(d);
+                    var nx = cx + dx;
+                    var ny = cy + dy;
+                    if (!grid.IsWalkable(nx, ny)) continue;
+                    var diagonal = dx != 0 && dy != 0;
+                    if (diagonal && !(grid.IsWalkable(cx + dx, cy) && grid.IsWalkable(cx, cy + dy))) continue;
+                    var next = ny * width + nx;
+                    if (_closed[next] == _generation) continue;
+                    var ng = g + (diagonal ? DiagonalCost : OrthogonalCost);
+                    if (_seen[next] == _generation && ng >= _g[next]) continue;
+                    _seen[next] = _generation;
+                    _g[next] = ng;
+                    _parent[next] = current;
+                    Push(next, ng, 0);
+                }
+            }
             LastNodesExpanded = expanded;
             return PathStatus.NoPath;
         }

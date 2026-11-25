@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Net.WebSockets;
 using Game.Server.World;
 using Game.Server.World.Aoi;
+using Game.Server.World.Autopilot;
 using Game.Server.World.Combat;
 using Game.Server.World.Dialogue;
 using Game.Server.World.Inventory;
@@ -56,6 +57,7 @@ public sealed class ClientSession : IViewSink
     private string? _byeReason;
     private volatile string? _mapId;
     private volatile bool _welcomed;
+    private bool _autopilotTold;             // tick thread: the autopilot's status went out with this session's first snapshot (T-604)
     private volatile bool _unacknowledged;   // resumed, and the client has not spoken since: the redeemed token still works
 
     internal ClientSession(Gateway gateway, WebSocket socket, string peer, long nowMs)
@@ -142,6 +144,11 @@ public sealed class ClientSession : IViewSink
         _gateway.PostSkills(snapshot.MapId, snapshot.Observer); // and the own skills, points and cooldowns
         _gateway.PostStats(snapshot.MapId, snapshot.Observer); // and the own stats, stat points and derived stats (T-503)
         _gateway.PostQuests(snapshot.Observer); // and the own quest log and NPC markers (T-602)
+        if (!_autopilotTold)
+        {
+            _autopilotTold = true;
+            _gateway.PostAutopilot(snapshot.MapId, snapshot.Observer); // a session that took a character over learns what became of its autopilot run (T-604)
+        }
         _gateway.Stats.AddSinkTime(Stopwatch.GetTimestamp() - started);
     }
 
@@ -367,6 +374,9 @@ public sealed class ClientSession : IViewSink
             _gateway.Acknowledge(this);
         }
 
+        // T-604: the player's own orders end an autopilot run, whatever becomes of the order itself. Queued first, so both reach the same tick in this order.
+        if (Entity is { } self && IsManualInput(message, out var isOrder)) _gateway.Enqueue(new ManualInput(self, isOrder));
+
         switch (message)
         {
             case HelloMessage:
@@ -434,6 +444,12 @@ public sealed class ClientSession : IViewSink
             case ShopSellMessage sell:
                 if (Entity is { } seller) _gateway.Enqueue(new ShopSell(seller, sell.Entry, sell.Quantity));
                 break;
+            case StartAutopilotMessage start:
+                if (Entity is { } starter) _gateway.Enqueue(new StartAutopilot(starter, start.Quests, start.Skills));
+                break;
+            case StopAutopilotMessage:
+                if (Entity is { } stopper) _gateway.Enqueue(new StopAutopilot(stopper, AutopilotStops.Stopped));
+                break;
             case AbandonQuestMessage abandon:
                 if (Entity is { } quitter) _gateway.Enqueue(new AbandonQuest(quitter, abandon.Quest));
                 break;
@@ -451,6 +467,17 @@ public sealed class ClientSession : IViewSink
                 break;
         }
         return null;
+    }
+
+    /// <summary>
+    /// True for the messages that take the character out of the autopilot's hands (T-604): move, stop, attack, skill, item, dialogue, shop and respawn. <paramref name="order"/>: it is
+    /// itself an order where to go or what to fight, so the walk in progress is its to end.
+    /// </summary>
+    private static bool IsManualInput(ClientMessage message, out bool order)
+    {
+        order = message is MoveMessage or StopMessage or AttackMessage or StopAttackMessage or RespawnMessage or UseSkillMessage or PickUpMessage or TalkMessage;
+        return order || message is UseItemMessage or EquipMessage or UnequipMessage or DropItemMessage or InsertCardMessage or RefineMessage
+            or DialogueChoiceMessage or DialogueCloseMessage or ShopBuyMessage or ShopSellMessage;
     }
 
     /// <summary>Logs in and joins; never throws. While the login is pending the session is still awaiting its hello (<see cref="SessionState.AwaitingHello"/>).</summary>

@@ -153,6 +153,32 @@ shop:
 quests:
   # How many quests a character may have going at once; one more start is refused (too_many_active) until one is completed or abandoned.
   max_active: 10
+autopilot:
+  # The quest autopilot (T-604): the server plays a player's ticked quests through the same orders and rules as the player. False refuses it.
+  enabled: true
+  # One run may be given as many quests as a character can have active (quests.max_active).
+  max_quests: 10
+  # Room for the largest skill bar the client can be configured to (hotbar_slots, at most 12); extra slots cost nothing.
+  max_skills: 12
+  # No daily limit. A fork that wants one sets minutes per 24 hours, counted from the first run of the day; pauses do not count.
+  daily_limit_minutes: 0
+  # Two minutes without a counter, a kill or getting nearer: longer than any respawn (20 s) or walk across the sample maps, short enough not to look stuck.
+  no_progress_ms: 120000
+  # Three decisions a second, like a monster's: a kill is followed up at once anyway (events wake a run early).
+  decide_interval_ms: 300
+  # Path searches all the runs of one map may share per tick. One search is capped by movement.max_nodes_expanded, so this caps what a crowd of runs costs;
+  # a hundred hunting runs still get forty a second, more than they ask for.
+  searches_per_tick: 4
+  # A journey is walked 24 cells at a time: well inside movement.max_path_length (64), so a winding way still fits one search.
+  leg_cells: 24
+  # What every player is sure to see around the character (aoi.view_radius x aoi.bucket_size): wanted drops are fetched from there before the next fight.
+  gather_range: 12
+  # Healing shortcut skills are cast below 60% HP (and SP skills below 60% SP), about one hard hit before it gets dangerous.
+  support_below_percent: 60
+  # At the hunting ground, whatever hit the character in the last 3 seconds is fought first. On the way somewhere it walks on.
+  retaliate_ms: 3000
+  # A monster that could not be reached (or an item that could not be taken) is left alone for 10 seconds.
+  avoid_ms: 10000
 characters:
   # Three characters per account: one per job path to try, and a small list that fits the character-select screen of a phone without scrolling far.
   max_slots: 3

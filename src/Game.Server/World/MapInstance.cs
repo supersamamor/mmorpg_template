@@ -22,6 +22,9 @@ public sealed class InstanceCounters
     /// <summary>Intents dropped because no system owns their type.</summary>
     public long IntentsDroppedUnrouted { get; internal set; }
 
+    /// <summary><see cref="Automated"/> intents dropped because the player took over in the same tick (<see cref="ICancelsAutomation"/>).</summary>
+    public long IntentsDroppedCancelled { get; internal set; }
+
     /// <summary>System <see cref="ITickSystem.Tick"/> calls that threw.</summary>
     public long SystemErrors { get; internal set; }
 
@@ -62,6 +65,8 @@ public sealed class MapInstance
     private readonly List<Entity> _ordered = new();
     private readonly List<Entity> _players = new();
     private readonly List<StructuralChange> _deferred = new();
+    private readonly HashSet<EntityId> _cancelled = new();       // entities whose automated intents of this tick are dropped
+    private readonly List<IIntent> _early = new();               // cancels for an entity still on its way here: offered again next tick
     private readonly object _inboxLock = new();
     private List<StructuralChange> _inbox = new();
     private List<StructuralChange> _inboxDrained = new();
@@ -154,6 +159,8 @@ public sealed class MapInstance
         // Phase 1: take everything that arrived before this tick began.
         _drained = _intents.DrainTo(_drained);
         lock (_inboxLock) (_inbox, _inboxDrained) = (_inboxDrained, _inbox);
+        foreach (var intent in _drained)
+            if (intent is ICancelsAutomation) _cancelled.Add(intent.Entity);
         foreach (var intent in _drained) Route(intent);
 
         // Phase 2: systems in order, each seeing its own intents.
@@ -170,6 +177,9 @@ public sealed class MapInstance
         foreach (var outbound in _outbound) RunOutbound(outbound, tick);
 
         _drained.Clear();
+        _cancelled.Clear();
+        foreach (var intent in _early) _intents.TryEnqueue(intent);
+        _early.Clear();
         _inboxDrained.Clear();
         _deferred.Clear();
         foreach (var list in _routed) list.Clear();
@@ -189,8 +199,20 @@ public sealed class MapInstance
 
     private void Route(IIntent intent)
     {
+        if (intent is Automated automated)
+        {
+            if (_cancelled.Contains(intent.Entity))
+            {
+                Counters.IntentsDroppedCancelled++;
+                return;
+            }
+            intent = automated.Intent;
+        }
         if (!_entities.TryGetValue(intent.Entity, out var entity))
-            Counters.IntentsDroppedUnknownEntity++;
+        {
+            if (intent is ICancelsAutomation && ReferenceEquals(World.InstanceOf(intent.Entity), this)) _early.Add(intent);
+            else Counters.IntentsDroppedUnknownEntity++;
+        }
         else if (entity.Dead && intent is not IDeadEntityIntent)
             Counters.IntentsDroppedDeadEntity++;
         else if (!_routes.TryGetValue(intent.GetType(), out var index))

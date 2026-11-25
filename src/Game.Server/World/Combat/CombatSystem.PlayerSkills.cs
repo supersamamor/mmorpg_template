@@ -221,14 +221,8 @@ public sealed partial class CombatSystem
         return null;
     }
 
-    private int SpCostOf(Entity player, CompiledSkill skill, int level)
-    {
-        if (player.Stats is not { } stats) return 0;
-        _skillFormula.Clear();
-        stats.WriteTo(_skillFormula);
-        _skillFormula[SkillLevelSlot] = level;
-        return (int)Math.Clamp(Math.Floor(skill.SpCost.Evaluate(_skillFormula) + 1e-9), 0, int.MaxValue);
-    }
+    private int SpCostOf(Entity player, CompiledSkill skill, int level) =>
+        player.Stats is { } stats ? SkillRules.SpCost(stats, skill.SpCost, level, _skillFormula) : 0;
 
     /// <summary>One player's cast for one tick: walk into range and sight, stand and cast, then pay and request. False when it ended.</summary>
     private bool PursueCast(TickContext context, Chase chase)

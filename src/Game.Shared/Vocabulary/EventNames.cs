@@ -246,6 +246,12 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>QuestMarkersChanged</c> (T-602): the NPCs with a quest to offer or turn in changed for a player.</summary>
         public const string QuestMarkersChanged = "QuestMarkersChanged";
 
+        /// <summary><c>AutopilotChanged</c> (T-604): what a player's quest autopilot is doing changed.</summary>
+        public const string AutopilotChanged = "AutopilotChanged";
+
+        /// <summary><c>AutopilotRefused</c> (T-604): a <c>start_autopilot</c> was refused; nothing changed.</summary>
+        public const string AutopilotRefused = "AutopilotRefused";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -328,6 +334,8 @@ namespace Game.Shared.Vocabulary
             QuestItemsResolved,
             QuestRewardsRequested,
             QuestRewarded,
-            QuestMarkersChanged);
+            QuestMarkersChanged,
+            AutopilotChanged,
+            AutopilotRefused);
     }
 }

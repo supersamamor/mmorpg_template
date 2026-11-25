@@ -425,6 +425,61 @@
       },
       "additionalProperties": false,
       "description": "Character slots and what a character may be called (T-701, ARCHITECTURE §10)."
+    },
+    "autopilot": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "False refuses every start_autopilot (disabled)."
+        },
+        "max_quests": {
+          "type": "integer",
+          "description": "Most quests one run may be given. At least 1."
+        },
+        "max_skills": {
+          "type": "integer",
+          "description": "Most shortcut skills one run may be given (0 = auto-attack only)."
+        },
+        "daily_limit_minutes": {
+          "type": "integer",
+          "description": "Minutes a character may run per 24 hours, counted from the first run of that day; 0 = no limit. Pauses do not count."
+        },
+        "no_progress_ms": {
+          "type": "integer",
+          "description": "A run with no progress for this long pauses (no_progress). Progress is a counter or step that moved, a credited kill of a hunted monster, or getting nearer on the way than ever before. Above 0."
+        },
+        "decide_interval_ms": {
+          "type": "integer",
+          "description": "How often a run that waits for nothing looks at what to do next. Above 0."
+        },
+        "searches_per_tick": {
+          "type": "integer",
+          "description": "Most path searches all the runs of one map may make in one tick; the others wait for the next. At least 1."
+        },
+        "leg_cells": {
+          "type": "integer",
+          "description": "Longest single walk of a journey, in cells, from 1 to movement.max_path_length; a longer way is walked in several."
+        },
+        "gather_range": {
+          "type": "integer",
+          "description": "A wanted ground item within this many cells (Chebyshev) is fetched before the next fight. From 0 to aoi.view_radius x aoi.bucket_size."
+        },
+        "support_below_percent": {
+          "type": "integer",
+          "description": "A shortcut skill that heals (or restores SP) is cast below this share of the maximum, in percent (0 = never, 100 = whenever some is missing)."
+        },
+        "retaliate_ms": {
+          "type": "integer",
+          "description": "At the hunting ground, a monster that hit the character within this long is fought first. 0 = never."
+        },
+        "avoid_ms": {
+          "type": "integer",
+          "description": "A target that could not be reached, or an item that could not be taken, is left alone for this long. 0 or more."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Quest autopilot (T-604, ARCHITECTURE §6.4.2)."
     }
   },
   "additionalProperties": false,
