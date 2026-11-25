@@ -9,8 +9,13 @@ public sealed record MeshFacts(string Name, int Triangles, IReadOnlySet<int> Mat
     /// <summary>Height of the mesh at rest, in world units.</summary>
     public float Height => Max.Y - Min.Y;
 
+    private readonly Lazy<IReadOnlySet<int>> _vertexColors = new(() => new HashSet<int>());
+
+    /// <summary>How to read <see cref="VertexColors"/>: only the few models whose paint is checked are read.</summary>
+    internal Func<IReadOnlySet<int>> ReadVertexColors { init => _vertexColors = new Lazy<IReadOnlySet<int>>(value); }
+
     /// <summary>The distinct vertex colours (glTF <c>COLOR_0</c>, linear, 8 bits a channel as the engine keeps them), as <c>r &lt;&lt; 16 | g &lt;&lt; 8 | b</c>.</summary>
-    public IReadOnlySet<int> VertexColors { get; init; } = new HashSet<int>();
+    public IReadOnlySet<int> VertexColors => _vertexColors.Value;
 
     /// <summary>True when some vertex is painted with one of these sRGB colours (<c>#rrggbb</c>), within the client's tolerance (T-706).</summary>
     public bool IsPainted(IEnumerable<string> colors)
@@ -80,6 +85,19 @@ public sealed class ModelFacts
     /// <summary>Indexes of materials that are blended (<c>alphaMode: BLEND</c>) or cut out (<c>MASK</c>): the toon look leaves those alone.</summary>
     public IReadOnlySet<int> SeeThroughMaterials { get; private init; } = new HashSet<int>();
 
+    private static HashSet<int> ColorsOf(GltfFile file, List<int> accessors)
+    {
+        var colors = new HashSet<int>();
+        foreach (var accessor in accessors)
+        {
+            var values = file.ReadFloats(accessor);
+            var width = GltfFile.Width(file.Json["accessors"]?[accessor]?["type"]?.GetValue<string>() ?? "VEC4");
+            int Channel(int at) => (int)Math.Round(Math.Clamp(values[at], 0f, 1f) * 255);
+            for (var v = 0; width >= 3 && v + width <= values.Length; v += width) colors.Add(Channel(v) << 16 | Channel(v + 1) << 8 | Channel(v + 2));
+        }
+        return colors;
+    }
+
     /// <summary>Measures a loaded asset.</summary>
     public static ModelFacts Of(GltfFile file)
     {
@@ -128,7 +146,7 @@ public sealed class ModelFacts
             var outline = primitives.Count > 0;
             var min = new Vector3(float.MaxValue);
             var max = new Vector3(float.MinValue);
-            var colors = new HashSet<int>();
+            var colorAccessors = new List<int>();
             foreach (var primitive in primitives.OfType<JsonObject>())
             {
                 var mode = primitive["mode"]?.GetValue<int>() ?? 4;
@@ -138,13 +156,7 @@ public sealed class ModelFacts
                 triangles += mode switch { 4 => count / 3, 5 or 6 => Math.Max(0, count - 2), _ => 0 };
                 if (primitive["material"] is { } material) materials.Add(material.GetValue<int>());
                 if (attributes?["TANGENT"] is null) outline = false;
-                if (attributes?["COLOR_0"]?.GetValue<int>() is { } colorAccessor)
-                {
-                    var values = file.ReadFloats(colorAccessor);
-                    var width = GltfFile.Width(file.Json["accessors"]?[colorAccessor]?["type"]?.GetValue<string>() ?? "VEC4");
-                    int Channel(int at) => (int)Math.Round(Math.Clamp(values[at], 0f, 1f) * 255);
-                    for (var v = 0; width >= 3 && v + width <= values.Length; v += width) colors.Add(Channel(v) << 16 | Channel(v + 1) << 8 | Channel(v + 2));
-                }
+                if (attributes?["COLOR_0"]?.GetValue<int>() is { } colorAccessor) colorAccessors.Add(colorAccessor);
                 if (positions is { } pa && file.Json["accessors"]?[pa] is JsonObject accessor && accessor["min"] is JsonArray lo && accessor["max"] is JsonArray hi && lo.Count == 3 && hi.Count == 3)
                 {
                     for (var corner = 0; corner < 8; corner++)
@@ -157,7 +169,7 @@ public sealed class ModelFacts
                 }
             }
             if (min.X > max.X) (min, max) = (Vector3.Zero, Vector3.Zero);
-            meshes.Add(new MeshFacts(file.NodeName(i), triangles, materials, outline, skinned, min, max) { VertexColors = colors });
+            meshes.Add(new MeshFacts(file.NodeName(i), triangles, materials, outline, skinned, min, max) { ReadVertexColors = () => ColorsOf(file, colorAccessors) });
         }
 
         var animations = new List<string>();

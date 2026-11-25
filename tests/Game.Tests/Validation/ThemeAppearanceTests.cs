@@ -9,25 +9,43 @@ namespace Game.Tests.Validation;
 /// T-706: what <c>validate</c> checks for character looks, on copies of the shipped pack and content: <c>recolor</c>, <c>hides_hair</c>, the paint on the bodies, the
 /// budget of a body with its face and hairstyle, and a job's look.
 /// </summary>
-public class ThemeAppearanceTests : IDisposable
+public class ThemeAppearanceTests : IClassFixture<ThemeAppearanceTests.Pack>
 {
-    private readonly string _root = Path.Combine(Path.GetTempPath(), "themeappearance-" + Guid.NewGuid().ToString("N"));
     private readonly string _themes;
     private readonly string _content;
 
-    public ThemeAppearanceTests()
+    /// <summary>One copy of the pack and content for the class (they are large); each test starts with the shipped manifest and jobs.</summary>
+    public sealed class Pack : IDisposable
     {
-        _themes = Path.Combine(_root, "themes");
-        _content = Path.Combine(_root, "content");
-        var source = Path.Combine(RepoRoot(), "themes", "default");
-        foreach (var folder in new[] { "models", "anims" }) Copy(Path.Combine(source, folder), Path.Combine(_themes, "default", folder));
-        File.Copy(Path.Combine(source, "asset-manifest.json"), Path.Combine(_themes, "default", "asset-manifest.json"));
-        Copy(Path.Combine(RepoRoot(), "content"), _content);
+        private readonly string _root = Path.Combine(Path.GetTempPath(), "themeappearance-" + Guid.NewGuid().ToString("N"));
+
+        public Pack()
+        {
+            foreach (var folder in new[] { "models", "anims" }) Copy(Path.Combine(RepoRoot(), "themes", "default", folder), Path.Combine(Themes, "default", folder));
+            Copy(Path.Combine(RepoRoot(), "content"), Content);
+        }
+
+        public string Themes => Path.Combine(_root, "themes");
+
+        public string Content => Path.Combine(_root, "content");
+
+        public void Reset()
+        {
+            File.Copy(Path.Combine(RepoRoot(), "themes", "default", "asset-manifest.json"), Path.Combine(Themes, "default", "asset-manifest.json"), true);
+            Copy(Path.Combine(RepoRoot(), "content", "jobs"), Path.Combine(Content, "jobs"));
+        }
+
+        public void Dispose()
+        {
+            try { Directory.Delete(_root, true); } catch (IOException) { }
+        }
     }
 
-    public void Dispose()
+    public ThemeAppearanceTests(Pack pack)
     {
-        try { Directory.Delete(_root, true); } catch (IOException) { }
+        pack.Reset();
+        _themes = pack.Themes;
+        _content = pack.Content;
     }
 
     [Fact]

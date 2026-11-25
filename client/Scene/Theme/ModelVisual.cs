@@ -43,6 +43,7 @@ public sealed class ModelVisual : IEntityVisual
     private readonly List<DressPart> _plan = new();
     private readonly List<WornItem> _wornItems = new();
     private CharacterLook? _character;
+    private string _dressKey = string.Empty;
     private AppearanceRecord? _looksSeen;
     private string? _jobSeen;
     private bool _fresh = true;
@@ -366,6 +367,7 @@ public sealed class ModelVisual : IEntityVisual
         _wornItems.Clear();
         foreach (var piece in _pieces) _wornItems.Add(new WornItem(piece.Worn, _equipment.SlotsOf(piece.ItemId)));
         DressPlan.Fill(_character, _wornItems, _plan);
+        _dressKey = WornSet.Key(PoolKey, _character, _plan); // once: a crowd waiting for its merges asks every frame
         for (var i = _dressed.Count - 1; i >= 0; i--)
             if (!_plan.Contains(_dressed[i].Part)) _dressed.RemoveAt(i); // a part still worn keeps its meshes
         foreach (var part in _plan)
@@ -436,7 +438,7 @@ public sealed class ModelVisual : IEntityVisual
         }
         var low = _lod1 is not null && _bodyMesh1 is not null && _bodySkin1 is not null;
         BodySource? Source(int lod) => lod == 0 ? new BodySource(_bodyMesh0!, _bodySkin0!, Parts(0)) : low ? new BodySource(_bodyMesh1!, _bodySkin1!, Parts(1)) : null;
-        if (!_mesher.TryGet(WornSet.Key(PoolKey, _character, _plan), _skeleton, Source, _character?.BodyColors, out var dressed)) return false;
+        if (!_mesher.TryGet(_dressKey, _skeleton, Source, _character?.BodyColors, out var dressed)) return false;
         ClearLoose();
         _lod0.Mesh = dressed.Mesh0;
         _lod0.Skin = dressed.Skin0;
