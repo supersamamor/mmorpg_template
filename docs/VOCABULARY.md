@@ -362,7 +362,7 @@ is a glowing part, drawn unlit by the toon material.
 
 ## Currency
 Engine id `currency`; the display name is data (`currency_name` in `balance.yaml`, default "crowns"; in the display bundle since format 6).
-The reward type is also `currency`. Per character, kept with the bag (`InventoryState.Currency`, in memory until T-702) and sent as `currency` in `inventory` and
+The reward type is also `currency`. Per character, kept and saved with the bag (`InventoryState.Currency`) and sent as `currency` in `inventory` and
 `inventory_changed` (T-602). Earned from quests; nothing spends it yet (shops are later).
 
 ## Formula variables (whitelist)
@@ -381,13 +381,16 @@ Owner only (about the client's own character): `attack_stopped`, `exp`, `level_u
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
 `oversize`, `before_hello`, `duplicate_hello`, `rate_limit`, `login_refused`, `server_full`, `too_slow`, `shutdown`, `server_error`, `update_required`,
-`logout`, `replaced`, `resume_failed`.
+`logout`, `replaced`, `resume_failed`, `load_failed`, `save_pending`, `save_lost`.
 `login_refused`: the dev login outside development or with a bad name, a session token that is unknown, expired or revoked, or a character that is not the account's
 (T-701: one answer for all of them). `server_error` also ends a `hello` whose login the database could not answer.
 `update_required`: the client's content hash differs from the server's, or it sent none outside development (ARCHITECTURE §5.4).
 `logout`: the client sent `logout`; its character left the world at once. `replaced`: another connection resumed this character with its token, or its account logged in again (an account plays one character at a time, T-701).
 The client reconnects after neither. `resume_failed`: the token in `hello` `resume` is unknown, already used, or its grace period is over
 (the client goes to the login screen). `rate_limit` also ends a resume from an address that failed too many resumes (ARCHITECTURE §10).
+`load_failed`: the character's saved state could not be read; nothing was created or changed. `save_pending`: its last save has not landed yet (bounded wait), or another live server holds it.
+`save_lost`: the server can no longer save the character it plays (it is held elsewhere, or deleted), so the session ends and the character goes back to its last save. After these three the
+client goes to the login screen and does not retry by itself (T-702, ARCHITECTURE §3 "Saving characters").
 A `rejected` message carries a "Movement reasons" (`MoveRejected`) term for `move`, an "Attack reasons" term for `attack`, or an "Item reasons" term for an
 item intent (`shop_buy` and `shop_sell` included), instead; the session goes on.
 
@@ -400,6 +403,11 @@ The `error` of a refused account request (T-701, ARCHITECTURE §10 "Accounts"): 
 **Account**: who signs in (a username and a password). **Session token**: proves a sign-in to the account endpoints and in `hello`; stored on the server as its SHA-256.
 **Resume token**: takes a character back after a drop; server memory only (ARCHITECTURE §10). **Character id**: a character's permanent id, a GUID; not the runtime
 entity id. **Slot**: a character's place in its account, from 0 (`characters.max_slots` in `balance.yaml`).
+
+## Saving terms
+(T-702, ARCHITECTURE §3 "Saving characters".) **Copy**: a character's whole state, taken on the tick thread. **Save**: a copy in the database, with a number that only goes up. **Claim**: which stay of a character may
+save it; the newest. **Run**: one server start, numbered by the database. **Link**: one save must not land before another. **Landed**: in the database. **At risk**: nothing has landed for 30 s.
+**Lost**: this server may not save the character any more. **Set aside**: kept, but not in use, because the content has no place for it. Set-aside kinds: `active_quest`, `completed_quest`, `unlocked_job`, `job`, `skill`.
 
 ## Entity kinds
 In a view record's `kind`: `player`, `monster`, `npc`, `item` (a ground item a monster dropped, `EntityKind.Item`; its `display_key` is the item id).

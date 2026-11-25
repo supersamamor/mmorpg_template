@@ -80,6 +80,13 @@ public sealed class QuestRig
 
     public void Publish(IGameEvent e) => Instance.Events.Publish(e);
 
+    /// <summary>EXP as a completed quest leaves it for combat to pay.</summary>
+    public void Owe(EntityId player, long baseExp, long jobExp)
+    {
+        Progress(player).OwedRewards.Add(new OwedQuestRewards("test.setup", baseExp, jobExp, 0, 0, [], []));
+        Publish(new QuestRewardsRequested(player, "test.setup"));
+    }
+
     public void Ticks(int n = 1)
     {
         for (var i = 0; i < n; i++)
@@ -349,7 +356,7 @@ public class QuestTests
         var rig = new QuestRig();
         var player = rig.Join();
         var state = rig.Progress(player);
-        rig.Publish(new QuestRewardsRequested(player, "test.setup", 500, 0, 0, 0, [], []));   // base level 2 or more, as combat pays EXP
+        rig.Owe(player, 500, 0);   // base level 2 or more, as combat pays EXP
         state.CompletedQuests.Add("quest.first_hunt");
         rig.Ticks(3);
         state.BaseLevel.ShouldBeGreaterThanOrEqualTo(2);
@@ -401,7 +408,7 @@ public class QuestTests
         // Below base level 5 the trial is not offered; Brannoc says what it takes.
         rig.Talk(player, "npc.trainer").Choices.Select(c => c.Text).ShouldContain(t => t.Contains("What does it take"));
         rig.Close(player);
-        rig.Publish(new QuestRewardsRequested(player, "test.setup", 1400, 0, 0, 0, [], []));
+        rig.Owe(player, 1400, 0);
         rig.TickUntil(() => state.BaseLevel >= 5, 10, "base level 5");
         state.BaseLevel.ShouldBeLessThan(10);
 
@@ -412,7 +419,7 @@ public class QuestTests
         rig.TickUntil(() => state.ActiveQuests.ContainsKey("quest.warden_trial"), 10, "the trial");
 
         // Step 1: base level 10 (a level reached through EXP, as kills would bring it); job level 8 for the job change too.
-        rig.Publish(new QuestRewardsRequested(player, "test.setup", 100_000, 100_000, 0, 0, [], []));
+        rig.Owe(player, 100_000, 100_000);
         rig.TickUntil(() => state.ActiveQuests["quest.warden_trial"].Step == 1, 10, "the level step");
         state.BaseLevel.ShouldBeGreaterThanOrEqualTo(10);
         state.JobLevel.ShouldBeGreaterThanOrEqualTo(8);

@@ -36,7 +36,7 @@ public sealed class SessionRow
 }
 
 /// <summary>
-/// Table <c>characters</c>: who exists. What a character owns or has done is T-702, its looks are T-705: both hang off <see cref="Id"/>.
+/// Table <c>characters</c>: who exists. What a character owns or has done is in <see cref="CharacterStateRow"/> and <see cref="ItemRow"/>, its looks are T-705: all hang off <see cref="Id"/>.
 /// </summary>
 public sealed class CharacterRow
 {
@@ -55,7 +55,7 @@ public sealed class CharacterRow
     /// <summary>What names are compared by (<c>CharacterNameRules.Key</c>). Unique over every row, deleted ones included: a deleted character keeps its name.</summary>
     public string NameKey { get; set; } = string.Empty;
 
-    /// <summary>Its job id.</summary>
+    /// <summary>Its job id, for the character list: what it was at its last save.</summary>
     public string JobId { get; set; } = string.Empty;
 
     /// <summary>When it was created (UTC).</summary>
@@ -63,4 +63,145 @@ public sealed class CharacterRow
 
     /// <summary>When it was deleted (UTC), or null. Deletion is soft: support can undo it.</summary>
     public DateTime? DeletedAt { get; set; }
+}
+
+/// <summary>Table <c>server_runs</c> (T-702): one row per server start. Its id is the high part of every item id the run hands out, so none is ever used twice.</summary>
+public sealed class ServerRunRow
+{
+    /// <summary>From the table's identity sequence, which never gives a number twice (not even after a rollback).</summary>
+    public long Id { get; set; }
+
+    /// <summary>When it started (the database's clock, as every time here).</summary>
+    public DateTime StartedAt { get; set; }
+
+    /// <summary>When it last said it was alive: a run silent for longer than the lease, or ended, holds nothing.</summary>
+    public DateTime SeenAt { get; set; }
+
+    /// <summary>When it stopped cleanly, or null.</summary>
+    public DateTime? EndedAt { get; set; }
+}
+
+/// <summary>
+/// Table <c>character_states</c> (T-702): everything saved about one character but its items. <see cref="Version"/> 0: never saved, the rest means nothing. Content is never here: ids
+/// and numbers only.
+/// </summary>
+public sealed class CharacterStateRow
+{
+    /// <summary>The character.</summary>
+    public Guid CharacterId { get; set; }
+
+    /// <summary>Counts who took the character; only the newest may save it.</summary>
+    public long Claim { get; set; }
+
+    /// <summary>The run that holds it, or null.</summary>
+    public long? HeldBy { get; set; }
+
+    /// <summary>The number of the last save: a save with a lower one changes nothing.</summary>
+    public long Version { get; set; }
+
+    /// <summary>When the last save's copy was made (UTC).</summary>
+    public DateTime? SavedAt { get; set; }
+
+    /// <summary>Map id.</summary>
+    public string MapId { get; set; } = string.Empty;
+
+    /// <summary>Cell.</summary>
+    public int CellX { get; set; }
+
+    /// <summary>Cell.</summary>
+    public int CellY { get; set; }
+
+    /// <summary>Facing.</summary>
+    public string Facing { get; set; } = string.Empty;
+
+    /// <summary>HP; 0 is dead.</summary>
+    public int Hp { get; set; }
+
+    /// <summary>SP.</summary>
+    public int Sp { get; set; }
+
+    /// <summary>Save point, or null.</summary>
+    public string? SaveMapId { get; set; }
+
+    /// <summary>Save point.</summary>
+    public int? SaveCellX { get; set; }
+
+    /// <summary>Save point.</summary>
+    public int? SaveCellY { get; set; }
+
+    /// <summary>Base level.</summary>
+    public int BaseLevel { get; set; }
+
+    /// <summary>Base EXP.</summary>
+    public long BaseExp { get; set; }
+
+    /// <summary>Job id.</summary>
+    public string JobId { get; set; } = string.Empty;
+
+    /// <summary>Job level.</summary>
+    public int JobLevel { get; set; }
+
+    /// <summary>Job EXP.</summary>
+    public long JobExp { get; set; }
+
+    /// <summary>Unspent stat points.</summary>
+    public int StatPoints { get; set; }
+
+    /// <summary>Unspent skill points.</summary>
+    public int SkillPoints { get; set; }
+
+    /// <summary>Currency.</summary>
+    public long Currency { get; set; }
+
+    /// <summary>The last quest turn-in number given out.</summary>
+    public long TurnInSequence { get; set; }
+
+    /// <summary>Autopilot time used.</summary>
+    public long AutopilotUsedMs { get; set; }
+
+    /// <summary>When the autopilot's day began, or null.</summary>
+    public DateTime? AutopilotDayStartedAt { get; set; }
+
+    /// <summary>jsonb: stat → value.</summary>
+    public string Stats { get; set; } = "{}";
+
+    /// <summary>jsonb: skill → level.</summary>
+    public string Skills { get; set; } = "{}";
+
+    /// <summary>jsonb: active and completed quests, unlocked jobs, paid turn-ins, owed rewards.</summary>
+    public string Quests { get; set; } = "{}";
+
+    /// <summary>jsonb: skill and item cooldowns, milliseconds left at <see cref="SavedAt"/>.</summary>
+    public string Cooldowns { get; set; } = "{}";
+
+    /// <summary>jsonb: what the content had no place for, items excepted (<see cref="ItemRow.Aside"/>).</summary>
+    public string SetAside { get; set; } = "[]";
+}
+
+/// <summary>Table <c>character_items</c> (T-702): one inventory entry. The primary key is what keeps one item from being two characters'.</summary>
+public sealed class ItemRow
+{
+    /// <summary>The permanent id: the run that made it and a counter (<c>CharacterSaves.NextItemId</c>).</summary>
+    public long Id { get; set; }
+
+    /// <summary>Whose it is.</summary>
+    public Guid CharacterId { get; set; }
+
+    /// <summary>The item.</summary>
+    public string ItemId { get; set; } = string.Empty;
+
+    /// <summary>How many.</summary>
+    public int Quantity { get; set; }
+
+    /// <summary>The slot it is worn in, or null.</summary>
+    public string? Slot { get; set; }
+
+    /// <summary>Socketed cards, in socket order.</summary>
+    public string[] Cards { get; set; } = [];
+
+    /// <summary>Refine level.</summary>
+    public int Refine { get; set; }
+
+    /// <summary>Why it is kept out of the bag (the content does not have it), or null.</summary>
+    public string? Aside { get; set; }
 }

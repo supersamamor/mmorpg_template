@@ -82,11 +82,10 @@ public sealed record QuestItemsResolved(EntityId Player, long Token, string? Rea
 }
 
 /// <summary>
-/// <c>QuestRewardsRequested</c>: the rewards of the completed <c>QuestId</c> that the progression host (combat) pays: base and job EXP (through <c>ProgressionRules</c>), stat and
-/// skill points, job unlocks and statuses (<c>StatusKeys</c>: compiled <c>apply_status</c> effects, <c>QuestRules.RewardKey</c>). None of them can fail.
+/// <c>QuestRewardsRequested</c>: the completed <c>QuestId</c> left rewards for the progression host (combat) to pay: they are in the character's <c>ProgressionState.OwedRewards</c>
+/// (EXP, points, unlocks, statuses), where a warp or a save between completing and paying cannot lose them (T-702). None of them can fail.
 /// </summary>
-public sealed record QuestRewardsRequested(EntityId Player, string QuestId, long BaseExp, long JobExp, int StatPoints, int SkillPoints, IReadOnlyList<string> UnlockJobs,
-    IReadOnlyList<string> StatusKeys) : IGameEvent
+public sealed record QuestRewardsRequested(EntityId Player, string QuestId) : IGameEvent
 {
     /// <inheritdoc />
     public string Name => EventNames.QuestRewardsRequested;

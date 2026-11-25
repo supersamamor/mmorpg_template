@@ -50,12 +50,16 @@ public sealed class QuestContent
 /// (<see cref="QuestItemsRequested"/>) and the progression host (<see cref="QuestRewardsRequested"/>) to pay. Owns <see cref="AbandonQuest"/>. Runs after the inventory.
 /// </summary>
 /// <remarks>
-/// <para><b>State</b> is in the shared progression store (<see cref="ProgressionState.ActiveQuests"/>, <see cref="ProgressionState.CompletedQuests"/>; in memory until T-702),
+/// <para><b>State</b> is in the shared progression store (<see cref="ProgressionState.ActiveQuests"/>, <see cref="ProgressionState.CompletedQuests"/>; saved with the character, T-702),
 /// changed only through <see cref="QuestRules"/> on the tick thread of the instance that holds the player.</para>
 /// <para><b>Turn-in.</b> When every objective of the current step is met, the step's consumed items, and for the last step the item and currency rewards, go to the inventory
 /// as one transaction (all or nothing, rule 10). When it is applied the step advances; the last step completes the quest and sends the other rewards (EXP, points, unlocks,
 /// statuses: none can fail) to the progression host. <b>Full bag:</b> when the inventory refuses (no room, too heavy), nothing changed and the quest <b>waits</b>: the step stays
 /// met and <i>held</i> (the reason goes to the player) and is tried again whenever the player's bag changes or it arrives on a map. Nothing is dropped on the ground.</para>
+/// <para><b>Paid exactly once (T-702, ADR-002 row 264).</b> A turn-in spans ticks: asked, paid by the inventory, then the step advances. Its number
+/// (<see cref="QuestProgress.Token"/>) stays the same until the step has advanced, and the bag keeps the numbers it has paid (<see cref="InventoryState.SettledTurnIns"/>), set in the
+/// step that pays. So when the answer is lost (the player warped that tick, or it was saved there and loaded after a crash), the arrival finds the turn-in paid and advances; it is never
+/// asked again. The rewards combat pays are kept the same way until they are paid (<see cref="ProgressionState.OwedRewards"/>).</para>
 /// <para><b>Events are handled on the next tick</b>, in raise order: an event raised in tick N is dispatched in its phase 4 and acted on in this system's tick N + 1.</para>
 /// </remarks>
 public sealed class QuestSystem : ITickSystem
@@ -74,7 +78,7 @@ public sealed class QuestSystem : ITickSystem
     private List<IGameEvent> _handling = new();
     private MapInstance? _instance;
     private TickContext? _context;
-    private long _nextToken = 1;
+    private const int AnswerTicks = 4;   // the inventory answers within two; only an instance without one (tests) never does
 
     /// <summary>
     /// Creates the quest system for one instance. <paramref name="progressions"/> is shared by every instance (quest state lives there); <paramref name="inventories"/> is read
@@ -197,6 +201,13 @@ public sealed class QuestSystem : ITickSystem
     private void Abandon(EntityId id, string questId)
     {
         if (!TryPlayer(id, out _, out var state)) return;
+        if (state.ActiveQuests.TryGetValue(questId, out var progress)
+            && ((progress.Waiting && _context!.TickNumber - progress.AskedAt < AnswerTicks) || IsPaid(id, progress)))
+        {
+            // Its turn-in is being paid, or is paid and about to be settled (it may just have arrived from another map): dropping it now would keep the rewards and the quest.
+            _context!.Instance.TryEnqueue(new AbandonQuest(id, questId));
+            return;
+        }
         if (!_rules.Abandon(state, questId))
         {
             _context!.Publish(new QuestRefused(id, MessageTypes.AbandonQuest, questId, QuestReasons.NotActive));
@@ -236,15 +247,27 @@ public sealed class QuestSystem : ITickSystem
         }
     }
 
-    /// <summary>A player arrived (join, warp, respawn elsewhere): a turn-in that was waiting for an inventory on the map it left is asked again, then everything is re-read.</summary>
+    /// <summary>
+    /// A player arrived (join, warp, respawn elsewhere). A turn-in its bag has paid, but whose answer was lost on the way, advances now; one that was never paid is asked again;
+    /// then everything is re-read.
+    /// </summary>
     private void Arrived(EntityId id)
     {
         if (!TryPlayer(id, out var player, out var state)) return;
-        foreach (var progress in state.ActiveQuests.Values) progress.Token = 0;
+        foreach (var progress in Snapshot(state))
+        {
+            progress.Waiting = false;
+            if (IsPaid(id, progress))
+                Advance(id, state, progress, _rules.IsLastStep(progress) ? _rules.Rewards(progress.QuestId) : null);
+        }
         PublishMarkers(id, announce: false);
         RefreshAll(id, retryHeld: true);
         foreach (var progress in Snapshot(state)) Evaluate(player, state, progress);
     }
+
+    /// <summary>The bag has paid the current step's turn-in, and the step has not advanced yet.</summary>
+    private bool IsPaid(EntityId id, QuestProgress progress) =>
+        progress.Token != 0 && _inventories is not null && _inventories.TryGet(id, out var bag) && bag.SettledTurnIns.Contains(progress.Token);
 
     // ---- turning in ---------------------------------------------------------------------------------------------------------------------
 
@@ -254,7 +277,7 @@ public sealed class QuestSystem : ITickSystem
     /// </summary>
     private bool Evaluate(Entity player, ProgressionState state, QuestProgress progress)
     {
-        if (progress.Token != 0 || !_rules.StepMet(progress)) return false;
+        if (progress.Waiting || !_rules.StepMet(progress)) return false;
         var takes = _rules.Consumed(progress);
         var last = _rules.IsLastStep(progress);
         var rewards = last ? _rules.Rewards(progress.QuestId) : null;
@@ -265,7 +288,9 @@ public sealed class QuestSystem : ITickSystem
             Advance(player.Id, state, progress, rewards);
             return true;
         }
-        progress.Token = _nextToken++;
+        if (progress.Token == 0) progress.Token = ++state.TurnInSequence;   // the same number until it is paid, however often it is asked
+        progress.Waiting = true;
+        progress.AskedAt = _context!.TickNumber;
         _context!.Publish(new QuestItemsRequested(player.Id, progress.Token, Quantities(takes), Quantities(gives), currency));
         return true;
     }
@@ -277,9 +302,10 @@ public sealed class QuestSystem : ITickSystem
         foreach (var p in state.ActiveQuests.Values)
             if (p.Token == e.Token) progress = p;
         if (progress is null) return;
-        progress.Token = 0;
         if (e.Reason is not null)
         {
+            if (!progress.Waiting) return;
+            progress.Waiting = false;
             // Full bag (or the consumed items went meanwhile): nothing changed, the quest waits and says why.
             if (!string.Equals(progress.Held, e.Reason, StringComparison.Ordinal))
             {
@@ -302,8 +328,12 @@ public sealed class QuestSystem : ITickSystem
         {
             rewards ??= _rules.Rewards(progress.QuestId);
             if (rewards.BaseExp > 0 || rewards.JobExp > 0 || rewards.StatPoints > 0 || rewards.SkillPoints > 0 || rewards.UnlockJobs.Count > 0 || rewards.StatusRewards.Count > 0)
-                _context!.Publish(new QuestRewardsRequested(id, progress.QuestId, rewards.BaseExp, rewards.JobExp, rewards.StatPoints, rewards.SkillPoints, rewards.UnlockJobs,
-                    rewards.StatusRewards.Select(i => QuestRules.RewardKey(progress.QuestId, i)).ToList()));
+            {
+                // Owed from this step on, so nothing between completing and paying can lose or repeat them (T-702); the event only tells combat to pay.
+                state.OwedRewards.Add(new OwedQuestRewards(progress.QuestId, rewards.BaseExp, rewards.JobExp, rewards.StatPoints, rewards.SkillPoints, rewards.UnlockJobs.ToArray(),
+                    rewards.StatusRewards.Select(i => QuestRules.RewardKey(progress.QuestId, i)).ToArray()));
+                _context!.Publish(new QuestRewardsRequested(id, progress.QuestId));
+            }
             _context!.Publish(new QuestCompleted(id, progress.QuestId));
             return;
         }

@@ -245,10 +245,19 @@ namespace Game.Shared.Protocol
         /// <summary><c>resume_failed</c>: the resume token is unknown, already used, or its character's grace period is over. Log in again.</summary>
         public const string ResumeFailed = "resume_failed";
 
+        /// <summary><c>load_failed</c>: the character's saved state could not be read; nothing was changed. Log in again later (T-702).</summary>
+        public const string LoadFailed = "load_failed";
+
+        /// <summary><c>save_pending</c>: the character's last save has not landed yet, or another server holds it. Log in again in a moment (T-702).</summary>
+        public const string SavePending = "save_pending";
+
+        /// <summary><c>save_lost</c>: this server can no longer save the character (it is held elsewhere, or deleted), so its session ends. Log in again (T-702).</summary>
+        public const string SaveLost = "save_lost";
+
         /// <summary>Every bye reason.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             Timeout, BadVersion, Malformed, UnknownType, Oversize, BeforeHello, DuplicateHello, RateLimit, LoginRefused, ServerFull, TooSlow,
-            Shutdown, ServerError, UpdateRequired, Logout, Replaced, ResumeFailed);
+            Shutdown, ServerError, UpdateRequired, Logout, Replaced, ResumeFailed, LoadFailed, SavePending, SaveLost);
     }
 
     /// <summary>Entity kinds in a view record's <c>kind</c> field (VOCABULARY.md "Entity kinds").</summary>

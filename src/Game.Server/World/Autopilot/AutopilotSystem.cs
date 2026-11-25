@@ -139,7 +139,7 @@ public sealed partial class AutopilotSystem : ITickSystem
     private void Start(Entity player, StartAutopilot start)
     {
         if (!_progressions.TryGet(player.Id, out var state)) return;
-        var usage = player.Autopilot?.Usage ?? new AutopilotUsage();
+        var usage = player.AutopilotUsage ??= new AutopilotUsage();
         usage.Roll(_clock.NowMilliseconds);
         var refusal = AutopilotRules.CheckStart(_balance, player.Dead, usage.UsedMs, state, _content.Quests, SkillOf, start.Quests, start.Skills);
         if (refusal is { } no)
@@ -332,7 +332,7 @@ public sealed partial class AutopilotSystem : ITickSystem
     private void Think(AutopilotRun run, ProgressionState state, QuestProgress progress)
     {
         if (run.Player.CannotMove) return;   // a stun: every order would be refused
-        if (progress.Token != 0) return;     // the turn-in is being settled
+        if (progress.Waiting) return;     // the turn-in is being settled
         if (progress.Held is QuestReasons.InventoryFull or QuestReasons.TooHeavy)
         {
             Stop(run, AutopilotStops.BagFull);

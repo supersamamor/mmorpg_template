@@ -7,6 +7,7 @@ using Game.Server.World.Dialogue;
 using Game.Server.World.Inventory;
 using Game.Server.World.Monsters;
 using Game.Server.World.Quests;
+using Game.Server.World.Saving;
 
 namespace Game.Server.Hosting;
 
@@ -18,7 +19,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
 {
     /// <summary>Usage text.</summary>
     public const string Usage =
-        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--net-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
+        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--save-interval <seconds>] [--save-shutdown-wait <seconds>] [--net-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
 
     /// <summary>The environment name that enables development mode (plain ws:// on loopback, the dev login).</summary>
     public const string DevelopmentName = "Development";
@@ -37,6 +38,12 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
     /// <summary><c>--migrate</c>: apply the database migrations and exit. Development applies them at start; everywhere else this is how it is done (T-701).</summary>
     public bool Migrate { get; init; }
 
+    /// <summary><c>--save-interval</c>: how often a character in the world is saved (T-702).</summary>
+    public int SaveIntervalSeconds { get; init; } = 60;
+
+    /// <summary><c>--save-shutdown-wait</c>: how long a shutdown waits for the last saves (T-702).</summary>
+    public int SaveShutdownWaitSeconds { get; init; } = 20;
+
     /// <summary>The <c>--net-</c> options and their values, in order, for <see cref="Game.Server.Net.GatewayOptions.Parse"/>.</summary>
     public IReadOnlyList<string> NetArgs { get; init; } = NoArgs;
 
@@ -54,11 +61,15 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         string? environment = null;
         var legacyTimer = false;
         var migrate = false;
+        var saveInterval = 60;
+        var saveWait = 20;
         var net = new List<string>();
         error = null;
         for (var i = 0; i < args.Length; i++)
         {
             var arg = args[i];
+            int Seconds(int min, int max) => int.TryParse(Value(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var n) && n >= min && n <= max
+                ? n : throw new FormatException($"{arg} takes {min} to {max} seconds");
             string Value() => i + 1 < args.Length ? args[++i] : throw new FormatException($"{arg} needs a value");
             try
             {
@@ -70,6 +81,8 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                     case "--environment": environment = Value(); break;
                     case "--legacy-timer": legacyTimer = true; break;
                     case "--migrate": migrate = true; break;
+                    case "--save-interval": saveInterval = Seconds(1, 3_600); break;
+                    case "--save-shutdown-wait": saveWait = Seconds(0, 600); break;
                     case var _ when arg.StartsWith(Game.Server.Net.GatewayOptions.ArgPrefix, StringComparison.Ordinal):
                         net.Add(arg);
                         net.Add(Value());
@@ -91,6 +104,8 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
             Environment = environment,
             LegacyTimer = legacyTimer,
             Migrate = migrate,
+            SaveIntervalSeconds = saveInterval,
+            SaveShutdownWaitSeconds = saveWait,
             NetArgs = net.Count == 0 ? NoArgs : net,
         };
     }
@@ -121,10 +136,11 @@ public static class ServerPipeline
     /// the world and queues intents, which the systems get in the next tick like a player's. The AOI does
     /// its work in phase 5 (outbound), after every system, so its place in the list only orders its intents; it is last.
     /// </summary>
-    /// <remarks>Player progression and inventories live in in-memory stores shared by every instance (persistence is T-702); pass them in to read
-    /// them from elsewhere too (the gateway's own <c>exp</c> and <c>inventory</c> messages). <paramref name="clock"/> times item cooldowns.</remarks>
+    /// <remarks>Player progression and inventories live in in-memory stores shared by every instance; pass them in to read
+    /// them from elsewhere too (the gateway's own <c>exp</c> and <c>inventory</c> messages). <paramref name="clock"/> times item cooldowns. With a <paramref name="keeper"/> (T-702, over the
+    /// same stores) saved characters are copied for their saves in phase 5, after the AOI.</remarks>
     public static SystemPipeline Create(ContentDatabase content, IPlayerProgressionStore? progressions = null, IInventoryStore? inventories = null,
-        Game.Shared.Time.IClock? clock = null, ISavePointStore? savePoints = null)
+        Game.Shared.Time.IClock? clock = null, ISavePointStore? savePoints = null, CharacterKeeper? keeper = null)
     {
         var balance = content.Balance;
         var monsters = MonsterCatalog.From(content);
@@ -141,7 +157,7 @@ public static class ServerPipeline
         var quests = QuestContent.From(content);         // and the quest numbers
         var shops = ShopContent.From(content);           // and the shops with their prices resolved
         var autopilot = AutopilotContent.From(content);  // and the autopilot numbers, with every journey it may have to make worked out
-        return new SystemPipeline()
+        var pipeline = new SystemPipeline()
             .Add(() => MovementSystem.Create(balance))
             .Add(() => new MonsterSpawnerSystem(monsters, balance.Death.CorpseMs))
             .Add(() => MonsterAiSystem.Create(monsters, balance))
@@ -151,5 +167,7 @@ public static class ServerPipeline
             .Add(() => new QuestSystem(quests, progressions, inventories))
             .Add(() => new AutopilotSystem(autopilot, progressions, clock))
             .Add(() => AoiSystem.Create(balance));
+        if (keeper is not null) pipeline.Add(() => new SaveSystem(keeper, clock, keeper.Saves.Options.IntervalMs));
+        return pipeline;
     }
 }

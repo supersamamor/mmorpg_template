@@ -8,7 +8,7 @@ public readonly record struct SavePoint(string MapId, GridCell Cell);
 
 /// <summary>
 /// Characters' save points (T-601). A character without one uses its map's respawn point (<c>CombatContent.RespawnPointFor</c>). Shared by every
-/// instance: the dialogue system sets it, combat reads it. In memory for the server run; storing it with the character is T-702.
+/// instance: the dialogue system sets it, combat reads it. Saved with the character (T-702).
 /// </summary>
 public interface ISavePointStore
 {
@@ -18,11 +18,11 @@ public interface ISavePointStore
     /// <summary>Sets (replaces) the character's save point.</summary>
     void Set(EntityId player, SavePoint point);
 
-    /// <summary>Forgets a character that left the world (persistence would save it here).</summary>
+    /// <summary>Forgets a character that left the world; a saved one has been copied for its last save (T-702).</summary>
     void Release(EntityId player);
 }
 
-/// <summary>Save points kept in memory for the server run only, keyed by entity id. Nothing is saved (T-702).</summary>
+/// <summary>Save points of the characters in the world, in memory, keyed by entity id.</summary>
 public sealed class InMemorySavePointStore : ISavePointStore
 {
     private readonly ConcurrentDictionary<EntityId, SavePoint> _points = new();

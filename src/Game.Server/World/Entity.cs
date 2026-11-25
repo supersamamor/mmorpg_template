@@ -158,6 +158,12 @@ public sealed class Entity
     /// </summary>
     public Autopilot.AutopilotRun? Autopilot { get; set; }
 
+    /// <summary>How long a player's autopilot runs took today (T-604, saved with the character: T-702), or null before its first run.</summary>
+    public Autopilot.AutopilotUsage? AutopilotUsage { get; set; }
+
+    /// <summary>The saved character this player is (T-702), or null for one that lives in memory only (a dev login). Set when it is spawned.</summary>
+    public Saving.CharacterTicket? Save { get; internal set; }
+
     /// <summary>A player's skill cooldowns (T-502), kept by combat; null for everything else.</summary>
     public Game.Shared.Skills.SkillCooldowns? Cooldowns { get; set; }
 

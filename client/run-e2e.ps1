@@ -23,13 +23,15 @@
 #                                                         (T-602; content copy: weak monsters, every slime drops a glob; quests and drops are server-only, the bundle hash is unchanged)
 #   .\client\run-e2e.ps1 -Run account                     register, create a character, enter the world, drop and resume, log out, sign out, sign in again and enter the world with
 #                                                         the same character (T-701). Needs PostgreSQL: $env:GAME_TEST_DB_CONNECTION; it uses its own database, mmo_e2e, on that server
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, account, bye, release (account is skipped, and said
+#   .\client\run-e2e.ps1 -Run saving                      a new account's character changes stats, quest, items, currency, gear, EXP and place; its server stops (and saves) and the next one has it
+#                                                         all; that one is killed outright and the third has its interval saves (T-702). Needs PostgreSQL like account; about 3 minutes
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, account, saving, bye, release (account and saving are skipped, and said
 #                                                         so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "account", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "account", "saving", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -372,6 +374,38 @@ function Invoke-Scenario([string] $Name) {
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-account" @()) -EngineArgs $engineArgs
                 return (Wait-GodotClient $run 180).Code
             }
+            "saving" {
+                # T-702: three servers on one database, one after the other. The first stops itself (the client is done changing things well before), the second is killed.
+                # Weak monsters, so the new character wins the fight that earns it EXP.
+                $env:GAME_DB_CONNECTION = Get-E2EConnection
+                $holder = @{ Servers = @(); Next = 0; Killed = $false }
+                try {
+                    $holder.Servers += Start-GameServer -Easy -Extra @("--duration", "80")
+                    $run = Start-GodotClient (Get-RunClientArgs "--e2e-saving" @("--set", "shutdown_retry_seconds=3")) -EngineArgs $engineArgs
+                    $result = Wait-GodotClient $run 420 -OnMarker {
+                        param($marker)
+                        if ($marker -eq "kill-server") {
+                            Write-Host "[run-e2e] killing the second server outright, starting a third"
+                            Stop-GameServer $holder.Servers[1]
+                            $holder.Servers += Start-GameServer -Easy -Extra @("--save-interval", "1")
+                        }
+                    } -OnTick {
+                        if ($holder.Servers.Count -eq 1 -and $holder.Servers[0].Process.HasExited) {
+                            $code = $holder.Servers[0].Process.ExitCode
+                            Select-String -Path $holder.Servers[0].Log -Pattern "Every character is saved|NOT SAVED" | ForEach-Object { Write-Host "[run-e2e] first server: $($_.Line)" }
+                            Write-Host "[run-e2e] the first server has stopped (exit code $code); starting a second one"
+                            $holder.Servers += Start-GameServer -Easy -Extra @("--save-interval", "1")
+                        }
+                    }
+                    if ($holder.Servers.Count -ne 3) { Write-Host "[run-e2e] expected three servers, had $($holder.Servers.Count)"; return 1 }
+                    if ($holder.Servers[0].Process.ExitCode -ne 0) { Write-Host "[run-e2e] the first server did not stop cleanly"; return 1 }
+                    return $result.Code
+                }
+                finally {
+                    $env:GAME_DB_CONNECTION = $null
+                    foreach ($one in $holder.Servers) { if (Test-Path $one.Log) { Stop-GameServer $one } }
+                }
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -498,16 +532,17 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "account", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "account", "saving", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
-# The account run needs a database. Named alone it fails without one; in `all` it is skipped, and the last line says so: skipped is not passed.
+# The account and saving runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.
 $skipped = @()
-if ($runs -contains "account" -and -not $env:GAME_TEST_DB_CONNECTION) {
-    if ($Run -ne "all") { throw "The account run needs a PostgreSQL server: set `$env:GAME_TEST_DB_CONNECTION." }
-    $skipped = @("account")
-    $runs = @($runs | Where-Object { $_ -ne "account" })
-    Write-Host "== account == SKIPPED: no database (`$env:GAME_TEST_DB_CONNECTION is not set)"
+$databaseRuns = @("account", "saving")
+if (@($runs | Where-Object { $databaseRuns -contains $_ }).Count -gt 0 -and -not $env:GAME_TEST_DB_CONNECTION) {
+    if ($Run -ne "all") { throw "The $Run run needs a PostgreSQL server: set `$env:GAME_TEST_DB_CONNECTION." }
+    $skipped = $databaseRuns
+    $runs = @($runs | Where-Object { $databaseRuns -notcontains $_ })
+    Write-Host "== $($databaseRuns -join ', ') == SKIPPED: no database (`$env:GAME_TEST_DB_CONNECTION is not set)"
 }
 $failed = @()
 try {

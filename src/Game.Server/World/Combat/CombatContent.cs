@@ -113,9 +113,8 @@ public sealed class CombatContent
 }
 
 /// <summary>
-/// Where each player character's progression (levels, EXP, points) lives while it is in the world. The seam for persistence (T-702): today
-/// <see cref="InMemoryProgressionStore"/>; later a store loaded from and saved to the database. Shared by every instance, so implementations
-/// must be thread-safe. A character is in one instance at a time, so its state is only touched from that instance's tick thread.
+/// Where each player character's progression (levels, EXP, points) lives while it is in the world. A saved character's is put here before any system sees it, and copied
+/// from here for a save (T-702, <c>CharacterKeeper</c>). Shared by every instance, so implementations must be thread-safe. A character is in one instance at a time, so its state is only touched from that instance's tick thread.
 /// </summary>
 public interface IPlayerProgressionStore
 {
@@ -125,11 +124,11 @@ public interface IPlayerProgressionStore
     /// <summary>The character's progression, if it has one.</summary>
     bool TryGet(EntityId player, out ProgressionState state);
 
-    /// <summary>Forgets a character that left the world (logout). Persistence would save it here.</summary>
+    /// <summary>Forgets a character that left the world; a saved one has been copied for its last save (T-702).</summary>
     void Release(EntityId player);
 }
 
-/// <summary>Progression kept in memory for the server run only, keyed by entity id. Nothing is saved (T-702).</summary>
+/// <summary>Progression of the characters in the world, in memory, keyed by entity id.</summary>
 public sealed class InMemoryProgressionStore : IPlayerProgressionStore
 {
     private readonly ConcurrentDictionary<EntityId, ProgressionState> _states = new();

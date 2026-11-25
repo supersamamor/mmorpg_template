@@ -54,6 +54,15 @@ public enum ConnectionNotice
     /// <summary><c>bye server_full</c> on a new login.</summary>
     ServerFull,
 
+    /// <summary><c>bye load_failed</c>: the character could not be loaded (T-702).</summary>
+    LoadFailed,
+
+    /// <summary><c>bye save_pending</c>: the character is still being saved (T-702).</summary>
+    SavePending,
+
+    /// <summary><c>bye save_lost</c>: the server could no longer save the character and ended the session (T-702).</summary>
+    SaveLost,
+
     /// <summary>A new login could not reach the server, or the server ended it.</summary>
     ConnectionFailed,
 
@@ -237,6 +246,16 @@ public sealed class ConnectionMachine
                 return;
             case ByeReasons.LoginRefused:
                 ToLogin(ConnectionNotice.LoginRefused);
+                return;
+            case ByeReasons.LoadFailed:
+                ToLogin(ConnectionNotice.LoadFailed);
+                return;
+            case ByeReasons.SavePending:
+                ToLogin(ConnectionNotice.SavePending);
+                return;
+            case ByeReasons.SaveLost:
+                // The character left the world without being saved, so there is nothing to resume.
+                ToLogin(ConnectionNotice.SaveLost);
                 return;
             case ByeReasons.Shutdown:
                 // A server restart invalidates every token (§10): the retry is a normal login.

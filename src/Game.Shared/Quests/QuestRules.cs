@@ -10,7 +10,7 @@ namespace Game.Shared.Quests
 {
     /// <summary>
     /// One active quest of one character: <c>{questId, stepIndex, counters}</c> (ARCHITECTURE §6.4). <see cref="Counters"/> has one value per objective of the
-    /// current step, never above its need. Changed only by <see cref="QuestRules"/>. Not thread-safe; persistence (T-702) maps it to and from storage.
+    /// current step, never above its need. Changed only by <see cref="QuestRules"/>. Not thread-safe.
     /// </summary>
     public sealed class QuestProgress
     {
@@ -36,8 +36,26 @@ namespace Game.Shared.Quests
         /// </summary>
         public string? Held { get; set; }
 
-        /// <summary>Not persisted: the inventory transaction the host is waiting for, or 0.</summary>
+        /// <summary>
+        /// The current step's turn-in, once the host has asked the inventory for it; 0 before that and on every new step. Unique per character for ever
+        /// (<see cref="ProgressionState.TurnInSequence"/>). Saved with the quest (T-702): the bag that paid it holds the same number (<c>InventoryState.SettledTurnIns</c>).
+        /// </summary>
         public long Token { get; set; }
+
+        /// <summary>Not persisted: the host waits for the inventory's answer.</summary>
+        public bool Waiting { get; set; }
+
+        /// <summary>Not persisted: when the host asked (its own count of time).</summary>
+        public long AskedAt { get; set; }
+
+        /// <summary>A saved quest as it was (T-702). The counters are copied.</summary>
+        public static QuestProgress Load(string questId, int step, IReadOnlyList<int> counters, long token)
+        {
+            if (counters == null) throw new ArgumentNullException(nameof(counters));
+            var progress = new QuestProgress(questId, counters.Count) { Step = step, Token = token };
+            for (var i = 0; i < counters.Count; i++) progress.Counters[i] = counters[i];
+            return progress;
+        }
     }
 
     /// <summary>What the objectives read about the player besides its progression (the server adapts its stores; tests use a plain object).</summary>
@@ -352,6 +370,8 @@ namespace Game.Shared.Quests
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             progress.Held = null;
+            progress.Token = 0;
+            progress.Waiting = false;
             if (IsLastStep(progress))
             {
                 state.ActiveQuests.Remove(progress.QuestId);

@@ -4,7 +4,7 @@ using Game.Shared.World;
 
 namespace Game.Server.World.Autopilot;
 
-/// <summary>How long a character's runs took in the current day (T-604). In memory until T-702, like the rest of a character: a new login starts at 0.</summary>
+/// <summary>How long a character's runs took in the current day (T-604). Saved with the character (T-702), so signing in again does not reset it.</summary>
 public sealed class AutopilotUsage
 {
     private long _dayStartedMs;
@@ -21,6 +21,12 @@ public sealed class AutopilotUsage
         _dayStartedMs = nowMs;
         UsedMs = 0;
     }
+
+    /// <summary>How long ago the day started, at <paramref name="nowMs"/>; null when none has.</summary>
+    public long? DayAgeMs(long nowMs) => _started ? Math.Max(0, nowMs - _dayStartedMs) : null;
+
+    /// <summary>A loaded character's usage (T-702): <paramref name="usedMs"/> in the day that began <paramref name="dayAgeMs"/> before <paramref name="nowMs"/>.</summary>
+    public static AutopilotUsage Restore(long usedMs, long dayAgeMs, long nowMs) => new() { _started = true, _dayStartedMs = nowMs - Math.Max(0, dayAgeMs), UsedMs = Math.Max(0, usedMs) };
 
     /// <summary>Adds one tick of running.</summary>
     public void Add(int deltaMs) => UsedMs += deltaMs;

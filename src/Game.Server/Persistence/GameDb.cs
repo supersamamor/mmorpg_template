@@ -19,6 +19,12 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
     /// <summary>The unique index that keeps two live characters out of one slot.</summary>
     public const string CharacterSlotIndex = "ux_characters_account_slot";
 
+    /// <summary>The primary key that keeps an item from being two characters'.</summary>
+    public const string ItemKey = "pk_character_items";
+
+    /// <summary>The unique index that keeps two items out of one equipment slot.</summary>
+    public const string ItemSlotIndex = "ux_character_items_slot";
+
     /// <summary>Accounts.</summary>
     public DbSet<AccountRow> Accounts => Set<AccountRow>();
 
@@ -27,6 +33,15 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
 
     /// <summary>Characters, deleted ones included.</summary>
     public DbSet<CharacterRow> Characters => Set<CharacterRow>();
+
+    /// <summary>Server runs (T-702).</summary>
+    public DbSet<ServerRunRow> Runs => Set<ServerRunRow>();
+
+    /// <summary>Saved characters (T-702).</summary>
+    public DbSet<CharacterStateRow> CharacterStates => Set<CharacterStateRow>();
+
+    /// <summary>Their items (T-702).</summary>
+    public DbSet<ItemRow> Items => Set<ItemRow>();
 
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder model)
@@ -69,6 +84,73 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
             e.HasIndex(c => new { c.AccountId, c.Slot }).IsUnique().HasFilter("deleted_at IS NULL").HasDatabaseName(CharacterSlotIndex);
             // Restrict: an account with characters is removed deliberately (T-703), never by a cascade.
             e.HasOne<AccountRow>().WithMany().HasForeignKey(c => c.AccountId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<ServerRunRow>(e =>
+        {
+            e.ToTable("server_runs");
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(r => r.StartedAt).HasColumnName("started_at");
+            e.Property(r => r.SeenAt).HasColumnName("seen_at");
+            e.Property(r => r.EndedAt).HasColumnName("ended_at");
+        });
+        model.Entity<CharacterStateRow>(e =>
+        {
+            e.ToTable("character_states", t =>
+            {
+                t.HasCheckConstraint("ck_character_states_currency", "currency >= 0");
+                t.HasCheckConstraint("ck_character_states_counts", "claim >= 1 AND version >= 0 AND turn_in_sequence >= 0");
+            });
+            e.HasKey(s => s.CharacterId);
+            e.Property(s => s.CharacterId).HasColumnName("character_id").ValueGeneratedNever();
+            e.Property(s => s.Claim).HasColumnName("claim");
+            e.Property(s => s.HeldBy).HasColumnName("held_by");
+            e.Property(s => s.Version).HasColumnName("version");
+            e.Property(s => s.SavedAt).HasColumnName("saved_at");
+            e.Property(s => s.MapId).HasColumnName("map_id").HasMaxLength(128);
+            e.Property(s => s.CellX).HasColumnName("cell_x");
+            e.Property(s => s.CellY).HasColumnName("cell_y");
+            e.Property(s => s.Facing).HasColumnName("facing").HasMaxLength(8);
+            e.Property(s => s.Hp).HasColumnName("hp");
+            e.Property(s => s.Sp).HasColumnName("sp");
+            e.Property(s => s.SaveMapId).HasColumnName("save_map_id").HasMaxLength(128);
+            e.Property(s => s.SaveCellX).HasColumnName("save_cell_x");
+            e.Property(s => s.SaveCellY).HasColumnName("save_cell_y");
+            e.Property(s => s.BaseLevel).HasColumnName("base_level");
+            e.Property(s => s.BaseExp).HasColumnName("base_exp");
+            e.Property(s => s.JobId).HasColumnName("job_id").HasMaxLength(128);
+            e.Property(s => s.JobLevel).HasColumnName("job_level");
+            e.Property(s => s.JobExp).HasColumnName("job_exp");
+            e.Property(s => s.StatPoints).HasColumnName("stat_points");
+            e.Property(s => s.SkillPoints).HasColumnName("skill_points");
+            e.Property(s => s.Currency).HasColumnName("currency");
+            e.Property(s => s.TurnInSequence).HasColumnName("turn_in_sequence");
+            e.Property(s => s.AutopilotUsedMs).HasColumnName("autopilot_used_ms");
+            e.Property(s => s.AutopilotDayStartedAt).HasColumnName("autopilot_day_started_at");
+            e.Property(s => s.Stats).HasColumnName("stats").HasColumnType("jsonb");
+            e.Property(s => s.Skills).HasColumnName("skills").HasColumnType("jsonb");
+            e.Property(s => s.Quests).HasColumnName("quests").HasColumnType("jsonb");
+            e.Property(s => s.Cooldowns).HasColumnName("cooldowns").HasColumnType("jsonb");
+            e.Property(s => s.SetAside).HasColumnName("set_aside").HasColumnType("jsonb");
+            e.HasOne<CharacterRow>().WithOne().HasForeignKey<CharacterStateRow>(s => s.CharacterId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<ServerRunRow>().WithMany().HasForeignKey(s => s.HeldBy).OnDelete(DeleteBehavior.Restrict);
+            e.HasIndex(s => s.HeldBy).HasDatabaseName("ix_character_states_held_by").HasFilter("held_by IS NOT NULL");
+        });
+        model.Entity<ItemRow>(e =>
+        {
+            e.ToTable("character_items", t => t.HasCheckConstraint("ck_character_items_quantity", "quantity >= 1 AND refine >= 0"));
+            e.HasKey(i => i.Id).HasName(ItemKey);
+            e.Property(i => i.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(i => i.CharacterId).HasColumnName("character_id");
+            e.Property(i => i.ItemId).HasColumnName("item_id").HasMaxLength(128);
+            e.Property(i => i.Quantity).HasColumnName("quantity");
+            e.Property(i => i.Slot).HasColumnName("slot").HasMaxLength(32);
+            e.Property(i => i.Cards).HasColumnName("cards");
+            e.Property(i => i.Refine).HasColumnName("refine");
+            e.Property(i => i.Aside).HasColumnName("aside").HasMaxLength(64);
+            e.HasIndex(i => i.CharacterId).HasDatabaseName("ix_character_items_character_id");
+            e.HasIndex(i => new { i.CharacterId, i.Slot }).IsUnique().HasFilter("slot IS NOT NULL").HasDatabaseName(ItemSlotIndex);
+            e.HasOne<CharacterStateRow>().WithMany().HasForeignKey(i => i.CharacterId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

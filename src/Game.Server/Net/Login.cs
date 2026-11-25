@@ -130,6 +130,12 @@ public sealed class NewCharacters
     /// <summary>Start job id; also the character's display key.</summary>
     public string JobId { get; }
 
+    /// <summary>The stat sheet of a loaded character (T-702): its levels, stats and job, the way a new character's is built; equipment and passives come as it enters.</summary>
+    public StatSheet CreateStats(ProgressionState state)
+    {
+        lock (_simulator) return _simulator.Player(state.JobId, state.BaseLevel, state.JobLevel, state.Stats, state.StatPoints, weapon: null).Sheet;
+    }
+
     /// <summary>A fresh stat sheet for a new character (base and job level 1, starting stat values, the start job's bonuses).</summary>
     public StatSheet CreateStats()
     {

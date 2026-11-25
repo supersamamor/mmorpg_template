@@ -95,7 +95,7 @@ public sealed record GatewayOptions
 
     /// <summary>
     /// How long a character stays in the world after its connection ends without <c>logout</c> (ARCHITECTURE §10): stopped, visible to others,
-    /// and resumable with its token. Then it leaves (and, from T-702, is saved).
+    /// and resumable with its token. Then it is saved and leaves (T-702).
     /// </summary>
     public int GracePeriodMs { get; init; } = 60_000;
 
