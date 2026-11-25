@@ -100,11 +100,11 @@ public class AccountServiceTests
         var rig = new ServiceRig();
         var first = await rig.RegisterAsync();
         var second = (await rig.LoginAsync()).Value!.Token;
-        (await rig.Service.ChangePasswordAsync(first, "not the password", "a brand new one", default)).Error.ShouldBe(AccountErrors.InvalidCredentials);
-        (await rig.Service.ChangePasswordAsync(first, ServiceRig.Password, "short", default)).Error.ShouldBe(AccountErrors.InvalidPassword);
-        (await rig.Service.ChangePasswordAsync("x", ServiceRig.Password, "a brand new one", default)).Error.ShouldBe(AccountErrors.InvalidSession);
+        (await rig.Service.ChangePasswordAsync(first, "not the password", "a brand new one", ServiceRig.Address, default)).Error.ShouldBe(AccountErrors.InvalidCredentials);
+        (await rig.Service.ChangePasswordAsync(first, ServiceRig.Password, "short", ServiceRig.Address, default)).Error.ShouldBe(AccountErrors.InvalidPassword);
+        (await rig.Service.ChangePasswordAsync("x", ServiceRig.Password, "a brand new one", ServiceRig.Address, default)).Error.ShouldBe(AccountErrors.InvalidSession);
         (await rig.Service.ListAsync(second, default)).Ok.ShouldBeTrue();
-        (await rig.Service.ChangePasswordAsync(first, ServiceRig.Password, "a brand new one", default)).Ok.ShouldBeTrue();
+        (await rig.Service.ChangePasswordAsync(first, ServiceRig.Password, "a brand new one", ServiceRig.Address, default)).Ok.ShouldBeTrue();
         foreach (var token in new[] { first, second }) (await rig.Service.ListAsync(token, default)).Error.ShouldBe(AccountErrors.InvalidSession);
         (await rig.LoginAsync()).Error.ShouldBe(AccountErrors.InvalidCredentials);
         (await rig.LoginAsync("ada", "a brand new one")).Ok.ShouldBeTrue();
@@ -334,5 +334,116 @@ public class AccountTimingTests
         var known = await MedianAsync("ada");
         var unknown = await MedianAsync("nobody");
         (unknown / known).ShouldBeInRange(0.4, 2.5, $"known {known:0.0} ms, unknown {unknown:0.0} ms"); // wide: other tests share the machine. Without the dummy it is near 0.
+    }
+
+    // ---- T-710: password change, ended sessions, a character another server holds ----
+
+    private const string NewPassword = "a brand new one";
+
+    [Fact]
+    public async Task A_password_change_gives_the_caller_a_new_session_and_names_every_ended_one()
+    {
+        var rig = new ServiceRig();
+        var ended = new List<EndedSessions>();
+        rig.Service.SessionsEnded = ended.Add;
+        var first = await rig.RegisterAsync();
+        var second = (await rig.LoginAsync()).Value!.Token;
+        ended.ShouldBeEmpty();
+        var renewed = (await rig.Service.ChangePasswordAsync(first, ServiceRig.Password, NewPassword, ServiceRig.Address, default)).Value!.Token;
+        new[] { first, second }.ShouldNotContain(renewed);
+        (await rig.Service.ListAsync(renewed, default)).Ok.ShouldBeTrue();
+        rig.Memory.SessionCount.ShouldBe(1);
+        var end = ended.Single();
+        end.All.ShouldBeTrue();
+        end.Keys.ShouldBe([SessionTokens.KeyOf(first)!, SessionTokens.KeyOf(second)!], ignoreOrder: true);
+    }
+
+    [Fact]
+    public async Task The_password_it_has_already_is_refused_but_only_to_someone_who_knows_it()
+    {
+        var rig = new ServiceRig();
+        var token = await rig.RegisterAsync();
+        (await rig.Service.ChangePasswordAsync(token, ServiceRig.Password, ServiceRig.Password, ServiceRig.Address, default)).Error.ShouldBe(AccountErrors.SamePassword);
+        (await rig.Service.ChangePasswordAsync(token, "not the password", "not the password", ServiceRig.Address, default)).Error.ShouldBe(AccountErrors.InvalidCredentials);
+        (await rig.Service.ListAsync(token, default)).Ok.ShouldBeTrue("nothing was changed");
+    }
+
+    [Fact]
+    public async Task Wrong_current_passwords_lock_further_changes_and_never_the_owners_sign_in()
+    {
+        var limits = new AccountLimits();
+        var rig = new ServiceRig(limits: limits);
+        var token = await rig.RegisterAsync();
+        for (var i = 0; i <= limits.AccountFreeFailures; i++)
+            (await rig.Service.ChangePasswordAsync(token, "wrong password " + i, NewPassword, ServiceRig.Address, default)).Error.ShouldBe(AccountErrors.InvalidCredentials);
+        var locked = await rig.Service.ChangePasswordAsync(token, ServiceRig.Password, NewPassword, ServiceRig.Address, default);
+        locked.Error.ShouldBe(AccountErrors.RateLimited, "the right password as well: no oracle while locked");
+        locked.RetryAfterMs.ShouldBeGreaterThan(0);
+        (await rig.LoginAsync()).Ok.ShouldBeTrue();
+        rig.Clock.Advance(limits.LockBaseMs);
+        (await rig.Service.ChangePasswordAsync(token, ServiceRig.Password, NewPassword, ServiceRig.Address, default)).Ok.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Wrong_current_passwords_count_for_the_address_like_failed_sign_ins()
+    {
+        var rig = new ServiceRig(limits: new AccountLimits { AddressFreeFailures = 2, AccountFreeFailures = 100 });
+        var token = await rig.RegisterAsync();
+        for (var i = 0; i < 3; i++) await rig.Service.ChangePasswordAsync(token, "wrong password", NewPassword, ServiceRig.Address, default);
+        (await rig.LoginAsync()).Error.ShouldBe(AccountErrors.RateLimited);
+        (await rig.LoginAsync(address: "198.51.100.1")).Ok.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task What_was_never_judged_costs_no_try()
+    {
+        var rig = new ServiceRig(limits: new AccountLimits { AddressFreeFailures = 1, AccountFreeFailures = 1 });
+        var token = await rig.RegisterAsync();
+        for (var i = 0; i < 5; i++)
+        {
+            (await rig.Service.ChangePasswordAsync(token, ServiceRig.Password, "short", ServiceRig.Address, default)).Error.ShouldBe(AccountErrors.InvalidPassword);
+            (await rig.Service.ChangePasswordAsync(token, ServiceRig.Password, ServiceRig.Password, ServiceRig.Address, default)).Error.ShouldBe(AccountErrors.SamePassword);
+            rig.Memory.Away = true;
+            (await rig.Service.ChangePasswordAsync(token, ServiceRig.Password, NewPassword, ServiceRig.Address, default)).Error.ShouldBe(AccountErrors.Unavailable);
+            rig.Memory.Away = false;
+        }
+        (await rig.Service.ChangePasswordAsync(token, ServiceRig.Password, NewPassword, ServiceRig.Address, default)).Ok.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Signing_out_and_being_pushed_out_name_the_session_and_expiry_names_none()
+    {
+        var rig = new ServiceRig(limits: new AccountLimits { MaxSessions = 2 });
+        var ended = new List<EndedSessions>();
+        rig.Service.SessionsEnded = ended.Add;
+        var first = await rig.RegisterAsync();
+        rig.Time.Now += TimeSpan.FromSeconds(1);
+        var second = (await rig.LoginAsync()).Value!.Token;
+        rig.Time.Now += TimeSpan.FromSeconds(1);
+        await rig.LoginAsync();
+        ended.Single().Keys.ShouldBe([SessionTokens.KeyOf(first)!]);
+        ended.Single().All.ShouldBeFalse();
+        ended.Clear();
+        (await rig.Service.LogoutAsync(second, default)).Ok.ShouldBeTrue();
+        ended.Single().Keys.ShouldBe([SessionTokens.KeyOf(second)!]);
+        ended.Clear();
+        (await rig.Service.LogoutAsync(second, default)).Error.ShouldBe(AccountErrors.InvalidSession);
+        rig.Time.Now += TimeSpan.FromDays(2);
+        await rig.LoginAsync(); // deletes the expired ones
+        ended.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task A_character_another_server_holds_is_in_use_for_its_owner_only()
+    {
+        var rig = new ServiceRig();
+        var ada = await rig.RegisterAsync();
+        var bob = await rig.RegisterAsync("bobby");
+        var id = Guid.Parse((await rig.CreateAsync(ada, "Lyra")).Id);
+        rig.Memory.HeldElsewhere.Add(id);
+        (await rig.Service.DeleteAsync(ada, id, default)).Error.ShouldBe(AccountErrors.CharacterInUse);
+        (await rig.Service.DeleteAsync(bob, id, default)).Error.ShouldBe(AccountErrors.UnknownCharacter);
+        rig.Memory.HeldElsewhere.Clear();
+        (await rig.Service.DeleteAsync(ada, id, default)).Ok.ShouldBeTrue();
     }
 }

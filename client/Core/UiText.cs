@@ -65,6 +65,7 @@ public static class UiText
             case ConnectionNotice.LoadFailed: return "Your character could not be loaded. Nothing was lost. Please try again later.";
             case ConnectionNotice.SavePending: return "Your character is still being saved. Please try again in a moment.";
             case ConnectionNotice.SaveLost: return "The server lost touch with your character's save. Please log in again.";
+            case ConnectionNotice.SessionEnded: return "You were signed out from another device, or your password was changed.";
             case ConnectionNotice.ConnectionFailed: return "Could not reach the server.";
             case ConnectionNotice.UpdateRequired: return "A new version is required to play. Please update the app.";
             case ConnectionNotice.Replaced: return "You are playing on another connection.";
@@ -136,6 +137,27 @@ public static class UiText
     /// <summary>The button that leaves the account.</summary>
     public const string SignOut = "Sign out";
 
+    /// <summary>The button that opens the password screen (T-710).</summary>
+    public const string ChangePassword = "Change password";
+
+    /// <summary>The password screen's title.</summary>
+    public const string PasswordTitle = "Change password";
+
+    /// <summary>The hint of the current password's field.</summary>
+    public const string CurrentPassword = "Current password";
+
+    /// <summary>The hint of the new password's field.</summary>
+    public const string NewPassword = "New password (at least 10 characters)";
+
+    /// <summary>The hint of the repeat's field.</summary>
+    public const string RepeatPassword = "New password again";
+
+    /// <summary>What a password change does besides.</summary>
+    public const string PasswordHelp = "Every other device is signed out, and a game running there ends.";
+
+    /// <summary>The refusal of a password change whose current password is wrong.</summary>
+    public const string WrongCurrentPassword = "The current password is wrong.";
+
     /// <summary>The line while the server is asked.</summary>
     public const string AccountBusy = "One moment...";
 
@@ -153,6 +175,8 @@ public static class UiText
         {
             case AccountNotice.Unreachable: return "Could not reach the server.";
             case AccountNotice.SessionEnded: return "Your session has ended. Please sign in again.";
+            case AccountNotice.PasswordsDiffer: return "The two new passwords are not the same.";
+            case AccountNotice.PasswordChanged: return "Your password is changed.";
             case AccountNotice.Refused: break;
             default: return string.Empty;
         }
@@ -160,6 +184,7 @@ public static class UiText
         {
             case AccountErrors.InvalidUsername: return "A username has 3 to 24 letters, digits, dots, dashes or underscores, and starts with a letter or digit.";
             case AccountErrors.InvalidPassword: return "A password has 10 to 128 characters.";
+            case AccountErrors.SamePassword: return "The new password is the same as the old one.";
             case AccountErrors.UsernameTaken: return "That username is taken.";
             case AccountErrors.InvalidSession: return Account(AccountNotice.SessionEnded, error, 0);
             case AccountErrors.InvalidCredentials: return "Wrong username or password.";

@@ -254,10 +254,13 @@ namespace Game.Shared.Protocol
         /// <summary><c>save_lost</c>: this server can no longer save the character (it is held elsewhere, or deleted), so its session ends. Log in again (T-702).</summary>
         public const string SaveLost = "save_lost";
 
+        /// <summary><c>session_ended</c>: the account session this connection signed in with was ended (signed out, pushed out by a newer sign-in, or a password change); the character left the world. Sign in again (T-710).</summary>
+        public const string SessionEnded = "session_ended";
+
         /// <summary>Every bye reason.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             Timeout, BadVersion, Malformed, UnknownType, Oversize, BeforeHello, DuplicateHello, RateLimit, LoginRefused, ServerFull, TooSlow,
-            Shutdown, ServerError, UpdateRequired, Logout, Replaced, ResumeFailed, LoadFailed, SavePending, SaveLost);
+            Shutdown, ServerError, UpdateRequired, Logout, Replaced, ResumeFailed, LoadFailed, SavePending, SaveLost, SessionEnded);
     }
 
     /// <summary>Entity kinds in a view record's <c>kind</c> field (VOCABULARY.md "Entity kinds").</summary>

@@ -4,6 +4,7 @@ using Game.Client.Core.Accounts;
 using Game.Client.Core.Bundle;
 using Game.Client.Core.Net;
 using Game.Shared.Protocol;
+using Game.Shared.Vocabulary;
 using Godot;
 
 namespace Game.Client.Scene;
@@ -44,7 +45,17 @@ public sealed class AccountPanel
     private readonly CreationPanel? _creation;
     private readonly Func<LookView>? _picture;
     private readonly Button _newButton = new() { Text = UiText.NewCharacter };
+    private readonly Button _passwordButton = new() { Text = UiText.ChangePassword };
     private readonly Button _signOutButton = new() { Text = UiText.SignOut };
+
+    private readonly VBoxContainer _passwordBox = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+    private readonly Label _passwordHelp = Wrapped();
+    private readonly LineEdit _currentPassword = new() { PlaceholderText = UiText.CurrentPassword, Secret = true, MaxLength = 128 };
+    private readonly LineEdit _newPassword = new() { PlaceholderText = UiText.NewPassword, Secret = true, MaxLength = 128 };
+    private readonly LineEdit _repeatPassword = new() { PlaceholderText = UiText.RepeatPassword, Secret = true, MaxLength = 128 };
+    private readonly HBoxContainer _passwordButtons = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+    private readonly Button _passwordBack = new() { Text = UiText.Back, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+    private readonly Button _changeButton = new() { Text = UiText.ChangePassword, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
 
     private float _target = 48;
     private float _playWidth = 96;
@@ -103,6 +114,7 @@ public sealed class AccountPanel
         _box.AddChild(_characters);
         _characters.AddChild(_rows);
         _characters.AddChild(_newButton);
+        _characters.AddChild(_passwordButton);
         _characters.AddChild(_signOutButton);
         _newButton.Pressed += () =>
         {
@@ -114,7 +126,30 @@ public sealed class AccountPanel
             _tap();
             _session.Accounts.SignOut();
         };
-        foreach (var control in new Control[] { _username, _password, _signInButton, _registerButton, _devButton, _newButton, _signOutButton }) interactive.Add(control);
+        _passwordButton.Pressed += () =>
+        {
+            _tap();
+            if (_samples is null) _session.Accounts.OpenPassword();
+        };
+
+        _box.AddChild(_passwordBox);
+        _passwordBox.AddChild(_passwordHelp);
+        _passwordBox.AddChild(_currentPassword);
+        _passwordBox.AddChild(_newPassword);
+        _passwordBox.AddChild(_repeatPassword);
+        _passwordBox.AddChild(_passwordButtons);
+        _passwordButtons.AddChild(_passwordBack);
+        _passwordButtons.AddChild(_changeButton);
+        _passwordHelp.Text = UiText.PasswordHelp;
+        _passwordBack.Pressed += () =>
+        {
+            _tap();
+            ClearPasswords();
+            if (_samples is null) _session.Accounts.ClosePassword();
+        };
+        _changeButton.Pressed += SubmitPassword;
+        _repeatPassword.TextSubmitted += _ => SubmitPassword();
+        foreach (var control in Controls()) interactive.Add(control);
     }
 
     /// <summary>True while it shows.</summary>
@@ -147,6 +182,12 @@ public sealed class AccountPanel
     /// <summary>The sign-out button (for the scripted run).</summary>
     public Button SignOutButton => _signOutButton;
 
+    /// <summary>The button that opens the password screen (for the scripted run).</summary>
+    public Button PasswordButton => _passwordButton;
+
+    /// <summary>The password screen's fields (current, new, repeat) and buttons (for the scripted run).</summary>
+    public (LineEdit Current, LineEdit New, LineEdit Repeat, Button Back, Button Change) PasswordScreen => (_currentPassword, _newPassword, _repeatPassword, _passwordBack, _changeButton);
+
     /// <summary>The character rows now shown: what each says and its buttons (for the scripted run).</summary>
     public IReadOnlyList<(string Text, Button Play, Button Delete)> Rows => _rowList.Where(r => r.Box.Visible).Select(r => (r.Label.Text, r.Play, r.Delete)).ToList();
 
@@ -163,6 +204,7 @@ public sealed class AccountPanel
             return;
         }
         _password.Text = string.Empty;
+        ClearPasswords();
         _center.Visible = false;
         _creation?.SetOpen(false);
         foreach (var row in _rowList) row.Picture?.Clear(); // the characters drawn here are freed while playing
@@ -180,10 +222,10 @@ public sealed class AccountPanel
         _scroll.CustomMinimumSize = new Vector2(width, safe.Size.Y - 2 * margin);
         var inner = width - dp(12); // beside the scroll bar
         var gap = Mathf.RoundToInt(dp(8));
-        foreach (var box in new BoxContainer[] { _box, _signIn, _signInButtons, _characters, _rows }) box.AddThemeConstantOverride("separation", gap);
+        foreach (var box in new BoxContainer[] { _box, _signIn, _signInButtons, _characters, _rows, _passwordBox, _passwordButtons }) box.AddThemeConstantOverride("separation", gap);
         _box.CustomMinimumSize = new Vector2(inner, 0);
-        foreach (var label in new[] { _title, _notice, _accountNotice }) label.CustomMinimumSize = new Vector2(inner, 0);
-        foreach (var control in new Control[] { _username, _password, _signInButton, _registerButton, _devButton, _newButton, _signOutButton })
+        foreach (var label in new[] { _title, _notice, _accountNotice, _passwordHelp }) label.CustomMinimumSize = new Vector2(inner, 0);
+        foreach (var control in Controls())
             control.CustomMinimumSize = new Vector2(_target, _target);
         foreach (var row in _rowList) Size(row);
         // Last: a control never gets smaller than what its children need, so a smaller screen must have shrunk them first.
@@ -212,12 +254,17 @@ public sealed class AccountPanel
         _shownConnection = connection.Version;
         var screen = _samples is null ? flow.Screen : _sampleScreen;
         var characters = _samples ?? flow.Characters;
-        _title.Text = screen == AccountScreen.SignIn ? UiText.SignInTitle : UiText.CharactersTitle;
+        _title.Text = screen == AccountScreen.SignIn ? UiText.SignInTitle : screen == AccountScreen.Password ? UiText.PasswordTitle : UiText.CharactersTitle;
         Set(_notice, UiText.Notice(connection.Notice));
-        if (_samples is null) Set(_accountNotice, flow.Busy ? UiText.AccountBusy : UiText.Account(flow.Notice, flow.Error, flow.RetryAfterSeconds));
+        if (_samples is null)
+            Set(_accountNotice, flow.Busy ? UiText.AccountBusy
+                : screen == AccountScreen.Password && flow.Notice == AccountNotice.Refused && flow.Error == AccountErrors.InvalidCredentials ? UiText.WrongCurrentPassword
+                : UiText.Account(flow.Notice, flow.Error, flow.RetryAfterSeconds));
         _signIn.Visible = screen == AccountScreen.SignIn;
         _characters.Visible = screen == AccountScreen.Characters;
-        foreach (var button in new[] { _signInButton, _registerButton, _newButton, _signOutButton }) button.Disabled = flow.Busy;
+        _passwordBox.Visible = screen == AccountScreen.Password;
+        if (screen != AccountScreen.Password) ClearPasswords(); // changed, or the session ended: none is kept
+        foreach (var button in new[] { _signInButton, _registerButton, _newButton, _passwordButton, _signOutButton, _passwordBack, _changeButton }) button.Disabled = flow.Busy;
 
         while (_rowList.Count < characters.Count) AddRow();
         for (var i = 0; i < _rowList.Count; i++)
@@ -238,7 +285,7 @@ public sealed class AccountPanel
     public void ShowSamples(AccountScreen screen, string longName)
     {
         _sampleScreen = screen;
-        _samples = screen == AccountScreen.SignIn
+        _samples = screen != AccountScreen.Characters
             ? []
             : [new CharacterRecord("a", 0, longName, longName, _session.Accounts.Creator?.Look), new CharacterRecord("b", 1, longName, longName, _session.Accounts.Creator?.Look),
                 new CharacterRecord("c", 2, longName, longName, _session.Accounts.Creator?.Look)];
@@ -272,6 +319,22 @@ public sealed class AccountPanel
         _password.Text = string.Empty; // not kept on screen or in the field, whatever the server answers
         send(_username.Text.Trim(), password);
     }
+
+    private void SubmitPassword()
+    {
+        _tap();
+        if (_samples is not null) return;
+        var (current, next, repeat) = (_currentPassword.Text, _newPassword.Text, _repeatPassword.Text);
+        _newPassword.Text = _repeatPassword.Text = string.Empty; // not kept, whatever comes of it
+        if (_session.Accounts.ChangePassword(current, next, repeat)) _currentPassword.Text = string.Empty;
+    }
+
+    private void ClearPasswords() => _currentPassword.Text = _newPassword.Text = _repeatPassword.Text = string.Empty;
+
+    private Control[] Controls() =>
+    [
+        _username, _password, _signInButton, _registerButton, _devButton, _newButton, _passwordButton, _signOutButton, _currentPassword, _newPassword, _repeatPassword, _passwordBack, _changeButton,
+    ];
 
     private void AddRow()
     {

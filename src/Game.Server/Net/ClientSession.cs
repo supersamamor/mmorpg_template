@@ -58,6 +58,7 @@ public sealed class ClientSession : IViewSink
     private volatile string? _mapId;
     private volatile bool _welcomed;
     private bool _autopilotTold;             // tick thread: the autopilot's status went out with this session's first snapshot (T-604)
+    private string? _sessionKey;
     private volatile bool _unacknowledged;   // resumed, and the client has not spoken since: the redeemed token still works
 
     internal ClientSession(Gateway gateway, WebSocket socket, string peer, long nowMs)
@@ -103,6 +104,9 @@ public sealed class ClientSession : IViewSink
 
     /// <summary>The dev display name, once logged in.</summary>
     public string? DisplayName { get; private set; }
+
+    /// <summary>The account session its <c>hello</c> named (T-710), from before it is checked: one that ends meanwhile ends this login. Null for a dev login and a resume.</summary>
+    internal string? SessionKey => Volatile.Read(ref _sessionKey);
 
     /// <summary>The reason of the <c>bye</c> sent, or null (none yet, or the client closed first).</summary>
     public string? ByeReason => Volatile.Read(ref _byeReason);
@@ -521,6 +525,7 @@ public sealed class ClientSession : IViewSink
             _gateway.Resume(this, hello);
             return;
         }
+        Volatile.Write(ref _sessionKey, Accounts.SessionTokens.KeyOf(hello.Session));
         var login = await _gateway.Login.LoginAsync(hello, Address, stop).ConfigureAwait(false);
         stop.ThrowIfCancellationRequested();   // dropped while it was pending: nothing is claimed or spawned for it
         if (login.Refusal is { } refusal)
@@ -531,6 +536,7 @@ public sealed class ClientSession : IViewSink
         if (Closing) return; // timed out, or the server is stopping
         DisplayName = login.DisplayName;
         if (_gateway.ClaimAccount(this, login)) return;
+        if (Closing) return;   // its account session ended while the login was pending (T-710)
         // T-702: a saved character is loaded before anything of it enters the world. Whatever goes wrong refuses the login and changes nothing.
         var entered = await _gateway.LoadCharacterAsync(login, stop).ConfigureAwait(false);
         if (entered?.Refusal is { } refused)

@@ -60,6 +60,8 @@ public class GatewaySkillTests
         var cooldown = await me.WaitForAsync<CooldownMessage>(m => m.Skill == "skill.ember_bolt", 20_000);
         cooldown.Ms.ShouldBe(500);
 
+        // The cooldown is a message of its own and goes out before the tick's delta with the cast's end, so that delta may not be here yet.
+        await me.WaitForAsync<DeltaMessage>(d => d.CastEnds?.Any(c => c.Caster == me.Id) == true);
         var deltas = me.Messages.OfType<DeltaMessage>().ToList();
         deltas.SelectMany(d => d.Casts ?? []).ShouldContain(c => c.Caster == me.Id && c.Skill == "skill.ember_bolt" && c.Ms > 800 && c.Ms <= 1000);
         deltas.SelectMany(d => d.CastEnds ?? []).ShouldContain(c => c.Caster == me.Id && c.Skill == "skill.ember_bolt" && c.Result == CastResults.Done);

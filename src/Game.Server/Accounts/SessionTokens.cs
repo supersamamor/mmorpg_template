@@ -24,6 +24,12 @@ public static class SessionTokens
         return Base64Url.EncodeToString(bytes);
     }
 
+    /// <summary>What a live connection remembers of the session it signed in with (T-710): the hash as text. Null when the text cannot be a token.</summary>
+    public static string? KeyOf(string? token) => HashOf(token) is { } hash ? KeyOf(hash) : null;
+
+    /// <summary>The same key from a stored hash.</summary>
+    public static string KeyOf(byte[] hash) => Convert.ToHexString(hash);
+
     /// <summary>What is stored and looked up for a token, or null when the text cannot be one (so it never reaches the database).</summary>
     public static byte[]? HashOf(string? token)
     {

@@ -17,6 +17,9 @@ namespace Game.Shared.Protocol
         /// <summary><c>POST</c> with the session token, no body: ends the session. 204.</summary>
         public const string Logout = Root + "/logout";
 
+        /// <summary><c>POST</c> a <see cref="ChangePasswordRequest"/> with the session token: changes the password and ends every session of the account (T-710). 200 with the caller's new <see cref="SessionAnswer"/>.</summary>
+        public const string Password = Root + "/password";
+
         /// <summary><c>GET</c>: 200 with a <see cref="CharactersAnswer"/>. <c>POST</c> a <see cref="CreateCharacterRequest"/>: 201 with a <see cref="CharacterRecord"/>. <c>DELETE</c> <c>/{id}</c>: 204.</summary>
         public const string Characters = Root + "/characters";
 
@@ -31,6 +34,15 @@ namespace Game.Shared.Protocol
     {
         /// <summary>No password in a log line or an exception.</summary>
         public override string ToString() => "CredentialsRequest { *** }";
+    }
+
+    /// <summary>The body of <see cref="AccountPaths.Password"/>: <c>{"current":"...","new":"..."}</c>. Never log one.</summary>
+    /// <param name="Current">The password the account has.</param>
+    /// <param name="New">The one it should have.</param>
+    public sealed record ChangePasswordRequest(string Current, string New)
+    {
+        /// <summary>No password in a log line or an exception.</summary>
+        public override string ToString() => "ChangePasswordRequest { *** }";
     }
 
     /// <summary>A new session: <c>{"token":"...","expires_in":86400}</c>. Never log one.</summary>

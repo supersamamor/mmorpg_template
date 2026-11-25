@@ -9,7 +9,20 @@ namespace Game.Client.Scene;
 /// </summary>
 public static class UserPrefsStore
 {
-    private const string Path = "user://preferences.json";
+    private const string PlayerPath = "user://preferences.json";
+    private const string ScratchPath = "user://preferences.scripted.json";
+
+    private static string Path = PlayerPath;
+
+    /// <summary>
+    /// A scripted run keeps its choices in a file of its own, empty at its start (T-710): however it ends, failed or killed half-way, the player's choices and the next
+    /// run's are untouched.
+    /// </summary>
+    public static void UseScratch()
+    {
+        Path = ScratchPath;
+        if (Godot.FileAccess.FileExists(Path)) DirAccess.RemoveAbsolute(ProjectSettings.GlobalizePath(Path));
+    }
 
     /// <summary>Reads the stored choices; defaults if there are none or they are damaged.</summary>
     public static UserPreferences Load() =>

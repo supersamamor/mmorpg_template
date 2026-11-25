@@ -100,9 +100,9 @@ jobs:
   client-export:
     name: client export and scripted runs (Android debug APK, headless)
     runs-on: ubuntu-latest
-    # Hard stop for the whole job: a little over the sum of the step limits below (195 minutes). Each Godot step's limit is the worst case of its script's own bounds (T-221, docs/MOBILE_BUILD.md §8.5),
+    # Hard stop for the whole job: a little over the sum of the step limits below (235 minutes). Each Godot step's limit is the worst case of its script's own bounds (T-221, docs/MOBILE_BUILD.md §8.5),
     # so a hang is stopped, retried and reported by the script long before GitHub would cancel the step. A clean run takes far less.
-    timeout-minutes: 200
+    timeout-minutes: 240
     env:
       # The pins of docs/MOBILE_BUILD.md. Change them there and here together.
       GODOT_VERSION: 4.7.2
@@ -219,10 +219,11 @@ jobs:
           path: client/exports/android/game-client.apk
           retention-days: 3
 
-      # Real server processes on loopback, the real Godot socket, headless: play, warp, the four bye runs, and a Linux release export that must refuse ws://.
-      # Worst case of run-e2e.ps1's bounds: import 3 x 180 s, the runs' own limits (2490 s in all), 11 server starts x 60 s, the release export 2 x 600 s.
+      # Real server processes on loopback, the real Godot socket, headless: every run of `all` but account, saving and appearance, which need PostgreSQL and are skipped (and said so), and a
+      # Linux release export that must refuse ws://. Worst case of run-e2e.ps1's bounds (T-710): import 3 x 180 s, the runs' own limits (5118 s in all), 16 server starts x 60 s, the release
+      # export 2 x 600 s.
       - name: Scripted runs
-        timeout-minutes: 95
+        timeout-minutes: 135
         shell: pwsh
         run: ./client/run-e2e.ps1 -Run all -Godot $env:GODOT -ExportTimeoutSeconds 600 -ExportAttempts 2
 

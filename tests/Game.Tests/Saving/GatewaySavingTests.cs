@@ -254,4 +254,15 @@ public class GatewaySavingTests
         await client.SendAsync(new MoveMessage(s.Rig.NearStart((2, 0), (-2, 0), (0, 2))));
         await Poll.UntilAsync(() => client.FramesReceived, n => n > seen, "the world goes on");
     }
+
+    [Fact]
+    public async Task A_game_ended_with_its_session_is_saved()
+    {
+        await using var s = await Setup.StartAsync();
+        var client = await s.JoinAsync(s.Lyra);
+        s.Earn(client, 710);
+        (await s.Rig.Accounts!.LogoutAsync(s.Ada, default)).Ok.ShouldBeTrue();
+        (await client.WaitForByeAsync()).ShouldBe(ByeReasons.SessionEnded);
+        await Poll.UntilAsync(() => s.Characters.StateOf(s.LyraId)?.Currency, c => c == 710, "the save");
+    }
 }

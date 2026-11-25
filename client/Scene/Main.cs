@@ -83,6 +83,7 @@ public partial class Main : Node3D
     public override void _Ready()
     {
         var args = OS.GetCmdlineUserArgs();
+        if (AutoRun.Wanted(args)) UserPrefsStore.UseScratch();
         LoadSettings(args);
         _config.AllowCleartext = OS.IsDebugBuild(); // the only place this is set (TransportPolicy): not from settings, not from arguments
         Engine.MaxFps = _config.FpsCap;

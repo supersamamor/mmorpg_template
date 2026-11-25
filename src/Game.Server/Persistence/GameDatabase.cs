@@ -36,8 +36,12 @@ public sealed class GameDatabase : IAsyncDisposable
     /// <summary>Longest a single statement may take.</summary>
     public const int CommandTimeoutSeconds = 5;
 
+    /// <summary>Longest a statement of a migration may take (T-710): making the database, or changing a table with many rows, takes longer than anything while playing may.</summary>
+    public const int MigrationTimeoutSeconds = 600;
+
     private readonly NpgsqlDataSource _source;
     private readonly DbContextOptions<GameDb> _options;
+    private readonly DbContextOptions<GameDb> _migrationOptions;
 
     /// <summary>Prepares the pool; connects to nothing yet. Throws <see cref="DatabaseException"/> when the connection string cannot be read.</summary>
     public GameDatabase(string connectionString)
@@ -55,7 +59,9 @@ public sealed class GameDatabase : IAsyncDisposable
             throw new DatabaseException($"The connection string in {ConnectionVariable} cannot be read (expected: Host=...;Database=...;Username=...;Password=...).");
         }
         // Warnings about logging parameters and the like never arise: EF gets no logger at all.
-        _options = new DbContextOptionsBuilder<GameDb>().UseNpgsql(_source, o => o.CommandTimeout(CommandTimeoutSeconds)).Options;
+        _options = Options(CommandTimeoutSeconds);
+        _migrationOptions = Options(MigrationTimeoutSeconds);
+        DbContextOptions<GameDb> Options(int timeout) => new DbContextOptionsBuilder<GameDb>().UseNpgsql(_source, o => o.CommandTimeout(timeout)).Options;
     }
 
     /// <summary>A new context, for one operation. Refuses on a tick thread (ARCHITECTURE §3).</summary>
@@ -63,6 +69,13 @@ public sealed class GameDatabase : IAsyncDisposable
     {
         TickThread.Forbid("Database work");
         return new GameDb(_options);
+    }
+
+    /// <summary>A context for migrations only: its statements may take long.</summary>
+    internal GameDb OpenForMigrations()
+    {
+        TickThread.Forbid("Database work");
+        return new GameDb(_migrationOptions);
     }
 
     /// <summary>Compares the applied migrations with this build's. Throws <see cref="DatabaseException"/> when the database cannot be reached.</summary>
@@ -96,7 +109,7 @@ public sealed class GameDatabase : IAsyncDisposable
     /// <summary>Applies this build's missing migrations, creating the database if needed. Throws <see cref="DatabaseException"/> on failure.</summary>
     public async Task MigrateAsync(CancellationToken cancellation = default)
     {
-        await using var db = Open();
+        await using var db = OpenForMigrations();
         try
         {
             await db.Database.MigrateAsync(cancellation).ConfigureAwait(false);

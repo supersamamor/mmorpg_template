@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Net.WebSockets;
 using Game.Server.Hosting;
+using Game.Server.Accounts;
 using Game.Server.World;
 using Game.Server.World.Aoi;
 using Game.Server.World.Autopilot;
@@ -338,6 +339,7 @@ public sealed class Gateway
         var token = string.Empty;
         lock (_linkLock)
         {
+            if (session.State == SessionState.Closing) return false;   // its account session ended while the login was pending (T-710): it takes nothing over
             _accountSessions.TryGetValue(account, out replaced);
             _accountSessions[account] = session;
             // Closing it here, before anything else, also ends a login of the account that is still joining: its character is never linked and leaves.
@@ -349,6 +351,7 @@ public sealed class Gateway
                     taken = link;
                     link.Session?.Bye(ByeReasons.Replaced);
                     link.Session = session;
+                    link.SessionKey = session.SessionKey;
                     token = Tokens.Issue(link.Character); // the replaced session's token stops working
                     session.OnResumed(link.Character, link.DisplayName, map, token);
                     Enqueue(new StopAutopilot(link.Character, AutopilotStops.Disconnected));   // T-604: the new session has not asked for it
@@ -378,6 +381,26 @@ public sealed class Gateway
     internal void GiveUp(EnterResult? entered)
     {
         if (entered?.Ticket is { } ticket) _keeper!.Saves.GiveUp(ticket);
+    }
+
+    /// <summary>
+    /// Account sessions were ended (T-710): whatever plays with one gets <c>bye</c> <c>session_ended</c>, and its character, in its grace period too, leaves the world (saved like on any
+    /// other leave), so its resume token stops working. A login that is still pending with one ends as well: it named its session before it was checked. Called after the database has the
+    /// sessions ended, on the request's thread; nothing is looked up while playing. Sessions ended on another server do not reach this one.
+    /// </summary>
+    public void EndSessions(EndedSessions ended)
+    {
+        lock (_linkLock)
+        {
+            foreach (var session in _sessions.Keys)
+                if (session.SessionKey is { } key && ended.Keys.Contains(key)) session.Bye(ByeReasons.SessionEnded);
+            foreach (var link in _links.Values.ToList())
+            {
+                if (link.SessionKey is not { } key || !(ended.Keys.Contains(key) || (ended.All && link.AccountId == ended.Account))) continue;
+                link.Session?.Bye(ByeReasons.SessionEnded);
+                Release(link, "its account session ended");
+            }
+        }
     }
 
     /// <summary>The server can no longer save the character (T-702): its session ends and it leaves at once, as if the server had crashed for it alone.</summary>
@@ -424,7 +447,7 @@ public sealed class Gateway
                 FreeJoiningSlot(session); // from here the link holds the slot, or the character leaves
                 if (session.State != SessionState.Closing)
                 {
-                    _links[entity.Id] = new CharacterLink(entity.Id, session.DisplayName, session, login.AccountId, login.CharacterId, entity.Save);
+                    _links[entity.Id] = new CharacterLink(entity.Id, session.DisplayName, session, login.AccountId, login.CharacterId, entity.Save, session.SessionKey);
                     token = Tokens.Issue(entity.Id);
                 }
             }

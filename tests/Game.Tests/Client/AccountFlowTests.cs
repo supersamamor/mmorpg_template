@@ -251,4 +251,68 @@ public class AccountFlowTests
             text.Length.ShouldBeLessThanOrEqualTo(UiText.LongestAccount.Length, error);
         }
     }
+
+    // ---- T-710: the password screen ----
+
+    [Fact]
+    public void A_password_change_sends_both_passwords_once_and_keeps_the_new_session()
+    {
+        var (flow, http) = SignedIn();
+        flow.OpenPassword();
+        flow.Screen.ShouldBe(AccountScreen.Password);
+        flow.ChangePassword("old-password-1", "new-password-1", "new-password-1").ShouldBeTrue();
+        (http.Last.Method, http.Last.Url, http.Last.Token).ShouldBe(("POST", "http://127.0.0.1:7780/account/password", Token));
+        var body = JsonDocument.Parse(http.Last.Body!).RootElement;
+        body.EnumerateObject().Select(p => (p.Name, p.Value.GetString())).ShouldBe([("current", "old-password-1"), ("new", "new-password-1")]);
+        flow.ChangePassword("a", "b", "b").ShouldBeFalse("one request at a time");
+        var renewed = new string('B', 43);
+        http.Answer(200, "{\"token\":\"" + renewed + "\",\"expires_in\":86400}");
+        flow.Update();
+        (flow.Screen, flow.Notice, flow.SessionToken).ShouldBe((AccountScreen.Characters, AccountNotice.PasswordChanged, renewed));
+        flow.Characters.Count.ShouldBe(1);
+        UiText.Account(flow.Notice, flow.Error, 0).ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public void A_repeat_that_differs_is_never_sent()
+    {
+        var (flow, http) = SignedIn();
+        flow.OpenPassword();
+        var sent = http.Sent.Count;
+        flow.ChangePassword("old-password-1", "new-password-1", "new-password-2").ShouldBeFalse();
+        http.Sent.Count.ShouldBe(sent);
+        (flow.Screen, flow.Notice).ShouldBe((AccountScreen.Password, AccountNotice.PasswordsDiffer));
+        UiText.Account(flow.Notice, flow.Error, 0).ShouldNotBeEmpty();
+    }
+
+    [Theory]
+    [InlineData(401, "invalid_credentials")]
+    [InlineData(400, "same_password")]
+    [InlineData(400, "invalid_password")]
+    [InlineData(429, "rate_limited")]
+    public void A_refused_change_stays_on_the_screen_and_signed_in(int status, string error)
+    {
+        var (flow, http) = SignedIn();
+        flow.OpenPassword();
+        flow.ChangePassword("old-password-1", "new-password-1", "new-password-1");
+        http.Answer(status, "{\"error\":\"" + error + "\"}");
+        flow.Update();
+        (flow.Screen, flow.Notice, flow.Error, flow.SessionToken).ShouldBe((AccountScreen.Password, AccountNotice.Refused, error, Token));
+        flow.ClosePassword();
+        (flow.Screen, flow.Notice).ShouldBe((AccountScreen.Characters, AccountNotice.None));
+    }
+
+    [Fact]
+    public void A_change_whose_session_has_ended_goes_back_to_signing_in()
+    {
+        var (flow, http) = SignedIn();
+        flow.OpenPassword();
+        flow.ChangePassword("old-password-1", "new-password-1", "new-password-1");
+        http.Answer(401, "{\"error\":\"invalid_session\"}");
+        flow.Update();
+        (flow.Screen, flow.Notice, flow.SignedIn).ShouldBe((AccountScreen.SignIn, AccountNotice.SessionEnded, false));
+        flow.OpenPassword();
+        flow.Screen.ShouldBe(AccountScreen.SignIn);
+        flow.ChangePassword("old-password-1", "new-password-1", "new-password-1").ShouldBeFalse("not signed in");
+    }
 }

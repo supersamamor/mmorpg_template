@@ -121,7 +121,7 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
   **Base** (T-701, `Game.Server/Persistence`): EF Core with Npgsql. The connection string is the environment variable `GAME_DB_CONNECTION` (not an option: those
   show up in process listings); it is never committed or logged, and database error details (which quote row values) are off. Without it a development server runs with
   the dev login only; any other server refuses to start. At start the applied migrations are compared with the build's: a missing or older schema is migrated in
-  development and refused elsewhere (`Game.Server --migrate` applies it and exits), and a newer one is always refused. Every operation opens its own `GameDb` through
+  development and refused elsewhere (`Game.Server --migrate` applies it and exits), and a newer one is always refused. A statement may take 5 s while playing and 10 minutes in a migration (T-710: making a database on a busy machine took longer than 5 s). Every operation opens its own `GameDb` through
   `GameDatabase.Open`, which throws on a tick thread (`TickThread`), so database work cannot run there. Tables: `accounts` (`id`, `username`, `password_hash`,
   `created_at`, `password_changed_at`), `account_sessions` (`token_hash`, `account_id`, `created_at`, `expires_at`), `characters` (`id`, `account_id`, `slot`, `name`,
   `name_key`, `job_id`, `created_at`, `deleted_at`). Unique indexes decide: `username`; `name_key` over **every** row (a deleted character keeps its name); and
@@ -721,7 +721,7 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   point 1/163 inch, and the stretch from window pixels to canvas units is undone. A desktop monitor never counts below the base density. Every button, slot and field is
   at least the minimum at every UI scale (a small scale never shrinks a target below it); a scripted check measures them.
 - **UI scale.** A step setting (`ui_scale_min`/`max`/`step`/`default` in client config: 0.75 to 1.5 in steps of 0.25) the player cycles with the size button. The choice is
-  stored in the engine's per-user storage (`user://preferences.json`, `UserPreferences`), never in `client_settings.json` and never on the server, and is clamped to the
+  stored in the engine's per-user storage (`user://preferences.json`, `UserPreferences`; a scripted run uses a file of its own that starts empty, T-710), never in `client_settings.json` and never on the server, and is clamped to the
   range when read. It scales sizes and the font together; it is applied by the HUD itself and does not use the window's content scale, so the camera and picking see no change.
 - **Text is never baked into textures.** Every size is dp times the scale; labels wrap rather than cut. A scripted check lays the HUD out for six screen shapes (small
   16:9, 19.5:9, a large phone, an iPhone, two desktop windows) with and without the notch at every UI scale, filled with the longest words, and fails on anything outside
@@ -1323,17 +1323,25 @@ placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms
   | `POST /account/register` | `username`, `password` | 201 `token`, `expires_in` (seconds): registered and signed in |
   | `POST /account/login` | `username`, `password` | 200 `token`, `expires_in` |
   | `POST /account/logout` | token | 204; the session has ended |
+  | `POST /account/password` | token, `current`, `new` | 200 `token`, `expires_in`: the password is changed, every session of the account has ended, and this is the caller's new one (T-710) |
   | `GET /account/characters` | token | 200 `slots`, `name_min`, `name_max`, `characters` (`[{id, slot, name, job, appearance}]`, by slot) |
   | `POST /account/characters` | token, `name`, optional `appearance` (§7.5.1) | 201 `id`, `slot`, `name`, `job`, `appearance` (the lowest free slot); 400 `invalid_appearance` |
-  | `DELETE /account/characters/{id}` | token | 204 (a soft delete: the row and its name stay); `character_in_use` while it is in the world |
+  | `DELETE /account/characters/{id}` | token | 204 (a soft delete: the row and its name stay); `character_in_use` while it is in the world, on this server or another (T-710) |
 
   Status: 400 invalid, 401 `invalid_credentials` / `invalid_session`, 404 `unknown_character`, 409 taken / full / in use, 429 `rate_limited`, 503 `unavailable`.
   - **Slots and names** come from `balance.yaml` `characters` (slots, name lengths, letters, separators). Names that differ in letter case are the same name.
   - **An account plays one character at a time.** A login with the character the gateway already holds (played elsewhere, or in its grace period) takes it over where it
     stands, as a resume would: the old session gets `bye replaced` and its resume token stops working. A login with another character ends the first one (`bye replaced`,
     and it leaves the world). A login of the same account that is still joining is replaced too, so there is never a second one.
-  - **What ending a session does not do:** logout from the account endpoints and a password change stop the token for every new request and `hello`; a game socket that is already
-    open, and its resume token, go on (a follow-up).
+  - **A session that ends takes its game along** (T-710). Signing out, being pushed out by a newer sign-in, and a password change end the connection that signed in with the session
+    (`bye session_ended`). Its character, also one in its grace period, leaves the world at once, saved like on any other leave, and its resume token stops working. A resume keeps the session
+    the character was entered with; an account login that takes the character over brings its own. A login still pending with that session ends too. The gateway is told after the database has
+    the session ended (`Gateway.EndSessions`); nothing is looked up per tick or per message. Two limits: a session whose 24 hours merely run out does not end a game in progress (nobody decided
+    to end it, and being put out in the middle of a fight helps nobody; the next login needs a new one, and a password change ends that game too), and a session ended through another server
+    process on the same database does not reach the game played on this one.
+  - **Password change** (T-710). The caller proves the current password although it is signed in, so a stolen session cannot take the account. It gets a new session at once: it has just shown
+    the password, and everyone else is out. If that last step fails the answer is `invalid_session` (sign in with the new password). The account's lock for wrong current passwords is kept under
+    its id, apart from the sign-in's lock under its username: a stolen session must not be able to lock the owner out. The address's lock is the same one.
   - **The client** (`client/Core/Accounts`, `Scene/AccountPanel`) keeps the session token in memory only: Godot offers no secure storage (Keychain, Keystore) without
     native code. The password is never kept. A restarted app signs in again. `TransportPolicy.AccountBase` gives the endpoints' address: a release build has none for `ws://`.
 - **Client resume flow** (for T-206):
@@ -1345,7 +1353,7 @@ placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms
   4. On `bye resume_failed` (or no token, e.g. the app was killed): go to the login screen. On `bye rate_limit` during a resume: same,
      and do not retry automatically.
   5. On `bye logout` or `bye replaced`: do not reconnect (`replaced` means the same player is on another connection).
-     On `bye update_required`: go to the store; `shutdown`: show a message and retry later with a normal login.
+     On `bye update_required`: go to the store; `shutdown`: show a message and retry later with a normal login. On `bye session_ended`: go to the sign-in screen.
   6. To leave on purpose, send `logout` and wait for `bye logout`.
 
   **What the client does** (`client/Core/Net/ConnectionMachine.cs`; the numbers are in `client_settings`):
@@ -1376,9 +1384,10 @@ placeholder parts have no LOD1); 64 merged characters cached. The single 73.7 ms
 - **Passwords** (T-701): Argon2id through NSec (libsodium): 19 MiB, 2 passes, 1 lane, 16-byte salt, 32-byte hash, stored in PHC format with its parameters and rehashed at
   the next login when they change. At most a quarter of the cores hash at once, with a bounded line behind them, so a flood of logins does not take the tick's cores.
   Usernames are stored and compared in one normalised form (NFKC, lower case, `a-z 0-9 . _ -`). No e-mail or other personal data.
-- **Session tokens, not credentials, on the socket** (T-701): 256 random bits, only the SHA-256 stored, 24 hours, at most 10 per account; logout and a password change end them.
+- **Session tokens, not credentials, on the socket** (T-701): 256 random bits, only the SHA-256 stored, 24 hours, at most 10 per account; logout and a password change end them, with the game played on them (T-710, §10).
 - **Guessing** (T-701): an unknown username and a wrong password get the same answer after the same work (a dummy hash). Failed logins lock the username (whether or not it
-  exists) after 5 and the address (an IPv6 /64 counts as one) after 20, for 5 s doubling to 5 min; attempts count when they start, so a burst gains nothing. Requests and registrations
+  exists) after 5 and the address (an IPv6 /64 counts as one) after 20, for 5 s doubling to 5 min; attempts count when they start, so a burst gains nothing. A wrong current password at a
+  password change counts the same way (T-710). Requests and registrations
   per address, creations per account and failed `hello`s per address are limited too. Every table of the limiter is bounded.
 - **Nothing secret in logs:** no password, token, connection string or username (accounts appear by id); records that hold a secret do not print it.
 - Item operations are atomic in the tick and saved whole, in one transaction, giver before receiver (§3 "Between characters"); every item has a permanent id, unique in the database (dupe auditing:

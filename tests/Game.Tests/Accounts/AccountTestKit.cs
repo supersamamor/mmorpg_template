@@ -113,18 +113,19 @@ public sealed class MemoryAccountStore : IAccountStore
         }
     }
 
-    public async Task<bool> TryAddSessionAsync(Guid account, string expectedHash, string? rehash, byte[] tokenHash, DateTime now, DateTime expires, int maxSessions, CancellationToken cancellation)
+    public async Task<IReadOnlyList<byte[]>?> TryAddSessionAsync(Guid account, string expectedHash, string? rehash, byte[] tokenHash, DateTime now, DateTime expires, int maxSessions, CancellationToken cancellation)
     {
         await Enter(cancellation);
         lock (_lock)
         {
-            if (!_accounts.TryGetValue(account, out var a) || a.Hash != expectedHash) return false;
+            if (!_accounts.TryGetValue(account, out var a) || a.Hash != expectedHash) return null;
             if (rehash is not null) _accounts[account] = (a.Username, rehash);
             _sessions.Add(Convert.ToHexString(tokenHash), (account, now, expires));
             foreach (var key in _sessions.Where(s => s.Value.Account == account && s.Value.Expires <= now).Select(s => s.Key).ToList()) _sessions.Remove(key);
-            foreach (var key in _sessions.Where(s => s.Value.Account == account && s.Key != Convert.ToHexString(tokenHash)).OrderByDescending(s => s.Value.Created)
-                         .Skip(maxSessions - 1).Select(s => s.Key).ToList()) _sessions.Remove(key);
-            return true;
+            var surplus = _sessions.Where(s => s.Value.Account == account && s.Key != Convert.ToHexString(tokenHash)).OrderByDescending(s => s.Value.Created)
+                .Skip(maxSessions - 1).Select(s => s.Key).ToList();
+            foreach (var key in surplus) _sessions.Remove(key);
+            return surplus.Select(Convert.FromHexString).ToList();
         }
     }
 
@@ -140,15 +141,16 @@ public sealed class MemoryAccountStore : IAccountStore
         lock (_lock) return _sessions.Remove(Convert.ToHexString(tokenHash));
     }
 
-    public async Task<bool> TryChangePasswordAsync(Guid account, string expectedHash, string newHash, DateTime now, CancellationToken cancellation)
+    public async Task<IReadOnlyList<byte[]>?> TryChangePasswordAsync(Guid account, string expectedHash, string newHash, DateTime now, CancellationToken cancellation)
     {
         await Enter(cancellation);
         lock (_lock)
         {
-            if (!_accounts.TryGetValue(account, out var a) || a.Hash != expectedHash) return false;
+            if (!_accounts.TryGetValue(account, out var a) || a.Hash != expectedHash) return null;
             _accounts[account] = (a.Username, newHash);
-            foreach (var key in _sessions.Where(s => s.Value.Account == account).Select(s => s.Key).ToList()) _sessions.Remove(key);
-            return true;
+            var ended = _sessions.Where(s => s.Value.Account == account).Select(s => s.Key).ToList();
+            foreach (var key in ended) _sessions.Remove(key);
+            return ended.Select(Convert.FromHexString).ToList();
         }
     }
 
@@ -183,14 +185,18 @@ public sealed class MemoryAccountStore : IAccountStore
         }
     }
 
-    public async Task<bool> DeleteCharacterAsync(Guid account, Guid character, DateTime now, CancellationToken cancellation)
+    /// <summary>Characters another server holds.</summary>
+    public HashSet<Guid> HeldElsewhere { get; } = new();
+
+    public async Task<DeleteCharacterOutcome> DeleteCharacterAsync(Guid account, Guid character, DateTime now, CancellationToken cancellation)
     {
         await Enter(cancellation);
         lock (_lock)
         {
-            if (!_characters.TryGetValue(character, out var c) || c.Account != account || c.Deleted) return false;
+            if (!_characters.TryGetValue(character, out var c) || c.Account != account || c.Deleted) return DeleteCharacterOutcome.Unknown;
+            if (HeldElsewhere.Contains(character)) return DeleteCharacterOutcome.InUse;
             _characters[character] = c with { Deleted = true };
-            return true;
+            return DeleteCharacterOutcome.Deleted;
         }
     }
 }

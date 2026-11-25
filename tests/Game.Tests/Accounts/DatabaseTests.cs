@@ -230,7 +230,7 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
     {
         var account = await AccountAsync();
         var token = Token();
-        (await Store.TryAddSessionAsync(account, "hash", null, token, Now, Now.AddHours(1), 10, default)).ShouldBeTrue();
+        (await Store.TryAddSessionAsync(account, "hash", null, token, Now, Now.AddHours(1), 10, default)).ShouldNotBeNull();
         (await Store.FindSessionAsync(token, Now.AddMinutes(59), default)).ShouldBe(account);
         (await Store.FindSessionAsync(token, Now.AddHours(1), default)).ShouldBeNull();
         (await Store.FindSessionAsync(Token(), Now, default)).ShouldBeNull();
@@ -258,9 +258,11 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
         var account = await AccountAsync();
         var other = await AccountAsync();
         var tokens = Enumerable.Range(0, 6).Select(_ => Token()).ToList();
-        (await Store.TryAddSessionAsync(other, "hash", null, tokens[5], Now, Now.AddHours(9), 2, default)).ShouldBeTrue();
+        (await Store.TryAddSessionAsync(other, "hash", null, tokens[5], Now, Now.AddHours(9), 2, default)).ShouldBeEmpty();
         await Store.TryAddSessionAsync(account, "hash", null, tokens[0], Now, Now.AddMinutes(1), 2, default);
-        for (var i = 1; i <= 4; i++) await Store.TryAddSessionAsync(account, "hash", null, tokens[i], Now.AddMinutes(i), Now.AddHours(9), 2, default);
+        var pushedOut = new List<byte[]>();
+        for (var i = 1; i <= 4; i++) pushedOut.AddRange((await Store.TryAddSessionAsync(account, "hash", null, tokens[i], Now.AddMinutes(i), Now.AddHours(9), 2, default))!);
+        pushedOut.Select(Convert.ToHexString).ShouldBe([Convert.ToHexString(tokens[1]), Convert.ToHexString(tokens[2])], "the live ones pushed out, not the expired one"); // T-710
         await using var db = fixture.Database.Open();
         (await db.Sessions.CountAsync(s => s.AccountId == account)).ShouldBe(2);
         (await Store.FindSessionAsync(tokens[3], Now.AddMinutes(5), default)).ShouldBe(account);
@@ -272,14 +274,14 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
     public async Task A_session_is_not_added_once_the_password_has_changed_and_a_rehash_is_stored()
     {
         var account = await AccountAsync("old");
-        (await Store.TryAddSessionAsync(account, "other", null, Token(), Now, Now.AddHours(1), 10, default)).ShouldBeFalse();
+        (await Store.TryAddSessionAsync(account, "other", null, Token(), Now, Now.AddHours(1), 10, default)).ShouldBeNull();
         var token = Token();
-        (await Store.TryAddSessionAsync(account, "old", "rehashed", token, Now, Now.AddHours(1), 10, default)).ShouldBeTrue();
+        (await Store.TryAddSessionAsync(account, "old", "rehashed", token, Now, Now.AddHours(1), 10, default)).ShouldBeEmpty();
         (await Store.FindAccountAsync(account, default))!.PasswordHash.ShouldBe("rehashed");
-        (await Store.TryChangePasswordAsync(account, "old", "new", Now, default)).ShouldBeFalse();
-        (await Store.TryChangePasswordAsync(account, "rehashed", "new", Now, default)).ShouldBeTrue();
+        (await Store.TryChangePasswordAsync(account, "old", "new", Now, default)).ShouldBeNull();
+        (await Store.TryChangePasswordAsync(account, "rehashed", "new", Now, default))!.Single().ShouldBe(token);
         (await Store.FindSessionAsync(token, Now, default)).ShouldBeNull("a password change ends every session");
-        (await Store.TryAddSessionAsync(account, "rehashed", null, Token(), Now, Now.AddHours(1), 10, default)).ShouldBeFalse();
+        (await Store.TryAddSessionAsync(account, "rehashed", null, Token(), Now, Now.AddHours(1), 10, default)).ShouldBeNull();
     }
 
     [DatabaseFact]
@@ -291,9 +293,9 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
             var signIns = Enumerable.Range(0, 8).Select(_ => Store.TryAddSessionAsync(account, "old", null, Token(), Now, Now.AddHours(1), 100, default)).ToList();
             var change = Store.TryChangePasswordAsync(account, "old", "new", Now, default);
             await Task.WhenAll(signIns);
-            (await change).ShouldBeTrue();
+            (await change)!.Count.ShouldBe(signIns.Count(s => s.Result is not null), "every session that was accepted first is named as ended"); // T-710
             await using var db = fixture.Database.Open();
-            (await db.Sessions.CountAsync(s => s.AccountId == account)).ShouldBe(0, $"round {round}: {signIns.Count(s => s.Result)} of 8 sign-ins were accepted first");
+            (await db.Sessions.CountAsync(s => s.AccountId == account)).ShouldBe(0, $"round {round}: {signIns.Count(s => s.Result is not null)} of 8 sign-ins were accepted first");
         }
     }
 
@@ -329,9 +331,9 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
         var first = (await CreateAsync(account, name)).Character!;
         (await CreateAsync(account, UniqueName())).Character!.Slot.ShouldBe(1);
         (await Store.FindCharacterAsync(other, first.Id, default)).ShouldBeNull();
-        (await Store.DeleteCharacterAsync(other, first.Id, Now, default)).ShouldBeFalse();
-        (await Store.DeleteCharacterAsync(account, first.Id, Now, default)).ShouldBeTrue();
-        (await Store.DeleteCharacterAsync(account, first.Id, Now, default)).ShouldBeFalse();
+        (await Store.DeleteCharacterAsync(other, first.Id, Now, default)).ShouldBe(DeleteCharacterOutcome.Unknown);
+        (await Store.DeleteCharacterAsync(account, first.Id, Now, default)).ShouldBe(DeleteCharacterOutcome.Deleted);
+        (await Store.DeleteCharacterAsync(account, first.Id, Now, default)).ShouldBe(DeleteCharacterOutcome.Unknown);
         (await Store.FindCharacterAsync(account, first.Id, default)).ShouldBeNull();
         (await CreateAsync(other, name)).Outcome.ShouldBe(CreateCharacterOutcome.NameTaken);
         (await CreateAsync(account, UniqueName())).Character!.Slot.ShouldBe(0);
@@ -395,5 +397,36 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
         AccountResult<NewSession> back = default;
         for (var i = 0; i < 5 && !(back = await service.LoginAsync(user, ServiceRig.Password, "a", default)).Ok; i++) await Task.Delay(200);
         back.Ok.ShouldBeTrue();
+    }
+
+    // ---- T-710 ----
+
+    [DatabaseFact]
+    public async Task Two_password_changes_at_once_one_wins_and_the_loser_learns_its_session_is_gone()
+    {
+        for (var round = 0; round < 10; round++)
+        {
+            var service = new AccountService(Store, new FakeHasher(), HashQueue.Default(), new AccountLimits(), TestGrids.SampleContent.Balance, TestGrids.SampleContent.Appearance, new ManualClock(), new FakeTime(), new ListLog());
+            var user = Unique("u");
+            var token = (await service.RegisterAsync(user, ServiceRig.Password, "a", default)).Value!.Token;
+            var changes = await Task.WhenAll(
+                Task.Run(() => service.ChangePasswordAsync(token, ServiceRig.Password, "the first new password", "a", default)),
+                Task.Run(() => service.ChangePasswordAsync(token, ServiceRig.Password, "the second new password", "a", default)));
+            changes.Count(c => c.Ok).ShouldBe(1, $"round {round}: {changes[0].Error}, {changes[1].Error}");
+            changes.Single(c => !c.Ok).Error.ShouldBe(AccountErrors.InvalidSession);
+            (await service.ListAsync(changes.Single(c => c.Ok).Value!.Token, default)).Ok.ShouldBeTrue();
+            (await service.ListAsync(token, default)).Error.ShouldBe(AccountErrors.InvalidSession);
+            var winner = changes[0].Ok ? "the first new password" : "the second new password";
+            (await service.LoginAsync(user, winner, "a", default)).Ok.ShouldBeTrue();
+        }
+    }
+
+    [DatabaseFact]
+    public async Task Only_migrations_may_take_long()
+    {
+        await using var play = fixture.Database.Open();
+        await using var migrate = fixture.Database.OpenForMigrations();
+        play.Database.GetCommandTimeout().ShouldBe(GameDatabase.CommandTimeoutSeconds);
+        migrate.Database.GetCommandTimeout().ShouldBe(GameDatabase.MigrationTimeoutSeconds);
     }
 }
