@@ -26,7 +26,14 @@ public sealed class VocabularyRule : IValidationRule
                 Check(context, e.Owner, e.Path + ".element", el, Elements.All, "element");
 
         foreach (var job in db.Jobs.All)
+        {
             CheckList(context, job.Id, "weapon_types", job.WeaponTypes, WeaponTypes.All, "weapon type");
+            for (var i = 0; i < job.Look.Pieces.Count; i++)
+            {
+                if (job.Look.Pieces[i].Gender is { } gender) Check(context, job.Id, $"look.pieces[{i}].gender", gender, Genders.All, "gender");
+                if (job.Look.Pieces[i].Slot is { } slot) Check(context, job.Id, $"look.pieces[{i}].slot", slot, EquipSlots.All, "equip slot");
+            }
+        }
 
         foreach (var skill in db.Skills.All)
         {

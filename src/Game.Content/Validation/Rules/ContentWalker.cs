@@ -201,6 +201,7 @@ internal static class ContentWalker
         {
             yield return new(j.Id, "model_asset_key", j.ModelAssetKey, false);
             yield return new(j.Id, "icon_asset_key", j.IconAssetKey, false);
+            for (var i = 0; i < j.Look.Pieces.Count; i++) yield return new(j.Id, $"look.pieces[{i}].model_asset_key", j.Look.Pieces[i].ModelAssetKey, true);
         }
         foreach (var s in db.Skills.All)
         {

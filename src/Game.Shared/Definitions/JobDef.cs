@@ -41,6 +41,35 @@ namespace Game.Shared.Definitions
 
         /// <summary>UI icon (<c>icon.*</c>).</summary>
         public string? IconAssetKey { get; init; }
+
+        /// <summary>How a character of this job is told apart on its own body (T-706, ARCHITECTURE §7.5.1). Cosmetic only.</summary>
+        public JobLookDef Look { get; init; } = new JobLookDef();
+    }
+
+    /// <summary>
+    /// What a job adds to a character's body, so the job shows while the body, face and hair stay the character's own (T-706): a colour for the body's cloth and
+    /// pieces worn under the equipment. Cosmetic only.
+    /// </summary>
+    public sealed record JobLookDef
+    {
+        /// <summary>Colour of the body's cloth as <c>#RRGGBB</c>. Null keeps the colour the body is painted with.</summary>
+        public string? ClothColor { get; init; }
+
+        /// <summary>Pieces merged into the body like worn equipment.</summary>
+        public IReadOnlyList<JobPieceDef> Pieces { get; init; } = Empty.List<JobPieceDef>();
+    }
+
+    /// <summary>One piece of a job's look.</summary>
+    public sealed record JobPieceDef
+    {
+        /// <summary>Piece model (<c>model.*</c>): <c>attach</c> or <c>skinned</c> in the theme manifest, like worn equipment.</summary>
+        public string ModelAssetKey { get; init; } = string.Empty;
+
+        /// <summary>Gender it is for (<see cref="Vocabulary.Genders"/>). Null: both.</summary>
+        public string? Gender { get; init; }
+
+        /// <summary>Equipment slot it stands for (<see cref="Vocabulary.EquipSlots"/>): worn equipment in that slot is drawn instead of it. Null: always drawn.</summary>
+        public string? Slot { get; init; }
     }
 
     /// <summary>Conditions for changing into a job. All listed conditions must hold.</summary>

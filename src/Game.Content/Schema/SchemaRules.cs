@@ -17,6 +17,8 @@ internal static class SchemaRules
         ["Race"] = MonsterRaces.All,
         ["Size"] = MonsterSizes.All,
         ["Slots"] = EquipSlots.All,
+        ["Slot"] = EquipSlots.All,
+        ["Gender"] = Genders.All,
         ["WeaponType"] = WeaponTypes.All,
         ["WeaponTypes"] = WeaponTypes.All,
         ["TwoHandedWeaponTypes"] = WeaponTypes.All,

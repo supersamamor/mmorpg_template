@@ -82,6 +82,28 @@ public sealed class WorldPresenter
         }
     }
 
+    /// <summary>
+    /// Measuring only (<c>--measure-looks</c>, T-706): gives every player these looks instead of the server's, so a crowd of all different characters can be measured.
+    /// Null (the default) draws what the server says. Never set while playing.
+    /// </summary>
+    public Func<EntityView, Game.Shared.Protocol.AppearanceRecord?>? LooksOverride { get; set; }
+
+    private Game.Shared.Protocol.AppearanceRecord? LooksOf(EntityView entity) => LooksOverride is { } looks && entity.Kind == EntityKinds.Player ? looks(entity) : entity.Appearance;
+
+    /// <summary>Measuring only: gives every visual back, so the next frame draws every entity anew (after a setting that decides the model changed).</summary>
+    public void Redraw()
+    {
+        var entities = _world.Entities;
+        for (var i = 0; i < entities.Count; i++)
+        {
+            if (entities[i].Visual is not IEntityVisual visual) continue;
+            visual.SetOutline(false);
+            _visuals.Release(visual);
+            entities[i].Visual = null;
+        }
+        _replan = true;
+    }
+
     /// <summary>Entities drawn with an outline after the last plan (for measuring, T-222).</summary>
     public int OutlinedCount { get; private set; }
 
@@ -312,7 +334,7 @@ public sealed class WorldPresenter
             var entity = entities[i];
             if (entity.Visual is null)
             {
-                entity.Visual = _visuals.Acquire(entity.Kind, entity.DisplayKey);
+                entity.Visual = _visuals.Acquire(entity.Kind, entity.DisplayKey, LooksOf(entity));
                 entity.PoseDirty = entity.LookDirty = true;
                 _replan = true;
                 if (entity.Kind == EntityKinds.Npc) _questMarksDirty = true;
@@ -321,6 +343,7 @@ public sealed class WorldPresenter
             if (entity.LookDirty)
             {
                 visual.SetLook(new EntityLook(entity.Id == ownId, entity.DeadShown, entity.Mine));
+                visual.SetCharacter(entity.DisplayKey, LooksOf(entity)); // a job change puts the new job's look on the same body (T-706)
                 // Worn equipment (T-403): the visual re-dresses only when the look counter moved, and swaps only the changed pieces.
                 var worn = _dressOverride is not null && entity.Kind == EntityKinds.Player ? _dressOverride : entity.Worn;
                 visual.SetGear(entity.Weapon, worn, unchecked(entity.LookVersion + _dressEpoch * 1_000_003));

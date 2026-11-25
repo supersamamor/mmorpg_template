@@ -15,6 +15,7 @@ namespace Game.Content.Validation.Rules;
 /// headgear. Anything else (another rig, or a rig-less model that is not head-attached) is an error. The rig and attach checks need
 /// the manifest metadata and are skipped when the key set was built without it.
 /// </para>
+/// It also checks a job's cloth colour (T-706), which is worn on the same bodies; the job's pieces are theme entries, checked by <see cref="ThemeCheck"/>.
 /// </summary>
 public sealed class AppearanceRule : IValidationRule
 {
@@ -56,6 +57,9 @@ public sealed class AppearanceRule : IValidationRule
         Default(context, "default_skin_tone_id", a.DefaultSkinToneId, a.SkinTones.Select(o => o.Id), "skin tone");
         Palette(context, "hair_colors", a.HairColors, AppearanceIdPrefixes.HairColor, seen);
         Default(context, "default_hair_color_id", a.DefaultHairColorId, a.HairColors.Select(o => o.Id), "hair colour");
+        foreach (var job in context.Database.Jobs.All)
+            if (job.Look.ClothColor is { } cloth && !Hex.IsMatch(cloth))
+                context.Error(job.Id, "look.cloth_color", ValidationCodes.AppearanceColor, $"{job.Id} look.cloth_color '{cloth}' must be a hex colour like #RRGGBB.");
     }
 
     private static void Gender(ValidationContext context, string path, GenderAppearanceDef def, HashSet<string> seen)

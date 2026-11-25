@@ -95,6 +95,21 @@ public sealed class ClientConfig
     /// <summary>Most distinct models kept loaded at once; loaded models nobody is showing are dropped oldest first beyond this (bounds memory).</summary>
     public int ModelCacheLimit { get; set; } = 48;
 
+    /// <summary>
+    /// Most merged characters (a body with its face, hair, colours and gear, at both levels of detail) kept for reuse (T-706); the least recently used go first. It is
+    /// above the 50 entities a client can see, so a crowd of all different looks never merges one twice; characters on screen hold their own meshes whatever it says.
+    /// </summary>
+    public int LookCacheLimit { get; set; } = 64;
+
+    /// <summary>How fast the creation preview turns by itself, in degrees a second (T-706).</summary>
+    public double PreviewTurnDegreesPerSecond { get; set; } = 30;
+
+    /// <summary>How far a drag across the whole preview turns it, in degrees.</summary>
+    public double PreviewDragDegrees { get; set; } = 360;
+
+    /// <summary>Draw characters by their own looks (T-706); off draws them by their job's model as before, for measuring.</summary>
+    public bool DrawAppearance { get; set; } = true;
+
     /// <summary>Most worn-visual models loaded ahead of need (worn on screen first, then the own bag, T-405); 0 turns the preload off. Their meshes count toward <see cref="ModelCacheLimit"/>.</summary>
     public int GearPreloadLimit { get; set; } = 16;
 
@@ -340,6 +355,10 @@ public sealed class ClientConfig
             case "full_rate_animated_count": FullRateAnimatedCount = (int)Number(value); break;
             case "reduced_animation_divisor": ReducedAnimationDivisor = Math.Max(1, (int)Number(value)); break;
             case "model_cache_limit": ModelCacheLimit = (int)Number(value); break;
+            case "look_cache_limit": LookCacheLimit = Math.Max(1, (int)Number(value)); break;
+            case "preview_turn_degrees": PreviewTurnDegreesPerSecond = Number(value); break;
+            case "preview_drag_degrees": PreviewDragDegrees = Number(value); break;
+            case "draw_appearance": DrawAppearance = Number(value) != 0; break;
             case "gear_preload_limit": GearPreloadLimit = Math.Max(0, (int)Number(value)); break;
             case "piece_load_attempts": PieceLoadAttempts = Math.Max(1, (int)Number(value)); break;
             case "toon_shading": ToonShading = Number(value) != 0; break;

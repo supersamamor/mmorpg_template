@@ -89,9 +89,17 @@ namespace Game.Shared.ClientContent
     /// <param name="ModelAssetKey">Body model key, or null.</param>
     /// <param name="IconAssetKey">UI icon key, or null.</param>
     /// <param name="Skills">The skill tree, in content order.</param>
+    /// <param name="ClothColor">The job's cloth colour as <c>#RRGGBB</c> (T-706), or null.</param>
+    /// <param name="Pieces">The pieces the job adds to a character's body (T-706); null or empty for none.</param>
     public sealed record ClientJob(
         string Id, string Name, string? Description, string? ParentJobId, IReadOnlyList<string> WeaponTypes, string? ModelAssetKey,
-        string? IconAssetKey, IReadOnlyList<ClientJobSkill> Skills);
+        string? IconAssetKey, IReadOnlyList<ClientJobSkill> Skills, string? ClothColor = null, IReadOnlyList<ClientJobPiece>? Pieces = null);
+
+    /// <summary>One piece of a job's look (T-706).</summary>
+    /// <param name="ModelAssetKey">Piece model key.</param>
+    /// <param name="Gender">A <c>Genders</c> term, or null for both.</param>
+    /// <param name="Slot">The equipment slot whose worn equipment replaces it, or null.</param>
+    public sealed record ClientJobPiece(string ModelAssetKey, string? Gender, string? Slot);
 
     /// <summary>A status as the client shows it.</summary>
     /// <param name="Id">Status id.</param>
@@ -194,9 +202,10 @@ namespace Game.Shared.ClientContent
     /// <param name="DefaultSkinToneId">Skin tone a new character starts with.</param>
     /// <param name="HairColors">Hair colour palette, in content order.</param>
     /// <param name="DefaultHairColorId">Hair colour a new character starts with.</param>
+    /// <param name="StartJobId">The job a new character starts in, whose look the creation preview wears (T-706); null is written as none.</param>
     public sealed record ClientAppearance(
         IReadOnlyList<ClientGender> Genders, IReadOnlyList<ClientColorOption> SkinTones, string DefaultSkinToneId,
-        IReadOnlyList<ClientColorOption> HairColors, string DefaultHairColorId);
+        IReadOnlyList<ClientColorOption> HairColors, string DefaultHairColorId, string? StartJobId = null);
 
     /// <summary>The whole client bundle (without its hash; the hash belongs to the file, see <c>ClientBundleWriter</c>).</summary>
     /// <param name="FormatVersion">The bundle format; the client refuses versions it does not know.</param>
@@ -220,9 +229,9 @@ namespace Game.Shared.ClientContent
         IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps, ClientAppearance Appearance, ClientRefine? Refine = null, string CurrencyName = "")
     {
         /// <summary>
-        /// The format this build writes and reads (6: the currency's display name, T-602; 5: no dialogue graphs, they are server-run since T-601; 4: item card slots and
+        /// The format this build writes and reads (7: the looks of jobs and the start job, T-706; 6: the currency's display name, T-602; 5: no dialogue graphs, they are server-run since T-601; 4: item card slots and
         /// refinable, and the refine steps, T-402).
         /// </summary>
-        public const int CurrentFormatVersion = 6;
+        public const int CurrentFormatVersion = 7;
     }
 }

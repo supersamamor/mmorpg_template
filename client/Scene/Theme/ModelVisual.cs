@@ -1,6 +1,7 @@
 using Game.Client.Core;
 using Game.Client.Core.Animation;
 using Game.Client.Core.Theme;
+using Game.Shared.Protocol;
 using Godot;
 
 namespace Game.Client.Scene;
@@ -29,6 +30,7 @@ public sealed class ModelVisual : IEntityVisual
     private readonly EquipmentCatalog _equipment;
     private readonly GearMesher _mesher;
     private readonly Action<ModelVisual> _needsDressing;
+    private readonly AppearanceCatalog _appearance;
     private readonly ModelResolution _resolution;
     private readonly ToonLook? _toon;
     private bool _outlined;
@@ -37,6 +39,13 @@ public sealed class ModelVisual : IEntityVisual
     private readonly List<string> _added = new();
     private readonly List<string> _removed = new();
     private readonly List<Piece> _pieces = new();
+    private readonly List<PartModel> _dressed = new();
+    private readonly List<DressPart> _plan = new();
+    private readonly List<WornItem> _wornItems = new();
+    private CharacterLook? _character;
+    private AppearanceRecord? _looksSeen;
+    private string? _jobSeen;
+    private bool _fresh = true;
     private readonly List<Node3D> _looseNodes = new();
 
     private Node3D? _content;
@@ -64,17 +73,14 @@ public sealed class ModelVisual : IEntityVisual
     private float _fade;
 
     /// <summary>One worn item on this character.</summary>
-    private sealed class Piece
+    private sealed record Piece(string ItemId, WornPiece Worn);
+
+    /// <summary>One part to merge (T-706: the face, the hairstyle and the job's pieces as well as worn items) and its meshes.</summary>
+    private sealed class PartModel
     {
-        public Piece(string itemId, WornPiece worn)
-        {
-            ItemId = itemId;
-            Worn = worn;
-        }
+        public PartModel(DressPart part) => Part = part;
 
-        public string ItemId { get; }
-
-        public WornPiece Worn { get; }
+        public DressPart Part { get; }
 
         /// <summary>The meshes are in (or will never come: <see cref="Meshes"/> stays null and the marker stands in).</summary>
         public bool Loaded;
@@ -88,10 +94,13 @@ public sealed class ModelVisual : IEntityVisual
     /// <param name="equipment">Worn items to pieces.</param>
     /// <param name="mesher">Merges the body and its pieces; shared by every visual.</param>
     /// <param name="needsDressing">Told when the gear changed, so the source calls <see cref="TryDress"/> until it is done.</param>
-    /// <param name="resolution">The character's model.</param>
+    /// <param name="resolution">The character's model: a job's, a monster's, or a character's own body (T-706).</param>
+    /// <param name="appearance">Appearance ids to looks (T-706).</param>
+    /// <param name="look">The toon look, or null.</param>
     public ModelVisual(ModelStore store, ThemeCatalog catalog, EquipmentCatalog equipment, GearMesher mesher, Action<ModelVisual> needsDressing, ModelResolution resolution,
-        ToonLook? look = null)
+        AppearanceCatalog appearance, ToonLook? look = null)
     {
+        _appearance = appearance;
         _store = store;
         _catalog = catalog;
         _equipment = equipment;
@@ -156,6 +165,32 @@ public sealed class ModelVisual : IEntityVisual
     /// <summary>Worn pieces on the character now, for measuring.</summary>
     public int PieceCount => _pieces.Count;
 
+    /// <summary>The character's look now drawn or being put on, or null when it is drawn by its model alone (for checking and measuring, T-706).</summary>
+    public CharacterLook? Character => _character;
+
+    /// <summary>The parts merged into the body now or about to be (for checking, T-706).</summary>
+    public IReadOnlyList<DressPart> Dressed => _plan;
+
+    /// <summary>True when the model is in place and everything on it is put on: what shows is what was asked for.</summary>
+    public bool Settled => _ready && !_gearDirty;
+
+    /// <summary>Surfaces drawn at the full level of detail (for checking: one per character, §9).</summary>
+    public int Surfaces => _lod0?.Mesh?.GetSurfaceCount() ?? 0;
+
+    /// <summary>The distinct vertex colours of the drawn mesh (for checking that the character's colours are baked in, T-706).</summary>
+    public IReadOnlyCollection<Color> DrawnColors()
+    {
+        var found = new HashSet<Color>();
+        if (_lod0?.Mesh is not { } mesh) return found;
+        for (var s = 0; s < mesh.GetSurfaceCount(); s++)
+        {
+            var colors = mesh.SurfaceGetArrays(s)[(int)Mesh.ArrayType.Color];
+            if (colors.VariantType != Variant.Type.Nil)
+                foreach (var color in colors.AsColorArray()) found.Add(color);
+        }
+        return found;
+    }
+
     /// <summary>The clip names in use for the weapon type (for checking).</summary>
     public string? ClipName(AnimClip clip) => _anims is null ? null : (_clipNames ?? _anims.NamesFor(_weapon))[(int)clip];
 
@@ -166,6 +201,7 @@ public sealed class ModelVisual : IEntityVisual
         _firstClip = true;
         _playing = false;
         _pending = 0;
+        _fresh = true; // until it is dressed it would show the last entity's face (T-706)
         SetFade(0);
         if (_ready && !_using && _resolution.Path is not null)
         {
@@ -262,7 +298,7 @@ public sealed class ModelVisual : IEntityVisual
     {
         _ready = true;
         ApplyMaterials();
-        Root.Visible = _wantVisible;
+        ApplyVisible();
         ApplyDetail();
         ApplyLook();
         if (_gearDirty) _needsDressing(this);
@@ -280,6 +316,20 @@ public sealed class ModelVisual : IEntityVisual
     {
         _look = look;
         if (_ready) ApplyLook();
+    }
+
+    /// <inheritdoc />
+    public void SetCharacter(string? jobId, AppearanceRecord? looks)
+    {
+        // Asked on every look change (HP included): the same objects mean nothing changed.
+        if (ReferenceEquals(looks, _looksSeen) && ReferenceEquals(jobId, _jobSeen)) return;
+        _looksSeen = looks;
+        _jobSeen = jobId;
+        var look = _appearance.Resolve(looks, jobId);
+        if (look is not null && look.Body.PoolKey != PoolKey) look = null; // another body: the source gave this one for a reason (a missing body, drawing switched off)
+        if (ReferenceEquals(look, _character)) return;
+        _character = look;
+        Redress();
     }
 
     /// <inheritdoc />
@@ -306,9 +356,26 @@ public sealed class ModelVisual : IEntityVisual
         {
             if (_equipment.Resolve(_added[i], _resolution.Asset?.Rig) is not { } wornPiece) continue;
             _pieces.Add(new Piece(_added[i], wornPiece));
-            if (wornPiece.Model.Path is not null) _store.Request(wornPiece.Model.Path);
+        }
+        Redress();
+    }
+
+    /// <summary>Plans what is merged into the body now (<see cref="DressPlan"/>), starts loading what is new, and asks to be dressed.</summary>
+    private void Redress()
+    {
+        _wornItems.Clear();
+        foreach (var piece in _pieces) _wornItems.Add(new WornItem(piece.Worn, _equipment.SlotsOf(piece.ItemId)));
+        DressPlan.Fill(_character, _wornItems, _plan);
+        for (var i = _dressed.Count - 1; i >= 0; i--)
+            if (!_plan.Contains(_dressed[i].Part)) _dressed.RemoveAt(i); // a part still worn keeps its meshes
+        foreach (var part in _plan)
+        {
+            if (_dressed.Exists(d => d.Part == part)) continue;
+            _dressed.Add(new PartModel(part));
+            if (part.Piece.Model.Path is not null) _store.Request(part.Piece.Model.Path);
         }
         _gearDirty = true;
+        ApplyVisible();
         _needsDressing(this);
     }
 
@@ -321,11 +388,11 @@ public sealed class ModelVisual : IEntityVisual
         if (!_gearDirty) return true;
         if (!_ready) return false;
         var loaded = true;
-        for (var i = 0; i < _pieces.Count; i++)
+        for (var i = 0; i < _dressed.Count; i++)
         {
-            var piece = _pieces[i];
+            var piece = _dressed[i];
             if (piece.Loaded) continue;
-            if (piece.Worn.Model.Path is not { } path)
+            if (piece.Part.Piece.Model.Path is not { } path)
             {
                 piece.Loaded = true;
                 continue;
@@ -340,6 +407,8 @@ public sealed class ModelVisual : IEntityVisual
         LastDressMs = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
         created++;
         _gearDirty = false;
+        _fresh = false;
+        ApplyVisible();
         return true;
     }
 
@@ -353,7 +422,7 @@ public sealed class ModelVisual : IEntityVisual
             DressLoose();
             return true;
         }
-        if (_pieces.Count == 0)
+        if (_dressed.Count == 0 && _character is null)
         {
             ClearLoose();
             _lod0.Mesh = _bodyMesh0;
@@ -365,21 +434,16 @@ public sealed class ModelVisual : IEntityVisual
             }
             return true;
         }
-        var worn = new List<WornPiece>(_pieces.Count);
-        foreach (var piece in _pieces) worn.Add(piece.Worn);
-        var key0 = WornSet.Key(PoolKey, 0, worn);
-        var ready = _mesher.TryGet(key0, _bodyMesh0, _bodySkin0, _skeleton, Parts(0), out var lod0);
         var low = _lod1 is not null && _bodyMesh1 is not null && _bodySkin1 is not null;
-        (ArrayMesh Mesh, Skin Skin) lod1 = default;
-        if (low) ready &= _mesher.TryGet(WornSet.Key(PoolKey, 1, worn), _bodyMesh1!, _bodySkin1!, _skeleton, Parts(1), out lod1);
-        if (!ready) return false;
+        BodySource? Source(int lod) => lod == 0 ? new BodySource(_bodyMesh0!, _bodySkin0!, Parts(0)) : low ? new BodySource(_bodyMesh1!, _bodySkin1!, Parts(1)) : null;
+        if (!_mesher.TryGet(WornSet.Key(PoolKey, _character, _plan), _skeleton, Source, _character?.BodyColors, out var dressed)) return false;
         ClearLoose();
-        _lod0.Mesh = lod0.Mesh;
-        _lod0.Skin = lod0.Skin;
-        if (low)
+        _lod0.Mesh = dressed.Mesh0;
+        _lod0.Skin = dressed.Skin0;
+        if (low && dressed.Mesh1 is not null)
         {
-            _lod1!.Mesh = lod1.Mesh;
-            _lod1.Skin = lod1.Skin;
+            _lod1!.Mesh = dressed.Mesh1;
+            _lod1.Skin = dressed.Skin1;
         }
         return true;
     }
@@ -392,10 +456,12 @@ public sealed class ModelVisual : IEntityVisual
 
     private List<GearPart> Parts(int lod)
     {
-        var parts = new List<GearPart>(_pieces.Count);
-        foreach (var piece in _pieces)
+        var parts = new List<GearPart>(_dressed.Count);
+        foreach (var model in _dressed)
         {
-            var meshes = piece.Meshes;
+            var piece = model.Part.Piece;
+            var colors = _character?.ColorsOf(model.Part.Role);
+            var meshes = model.Meshes;
             Mesh mesh = MarkerMesh();
             Skin? skin = null;
             var transform = Transform3D.Identity;
@@ -406,15 +472,15 @@ public sealed class ModelVisual : IEntityVisual
                 skin = low ? meshes.Skin1 : meshes.Skin0;
                 transform = low ? meshes.Transform1 : meshes.Transform0;
             }
-            if (piece.Worn.Mode == WornMode.Skinned && skin is not null)
+            if (piece.Mode == WornMode.Skinned && skin is not null)
             {
-                parts.Add(new GearPart(mesh, skin, Transform3D.Identity, -1));
+                parts.Add(new GearPart(mesh, skin, Transform3D.Identity, -1, colors));
                 continue;
             }
             // Attached (or a skinned file with no skin, or the marker): rigid on its bone, or on the default point.
-            var bone = AttachRules.BoneFor(piece.Worn.Mode == WornMode.Attached ? piece.Worn.Bone : null, _skeleton!.GetBoneCount(), name => _skeleton.FindBone(name), PoolKey, _catalog);
-            if (piece.Worn.Fallback || meshes is null) transform = Transform3D.Identity.Scaled(Vector3.One * FallbackPieceScale) * transform;
-            parts.Add(new GearPart(mesh, null, transform, Math.Max(0, bone)));
+            var bone = AttachRules.BoneFor(piece.Mode == WornMode.Attached ? piece.Bone : null, _skeleton!.GetBoneCount(), name => _skeleton.FindBone(name), PoolKey, _catalog);
+            if (piece.Fallback || meshes is null) transform = Transform3D.Identity.Scaled(Vector3.One * FallbackPieceScale) * transform;
+            parts.Add(new GearPart(mesh, null, transform, Math.Max(0, bone), piece.Fallback ? null : colors));
         }
         return parts;
     }
@@ -422,9 +488,9 @@ public sealed class ModelVisual : IEntityVisual
     /// <summary>A model without a skinned body: each piece is a plain mesh on its root (warned once by <see cref="AttachRules"/>).</summary>
     private void DressLoose()
     {
-        foreach (var piece in _pieces)
+        foreach (var piece in _dressed)
         {
-            AttachRules.BoneFor(piece.Worn.Bone ?? string.Empty, 0, _ => -1, PoolKey, _catalog);
+            AttachRules.BoneFor(piece.Part.Piece.Bone ?? string.Empty, 0, _ => -1, PoolKey, _catalog);
             var node = new MeshInstance3D { Mesh = piece.Meshes?.Lod0 ?? MarkerMesh(), Name = "Worn" };
             node.Transform = piece.Meshes?.Transform0 ?? Transform3D.Identity.Scaled(Vector3.One * FallbackPieceScale);
             node.CastShadow = Shadow;
@@ -437,7 +503,14 @@ public sealed class ModelVisual : IEntityVisual
     public void SetVisible(bool visible)
     {
         _wantVisible = visible;
-        Root.Visible = visible && _ready;
+        ApplyVisible();
+    }
+
+    /// <summary>A character with looks of its own stays hidden until they are on (T-706): a pooled one would show the last entity's face for a few frames.</summary>
+    private void ApplyVisible()
+    {
+        Root.Visible = _wantVisible && _ready && !(_fresh && _gearDirty && _character is not null);
+        if (Root.Visible) _fresh = false; // from here on a change keeps the old look until the new one is merged
     }
 
     /// <inheritdoc />

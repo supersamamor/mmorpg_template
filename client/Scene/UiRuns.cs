@@ -108,11 +108,19 @@ public sealed class UiRuns
         await LayoutMatrixAsync("sign-in screen");
         accounts.ShowSamples(Game.Client.Core.Accounts.AccountScreen.Characters, LongName);
         await FramesAsync(3);
-        Check(accounts.Rows.Count == 3 && accounts.CreateButton.IsVisibleInTree(), "the character screen shows its slots and the create button");
+        Check(accounts.Rows.Count == 3 && accounts.NewButton.IsVisibleInTree(), "the character screen shows its slots and the new-character button");
+        Check(accounts.Pictures.Count == 3 && accounts.Pictures.All(p => p.Looks is not null), "every character in the list has its picture");
         await LayoutMatrixAsync("character select");
         accounts.ClearSamples();
+        accounts.ShowCreationSamples(LongName);
         await FramesAsync(3);
-        Print("accounts: the sign-in and character-select screens fit every screen shape and scale, every button and field at least the touch target");
+        var creation = accounts.Creation!;
+        Check(creation.Open && creation.CreateButton.IsVisibleInTree() && creation.OptionButton("sample5") is not null, "the creation screen shows its choices and its buttons");
+        Check(Hud.Blocks(creation.BackButton.GetGlobalRect().GetCenter()) && (creation.Preview is null || Hud.Blocks(creation.Preview.Frame.GetGlobalRect().GetCenter())), "a touch on the creation screen never reaches the world");
+        await LayoutMatrixAsync("character creation");
+        accounts.ClearSamples();
+        await FramesAsync(3);
+        Print("accounts: the sign-in, character-select and creation screens fit every screen shape and scale, every button and field at least the touch target");
     }
 
     /// <summary>The sound settings: the panel fits at every screen shape, the buttons change the mixer and the engine's buses, and the choice is stored.</summary>

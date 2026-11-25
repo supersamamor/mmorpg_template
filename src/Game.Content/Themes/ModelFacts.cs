@@ -8,6 +8,26 @@ public sealed record MeshFacts(string Name, int Triangles, IReadOnlySet<int> Mat
 {
     /// <summary>Height of the mesh at rest, in world units.</summary>
     public float Height => Max.Y - Min.Y;
+
+    /// <summary>The distinct vertex colours (glTF <c>COLOR_0</c>, linear, 8 bits a channel as the engine keeps them), as <c>r &lt;&lt; 16 | g &lt;&lt; 8 | b</c>.</summary>
+    public IReadOnlySet<int> VertexColors { get; init; } = new HashSet<int>();
+
+    /// <summary>True when some vertex is painted with one of these sRGB colours (<c>#rrggbb</c>), within the client's tolerance (T-706).</summary>
+    public bool IsPainted(IEnumerable<string> colors)
+    {
+        foreach (var hex in colors)
+        {
+            var want = new int[3];
+            for (var i = 0; i < 3; i++)
+            {
+                var c = Convert.ToInt32(hex.Substring(1 + 2 * i, 2), 16) / 255.0;
+                want[i] = (int)Math.Round((c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4)) * 255);
+            }
+            foreach (var v in VertexColors)
+                if (Math.Abs((v >> 16) - want[0]) <= 1 && Math.Abs(((v >> 8) & 255) - want[1]) <= 1 && Math.Abs((v & 255) - want[2]) <= 1) return true;
+        }
+        return false;
+    }
 }
 
 /// <summary>
@@ -108,6 +128,7 @@ public sealed class ModelFacts
             var outline = primitives.Count > 0;
             var min = new Vector3(float.MaxValue);
             var max = new Vector3(float.MinValue);
+            var colors = new HashSet<int>();
             foreach (var primitive in primitives.OfType<JsonObject>())
             {
                 var mode = primitive["mode"]?.GetValue<int>() ?? 4;
@@ -117,6 +138,13 @@ public sealed class ModelFacts
                 triangles += mode switch { 4 => count / 3, 5 or 6 => Math.Max(0, count - 2), _ => 0 };
                 if (primitive["material"] is { } material) materials.Add(material.GetValue<int>());
                 if (attributes?["TANGENT"] is null) outline = false;
+                if (attributes?["COLOR_0"]?.GetValue<int>() is { } colorAccessor)
+                {
+                    var values = file.ReadFloats(colorAccessor);
+                    var width = GltfFile.Width(file.Json["accessors"]?[colorAccessor]?["type"]?.GetValue<string>() ?? "VEC4");
+                    int Channel(int at) => (int)Math.Round(Math.Clamp(values[at], 0f, 1f) * 255);
+                    for (var v = 0; width >= 3 && v + width <= values.Length; v += width) colors.Add(Channel(v) << 16 | Channel(v + 1) << 8 | Channel(v + 2));
+                }
                 if (positions is { } pa && file.Json["accessors"]?[pa] is JsonObject accessor && accessor["min"] is JsonArray lo && accessor["max"] is JsonArray hi && lo.Count == 3 && hi.Count == 3)
                 {
                     for (var corner = 0; corner < 8; corner++)
@@ -129,7 +157,7 @@ public sealed class ModelFacts
                 }
             }
             if (min.X > max.X) (min, max) = (Vector3.Zero, Vector3.Zero);
-            meshes.Add(new MeshFacts(file.NodeName(i), triangles, materials, outline, skinned, min, max));
+            meshes.Add(new MeshFacts(file.NodeName(i), triangles, materials, outline, skinned, min, max) { VertexColors = colors });
         }
 
         var animations = new List<string>();

@@ -14,6 +14,9 @@ public enum AccountScreen
 
     /// <summary>The character slots.</summary>
     Characters,
+
+    /// <summary>Making a new character (T-706).</summary>
+    Creation,
 }
 
 /// <summary>What the line under the screen's title says. The UI picks the text (<see cref="UiText.Account"/>).</summary>
@@ -50,11 +53,15 @@ public sealed class AccountFlow
     private string? _sessionToken;
 
     /// <summary>Creates the flow on the sign-in screen. Without a transport every request is unreachable (tests of other things).</summary>
-    public AccountFlow(ClientConfig config, IAccountTransport? transport)
+    public AccountFlow(ClientConfig config, IAccountTransport? transport, CharacterCreator? creator = null)
     {
         _config = config;
         _transport = transport;
+        Creator = creator;
     }
+
+    /// <summary>What is chosen on the creation screen (T-706), or null (tests of other things).</summary>
+    public CharacterCreator? Creator { get; }
 
     /// <summary>The screen.</summary>
     public AccountScreen Screen { get; private set; }
@@ -107,6 +114,7 @@ public sealed class AccountFlow
         if (Busy || _sessionToken is null) return;
         var token = _sessionToken;
         Forget();
+        Creator?.Reset(); // the next one to sign in starts fresh; a session that ended by itself keeps the choices
         Send(AccountCall.SignOut, "POST", AccountPaths.Logout, null, token);
     }
 
@@ -116,10 +124,26 @@ public sealed class AccountFlow
         if (_sessionToken is not null) Send(AccountCall.List, "GET", AccountPaths.Characters, null, _sessionToken);
     }
 
-    /// <summary>Creates a character.</summary>
-    public void Create(string name)
+    /// <summary>Opens the creation screen with what was chosen there before.</summary>
+    public void OpenCreation()
     {
-        if (_sessionToken is not null) Send(AccountCall.Create, "POST", AccountPaths.Characters, AccountJson.Write(new CreateCharacterRequest(name)), _sessionToken);
+        if (Busy || Screen != AccountScreen.Characters) return;
+        Screen = AccountScreen.Creation;
+        ClearNotice();
+    }
+
+    /// <summary>Back to the character list; the choices stay.</summary>
+    public void CloseCreation()
+    {
+        if (Busy || Screen != AccountScreen.Creation) return;
+        Screen = AccountScreen.Characters;
+        ClearNotice();
+    }
+
+    /// <summary>Creates a character with the chosen look (null: the server's defaults).</summary>
+    public void Create(string name, AppearanceChoice? appearance = null)
+    {
+        if (_sessionToken is not null) Send(AccountCall.Create, "POST", AccountPaths.Characters, AccountJson.Write(new CreateCharacterRequest(name, appearance)), _sessionToken);
     }
 
     /// <summary>First press: asks whether to delete the character. Second press on the same one: deletes it.</summary>
@@ -180,6 +204,9 @@ public sealed class AccountFlow
                 else Notice = AccountNotice.Unreachable;
                 break;
             case AccountCall.Create:
+                Creator?.Reset();
+                Refresh();
+                break;
             case AccountCall.Delete:
                 Refresh();
                 break;
@@ -213,14 +240,19 @@ public sealed class AccountFlow
         Version++;
     }
 
-    private void Send(AccountCall call, string method, string path, byte[]? body, string? token)
+    private void ClearNotice()
     {
-        if (Busy) return;
         Version++;
         Notice = AccountNotice.None;
         Error = string.Empty;
         RetryAfterSeconds = 0;
         Deleting = null;
+    }
+
+    private void Send(AccountCall call, string method, string path, byte[]? body, string? token)
+    {
+        if (Busy) return;
+        ClearNotice();
         if (_transport is null || TransportPolicy.AccountBase(_config.ServerUrl, _config.AllowCleartext) is not { } root)
         {
             Notice = AccountNotice.Unreachable; // Main refuses a bad server address at start-up with a screen; this is the second lock

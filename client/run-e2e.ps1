@@ -27,13 +27,15 @@
 #                                                         the same character (T-701). Needs PostgreSQL: $env:GAME_TEST_DB_CONNECTION; it uses its own database, mmo_e2e, on that server
 #   .\client\run-e2e.ps1 -Run saving                      a new account's character changes stats, quest, items, currency, gear, EXP and place; its server stops (and saves) and the next one has it
 #                                                         all; that one is killed outright and the third has its interval saves (T-702). Needs PostgreSQL like account; about 3 minutes
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, bye, release (account and saving are skipped, and said
-#                                                         so, when no database is configured)
+#   .\client\run-e2e.ps1 -Run appearance                  make a character with looks other than the defaults on the creation screen, enter and see it drawn with them; a second client (always
+#                                                         headless) logs in beside it and sees them too (T-706). Needs PostgreSQL like account
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, bye, release (account, saving
+#                                                         and appearance are skipped, and said so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -212,12 +214,12 @@ function Stop-GameServer($server) {
 
 # Starts Godot with the client's arguments (after `--`) and returns the process and its log file. Godot writes to stderr even when all is well,
 # so its output goes to files and success is judged by the exit code, never by stderr.
-function Start-GodotClient([string[]] $UserArgs, [string] $Binary = $godot, [string[]] $EngineArgs = @()) {
+function Start-GodotClient([string[]] $UserArgs, [string] $Binary = $godot, [string[]] $EngineArgs = @(), [switch] $Headless) {
     $log = [IO.Path]::GetTempFileName()
     $arguments = @()
     if ($Binary -eq $godot) { $arguments += @("--path", "`"$client`"") }
     $arguments += $EngineArgs
-    if (-not $Windowed) { $arguments += "--headless" }
+    if ($Headless -or -not $Windowed) { $arguments += "--headless" }
     $arguments += "--"
     $arguments += $UserArgs
     $process = Start-Process $Binary -PassThru -NoNewWindow -RedirectStandardOutput $log -RedirectStandardError "$log.err" -ArgumentList $arguments
@@ -413,6 +415,24 @@ function Invoke-Scenario([string] $Name) {
                     foreach ($one in $holder.Servers) { if (Test-Path $one.Log) { Stop-GameServer $one } }
                 }
             }
+            "appearance" {
+                # T-706: a database like account. The first client asks for the second (the marker names the looks it must see) and waits for it to come and go.
+                $env:GAME_DB_CONNECTION = Get-E2EConnection
+                try { $server = Start-GameServer } finally { $env:GAME_DB_CONNECTION = $null }
+                $holder = @{ Second = $null }
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-appearance" @()) -EngineArgs $engineArgs
+                $result = Wait-GodotClient $run 240 -OnMarker {
+                    param($marker)
+                    if ($marker -like "watch:*") {
+                        Write-Host "[run-e2e] starting the second client"
+                        $holder.Second = Start-GodotClient @("--e2e-appearance-watch", $marker.Substring(6), "--server", "ws://127.0.0.1:$Port/ws", "--name", "e2e-watcher") -EngineArgs $engineArgs -Headless
+                    }
+                }
+                if (-not $holder.Second) { Write-Host "[run-e2e] the first client never asked for the second"; return 1 }
+                $second = Wait-GodotClient $holder.Second 60
+                if ($second.Code -ne 0) { Write-Host "[run-e2e] the second client failed (exit code $($second.Code))"; return 1 }
+                return $result.Code
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -539,12 +559,12 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
-# The account and saving runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.
+# The account, saving and appearance runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.
 $skipped = @()
-$databaseRuns = @("account", "saving")
+$databaseRuns = @("account", "saving", "appearance")
 if (@($runs | Where-Object { $databaseRuns -contains $_ }).Count -gt 0 -and -not $env:GAME_TEST_DB_CONNECTION) {
     if ($Run -ne "all") { throw "The $Run run needs a PostgreSQL server: set `$env:GAME_TEST_DB_CONNECTION." }
     $skipped = $databaseRuns

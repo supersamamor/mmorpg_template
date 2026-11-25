@@ -37,6 +37,12 @@ public interface IEntityVisual
     /// </summary>
     void SetGear(string? weaponType, IReadOnlyList<string> worn, int version);
 
+    /// <summary>
+    /// A player's looks (T-706): its appearance ids and its job (the display key). Null ids draw the model alone. The same ids and job do nothing; a new job puts its
+    /// look on the same body.
+    /// </summary>
+    void SetCharacter(string? jobId, Game.Shared.Protocol.AppearanceRecord? looks);
+
     /// <summary>The level of detail: 0 for the nearest characters, 1 for the rest. A model with one level ignores it.</summary>
     void SetDetail(int lod);
 
@@ -58,9 +64,10 @@ public interface IEntityVisualSource
 {
     /// <summary>
     /// A visual for an entity: <paramref name="kind"/> is an <c>EntityKinds</c> term and <paramref name="displayKey"/> the content id the server sent. The model comes
-    /// from the bundle and the theme; the visual may fill in a little later if its model is still loading.
+    /// from the bundle and the theme; the visual may fill in a little later if its model is still loading. A player with <paramref name="looks"/> is drawn on its own
+    /// body (T-706).
     /// </summary>
-    IEntityVisual Acquire(string kind, string? displayKey);
+    IEntityVisual Acquire(string kind, string? displayKey, Game.Shared.Protocol.AppearanceRecord? looks = null);
 
     /// <summary>Back to the pool.</summary>
     void Release(IEntityVisual visual);

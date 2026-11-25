@@ -1,3 +1,4 @@
+using Game.Client.Core.Theme;
 using Godot;
 
 namespace Game.Client.Scene;
@@ -39,30 +40,56 @@ public sealed class PieceMeshes
 /// <param name="Skin">The skin of a skinned part; null for a rigid one.</param>
 /// <param name="Transform">A rigid part's transform in its bone's space (its offset, times the fallback scale).</param>
 /// <param name="Bone">A rigid part's bone on the character's skeleton.</param>
-public readonly record struct GearPart(Mesh Mesh, Skin? Skin, Transform3D Transform, int Bone);
+/// <param name="Colors">What its painted colours become (a face's skin, a hairstyle's hair colour; T-706), or null for none.</param>
+public readonly record struct GearPart(Mesh Mesh, Skin? Skin, Transform3D Transform, int Bone, Recolor? Colors = null);
+
+/// <summary>What one merge needs of a character at one level of detail: its body's mesh and skin, and the parts to merge in.</summary>
+public readonly record struct BodySource(Mesh Mesh, Skin Skin, IReadOnlyList<GearPart> Parts);
+
+/// <summary>A merged character: the full mesh and, when the body has one, the far one, each with its skin.</summary>
+public sealed record DressedMesh(ArrayMesh Mesh0, Skin Skin0, ArrayMesh? Mesh1, Skin? Skin1)
+{
+    internal long LastUsed { get; set; }
+}
 
 /// <summary>
 /// Merges a character's body and its worn pieces into one skinned mesh per level of detail (T-403, §9). Attached pieces become parts of the skin weighted fully to their
 /// bone, so they follow it exactly as a bone attachment would; skinned pieces keep their weights, with their skin's binds mapped onto the character's. Surfaces whose
 /// materials differ only in colour (untextured <see cref="StandardMaterial3D"/>, opaque, the same shading) are joined into one surface with the colour baked into the
 /// vertex colours, so a character costs one draw call whatever it wears; a textured material keeps its own surface (real art needs an atlas to merge, §9's
-/// "1 material"). Results are cached by <see cref="Game.Client.Core.Theme.WornSet"/> key, so a crowd wearing the same set shares one mesh and one skin.
+/// "1 material"). Since T-706 the face and hairstyle are parts like the gear, and the skin, hair and cloth colours are baked into the vertex colours
+/// (<see cref="Recolor"/>). Results are cached by <see cref="WornSet"/> key, both levels of detail together, at most <c>look_cache_limit</c> of them (the least recently
+/// used go first), so a crowd with the same looks and gear shares one mesh and one skin.
 /// <para><b>Off the main thread</b> (T-222, ADR-002 row 223): the merge used to take one 60–105 ms frame. Now each source mesh's arrays are read once (on the main
 /// thread, then cached), the merge itself runs on a worker over plain arrays (no engine object is touched there, so it is safe with the headless dummy renderer,
 /// §7.7), and the main thread only turns the result into a mesh and a skin. <see cref="TryGet"/> says "not yet" until then; the character keeps its old look for
-/// those frames. The vertex outline direction (the tangent, T-222) and the glow mark (vertex alpha) are carried through.</para>
+/// those frames. The vertex outline direction (the tangent, T-222) and the glow mark (vertex alpha) are carried through. At most <see cref="MaxRunning"/> merges run
+/// at once, so a crowd coming into view neither floods the workers nor reads every source in one frame.</para>
 /// </summary>
 public sealed class GearMesher
 {
-    private readonly Dictionary<string, (ArrayMesh Mesh, Skin Skin)> _cache = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, Task<Merged>> _pending = new(StringComparer.Ordinal);
-    private readonly Queue<string> _order = new();
+    /// <summary>Most merges running on workers at once.</summary>
+    public const int MaxRunning = 2;
+
+    private const int MaxSources = 256;          // source meshes whose arrays are kept; past it they are read again when needed
+    private const int ForgetAfterCalls = 4096;   // a finished merge nobody has asked for in this many calls belongs to a character that left view
+
+    private sealed class Waiting
+    {
+        public required Task<(Merged Lod0, Merged? Lod1)> Task { get; init; }
+
+        public long LastAsked;
+    }
+
+    private readonly Dictionary<string, DressedMesh> _cache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Waiting> _pending = new(StringComparer.Ordinal);
+    private long _clock;
     private readonly Dictionary<string, StandardMaterial3D> _baked = new(StringComparer.Ordinal);
     private readonly Dictionary<ulong, SourceMesh> _sources = new();
     private readonly int _limit;
     private readonly bool _threaded;
 
-    /// <summary>Creates a mesher that keeps at most <paramref name="limit"/> merged meshes (the oldest go first; a character still showing one keeps it).
+    /// <summary>Creates a mesher that keeps at most <paramref name="limit"/> merged characters (the least recently used go first; a character still showing one keeps it).
     /// Without <paramref name="threaded"/> the merge runs at once on the calling thread.</summary>
     public GearMesher(int limit, bool threaded = true)
     {
@@ -70,7 +97,7 @@ public sealed class GearMesher
         _threaded = threaded;
     }
 
-    /// <summary>Merged meshes cached now (for measuring).</summary>
+    /// <summary>Merged characters cached now (for measuring).</summary>
     public int Cached => _cache.Count;
 
     /// <summary>Merges built so far (for measuring).</summary>
@@ -83,33 +110,72 @@ public sealed class GearMesher
     public int Pending => _pending.Count;
 
     /// <summary>
-    /// The merged mesh and skin for <paramref name="key"/>: true with the result when it is cached or its merge has finished; false while it is being merged (the
-    /// first call starts it).
+    /// The merged character for <paramref name="key"/>: true with the result when it is cached or its merge has finished; false while it is being merged or waits for a
+    /// free worker (call again: the first call with a free worker starts it). <paramref name="sources"/> is asked for the body and parts of a level of detail only when
+    /// a merge starts (null for a level the body lacks).
     /// </summary>
-    public bool TryGet(string key, Mesh body, Skin bodySkin, Skeleton3D skeleton, IReadOnlyList<GearPart> parts, out (ArrayMesh Mesh, Skin Skin) result)
+    public bool TryGet(string key, Skeleton3D skeleton, Func<int, BodySource?> sources, Recolor? bodyColors, out DressedMesh result)
     {
-        if (_cache.TryGetValue(key, out result)) return true;
+        _clock++;
+        if (_cache.TryGetValue(key, out result!))
+        {
+            result.LastUsed = _clock;
+            return true;
+        }
         var started = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
-            if (!_pending.TryGetValue(key, out var task))
+            if (!_pending.TryGetValue(key, out var waiting))
             {
-                var job = Snapshot(body, bodySkin, skeleton, parts);
-                task = _threaded ? Task.Run(() => Merge(job)) : Task.FromResult(Merge(job));
-                _pending[key] = task;
+                if (_threaded && Running() >= MaxRunning) return false;
+                var near = Snapshot(sources(0)!.Value, skeleton, bodyColors);
+                var far = sources(1) is { } low ? Snapshot(low, skeleton, bodyColors) : null;
+                (Merged, Merged?) Work() => (Merge(near), far is null ? null : Merge(far));
+                waiting = new Waiting { Task = _threaded ? Task.Run(Work) : Task.FromResult(Work()) };
+                _pending[key] = waiting;
             }
-            if (!task.IsCompleted) return false;
+            waiting.LastAsked = _clock;
+            if (!waiting.Task.IsCompleted) return false;
             _pending.Remove(key);
-            result = Build(task.Result);
+            var (lod0, lod1) = waiting.Task.Result;
+            var (mesh0, skin0) = Build(lod0);
+            (ArrayMesh Mesh, Skin Skin)? second = lod1 is null ? null : Build(lod1);
+            result = new DressedMesh(mesh0, skin0, second?.Mesh, second?.Skin) { LastUsed = _clock };
             Built++;
             _cache[key] = result;
-            _order.Enqueue(key);
-            while (_cache.Count > _limit) _cache.Remove(_order.Dequeue());
+            Trim(key);
             return true;
         }
         finally
         {
             MainThreadMs += System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        }
+    }
+
+    private int Running()
+    {
+        var running = 0;
+        List<string>? stale = null;
+        foreach (var (key, waiting) in _pending)
+        {
+            if (!waiting.Task.IsCompleted) running++;
+            else if (_clock - waiting.LastAsked > ForgetAfterCalls) (stale ??= new List<string>()).Add(key);
+        }
+        if (stale is not null)
+            foreach (var key in stale) _pending.Remove(key);
+        return running;
+    }
+
+    private void Trim(string keep)
+    {
+        while (_cache.Count > _limit)
+        {
+            string? victim = null;
+            var oldest = long.MaxValue;
+            foreach (var (key, dressed) in _cache)
+                if (key != keep && dressed.LastUsed < oldest) (victim, oldest) = (key, dressed.LastUsed);
+            if (victim is null) return;
+            _cache.Remove(victim);
         }
     }
 
@@ -125,10 +191,9 @@ public sealed class GearMesher
     /// <summary>Lets go of every merged mesh (merges still running finish and are dropped).</summary>
     public void Clear()
     {
-        foreach (var task in _pending.Values) task.Wait();
+        foreach (var waiting in _pending.Values) waiting.Task.Wait();
         _pending.Clear();
         _cache.Clear();
-        _order.Clear();
         _baked.Clear();
         _sources.Clear();
     }
@@ -160,7 +225,7 @@ public sealed class GearMesher
         public readonly List<SourceSurface> Surfaces = new();
     }
 
-    private sealed record Part(SourceMesh Mesh, Bind[]? Binds, Transform3D Transform, string BoneName, int Bone);
+    private sealed record Part(SourceMesh Mesh, Bind[]? Binds, Transform3D Transform, string BoneName, int Bone, Recolor Colors);
 
     private sealed record Job(bool Named, Part Body, Part[] Parts);
 
@@ -182,18 +247,19 @@ public sealed class GearMesher
 
     // ---- main thread: read the sources ----
 
-    private Job Snapshot(Mesh body, Skin bodySkin, Skeleton3D skeleton, IReadOnlyList<GearPart> parts)
+    private Job Snapshot(BodySource source, Skeleton3D skeleton, Recolor? bodyColors)
     {
+        var (body, bodySkin, parts) = source;
         var named = bodySkin.GetBindCount() > 0 && bodySkin.GetBindName(0).ToString().Length > 0;
         var list = new Part[parts.Count];
         for (var i = 0; i < parts.Count; i++)
         {
             var part = parts[i];
             list[i] = part.Skin is { } skin
-                ? new Part(Source(part.Mesh), Binds(skin), Transform3D.Identity, string.Empty, -1)
-                : new Part(Source(part.Mesh), null, part.Transform, named ? skeleton.GetBoneName(part.Bone).ToString() : string.Empty, part.Bone);
+                ? new Part(Source(part.Mesh), Binds(skin), Transform3D.Identity, string.Empty, -1, part.Colors ?? Recolor.None)
+                : new Part(Source(part.Mesh), null, part.Transform, named ? skeleton.GetBoneName(part.Bone).ToString() : string.Empty, part.Bone, part.Colors ?? Recolor.None);
         }
-        return new Job(named, new Part(Source(body), Binds(bodySkin), Transform3D.Identity, string.Empty, -1), list);
+        return new Job(named, new Part(Source(body), Binds(bodySkin), Transform3D.Identity, string.Empty, -1, bodyColors ?? Recolor.None), list);
     }
 
     private static Bind[] Binds(Skin skin)
@@ -207,6 +273,7 @@ public sealed class GearMesher
     {
         var id = mesh.GetInstanceId();
         if (_sources.TryGetValue(id, out var known)) return known;
+        if (_sources.Count >= MaxSources) _sources.Clear(); // a merge already running holds the ones it needs
         var source = new SourceMesh();
         for (var s = 0; s < mesh.GetSurfaceCount(); s++)
         {
@@ -269,13 +336,13 @@ public sealed class GearMesher
         var binds = new List<Bind>();
         var groups = new Dictionary<string, Group>(StringComparer.Ordinal);
         var order = new List<Group>();
-        AddMesh(groups, order, job.Body.Mesh, Transform3D.Identity, MapBinds(binds, job.Body.Binds!, job.Named), -1);
+        AddMesh(groups, order, job.Body, Transform3D.Identity, MapBinds(binds, job.Body.Binds!, job.Named), -1);
         foreach (var part in job.Parts)
         {
             if (part.Binds is { } partBinds)
-                AddMesh(groups, order, part.Mesh, Transform3D.Identity, MapBinds(binds, partBinds, job.Named), -1);
+                AddMesh(groups, order, part, Transform3D.Identity, MapBinds(binds, partBinds, job.Named), -1);
             else
-                AddMesh(groups, order, part.Mesh, part.Transform, null,
+                AddMesh(groups, order, part, part.Transform, null,
                     job.Named ? BindIndex(binds, part.BoneName, -1, Transform3D.Identity) : BindIndex(binds, string.Empty, part.Bone, Transform3D.Identity));
         }
         return new Merged(binds, order);
@@ -300,10 +367,12 @@ public sealed class GearMesher
         return binds.Count - 1;
     }
 
-    /// <summary>Adds every surface of <paramref name="source"/> to its group. <paramref name="bindMap"/> remaps a skinned source's bones; otherwise every vertex goes fully to <paramref name="rigidBind"/>.</summary>
-    private static void AddMesh(Dictionary<string, Group> groups, List<Group> order, SourceMesh source, Transform3D transform, int[]? bindMap, int rigidBind)
+    /// <summary>Adds every surface of <paramref name="part"/> to its group, in its own colours or the character's. <paramref name="bindMap"/> remaps a skinned source's bones; otherwise every vertex goes fully to <paramref name="rigidBind"/>.</summary>
+    private static void AddMesh(Dictionary<string, Group> groups, List<Group> order, Part part, Transform3D transform, int[]? bindMap, int rigidBind)
     {
-        foreach (var surface in source.Surfaces)
+        var recolor = part.Colors;
+        var dominant = recolor.NeedsDominant ? Recolor.Dominant(Painted(part.Mesh)) : default;
+        foreach (var surface in part.Mesh.Surfaces)
         {
             var vertices = surface.Vertices;
             if (vertices.Length == 0) continue;
@@ -334,7 +403,7 @@ public sealed class GearMesher
                 group.Tangents.Add(outline.Z);
                 group.Tangents.Add(1f);
                 var color = colors is not null && v < colors.Length ? colors[v] : Colors.White;
-                group.Colors.Add(surface.Bake ? Tint(surface, color) : color);
+                group.Colors.Add(Tint(surface, color, recolor, dominant));
                 if (uvs is not null && v < uvs.Length)
                 {
                     group.Uvs.Add(uvs[v]);
@@ -379,14 +448,34 @@ public sealed class GearMesher
     /// <summary>
     /// Albedo × vertex colour, done the way the shader does it: the albedo colour is sRGB, vertex colours are linear unless the material says sRGB. Vertex colours
     /// always count: glTF says COLOR_0 multiplies the base colour, though Godot's importer leaves the flag off, and the T-222 placeholders keep their colours there.
-    /// The alpha is kept: 0 marks a glowing part (T-222).
+    /// The alpha is kept: 0 marks a glowing part (T-222), which takes no character colour (T-706). A textured surface keeps its albedo in its material, and only its
+    /// vertex colour takes part.
     /// </summary>
-    private static Color Tint(SourceSurface surface, Color c)
+    private static Color Tint(SourceSurface surface, Color c, Recolor recolor, LinearColor dominant)
     {
-        var linearVertex = surface.Srgb ? c.SrgbToLinear() : c;
+        if (!surface.Bake && recolor.IsNone) return c;
+        var painted = Paint(surface, c);
+        if (!recolor.IsNone && c.A > 0) painted = recolor.Apply(painted, dominant);
+        var result = new Color(painted.R, painted.G, painted.B, c.A);
+        return surface.Srgb ? result.LinearToSrgb() : result;
+    }
+
+    /// <summary>A vertex's painted colour, linear: with the material's colour where that is baked in.</summary>
+    private static LinearColor Paint(SourceSurface surface, Color c)
+    {
+        var v = surface.Srgb ? c.SrgbToLinear() : c;
         var a = surface.LinearAlbedo;
-        var product = new Color(a.R * linearVertex.R, a.G * linearVertex.G, a.B * linearVertex.B, c.A);
-        return surface.Srgb ? product.LinearToSrgb() : product;
+        return surface.Bake ? new LinearColor(a.R * v.R, a.G * v.G, a.B * v.B) : new LinearColor(v.R, v.G, v.B);
+    }
+
+    private static IEnumerable<LinearColor> Painted(SourceMesh mesh)
+    {
+        foreach (var surface in mesh.Surfaces)
+            for (var v = 0; v < surface.Vertices.Length; v++)
+            {
+                var color = surface.Colors is not null && v < surface.Colors.Length ? surface.Colors[v] : Colors.White;
+                if (color.A > 0) yield return Paint(surface, color);
+            }
     }
 
     // ---- main thread: the engine objects ----

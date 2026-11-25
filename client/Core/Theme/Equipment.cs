@@ -18,6 +18,7 @@ public sealed class WornPiece
 {
     internal WornPiece(string visualKey, ModelResolution model, WornMode mode, string? bone, bool fallback)
     {
+        HidesHair = !fallback && model.Asset is { HidesHair: true };
         VisualKey = visualKey;
         Model = model;
         Mode = mode;
@@ -37,6 +38,9 @@ public sealed class WornPiece
     /// <summary>For an attached piece, the attach point (bone name) the manifest names; null means the default point (<see cref="AttachRules"/>).</summary>
     public string? Bone { get; }
 
+    /// <summary>True when the manifest says this piece hides the hairstyle (<c>hides_hair</c>, T-706). A piece standing in for a missing key hides nothing.</summary>
+    public bool HidesHair { get; }
+
     /// <summary>True when the key did not resolve and the missing model stands in for it (drawn small, at the default point).</summary>
     public bool Fallback { get; }
 }
@@ -51,16 +55,22 @@ public sealed class EquipmentCatalog
 {
     private readonly ThemeCatalog _catalog;
     private readonly Func<string, string?> _visualKeyOf;
+    private readonly Func<string, IReadOnlyList<string>?>? _slotsOf;
     private readonly Dictionary<(string Key, string? Rig), WornPiece> _pieces = new Dictionary<(string, string?), WornPiece>();
 
     /// <summary>Creates a resolver over the theme catalog.</summary>
     /// <param name="catalog">The theme chain.</param>
     /// <param name="visualKeyOf">An item id's worn visual asset key from the display bundle, or null when it has none.</param>
-    public EquipmentCatalog(ThemeCatalog catalog, Func<string, string?> visualKeyOf)
+    /// <param name="slotsOf">An item id's equipment slots from the display bundle (T-706), or null.</param>
+    public EquipmentCatalog(ThemeCatalog catalog, Func<string, string?> visualKeyOf, Func<string, IReadOnlyList<string>?>? slotsOf = null)
     {
+        _slotsOf = slotsOf;
         _catalog = catalog;
         _visualKeyOf = visualKeyOf;
     }
+
+    /// <summary>The equipment slots an item takes (the bundle's), so a job's piece gives way to the equipment worn in its slot (T-706); empty when nothing is known.</summary>
+    public IReadOnlyList<string> SlotsOf(string itemId) => _slotsOf?.Invoke(itemId) ?? Array.Empty<string>();
 
     /// <summary>Pieces resolved so far (one per visual key and rig).</summary>
     public int Count => _pieces.Count;
@@ -77,9 +87,38 @@ public sealed class EquipmentCatalog
             _catalog.WarnOnce("item:" + itemId, "[theme] worn item '" + itemId + "' has no worn visual in the bundle; nothing is drawn for it");
             return null;
         }
+        return ResolveKey(key, rig);
+    }
+
+    /// <summary>The piece for an asset key worn on <paramref name="rig"/> (a job's piece, T-706, and what <see cref="Resolve"/> does once it has an item's key).</summary>
+    public WornPiece ResolveKey(string key, string? rig)
+    {
         if (_pieces.TryGetValue((key, rig), out var cached)) return cached;
         return _pieces[(key, rig)] = Make(key, rig);
     }
+
+    /// <summary>
+    /// The piece for a face or hairstyle key on a body with <paramref name="rig"/> (T-706): attached at its <c>attach</c> bone, or skinned when its <c>skinned</c> or
+    /// <c>rig</c> is the body's. Null, with <paramref name="why"/>, when no theme has it or it does not fit; the caller picks what stands in.
+    /// </summary>
+    public WornPiece? FindPart(string key, string? rig, out string why)
+    {
+        why = string.Empty;
+        if (!_catalog.TryFind(key, out var path, out var asset))
+        {
+            why = _catalog.WhyMissing(key);
+            return null;
+        }
+        var model = new ModelResolution(key, path, asset, ResolutionLevel.Exact);
+        if (asset.Attach is not null) return new WornPiece(key, model, WornMode.Attached, asset.Attach, false);
+        var on = asset.Skinned ?? asset.Rig;
+        if (on is not null && on == rig) return new WornPiece(key, model, WornMode.Skinned, null, false);
+        why = on is null ? "its entry says neither 'attach' nor 'rig'" : "it is on rig '" + on + "' but the body's rig is '" + (rig ?? "none") + "'";
+        return null;
+    }
+
+    /// <summary>The missing model at the default attach point, with one warning, for a part nothing else can stand in for (T-706).</summary>
+    public WornPiece MissingPart(string key, string why) => Missing(key, why);
 
     private WornPiece Make(string key, string? rig)
     {
@@ -178,23 +217,28 @@ public sealed class Wardrobe
 }
 
 /// <summary>
-/// The cache key of a dressed character's merged mesh (T-403, §9): the body's file, the level of detail and the worn pieces in any order. Characters with the same
-/// body and the same pieces get the same key, so they share one merged mesh; the order the server lists the items in does not matter.
+/// The cache key of a dressed character's merged meshes (T-403, T-706, §9): the body's file, the character's colours and everything merged into it, in any order.
+/// Characters with the same body, colours and pieces get the same key, so they share one merged mesh per level of detail; the order the server lists the items in
+/// does not matter.
 /// </summary>
 public static class WornSet
 {
-    /// <summary>The key. <paramref name="pieces"/> is not changed.</summary>
-    public static string Key(string body, int lod, IReadOnlyList<WornPiece> pieces)
+    /// <summary>The key: what <see cref="DressPlan"/> chose to merge, and the character's colours. <paramref name="dressed"/> is not changed.</summary>
+    public static string Key(string body, CharacterLook? look, IReadOnlyList<DressPart> dressed)
     {
-        var parts = new string[pieces.Count];
-        for (var i = 0; i < pieces.Count; i++)
+        var parts = new string[dressed.Count];
+        for (var i = 0; i < dressed.Count; i++)
         {
-            var piece = pieces[i];
-            parts[i] = (piece.Model.Path ?? "builtin") + "@" + (piece.Mode == WornMode.Skinned ? "skinned" : piece.Bone ?? "default") + (piece.Fallback ? "!" : "");
+            // A face or hairstyle takes the character's colours where the same file worn as gear would not, so its role is part of the key.
+            var role = dressed[i].Role == PartRole.Hair ? "hair:" : dressed[i].Role == PartRole.Face ? "face:" : string.Empty;
+            parts[i] = role + Part(dressed[i].Piece);
         }
         Array.Sort(parts, StringComparer.Ordinal);
-        return body + "#" + lod + "|" + string.Join("|", parts);
+        return body + "#" + (look?.ColorKey ?? string.Empty) + "|" + string.Join("|", parts);
     }
+
+    private static string Part(WornPiece piece) =>
+        (piece.Model.Path ?? "builtin") + "@" + (piece.Mode == WornMode.Skinned ? "skinned" : piece.Bone ?? "default") + (piece.Fallback ? "!" : "");
 }
 
 /// <summary>
