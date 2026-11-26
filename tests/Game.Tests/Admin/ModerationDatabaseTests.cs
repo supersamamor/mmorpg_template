@@ -303,12 +303,12 @@ public sealed class ModerationDatabaseTests(DatabaseFixture fixture) : IClassFix
             "{}", "the note", Now), [(given, "item.x", 1)]) { Version = ticket.TakenVersion + 1 };
         // A save that fails after it wrote everything (here: a duplicate item makes it roll back) writes no note either.
         var other = Interlocked.Increment(ref _lastItem);
-        await using (var db = Database.Open())
-        {
-            var (_, someone) = await accounts.CreateCharacterAsync(account, Guid.NewGuid(), "O" + Tag(), CharacterNameRules.Key("O" + Tag()), "job.x", 3, null, Now, default);
-            db.Items.Add(new ItemRow { Id = other, CharacterId = someone!.Id, ItemId = "item.x", Quantity = 1 });
-            await db.SaveChangesAsync();
-        }
+        var otherName = "O" + Tag();
+        var (_, someone) = await accounts.CreateCharacterAsync(account, Guid.NewGuid(), otherName, CharacterNameRules.Key(otherName), "job.x", 3, null, Now, default);
+        var otherClaim = await characters.ClaimAsync(someone!.Id, run, default);
+        var otherTicket = new CharacterTicket(someone.Id) { Claim = otherClaim.Claim, TakenVersion = otherClaim.Version, LandedVersion = otherClaim.Version };
+        (await characters.SaveAsync([new CharacterSave(otherTicket, ++otherTicket.TakenVersion,
+            SavedContent.Full(() => Interlocked.Increment(ref _lastItem), Now) with { Items = [new InventoryEntry(other, "item.x", 1)] }, false, [], [])], default)).ShouldBeOfType<SaveResult.Saved>();
         var bad = new CharacterSave(ticket, ticket.TakenVersion + 1, SavedContent.Full(() => Interlocked.Increment(ref _lastItem), Now) with { Items = [new InventoryEntry(other, "item.x", 1)] },
             false, [], [note]);
         (await characters.SaveAsync([bad], default)).ShouldBeOfType<SaveResult.Duplicated>();

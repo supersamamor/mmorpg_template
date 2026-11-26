@@ -505,6 +505,25 @@ public static class ProtocolJson
         return buffer.WrittenSpan.ToArray();
     }
 
+    /// <summary>
+    /// The close frame's reason for <paramref name="bye"/>: the reason, then <c>retry_after</c> after a space when it has one (<c>banned 3600</c>, T-806). A client may lose the
+    /// <c>bye</c> packet that came with the close frame (Godot's WebSocketPeer drops it), so the frame carries everything the bye says.
+    /// </summary>
+    public static string CloseReasonOf(ByeMessage bye) =>
+        bye.RetryAfterSeconds is { } retry ? bye.Reason + " " + retry.ToString(System.Globalization.CultureInfo.InvariantCulture) : bye.Reason;
+
+    /// <summary>The <c>bye</c> a close frame's reason stands for (<see cref="CloseReasonOf"/>), or null when it is none.</summary>
+    public static ByeMessage? ByeFromCloseReason(string? closeReason)
+    {
+        if (closeReason is null) return null;
+        var space = closeReason.IndexOf(' ');
+        var reason = space < 0 ? closeReason : closeReason.Substring(0, space);
+        if (!ByeReasons.All.Contains(reason)) return null;
+        if (space < 0) return new ByeMessage(reason);
+        return long.TryParse(closeReason.Substring(space + 1), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var retry) && retry > 0
+            ? new ByeMessage(reason, retry) : new ByeMessage(reason);
+    }
+
     /// <summary>A client message as a new byte array.</summary>
     public static byte[] ToBytes(ClientMessage message)
     {

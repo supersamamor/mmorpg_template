@@ -1426,6 +1426,7 @@ still well inside 150k. Not run on a phone (ADR-002 row 112).
     within `foreground_probe_seconds`, because a socket can look open after a suspension.
   - **`bye` also comes from the close frame.** The server writes the reason into the close frame as well, and that is needed: when `bye` and the close frame arrive in one poll,
     `WebSocketPeer` clears its packets before they can be read. Found by T-206's live run with a stale hash, where the `bye update_required` was lost.
+    A `bye` with `retry_after` writes it after the reason, separated by a space (`banned 3600`; `ProtocolJson.CloseReasonOf`), so a ban's time left survives the same loss (T-806's live run found it).
 - **Back-pressure:** the sink serializes on the tick thread into a bounded per-session queue, and the socket drains that queue. When
   the queue is full, queued views are dropped and later deltas are skipped. Once the queue has drained, the session asks for a fresh
   snapshot (`RequestSnapshot`). A client that stays behind for `slow-client-timeout-ms` gets `bye too_slow`.

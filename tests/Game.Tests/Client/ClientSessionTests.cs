@@ -403,6 +403,15 @@ public class ClientSessionTests
         InboundParser.ByeFromClose(null).ShouldBeNull();
         InboundParser.ByeFromClose("").ShouldBeNull();
         InboundParser.ByeFromClose("going away").ShouldBeNull();
+        // T-806: a ban's time left rides in the frame too, since the bye packet with it may be the one that was dropped.
+        ProtocolJson.CloseReasonOf(new ByeMessage(ByeReasons.Banned, 3_600)).ShouldBe("banned 3600");
+        ProtocolJson.CloseReasonOf(new ByeMessage(ByeReasons.Banned)).ShouldBe("banned");
+        InboundParser.ByeFromClose("banned 3600").ShouldBe(new ByeMessage(ByeReasons.Banned, 3_600));
+        InboundParser.ByeFromClose("banned").ShouldBe(new ByeMessage(ByeReasons.Banned));
+        InboundParser.ByeFromClose("banned -5").ShouldBe(new ByeMessage(ByeReasons.Banned), "a time that is not one is left out");
+        InboundParser.ByeFromClose("banned x").ShouldBe(new ByeMessage(ByeReasons.Banned));
+        foreach (var reason in ByeReasons.All.Ordered)
+            System.Text.Encoding.UTF8.GetByteCount(ProtocolJson.CloseReasonOf(new ByeMessage(reason, long.MaxValue))).ShouldBeLessThanOrEqualTo(123, "a close frame's reason is at most 123 bytes");
 
         // The text bye and then the close frame's copy of it change nothing twice.
         var (session, socket) = Playing();

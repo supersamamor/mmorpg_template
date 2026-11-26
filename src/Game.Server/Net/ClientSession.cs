@@ -56,6 +56,7 @@ public sealed class ClientSession : IViewSink
     private long _bytesSent;
     private long _messagesSent;
     private string? _byeReason;
+    private string? _closeReason;   // T-806: the bye in the close frame, with its retry_after
     private volatile string? _mapId;
     private volatile bool _welcomed;
     private bool _autopilotTold;             // tick thread: the autopilot's status went out with this session's first snapshot (T-604)
@@ -226,7 +227,9 @@ public sealed class ClientSession : IViewSink
     {
         if (Interlocked.CompareExchange(ref _byeReason, reason, null) is not null) return;
         BeginClosing();
-        Queue.PostFinal(ProtocolJson.ToBytes(new ByeMessage(reason, retryAfterSeconds)));
+        var bye = new ByeMessage(reason, retryAfterSeconds);
+        Volatile.Write(ref _closeReason, ProtocolJson.CloseReasonOf(bye));
+        Queue.PostFinal(ProtocolJson.ToBytes(bye));
         _gateway.Stats.CountBye(reason);
     }
 
@@ -701,7 +704,7 @@ public sealed class ClientSession : IViewSink
             }
 
             if (ByeReason is { } reason && _socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
-                await _socket.CloseOutputAsync(CloseStatusFor(reason), reason, token).ConfigureAwait(false);
+                await _socket.CloseOutputAsync(CloseStatusFor(reason), Volatile.Read(ref _closeReason) ?? reason, token).ConfigureAwait(false);
         }
         catch (Exception e) when (e is WebSocketException or OperationCanceledException or IOException or ObjectDisposedException)
         {

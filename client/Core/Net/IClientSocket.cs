@@ -74,6 +74,5 @@ public static class InboundParser
     /// The <c>bye</c> a close frame stands for, or null. The server puts the reason in the close frame too. It matters: a socket may hand over no
     /// packet that arrived together with the close frame (Godot's WebSocketPeer clears them), and then the frame is the only trace of the <c>bye</c>.
     /// </summary>
-    public static ByeMessage? ByeFromClose(string? closeReason) =>
-        closeReason is not null && ByeReasons.All.Contains(closeReason) ? new ByeMessage(closeReason) : null;
+    public static ByeMessage? ByeFromClose(string? closeReason) => ProtocolJson.ByeFromCloseReason(closeReason);   // with a ban's retry_after (T-806)
 }

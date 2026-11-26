@@ -14,6 +14,9 @@ internal static class Moderation
         await store.ActiveSanctionAsync(account, SanctionKinds.Ban, time.GetUtcNow().UtcDateTime, cancellation).ConfigureAwait(false) is { } ban ? new BanState(ban.Until) : null;
 
     /// <summary>Seconds until <paramref name="until"/> (at least 1), or null for a ban that never ends.</summary>
+    /// <summary><paramref name="time"/> cut to what the database keeps (microseconds), so a ban's end read back is the one that was answered: rounding it up would add a second.</summary>
+    public static DateTime AsStored(DateTime time) => new(time.Ticks - time.Ticks % 10, time.Kind);
+
     public static long? SecondsLeft(DateTime? until, DateTime now) => until is { } u ? Math.Max(1, (long)Math.Ceiling((u - now).TotalSeconds)) : null;
 
     public static AdminResult Result(string outcome, long? auditId, string targetKind, string targetId, Dictionary<string, object?>? values = null)
@@ -43,7 +46,7 @@ public sealed class BanCommand : IAdminCommand
             || !AdminFields.Number(call.Body, AdminCommandFields.Minutes, 1, AdminCommandFields.MaxMinutes, out long? minutes, optional: true))
             return AdminResult.Refused(AdminErrors.InvalidRequest);
         if (road.Moderation is not { } store) return AdminResult.Refused(AdminErrors.Unavailable);
-        var now = road.Now;
+        var now = Moderation.AsStored(road.Now);
         DateTime? until = minutes is { } m ? now.AddMinutes(m) : null;
         var online = road.Gateway.LinksOf(account).Count > 0;
         var target = account.ToString();
@@ -86,7 +89,7 @@ public sealed class MuteCommand : IAdminCommand
             || !AdminFields.Number(call.Body, AdminCommandFields.Minutes, 1, AdminCommandFields.MaxMinutes, out long minutes))
             return AdminResult.Refused(AdminErrors.InvalidRequest);
         if (road.Moderation is not { } store) return AdminResult.Refused(AdminErrors.Unavailable);
-        var now = road.Now;
+        var now = Moderation.AsStored(road.Now);
         var until = now.AddMinutes(minutes);
         var target = account.ToString();
         var draft = road.Draft(call, Action, AdminTargetKinds.Account, target, new Dictionary<string, object?> { ["muted"] = false },

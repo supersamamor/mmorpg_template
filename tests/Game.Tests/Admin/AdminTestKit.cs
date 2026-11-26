@@ -154,7 +154,7 @@ public sealed class AdminRig : IAsyncDisposable
     public static async Task<AdminRig> StartAsync(Func<AdminOptions, AdminOptions>? configure = null, IAdminStore? store = null, AccountRigOptions? accounts = null,
         IEnumerable<IAdminCommand>? commands = null, IReadOnlyDictionary<string, string>? table = null, IModerationStore? moderation = null, int saveWaitMs = 10_000)
     {
-        var time = new FakeTime { Now = DateTimeOffset.UtcNow };
+        var time = accounts?.Time as FakeTime ?? new FakeTime { Now = DateTimeOffset.UtcNow };   // one clock for accounts and the admin road
         var memory = accounts is null ? new MemoryAccountStore() : accounts.Store as MemoryAccountStore;
         var game = await GatewayRig.StartAsync(accounts: accounts ?? new AccountRigOptions(memory!, new FakeHasher(), new AccountLimits(), time));
         store ??= new MemoryAdminStore(memory);
