@@ -138,6 +138,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-710 | Account leftovers: password change, a session that ends closes its game, `character_in_use` across servers, a failed `ui` run restores preferences, flaky tests, docs of the `saving` and `appearance` runs | Claude Code | Sonnet 5.5 | [T-710](../tasks/prompts/T-710.md) | T-701, T-702, T-706 | Review | Restricted `Net/**` and `Persistence/**` scopes in the prompt's header; ADR-002 #289, #300, #316 |
 | T-703 | Store compliance: account deletion in the app with a waiting time, erasing, privacy disclosures (no Sign in with Apple: no other third-party login) | Claude Code | Opus 5.5 | [T-703](../tasks/prompts/T-703.md) | T-701, T-702, T-705, T-710 | Review | Restricted `Persistence/**` scope in the prompt's header; Opus instead of Sonnet: erasing data under concurrency |
 | T-708 | Cosmetic wardrobe: outfits as data that change only the look, owned outfits saved with the character, a wardrobe panel, others see them; two placeholder outfits | Claude Code | Opus 5.5 | [T-708](../tasks/prompts/T-708.md) | T-403, T-405, T-702, T-703, T-705, T-706 | Review | Restricted `Net/**` and `Persistence/**` scopes in the prompt's header |
+| T-807 | Local play on one PC: the server in a container behind a compose profile, a Windows game build, one script to start and stop it | Claude Code | Sonnet 5.5 | [T-807](../tasks/prompts/T-807.md) | T-213, T-216, T-701, T-702, T-708 | Ready | Moved up by the owner on 2026-11-26; restricted `Net/**` only for a listen option, if needed |
 
 ## Backlog (prompts written when the previous phase is Done)
 
@@ -154,7 +155,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-804 | 8 | Admin API in server: admin commands via tick loop, role checks, audit log (ARCH §12) | Claude Code | Opus 5.5 | Backlog |
 | T-805 | 8 | `Game.Admin` web panel: SSO + roles, player lookup, server status, audit search | Claude Code | Sonnet 5.5 | Backlog |
 | T-806 | 8 | Moderation & support: kick/mute/ban, item/currency restore, announcements, maintenance, deletion/export queue | Claude Code | Sonnet 5.5 | Backlog |
-| T-807 | 8 | Local Docker stack (server + Postgres, compose) and a Windows desktop client build for end-to-end play on one PC | Claude Code | Sonnet 5.5 | Backlog |
 | T-901 | 9 | Chat: map, whisper, party and guild channels; rate limit + moderation hooks (mute from T-806) | Claude Code | Sonnet 5.5 | Backlog |
 | T-902 | 9 | Party: invite/leave/leader, member HP list + minimap, EXP share formula in `formulas.yaml`, shared quest kill credit via event bus | Claude Code | Opus 5.5 | Backlog |
 | T-903 | 9 | Player trade: two-step confirm, atomic transactional swap, dupe-safe (rule 10) | Claude Code | Opus 5.5 | Backlog |
