@@ -1,0 +1,23 @@
+# The build context of the server image (Dockerfile, T-807). Everything is left out, then only what the server needs is let back in:
+# no client, no tests, no art, no .git, and nothing of .play/ (the local certificate and its password).
+**
+
+!global.json
+!Directory.Build.props
+!Directory.Packages.props
+!.editorconfig
+!src/Game.Shared/**
+!src/Game.Content/**
+!src/Game.Server/**
+!content/**
+# CI's copy of the display bundle: the server never reads it.
+content/client-content.reference.json
+!themes/*/asset-manifest.json
+
+**/bin/
+**/obj/
+**/*.md
+**/*.pfx
+**/*.key
+**/.env
+**/appsettings.Development.local.json

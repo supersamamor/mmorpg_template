@@ -1,6 +1,7 @@
 # Dev-only database for the MMORPG template.
 # Start:  docker compose up -d      Stop: docker compose down
 # Wipe:   docker compose down -v    (deletes all character/account data)
+# The services with the profile "play" are the local game (play-local.ps1, docs/LOCAL_PLAY.md): the commands above leave them out.
 services:
   postgres:
     image: postgres:17
@@ -33,5 +34,54 @@ services:
     depends_on:
       - postgres
 
+  # ---- Local play on one PC (docs/LOCAL_PLAY.md, T-807). Started only by play-local.ps1 (profile "play", its own project "mmo-play"). ----
+  # The play stack has a database of its own, with its own volume: playing (and play-local.ps1 -Reset) never touches the data of `postgres` above.
+  play-db:
+    profiles: [play]
+    image: postgres:17
+    environment:
+      POSTGRES_USER: mmo_play
+      POSTGRES_PASSWORD: ${MMO_PLAY_DB_PASSWORD:-mmo_dev_password}   # dev only - a local game's database, not published to the host
+      POSTGRES_DB: mmo_play
+    volumes:
+      - mmo_play_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # Over TCP: while the database is being made it answers on its local socket only, and the server connects over TCP.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U mmo_play -d mmo_play"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # The game server (Dockerfile). It runs as Production, so it listens inside its container on every interface and ONLY with TLS (wss://);
+  # it refuses to start without the certificate. The port is published on the PC's loopback only: nothing else on the network reaches it.
+  play-server:
+    profiles: [play]
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      # The dev password above, unless MMO_PLAY_DB_CONNECTION or MMO_PLAY_DB_PASSWORD says otherwise. Dev only.
+      GAME_DB_CONNECTION: ${MMO_PLAY_DB_CONNECTION:-Host=play-db;Port=5432;Database=mmo_play;Username=mmo_play;Password=${MMO_PLAY_DB_PASSWORD:-mmo_dev_password}}
+      GAME_NET_PORT: "7780"
+      GAME_NET_CERTIFICATE_PATH: /certs/server.pfx
+      # Made at random for each certificate by play-local.ps1 (empty here: without the script there is no certificate either).
+      GAME_NET_CERTIFICATE_PASSWORD: ${MMO_PLAY_CERT_PASSWORD:-}
+    volumes:
+      - ${MMO_PLAY_CERT_DIR:-./.play/mmo-play/certs}:/certs:ro   # the self-signed certificate (tools/new-play-cert.ps1); gitignored
+    ports:
+      - "127.0.0.1:${MMO_PLAY_PORT:-7780}:7780"
+    depends_on:
+      play-db:
+        condition: service_healthy
+    healthcheck:
+      # Listening means migrated, content loaded and the certificate read. (The image has no HTTP client, and the server has no health endpoint.)
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/7780"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+    stop_grace_period: 30s   # SIGTERM: the server says bye and saves every character (it waits up to 20 s for the saves)
+
 volumes:
   mmo_pgdata:
+  mmo_play_pgdata:

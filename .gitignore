@@ -39,6 +39,8 @@ Desktop.ini
 .DS_Store
 
 # ---------- Secrets / local ----------
+# The local play stack's certificate, its password and the record of the game windows (play-local.ps1, docs/LOCAL_PLAY.md)
+/.play/
 .env
 .env.*
 !.env.example
