@@ -1,0 +1,105 @@
+@page "/characters/{Id:guid}"
+@inherits PanelPage
+
+<PageTitle>Character · Staff panel</PageTitle>
+<h1>Character</h1>
+
+<FailureBox Failure="_character?.Failure" />
+@if (_character?.Value is { } detail && _me is not null && _commands is not null)
+{
+    var character = detail.Character;
+    <dl class="facts">
+        <dt>Name</dt><dd>@character.Name</dd>
+        <dt>Character id</dt><dd><code>@character.Id</code></dd>
+        <dt>Account</dt><dd><a href="/accounts/@character.AccountId"><code>@character.AccountId</code></a></dd>
+        <dt>Slot</dt><dd>@character.Slot</dd>
+        <dt>Job</dt><dd>@Names.Describe(character.JobId)</dd>
+        <dt>Created</dt><dd>@Time(character.CreatedAt)</dd>
+        <dt>Deleted</dt><dd>@Time(character.DeletedAt)</dd>
+        <dt>Online</dt><dd>@(character.Online ? "yes" : "no")</dd>
+    </dl>
+
+    <h2>Commands</h2>
+    <p class="small">Kick is for the account: it ends all of its sign-ins and whichever of its characters is playing.</p>
+    <CommandButtons List="_commands" Me="_me" Target="@Target(character)" />
+    <p><a href="/audit?target=@character.Id">Audit rows about this character</a> · <a href="/audit?target=@character.AccountId">about its account</a></p>
+
+    <h2>Saved state</h2>
+    @if (detail.State is not { } state)
+    {
+        <p>This character was never saved.</p>
+    }
+    else
+    {
+        <p class="small">What the database holds. A character that is playing may have moved on since the last save.</p>
+        <dl class="facts">
+            <dt>Saved</dt><dd>@Time(state.SavedAt) (version @state.Version)</dd>
+            <dt>Held by server run</dt><dd>@(state.HeldBy?.ToString() ?? "no")</dd>
+            <dt>Place</dt><dd>@Names.Describe(state.MapId), cell @state.CellX, @state.CellY, facing @state.Facing</dd>
+            <dt>Save point</dt>
+            <dd>@(state.SaveMapId is null ? "—" : $"{Names.Describe(state.SaveMapId)}, cell {state.SaveCellX}, {state.SaveCellY}")</dd>
+            <dt>HP / SP</dt><dd>@state.Hp / @state.Sp</dd>
+            <dt>Base level</dt><dd>@state.BaseLevel (EXP @state.BaseExp)</dd>
+            <dt>Job</dt><dd>@Names.Describe(state.JobId), level @state.JobLevel (EXP @state.JobExp)</dd>
+            <dt>Unspent points</dt><dd>@state.StatPoints stat, @state.SkillPoints skill</dd>
+            <dt>Currency</dt><dd>@state.Currency</dd>
+        </dl>
+
+        <h3>Items</h3>
+        @if (state.Items.Count == 0)
+        {
+            <p>No items.</p>
+        }
+        else
+        {
+            <div class="scroll">
+                <table>
+                    <thead><tr><th>Item</th><th>Quantity</th><th>Worn in</th><th>Refine</th><th>Cards</th><th>Set aside</th><th>Instance</th></tr></thead>
+                    <tbody>
+                        @foreach (var item in state.Items)
+                        {
+                            <tr>
+                                <td>@Names.Describe(item.ItemId)</td><td>@item.Quantity</td><td>@(item.Slot ?? "—")</td><td>@item.Refine</td>
+                                <td>@(item.Cards.Count == 0 ? "—" : string.Join(", ", item.Cards.Select(Names.Describe)))</td><td>@(item.Aside ?? "—")</td><td>@item.Id</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+
+        <h3>Stats</h3>
+        <JsonView Value="state.Stats" />
+        <h3>Skills</h3>
+        <JsonView Value="state.Skills" />
+        <h3>Quests</h3>
+        <JsonView Value="state.Quests" />
+        <h3>Outfits owned</h3>
+        <p>@(state.Outfits.Count == 0 ? "none" : string.Join(", ", state.Outfits.Select(Names.Describe)))@(state.OutfitsHidden ? " (hidden)" : "")</p>
+        <h3>Outfits worn</h3>
+        <JsonView Value="state.OutfitSlots" />
+        <h3>Cooldowns</h3>
+        <JsonView Value="state.Cooldowns" />
+        <h3>Set aside (content that is gone)</h3>
+        <JsonView Value="state.SetAside" />
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Staff? _me;
+    private ApiResult<CharacterDetailAnswer>? _character;
+    private ApiResult<CommandListAnswer>? _commands;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _me = await StaffAsync();
+        if (_me is null) return;
+        _character = await Api.GetCharacterAsync(_me, Id);
+        if (_character.Value is not null) _commands = await Api.GetCommandsAsync(_me);
+    }
+
+    private static IReadOnlyList<(string, string)> Target(CharacterAnswer character) =>
+        [(AdminCommandFields.AccountId, character.AccountId.ToString()), ("character_id", character.Id.ToString())];
+}

@@ -1,0 +1,33 @@
+@page "/commands"
+@inherits PanelPage
+
+<PageTitle>Commands · Staff panel</PageTitle>
+<h1>Commands</h1>
+<p>What the server offers, and the lowest role for each. The server checks the role of every command. Kick is easiest from an account's or a character's page.</p>
+
+<FailureBox Failure="_commands?.Failure" />
+@if (_commands?.Value is { } list && _me is not null)
+{
+    <table>
+        <thead><tr><th>Command</th><th>Lowest role</th></tr></thead>
+        <tbody>
+            @foreach (var command in list.Commands)
+            {
+                <tr><td>@command.Action</td><td>@command.LowestRole</td></tr>
+            }
+        </tbody>
+    </table>
+    <h2>Run one</h2>
+    <CommandButtons List="_commands" Me="_me" />
+}
+
+@code {
+    private Staff? _me;
+    private ApiResult<CommandListAnswer>? _commands;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _me = await StaffAsync();
+        if (_me is not null) _commands = await Api.GetCommandsAsync(_me);
+    }
+}

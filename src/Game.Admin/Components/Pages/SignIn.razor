@@ -1,0 +1,55 @@
+@page "/signin"
+@attribute [AllowAnonymous]
+@inject PanelSettings Settings
+@inject IWebHostEnvironment Environment
+
+<PageTitle>Sign in · Staff panel</PageTitle>
+<h1>Sign in</h1>
+
+@if (ErrorWordsFor(Error) is { } words)
+{
+    <div class="failure" role="alert"><p>@words</p></div>
+}
+
+@if (Settings.HasProvider)
+{
+    <p><a class="button" data-enhance-nav="false" href="@($"{SignInPaths.Provider}?returnUrl={Uri.EscapeDataString(SignInSetup.LocalUrl(ReturnUrl))}")">Sign in with your staff account</a></p>
+    <p class="small">Your identity provider asks for your password and second factor. The panel has no passwords of its own.</p>
+}
+
+@if (Environment.IsDevelopment() && Settings.DevelopmentSignIn)
+{
+    <section class="development">
+        <h2>Development sign-in</h2>
+        <p class="warning"><strong>Local use only.</strong> No password: anyone on this machine can sign in as any role. It does not exist outside the Development environment.</p>
+        <form method="post" action="@SignInPaths.Development">
+            <AntiforgeryToken />
+            <input type="hidden" name="returnUrl" value="@SignInSetup.LocalUrl(ReturnUrl)" />
+            <label>Display name <input name="name" value="Developer" maxlength="64" /></label>
+            <label>Role
+                <select name="role">
+                    @foreach (var role in StaffRoles.All.Ordered)
+                    {
+                        <option value="@role">@role</option>
+                    }
+                </select>
+            </label>
+            <button type="submit">Sign in for development</button>
+        </form>
+    </section>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "returnUrl")] public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "error")] public string? Error { get; set; }
+
+    // Only the panel's own codes have words: the address never puts text of its own on the page.
+    private static string? ErrorWordsFor(string? error) => error switch
+    {
+        SignInPaths.NoRole => "You signed in, but your account is in no group that gives a staff role. Ask whoever manages the staff groups.",
+        SignInPaths.BadSubject => "Your identity provider's id for you cannot be used as a staff id. Ask whoever runs the panel (docs/ADMIN_PANEL.md).",
+        SignInPaths.Failed => "The sign-in did not finish. Try again.",
+        _ => null,
+    };
+}

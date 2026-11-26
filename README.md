@@ -93,6 +93,7 @@ docker compose down -v    # stop and WIPE all data
 - [`CLAUDE.md`](CLAUDE.md) — rules for AI agents (read first)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - [`docs/LOCAL_PLAY.md`](docs/LOCAL_PLAY.md) — play on one PC: the server in Docker, a Windows game build
+- [`docs/ADMIN_PANEL.md`](docs/ADMIN_PANEL.md) — the staff web panel (`src/Game.Admin`): local use, sign-in through your identity provider, security notes
 - [`docs/VOCABULARY.md`](docs/VOCABULARY.md)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - [`docs/TASKS.md`](docs/TASKS.md) — task tracker: agent, model, prompt, status per task

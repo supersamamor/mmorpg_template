@@ -1,0 +1,64 @@
+@page "/characters"
+@inherits PanelPage
+
+<PageTitle>Characters · Staff panel</PageTitle>
+<h1>Characters</h1>
+
+<form method="get" action="/characters" class="search">
+    <label>Name starts with <input name="name" value="@Name" maxlength="128" /></label>
+    <label>Character id <input name="id" value="@Id" maxlength="128" size="38" /></label>
+    <label>Account id <input name="account" value="@Account" maxlength="128" size="38" /></label>
+    <button type="submit">Search</button>
+</form>
+
+<FailureBox Failure="_page?.Failure" />
+@if (_page?.Value is { } page)
+{
+    @if (page.Items.Count == 0)
+    {
+        <p>No character matches.</p>
+    }
+    else
+    {
+        <div class="scroll">
+            <table>
+                <thead><tr><th>Name</th><th>Character id</th><th>Account</th><th>Job</th><th>Created</th><th>Deleted</th><th>Online</th></tr></thead>
+                <tbody>
+                    @foreach (var character in page.Items)
+                    {
+                        <tr>
+                            <td><a href="/characters/@character.Id">@character.Name</a></td><td><code>@character.Id</code></td><td><a href="/accounts/@character.AccountId">account</a></td>
+                            <td>@Names.Describe(character.JobId)</td><td>@Time(character.CreatedAt)</td><td>@Time(character.DeletedAt)</td><td>@(character.Online ? "yes" : "no")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <p class="pages">
+        @if (After is not null)
+        {
+            <a href="@Link(null)">First page</a>
+        }
+        @if (page.Next is { } next)
+        {
+            <a href="@Link(next)" rel="next">Next page</a>
+        }
+    </p>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "name")] public string? Name { get; set; }
+    [SupplyParameterFromQuery(Name = "id")] public string? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "account")] public string? Account { get; set; }
+    [SupplyParameterFromQuery(Name = "after")] public string? After { get; set; }
+
+    private ApiResult<PageAnswer<CharacterAnswer>>? _page;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (await StaffAsync() is { } me) _page = await Api.FindCharactersAsync(me, Clean(Name), Clean(Id), Clean(Account), Clean(After));
+    }
+
+    private string Link(string? after) => Paging.Link("/characters", ("name", Clean(Name)), ("id", Clean(Id)), ("account", Clean(Account)), ("after", after));
+}

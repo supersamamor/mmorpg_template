@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <base href="/" />
+    <link rel="stylesheet" href="@Assets["panel.css"]" />
+    <link rel="icon" type="image/svg+xml" href="@Assets["icon.svg"]" />
+    <HeadOutlet />
+</head>
+<body>
+    <Routes />
+    @* Blazor shows this when the status page's connection drops. It is here so that Blazor adds no inline style of its own (the content security policy refuses one). *@
+    <div id="components-reconnect-modal">
+        <p>The live connection to the panel was lost. <a href="">Reload the page</a>.</p>
+    </div>
+    <script src="@Assets["_framework/blazor.web.js"]"></script>
+</body>
+</html>

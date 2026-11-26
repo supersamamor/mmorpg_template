@@ -1,0 +1,11 @@
+@if (Failure is not null)
+{
+    <div class="failure" role="alert">
+        <p>@Failure.Words</p>
+        <p class="small">Error <code>@Failure.Term</code>@(Failure.Status > 0 ? $" (HTTP {Failure.Status})" : "") · request <code>@Failure.RequestId</code></p>
+    </div>
+}
+
+@code {
+    [Parameter] public ApiFailure? Failure { get; set; }
+}

@@ -1,0 +1,223 @@
+@page "/commands/{CommandName}"
+@inherits PanelPage
+@inject CommandTickets Tickets
+@inject ILogger<Game.Admin.Components.Pages.Command> Log
+
+@* One command: its form, then a confirmation that shows exactly what will be sent, then what came of it. One form element, whatever the step: a post must find it. *@
+
+<PageTitle>@CommandName · Staff panel</PageTitle>
+<h1>@Title</h1>
+
+<FailureBox Failure="_commands?.Failure" />
+@if (_commands?.Value is not null && _info is null && _result is null)
+{
+    <div class="failure" role="alert"><p>The server lists no command <code>@CommandName</code>.</p></div>
+}
+
+<form method="post" @formname="command" @onsubmit="SubmitAsync">
+    <AntiforgeryToken />
+    @if (_result is not null)
+    {
+        @if (_result.Answer is { } answer)
+        {
+            <div class="outcome @answer.Outcome" role="status">
+                <p data-outcome="@answer.Outcome"><strong>@OutcomeWords(answer.Outcome)</strong></p>
+                @if (answer.Error is { } error)
+                {
+                    <p>@ErrorWords.For(error)</p>
+                    <p class="small">Error <code>@error</code></p>
+                }
+                <p class="small">Request <code>@answer.RequestId</code>@(answer.AuditId is { } audit ? $" · audit row {audit}" : "")</p>
+                @if (answer.Result is { Count: > 0 } values)
+                {
+                    <dl class="facts">
+                        @foreach (var value in values)
+                        {
+                            <dt>@value.Key</dt><dd>@value.Value?.ToString()</dd>
+                        }
+                    </dl>
+                }
+            </div>
+        }
+        else
+        {
+            <FailureBox Failure="_result.Failure" />
+            @if (_result.OutcomeUnknown)
+            {
+                <p class="warning">@ErrorWords.MayHaveHappened</p>
+            }
+        }
+        <p><a href="/audit">Open the audit log</a></p>
+    }
+    else if (_ticket is not null && _me is not null && _info is not null)
+    {
+        <h2>Confirm</h2>
+        @if (_targetAccount is not null)
+        {
+            <p>Account <strong>@_targetAccount.Username</strong> (<code>@_targetAccount.Id</code>), @(_targetAccount.Online ? "playing now" : "not playing").</p>
+        }
+        @if (CommandName == AdminActions.Kick)
+        {
+            <p>Kick ends every sign-in of the account and its game. The player has to sign in again.</p>
+        }
+        <p>This will be sent to the server, once:</p>
+        <pre data-confirm>@_json</pre>
+        <ReasonWarning />
+        <input type="hidden" name="ticket" value="@_ticket" />
+        <p class="actions">
+            <button type="submit" name="step" value="confirm" class="danger" disabled="@(!_me.Reaches(_info.LowestRole))">Confirm: @CommandName</button>
+            <a href="@Back">Cancel</a>
+        </p>
+    }
+    else
+    {
+        @if (_problem is not null)
+        {
+            <div class="failure" role="alert"><p>@_problem</p></div>
+        }
+        @if (_info is not null && _me is not null)
+        {
+            var allowed = _me.Reaches(_info.LowestRole);
+            @if (!allowed)
+            {
+                <p class="warning">This command needs the role @_info.LowestRole or higher. Yours is @_me.Role.</p>
+            }
+            @if (_known is not null)
+            {
+                @foreach (var field in _fields)
+                {
+                    <label>@field.Name <input name="@field.Name" value="@field.Value" size="38" maxlength="36" required /></label>
+                }
+            }
+            else
+            {
+                <p>The panel has no page of its own for this command. Name each field the command takes (docs/ADMIN_API.md); empty rows are left out. The server checks every field.</p>
+                @for (var i = 0; i < _fields.Count; i++)
+                {
+                    var field = _fields[i];
+                    <div class="field-row">
+                        <label>Field <input name="field_name_@i" value="@field.Name" maxlength="64" /></label>
+                        <label>Kind
+                            <select name="field_kind_@i">
+                                @foreach (var kind in CommandForms.Kinds)
+                                {
+                                    <option value="@kind" selected="@(kind == field.Kind)">@kind</option>
+                                }
+                            </select>
+                        </label>
+                        <label>Value <input name="field_value_@i" value="@field.Value" maxlength="@CommandForms.MaxValueLength" size="38" /></label>
+                    </div>
+                }
+            }
+            <ReasonWarning />
+            <label>Reason (required)
+                <textarea name="reason" rows="3" maxlength="@AdminCommandFields.MaxReasonLength" required aria-describedby="reason-warning">@_reason</textarea>
+            </label>
+            <p class="actions">
+                <button type="submit" name="step" value="review" disabled="@(!allowed)">Review</button>
+                <a href="@Back">Cancel</a>
+            </p>
+        }
+    }
+</form>
+
+@code {
+    [Parameter] public string CommandName { get; set; } = string.Empty;
+
+    [CascadingParameter] private HttpContext? Http { get; set; }
+
+    private Staff? _me;
+    private ApiResult<CommandListAnswer>? _commands;
+    private CommandInfo? _info;
+    private IReadOnlyList<string>? _known;
+    private List<CommandField> _fields = [];
+    private string _reason = string.Empty;
+    private string? _problem;
+    private string? _ticket;
+    private string? _json;
+    private AccountAnswer? _targetAccount;
+    private CommandResult? _result;
+
+    private string Title => CommandName == AdminActions.Kick ? "Kick" : "Command: " + CommandName;
+
+    private string Back =>
+        QueryId("character_id") is { } character ? $"/characters/{character}"
+        : QueryId(AdminCommandFields.AccountId) is { } account ? $"/accounts/{account}"
+        : "/commands";
+
+    private string? QueryId(string name) => Guid.TryParseExact(Http?.Request.Query[name].ToString(), "D", out var id) ? id.ToString() : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _me = await StaffAsync();
+        if (_me is null) return;
+        _commands = await Api.GetCommandsAsync(_me);
+        _info = AdminApiClient.IsActionName(CommandName) ? _commands.Value?.Commands.FirstOrDefault(c => c.Action == CommandName) : null;
+        CommandForms.Known.TryGetValue(CommandName, out _known);
+        var ids = new[] { AdminCommandFields.AccountId, "character_id" };
+        if (_known is not null)
+        {
+            _fields = _known.Select(name => new CommandField(name, CommandForms.Text, QueryId(name) ?? string.Empty)).ToList();
+        }
+        else
+        {
+            // Prefilled with the one id the page it was opened from is about.
+            var prefill = ids.Reverse().Select(name => (Name: name, Id: QueryId(name))).FirstOrDefault(p => p.Id is not null);
+            _fields = Enumerable.Range(0, CommandForms.MaxFields)
+                .Select(i => i == 0 && prefill.Id is not null ? new CommandField(prefill.Name, CommandForms.Text, prefill.Id) : new CommandField("", CommandForms.Text, ""))
+                .ToList();
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        // Who is asking comes from the sign-in; the form says only what to send.
+        if (_me is null || Http is null) return;
+        var form = Http.Request.Form;
+        var step = form["step"].ToString();
+        if (step == "confirm")
+        {
+            if (Tickets.Take(form["ticket"].ToString(), _me.SessionId, CommandName) is not { } pending)
+            {
+                _problem = "This confirmation was used already or has expired, so nothing was sent now. If you pressed it before, look in the audit log; otherwise start again.";
+                return;
+            }
+            // Not tied to the browser: a staff member who leaves the page does not cut a command off half way.
+            _result = await Api.RunCommandAsync(_me, CommandName, pending.Json);
+            Log.LogInformation("Staff {StaffId} ({Role}) ran '{Action}': {Outcome} {Error} (request {RequestId}, audit row {AuditId})", _me.Id, _me.Role, CommandName,
+                _result.Answer?.Outcome ?? "no answer", _result.Answer?.Error ?? _result.Failure?.Term, _result.RequestId, _result.Answer?.AuditId);
+            return;
+        }
+        if (_info is null) return;
+        _fields = _known is not null
+            ? _known.Select(name => new CommandField(name, CommandForms.Text, form[name].ToString())).ToList()
+            : Enumerable.Range(0, CommandForms.MaxFields)
+                .Select(i => new CommandField(form[$"field_name_{i}"].ToString(), form[$"field_kind_{i}"].ToString() is { Length: > 0 } kind ? kind : CommandForms.Text,
+                    form[$"field_value_{i}"].ToString()))
+                .ToList();
+        _reason = form["reason"].ToString();
+        var body = CommandForms.Build(CommandName, _fields, _reason);
+        if (body.Json is null)
+        {
+            _problem = body.Problem;
+            return;
+        }
+        if (CommandName == AdminActions.Kick && Guid.TryParse(_fields[0].Value.Trim(), out var account))
+        {
+            var found = await Api.GetAccountAsync(_me, account);
+            if (found.Value is null)
+            {
+                _problem = found.Failure!.Words;
+                return;
+            }
+            _targetAccount = found.Value.Account;
+        }
+        _json = body.Json;
+        _ticket = Tickets.Issue(_me.SessionId, CommandName, body.Json);
+    }
+
+    private static string OutcomeWords(string outcome) =>
+        outcome == AdminOutcomes.Done ? "Done: the change is made and in the audit log."
+        : outcome == AdminOutcomes.Accepted ? "Accepted: it is in the audit log, and the world applies it on a coming tick."
+        : "The server refused: nothing was changed.";
+}

@@ -141,7 +141,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-807 | Local play on one PC: the server in a container behind a compose profile, a Windows game build, one script to start and stop it | Claude Code | Sonnet 5.5 | [T-807](../tasks/prompts/T-807.md) | T-213, T-216, T-701, T-702, T-708 | Review | Moved up by the owner on 2026-11-26; restricted `Net/**` only for a listen option, if needed |
 | T-804 | Admin API in the server: a private listener, service credential and staff roles, admin commands through the tick, append-only audit log, status and lookup reads, kick | Claude Code | Opus 5.5 | [T-804](../tasks/prompts/T-804.md) | T-213, T-214, T-701, T-702, T-703, T-710 | Review | Restricted `Admin/**` (new), `Persistence/**` and `Net/**` scopes in the prompt's header |
 | T-806 | Moderation and support: ban, mute, item and currency fixes, unstick, announcements, maintenance, the support queue for deletion and export | Claude Code | Opus 5.5 | [T-806](../tasks/prompts/T-806.md) | T-702, T-703, T-804 | Ready | Restricted `Admin/**`, `Persistence/**` and `Net/**` scopes in the prompt's header; Opus instead of Sonnet: item changes against saves |
-| T-805 | Staff web panel `Game.Admin`: OIDC sign-in and roles, status, player lookup, audit search, commands by role | Claude Code | Sonnet 5.5 | [T-805](../tasks/prompts/T-805.md) | T-804 | Ready | Built beside T-806; no restricted area |
+| T-805 | Staff web panel `Game.Admin`: OIDC sign-in and roles, status, player lookup, audit search, commands by role | Claude Code | Sonnet 5.5 | [T-805](../tasks/prompts/T-805.md) | T-804 | In Progress | Built beside T-806; no restricted area |
 
 ## Backlog (prompts written when the previous phase is Done)
 

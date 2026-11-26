@@ -1536,6 +1536,18 @@ Endpoints, headers and local use: **docs/ADMIN_API.md**. Code: `src/Game.Server/
 - **Kick** (`support`): every session of the account ends with its row in one transaction; the gateway says `bye kicked` and the character (in its grace period too) leaves, saved, its resume token dead,
   exactly as T-710's session end. The client says so and goes to the sign-in screen.
 
+### 12.7 The panel as built (T-805)
+Setup, local use and a fork's security notes: **docs/ADMIN_PANEL.md**. Code: `src/Game.Admin` (references `Game.Shared` and `Game.Content` only).
+- **Shape.** Blazor Server: pages are rendered on the server per request, so each one checks the sign-in again; only the status page holds a live connection, and asks again on a timer
+  (10 s, never under 5). Commands are plain posts with antiforgery.
+- **Sign-in.** OIDC authorization code with PKCE; configured groups give the role (the highest); MFA is the provider's. The cookie holds the staff id, name, role and end only; it is never extended
+  and signing out ends it. A development sign-in works in `Development` on loopback only; switched on anywhere else the panel does not start.
+- **Calls.** One typed client: the five headers, no retry, redirect, proxy or request logging, a timeout. A write with no usable answer is shown as "may have happened" with its request id.
+- **Commands.** The server's list, greyed out below each lowest role (the server decides). Reason, then a confirmation showing the exact JSON, sent once (a one-time ticket held by the panel). A command
+  without a page gets a general form of named, typed fields.
+- **Exposure.** Loopback unless told it is on a private network, HTTPS outside development, only named hosts, a content security policy of this origin only.
+- **Not built:** the login and item history of §12.4 (the admin API has no read for them), an IP allowlist in the panel (a VPN or firewall does it), a real provider's test.
+
 ## 13. Non-goals for v1
 Sharding/multi-server, client prediction beyond movement interpolation, PvP balance,
 guild wars, cash shop / in-app purchases, multi-floor maps / jumping / flying,
