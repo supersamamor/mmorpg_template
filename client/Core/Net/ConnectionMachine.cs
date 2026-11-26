@@ -66,6 +66,9 @@ public enum ConnectionNotice
     /// <summary><c>bye session_ended</c>: the account session was ended elsewhere (T-710).</summary>
     SessionEnded,
 
+    /// <summary><c>bye kicked</c>: staff ended the game, and the account's sessions with it (T-804).</summary>
+    Kicked,
+
     /// <summary>A new login could not reach the server, or the server ended it.</summary>
     ConnectionFailed,
 
@@ -263,6 +266,10 @@ public sealed class ConnectionMachine
             case ByeReasons.SessionEnded:
                 // Signed out, or the password changed, elsewhere: the token is dead with the session.
                 ToLogin(ConnectionNotice.SessionEnded);
+                return;
+            case ByeReasons.Kicked:
+                // Staff ended the game (T-804): every session of the account ended with it, so it is back to signing in; nothing to resume.
+                ToLogin(ConnectionNotice.Kicked);
                 return;
             case ByeReasons.Shutdown:
                 // A server restart invalidates every token (§10): the retry is a normal login.

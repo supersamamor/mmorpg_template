@@ -261,6 +261,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>AutopilotRefused</c> (T-604): a <c>start_autopilot</c> was refused; nothing changed.</summary>
         public const string AutopilotRefused = "AutopilotRefused";
 
+        /// <summary><c>AdminActionApplied</c>: staff changed something through the admin API (T-804); raised on the admin event bus after the change is made and audited.</summary>
+        public const string AdminActionApplied = "AdminActionApplied";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -348,6 +351,7 @@ namespace Game.Shared.Vocabulary
             AutopilotRefused,
             OutfitGranted,
             WardrobeChanged,
-            OutfitRefused);
+            OutfitRefused,
+            AdminActionApplied);
     }
 }

@@ -52,6 +52,15 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
     /// <summary>The outfits they own (T-708).</summary>
     public DbSet<OutfitRow> Outfits => Set<OutfitRow>();
 
+    /// <summary>The staff the audit log names (T-804).</summary>
+    public DbSet<AdminStaffRow> Staff => Set<AdminStaffRow>();
+
+    /// <summary>The audit log (T-804): append-only.</summary>
+    public DbSet<AdminAuditRow> Audit => Set<AdminAuditRow>();
+
+    /// <summary>The trigger function that refuses changing or deleting audit rows.</summary>
+    public const string AuditGuard = "admin_audit_append_only";
+
     /// <inheritdoc />
     protected override void OnModelCreating(ModelBuilder model)
     {
@@ -185,6 +194,36 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
             e.HasIndex(i => i.CharacterId).HasDatabaseName("ix_character_items_character_id");
             e.HasIndex(i => new { i.CharacterId, i.Slot }).IsUnique().HasFilter("slot IS NOT NULL").HasDatabaseName(ItemSlotIndex);
             e.HasOne<CharacterStateRow>().WithMany().HasForeignKey(i => i.CharacterId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<AdminStaffRow>(e =>
+        {
+            e.ToTable("admin_staff");
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Id).HasColumnName("id").HasMaxLength(128).ValueGeneratedNever();
+            e.Property(s => s.DisplayName).HasColumnName("display_name").HasMaxLength(64);
+            e.Property(s => s.Role).HasColumnName("role").HasMaxLength(16);
+            e.Property(s => s.FirstSeenAt).HasColumnName("first_seen_at");
+            e.Property(s => s.LastSeenAt).HasColumnName("last_seen_at");
+        });
+        model.Entity<AdminAuditRow>(e =>
+        {
+            e.ToTable("admin_audit", t => t.HasCheckConstraint("ck_admin_audit_reason", "length(btrim(reason)) > 0"));
+            e.HasKey(a => a.Id);
+            e.Property(a => a.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(a => a.At).HasColumnName("at");
+            e.Property(a => a.RequestId).HasColumnName("request_id").HasMaxLength(64);
+            e.Property(a => a.StaffId).HasColumnName("staff_id").HasMaxLength(128);
+            e.Property(a => a.StaffRole).HasColumnName("staff_role").HasMaxLength(16);
+            e.Property(a => a.Action).HasColumnName("action").HasMaxLength(64);
+            e.Property(a => a.TargetKind).HasColumnName("target_kind").HasMaxLength(32);
+            e.Property(a => a.TargetId).HasColumnName("target_id").HasMaxLength(64);
+            e.Property(a => a.Before).HasColumnName("before").HasColumnType("jsonb");
+            e.Property(a => a.After).HasColumnName("after").HasColumnType("jsonb");
+            e.Property(a => a.Reason).HasColumnName("reason").HasMaxLength(Game.Shared.Protocol.AdminCommandFields.MaxReasonLength);
+            e.HasIndex(a => new { a.TargetId, a.Id }).HasDatabaseName("ix_admin_audit_target");
+            e.HasIndex(a => new { a.StaffId, a.Id }).HasDatabaseName("ix_admin_audit_staff");
+            e.HasIndex(a => a.At).HasDatabaseName("ix_admin_audit_at");
+            e.HasOne<AdminStaffRow>().WithMany().HasForeignKey(a => a.StaffId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

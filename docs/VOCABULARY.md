@@ -288,7 +288,8 @@ Any reason other than `finished` ends the services the dialogue opened too.
 `DialogueShown`, `DialogueEnded`, `DialogueRefused`, `ServiceOpened`, `ShopOpened`, `QuestStartRequested`, `SavePointSet`, `DialogueEffectsRequested`, `DialogueItemsRequested`, `DialogueItemsResolved`,
 `QuestProgressed`, `QuestAbandoned`, `QuestRefused`, `QuestItemsRequested`, `QuestItemsResolved`, `QuestRewardsRequested`, `QuestRewarded`, `QuestMarkersChanged`,
 `AutopilotChanged`, `AutopilotRefused`,
-`OutfitGranted`, `WardrobeChanged`, `OutfitRefused`
+`OutfitGranted`, `WardrobeChanged`, `OutfitRefused`,
+`AdminActionApplied` (on the admin event bus, not an instance's: T-804)
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -397,7 +398,7 @@ Owner only (about the client's own character): `attack_stopped`, `exp`, `level_u
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
 `oversize`, `before_hello`, `duplicate_hello`, `rate_limit`, `login_refused`, `server_full`, `too_slow`, `shutdown`, `server_error`, `update_required`,
-`logout`, `replaced`, `resume_failed`, `load_failed`, `save_pending`, `save_lost`, `session_ended`.
+`logout`, `replaced`, `resume_failed`, `load_failed`, `save_pending`, `save_lost`, `session_ended`, `kicked`.
 `login_refused`: the dev login outside development or with a bad name, a session token that is unknown, expired or revoked, or a character that is not the account's
 (T-701: one answer for all of them). `server_error` also ends a `hello` whose login the database could not answer.
 `update_required`: the client's content hash differs from the server's, or it sent none outside development (ARCHITECTURE §5.4).
@@ -408,6 +409,7 @@ The client reconnects after neither. `resume_failed`: the token in `hello` `resu
 `save_lost`: the server can no longer save the character it plays (it is held elsewhere, or deleted), so the session ends and the character goes back to its last save. After these three the
 client goes to the login screen and does not retry by itself (T-702, ARCHITECTURE §3 "Saving characters").
 `session_ended`: the account session the character is played with was ended (signed out, pushed out by a newer sign-in, or a password change), so the character left the world and is saved. The client goes to the login screen (T-710).
+`kicked`: staff ended the account's game through the admin API (T-804): every session of the account ended with it, and the character left the world, saved. The client says so and goes to the sign-in screen.
 A `rejected` message carries a "Movement reasons" (`MoveRejected`) term for `move`, an "Attack reasons" term for `attack`, or an "Item reasons" term for an
 item intent (`shop_buy` and `shop_sell` included), or an "Outfit reasons" term for `set_outfit`, instead; the session goes on.
 
@@ -429,6 +431,28 @@ outfit as nothing, keeping the choices. **Shown**: the choices that stand (owned
 (T-702, ARCHITECTURE §3 "Saving characters".) **Copy**: a character's whole state, taken on the tick thread. **Save**: a copy in the database, with a number that only goes up. **Claim**: which stay of a character may
 save it; the newest. **Run**: one server start, numbered by the database. **Link**: one save must not land before another. **Landed**: in the database. **At risk**: nothing has landed for 30 s.
 **Lost**: this server may not save the character any more. **Set aside**: kept, but not in use, because the content has no place for it. Set-aside kinds: `active_quest`, `completed_quest`, `unlocked_job`, `job`, `skill`.
+
+## Staff roles
+(T-804, ARCHITECTURE §12.2.) In the `X-Staff-Role` header of an admin request, lowest first; each may do what the ones before it may: `support`, `gm`, `admin`.
+
+## Admin actions
+What an admin command does; the `action` of its audit row (T-804; T-806 adds more): `kick`.
+
+## Admin target kinds
+What an admin command or audit row is about: `account`, `character`.
+
+## Admin errors
+The `error` of a refused admin request or command (T-804, docs/ADMIN_API.md): `invalid_request`, `unauthorized`, `invalid_staff`, `unknown_role`, `forbidden`, `reason_required`, `not_found`,
+`unknown_target`, `rate_limited`, `timeout`, `unavailable`. `rate_limited` comes with a `Retry-After` header. A refused command changed nothing and wrote no audit row.
+
+## Admin outcomes
+The `outcome` of an admin command: `done` (made and audited), `accepted` (audited; the world applies it on a coming tick), `refused` (with an "Admin errors" term).
+
+## Admin terms
+(T-804, ARCHITECTURE §12.) **Admin API**: the server's private HTTP listener for staff tooling, on its own port. **Service credential**: the secret that proves a request comes from the panel.
+**Staff member**: who the panel says makes the request (id, display name, role). **Admin command**: a write through the admin API, checked against the role table and the game like an intent.
+**Admin step**: the part of a command that runs on an instance's tick (`AdminIntent`). **Audit row**: one append-only record of an admin change (staff, role, action, target, before, after,
+reason, time, request id). **Reason**: the staff member's own words for a write; required.
 
 ## Entity kinds
 In a view record's `kind`: `player`, `monster`, `npc`, `item` (a ground item a monster dropped, `EntityKind.Item`; its `display_key` is the item id).

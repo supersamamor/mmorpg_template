@@ -45,7 +45,7 @@ public sealed class AutoRun
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
         Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-autopilot") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 || Array.IndexOf(args, "--e2e-appearance") >= 0 || Array.IndexOf(args, "--e2e-appearance-watch") >= 0 ||
-        Array.IndexOf(args, "--e2e-wardrobe") >= 0 || Array.IndexOf(args, "--e2e-wardrobe-watch") >= 0 ||
+        Array.IndexOf(args, "--e2e-wardrobe") >= 0 || Array.IndexOf(args, "--e2e-wardrobe-watch") >= 0 || Array.IndexOf(args, "--e2e-kick") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -83,6 +83,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-autopilot") >= 0) await AutopilotRunAsync();
             else if (Array.IndexOf(_args, "--e2e-account") >= 0) await AccountRunAsync();
             else if (Array.IndexOf(_args, "--e2e-saving") >= 0) await SavingRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-kick") >= 0) await KickRunAsync();
             else if (Value("--e2e-appearance-watch") is { } looks) await new LookRuns(_main, ShotAsync).WatcherAsync(looks);
             else if (Array.IndexOf(_args, "--e2e-appearance") >= 0) await new LookRuns(_main, ShotAsync).CreatorAsync();
             else if (Value("--e2e-wardrobe-watch") is { } outfit) await new WardrobeRuns(_main, ShotAsync).WatcherAsync(outfit);
@@ -262,6 +263,50 @@ public sealed class AutoRun
         Check(accounts.Characters.Count == 1 && accounts.Characters[0].Id == character.Id, "and its character is there");
         Print("account: kept, and deleted again at the end");
         await DeleteAsync("second");
+    }
+
+    /// <summary>
+    /// T-804's run, against a server with a database and its admin API: a new account's character enters the world and walks a step; the script, asked by a marker, kicks the account
+    /// through the admin API. The client must say so (<c>bye kicked</c>), go to the sign-in screen with its session gone, and sign in again.
+    /// </summary>
+    private async Task KickRunAsync()
+    {
+        var hud = _main.Hud!;
+        var accounts = Session.Accounts;
+        await FramesAsync(3);
+        var screen = hud.Accounts!;
+        var tag = new string(System.Security.Cryptography.RandomNumberGenerator.GetItems<char>("abcdefghijklmnopqrstuvwxyz", 10));
+        var username = "e2e-kick-" + tag;
+        var password = Guid.NewGuid().ToString("N"); // thrown away with the run
+        screen.Username.Text = username;
+        screen.Password.Text = password;
+        Press(screen.RegisterButton);
+        await UntilAsync(() => accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters && !accounts.Busy, 15, "the character list after registering");
+        await LookRuns.CreateAsync(_main, "Kick" + tag);
+        Press(screen.Rows[0].Play);
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null && _main.LoadedMap == World.MapId, 15, "entering the world");
+        await FramesAsync(3);
+        Print($"kick: in the world as entity {World.OwnId} on {World.MapId}; asking the script to kick the account");
+        Print("@ kick:" + username);
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen, 30, "bye kicked");
+        Check(Session.Connection.Notice == ConnectionNotice.Kicked, "the game ended with bye kicked, was " + Session.Connection.Notice);
+        await UntilAsync(() => !accounts.Busy && accounts.Screen == Game.Client.Core.Accounts.AccountScreen.SignIn, 15, "the sign-in screen");
+        Check(!accounts.SignedIn, "the session is gone with the kick");
+        await FramesAsync(3);
+        Check(screen.Open && screen.SignInButton.IsVisibleInTree(), "the sign-in screen is shown");
+        var said = UiText.Notice(ConnectionNotice.Kicked);
+        Check(screen.Text.Contains(said), "the screen says why: \"" + screen.Text + "\"");
+        Print("kick: put out, on the sign-in screen: \"" + screen.Text.Replace("\n", " / ") + "\"");
+        await ShotAsync();
+        screen.Username.Text = username;
+        screen.Password.Text = password;
+        Press(screen.SignInButton);
+        await UntilAsync(() => accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters && !accounts.Busy, 15, "signing in again");
+        Press(screen.Rows[0].Play);
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null, 15, "entering the world again");
+        Print($"kick: signed in again and back in the world as entity {World.OwnId}");
+        Session.Logout(Clocks.Wall());
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy, 10, "bye logout");
     }
 
     /// <summary>

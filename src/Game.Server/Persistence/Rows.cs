@@ -258,3 +258,65 @@ public sealed class ItemRow
     /// <summary>Why it is kept out of the bag (the content does not have it), or null.</summary>
     public string? Aside { get; set; }
 }
+
+/// <summary>
+/// Table <c>admin_staff</c> (T-804): the staff members the audit log names, as the panel last said (ARCHITECTURE §12.2). Staff, not players: no row here is about a player. Updated
+/// at each of their writes; never deleted while an audit row names it.
+/// </summary>
+public sealed class AdminStaffRow
+{
+    /// <summary>The identity provider's subject.</summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>The display name the panel last sent.</summary>
+    public string DisplayName { get; set; } = string.Empty;
+
+    /// <summary>The role the panel last sent (each audit row keeps the role of its moment).</summary>
+    public string Role { get; set; } = string.Empty;
+
+    /// <summary>Their first write (UTC).</summary>
+    public DateTime FirstSeenAt { get; set; }
+
+    /// <summary>Their latest write (UTC).</summary>
+    public DateTime LastSeenAt { get; set; }
+}
+
+/// <summary>
+/// Table <c>admin_audit</c> (T-804, ARCHITECTURE §12.3): one row per admin change, append-only. Triggers refuse every <c>UPDATE</c>, <c>DELETE</c> and <c>TRUNCATE</c>, whoever asks.
+/// It refers to no player table: a target is an id that may outlive what it names (an erased account's id leads nowhere). Before and after hold ids and numbers only.
+/// </summary>
+public sealed class AdminAuditRow
+{
+    /// <summary>From an identity sequence: the order rows were written in.</summary>
+    public long Id { get; set; }
+
+    /// <summary>When (UTC).</summary>
+    public DateTime At { get; set; }
+
+    /// <summary>The request that made it.</summary>
+    public string RequestId { get; set; } = string.Empty;
+
+    /// <summary>Who (<see cref="AdminStaffRow"/>).</summary>
+    public string StaffId { get; set; } = string.Empty;
+
+    /// <summary>The role they had then.</summary>
+    public string StaffRole { get; set; } = string.Empty;
+
+    /// <summary>An "Admin actions" term.</summary>
+    public string Action { get; set; } = string.Empty;
+
+    /// <summary>An "Admin target kinds" term.</summary>
+    public string TargetKind { get; set; } = string.Empty;
+
+    /// <summary>The target's id.</summary>
+    public string TargetId { get; set; } = string.Empty;
+
+    /// <summary>What it was (a JSON object).</summary>
+    public string Before { get; set; } = "{}";
+
+    /// <summary>What it became (a JSON object).</summary>
+    public string After { get; set; } = "{}";
+
+    /// <summary>Why, in the staff member's words.</summary>
+    public string Reason { get; set; } = string.Empty;
+}

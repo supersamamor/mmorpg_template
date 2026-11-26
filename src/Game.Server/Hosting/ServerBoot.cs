@@ -20,7 +20,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
 {
     /// <summary>Usage text.</summary>
     public const string Usage =
-        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--save-interval <seconds>] [--save-shutdown-wait <seconds>] [--account-erase-days <days>] [--net-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
+        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--save-interval <seconds>] [--save-shutdown-wait <seconds>] [--account-erase-days <days>] [--net-<name> <value> ...] [--admin-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
 
     /// <summary>The environment name that enables development mode (plain ws:// on loopback, the dev login).</summary>
     public const string DevelopmentName = "Development";
@@ -51,6 +51,9 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
     /// <summary>The <c>--net-</c> options and their values, in order, for <see cref="Game.Server.Net.GatewayOptions.Parse"/>.</summary>
     public IReadOnlyList<string> NetArgs { get; init; } = NoArgs;
 
+    /// <summary>The <c>--admin-</c> options and their values, in order, for <see cref="Game.Server.Admin.AdminOptions.Parse"/> (T-804).</summary>
+    public IReadOnlyList<string> AdminArgs { get; init; } = NoArgs;
+
     /// <summary>The environment name in effect: <see cref="Environment"/>, else <paramref name="environmentVariable"/>, else <c>Production</c>.</summary>
     public string EnvironmentName(string? environmentVariable) =>
         Environment ?? (string.IsNullOrWhiteSpace(environmentVariable) ? "Production" : environmentVariable);
@@ -69,6 +72,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         var saveWait = 20;
         var eraseDays = 14;
         var net = new List<string>();
+        var admin = new List<string>();
         error = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -96,6 +100,10 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                         net.Add(arg);
                         net.Add(Value());
                         break;
+                    case var _ when arg.StartsWith(Game.Server.Admin.AdminOptions.ArgPrefix, StringComparison.Ordinal):
+                        admin.Add(arg);
+                        admin.Add(Value());
+                        break;
                     default:
                         if (arg.StartsWith("--", StringComparison.Ordinal) || content is not null) throw new FormatException($"unexpected argument '{arg}'");
                         content = arg;
@@ -117,6 +125,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
             SaveShutdownWaitSeconds = saveWait,
             AccountEraseDays = eraseDays,
             NetArgs = net.Count == 0 ? NoArgs : net,
+            AdminArgs = admin.Count == 0 ? NoArgs : admin,
         };
     }
 
@@ -144,7 +153,8 @@ public static class ServerPipeline
     /// swing. The quest system (T-602) comes after the inventory: it reacts to the previous tick's events (kills, uses, talks, bag changes) and its turn-ins go to the
     /// inventory and combat as events, applied on their next tick. The outfit system (T-708) only says what
     /// others see, so its place does not matter. The autopilot (T-604) comes after all of them: it looks at what this tick made of
-    /// the world and queues intents, which the systems get in the next tick like a player's. The AOI does
+    /// the world and queues intents, which the systems get in the next tick like a player's. The admin system (T-804) runs the steps of admin commands
+    /// after every game system, so a step sees this tick's world and what it changes is in this tick's view messages. The AOI does
     /// its work in phase 5 (outbound), after every system, so its place in the list only orders its intents; it is last.
     /// </summary>
     /// <remarks>Player progression and inventories live in in-memory stores shared by every instance; pass them in to read
@@ -179,6 +189,7 @@ public static class ServerPipeline
             .Add(() => new QuestSystem(quests, progressions, inventories))
             .Add(() => new OutfitSystem(outfits, progressions))
             .Add(() => new AutopilotSystem(autopilot, progressions, clock))
+            .Add(() => new Game.Server.World.Admin.AdminSystem())
             .Add(() => AoiSystem.Create(balance));
         if (keeper is not null) pipeline.Add(() => new SaveSystem(keeper, clock, keeper.Saves.Options.IntervalMs));
         return pipeline;
