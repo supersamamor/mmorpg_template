@@ -80,6 +80,7 @@ public sealed class Hud
     private DialoguePanel? _dialoguePanel;
     private ShopPanel? _shopPanel;
     private QuestPanel? _questPanel;
+    private WardrobePanel? _wardrobe;   // T-708: opened from the bag, as the stats are from the skills: the phone HUD has no room for another button
     // The quest tracker (T-602): under the bars on the left, the tracked quest's name and counters; a tap opens the quest log. With no active quest it is the
     // "Quests" button, so the log needs no button of its own on a full phone HUD. Each line is trimmed to the column with an ellipsis instead of wrapping (T-406): a long
     // quest name or three long objectives would otherwise grow it over the buttons below; the log has the whole text.
@@ -263,6 +264,11 @@ public sealed class Hud
             // A service the server opened (refining at a smith) is a panel of its own: the bag, where the refine button lives.
             session.ServiceOpened += opened => { if (opened.Service == ServiceIds.Refine) _bag?.SetOpen(true); };
             _shopPanel = new ShopPanel(_safe, session, bundle, _interactive, Tap);   // the shop service is a panel of its own (T-603)
+        }
+        if (session is not null && bundle is not null)
+        {
+            _wardrobe = new WardrobePanel(_safe, session, bundle, looks?.Invoke(true), _interactive, Tap) { BackToBag = () => _bag?.SetOpen(true) };
+            _bag!.ShowWardrobe = () => _wardrobe.SetOpen(true);
         }
         if (session is not null && bundle is not null) _questPanel = new QuestPanel(_safe, session, bundle, _interactive, Tap);
         if (session is not null)
@@ -466,6 +472,9 @@ public sealed class Hud
     /// <summary>The inventory panel, or null without a session.</summary>
     public InventoryPanel? Bag => _bag;
 
+    /// <summary>The wardrobe panel (T-708), or null without a session.</summary>
+    public WardrobePanel? Wardrobe => _wardrobe;
+
     /// <summary>The skill tree panel (T-502; for the scripted run).</summary>
     public SkillPanel? Skills => _skillPanel;
 
@@ -494,6 +503,7 @@ public sealed class Hud
             _statusVersion = -1;   // the status icons can load now
             if (_bag is not null) _bag.IconLoader = value;
             if (_shopPanel is not null) _shopPanel.IconLoader = value;
+            if (_wardrobe is not null) _wardrobe.IconLoader = value;
             if (_skillPanel is not null) _skillPanel.IconLoader = value;
             if (_dialoguePanel is not null) _dialoguePanel.IconLoader = value;
         }
@@ -641,6 +651,7 @@ public sealed class Hud
         _hotbarRow.AddThemeConstantOverride("separation", Mathf.RoundToInt(margin));
         _bag?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _statsPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
+        _wardrobe?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
         _shopPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _dialoguePanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
@@ -732,6 +743,7 @@ public sealed class Hud
                 _bag?.SetOpen(false);
                 _skillPanel?.SetOpen(false);
                 _statsPanel?.SetOpen(false);
+                _wardrobe?.SetOpen(false);
             }
         }
         if (_uiVersion != ui.Version)
@@ -770,6 +782,7 @@ public sealed class Hud
         _bag?.Refresh();
         _skillPanel?.Refresh();
         _statsPanel?.Refresh();
+        _wardrobe?.Refresh(_host.GetProcessDeltaTime());
         _dialoguePanel?.Refresh();
         _shopPanel?.Refresh();
         if (_questVersion != _session.Quests.Version && _bundle is not null)

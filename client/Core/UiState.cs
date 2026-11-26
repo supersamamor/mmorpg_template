@@ -114,6 +114,9 @@ public sealed class UiState
     /// <summary>An <c>autopilot</c> message ended a run (T-605): the flash line says why, so a stop is never a surprise.</summary>
     public void OnAutopilotEnded(string? reason, double now) => SetFlash(UiText.AutopilotEnded(reason), now);
 
+    /// <summary>A new outfit is in the wardrobe (T-708).</summary>
+    public void OnOutfitGained(string outfitId, double now) => SetFlash(UiText.OutfitGained(_bundle.NameOf(outfitId)), now);
+
     /// <summary><c>refine_result</c>: the outcome goes on the flash line (success, kept, down a level, broke), with the item's name and level from the server.</summary>
     public void OnRefineResult(RefineResultMessage result, double now) =>
         SetFlash(UiText.RefineResult(_bundle.NameOf(result.Item), result.Result, result.Refine), now);
@@ -124,6 +127,11 @@ public sealed class UiState
         if (rejected.Intent == MessageTypes.StartAutopilot)
         {
             SetFlash(UiText.AutopilotRefused(rejected.Reason, rejected.Quest is { } q ? _bundle.Quest(q)?.Name ?? q : rejected.Skill is { } sk ? _bundle.Skill(sk)?.Name ?? sk : null), now);   // nothing changed: a run in progress goes on
+            return;
+        }
+        if (rejected.Intent == MessageTypes.SetOutfit)
+        {
+            SetFlash(UiText.OutfitRefused(rejected.Reason), now);
             return;
         }
         if (IsItemIntent(rejected.Intent))

@@ -37,7 +37,8 @@ public static class ProtocolJson
         {
             var reader = new Utf8JsonReader(utf8, new JsonReaderOptions { MaxDepth = MaxClientDepth });
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ClientMessage>(ByeReasons.Malformed);
-            string? type = null, name = null, content = null, resume = null, session = null, character = null, slot = null, skill = null, job = null, stat = null, quest = null, itemId = null;
+            string? type = null, name = null, content = null, resume = null, session = null, character = null, slot = null, skill = null, job = null, stat = null, quest = null, itemId = null, outfit = null;
+            bool? hidden = null;
             int? version = null, quantity = null, level = null, amount = null, index = null;
             long? seq = null, target = null, entry = null, card = null;
             GridCell? cell = null;
@@ -78,6 +79,8 @@ public static class ProtocolJson
                     case "stat": stat = String(ref reader); break;
                     case "quest": quest = String(ref reader); break;
                     case "item": itemId = String(ref reader); break;
+                    case "outfit": outfit = String(ref reader); break;
+                    case "hidden": hidden = reader.TokenType is JsonTokenType.True or JsonTokenType.False ? reader.GetBoolean() : throw Bad(); break;
                     case "amount": amount = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var am) ? am : throw Bad(); break;
                     case "index": index = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var ix) ? ix : throw Bad(); break;
                     case "level": level = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var lv) ? lv : throw Bad(); break;
@@ -120,6 +123,8 @@ public static class ProtocolJson
                 MessageTypes.StartAutopilot => hasQuests
                     ? new StartAutopilotMessage(ReadStrings(ref questsAt), hasSkills ? ReadLevels(ref skillsAt) : []) : null,
                 MessageTypes.StopAutopilot => new StopAutopilotMessage(),
+                // exactly one of slot (with an outfit, or nothing) and hidden
+                MessageTypes.SetOutfit => (slot is null) != (hidden is null) && (outfit is null || slot is not null) ? new SetOutfitMessage(slot, outfit, hidden) : null,
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -221,6 +226,11 @@ public static class ProtocolJson
                 w.WriteNumber("entry", sell.Entry);
                 w.WriteNumber("quantity", sell.Quantity);
                 break;
+            case SetOutfitMessage set:
+                if (set.Slot is not null) w.WriteString("slot", set.Slot);
+                if (set.Outfit is not null) w.WriteString("outfit", set.Outfit);
+                if (set.Hidden is { } hide) w.WriteBoolean("hidden", hide);
+                break;
             case StartAutopilotMessage start:
                 WriteStrings(w, "quests", start.Quests);
                 WriteLevels(w, "skills", start.Skills);
@@ -267,7 +277,7 @@ public static class ProtocolJson
                 if (delta.Changed.Count > 0)
                 {
                     w.WriteStartArray("changed");
-                    foreach (var c in delta.Changed) WriteChange(w, c.Id, c.Fields, c.Cell, c.Facing, c.Next, c.Speed, c.DisplayKey, c.Hp, c.Dead, c.Mine, c.Weapon, c.Worn, c.Statuses);
+                    foreach (var c in delta.Changed) WriteChange(w, c.Id, c.Fields, c.Cell, c.Facing, c.Next, c.Speed, c.DisplayKey, c.Hp, c.Dead, c.Mine, c.Weapon, c.Worn, c.Statuses, c.Outfit);
                     w.WriteEndArray();
                 }
                 if (delta.Disappeared.Count > 0)
@@ -466,6 +476,11 @@ public static class ProtocolJson
                 if (autopilot.Doing is not null) w.WriteString("doing", autopilot.Doing);
                 if (autopilot.Reason is not null) w.WriteString("reason", autopilot.Reason);
                 break;
+            case WardrobeMessage wardrobe:
+                WriteStrings(w, "owned", wardrobe.Owned);
+                WriteOutfit(w, "chosen", wardrobe.Chosen);
+                if (wardrobe.Hidden) w.WriteBoolean("hidden", true);
+                break;
             case PongMessage pong:
                 w.WriteNumber("seq", pong.Seq);
                 break;
@@ -530,7 +545,9 @@ public static class ProtocolJson
             List<ShopStockRecord>? shopStock = null, shopSell = null;
             List<QuestEntryRecord>? questsActive = null;
             QuestEntryRecord? questState = null;
-            List<string>? completed = null, offer = null, turnIn = null;
+            List<string>? completed = null, offer = null, turnIn = null, owned = null;
+            List<ShownOutfit>? chosen = null;
+            bool hidden = false;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var key = reader.GetString();
@@ -618,6 +635,9 @@ public static class ProtocolJson
                     case "completed": completed = ReadStrings(ref reader); break;
                     case "offer": offer = ReadStrings(ref reader); break;
                     case "turn_in": turnIn = ReadStrings(ref reader); break;
+                    case "owned": owned = ReadStrings(ref reader); break;
+                    case "chosen": chosen = ReadOutfit(ref reader); break;
+                    case "hidden": hidden = reader.GetBoolean(); break;
                     case "removed":
                         if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
                         removed = new List<long>();
@@ -657,6 +677,7 @@ public static class ProtocolJson
                     (IReadOnlyList<string>?)completed ?? Array.Empty<string>(), (IReadOnlyList<string>?)offer ?? Array.Empty<string>(), (IReadOnlyList<string>?)turnIn ?? Array.Empty<string>()),
                 MessageTypes.Quest => change is null || quest is null ? null : new QuestMessage(change, quest, questState),
                 MessageTypes.Autopilot => mode is null ? null : new AutopilotMessage(mode, quest, doing, reason),
+                MessageTypes.Wardrobe => new WardrobeMessage((IReadOnlyList<string>?)owned ?? Array.Empty<string>(), (IReadOnlyList<ShownOutfit>?)chosen ?? Array.Empty<ShownOutfit>(), hidden),
                 MessageTypes.Pong => new PongMessage(seq),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason),
                 null => null,
@@ -677,10 +698,11 @@ public static class ProtocolJson
     // ---- shared pieces (also used by ViewMessageWriter) ----
 
     private static void WriteRecord(Utf8JsonWriter w, EntityRecord e) =>
-        WriteRecord(w, e.Id, e.Kind, e.DisplayKey, e.Cell, e.Facing, e.Next, e.Speed, e.Hp, e.Dead, e.Quantity, e.Mine, e.Weapon, e.Worn, e.Statuses, e.Appearance);
+        WriteRecord(w, e.Id, e.Kind, e.DisplayKey, e.Cell, e.Facing, e.Next, e.Speed, e.Hp, e.Dead, e.Quantity, e.Mine, e.Weapon, e.Worn, e.Statuses, e.Appearance, e.Outfit);
 
     internal static void WriteRecord(Utf8JsonWriter w, long id, string kind, string? displayKey, GridCell cell, string facing, GridCell? next, double speed,
-        double? hp, bool dead, int quantity, bool? mine, string? weapon = null, IReadOnlyList<string>? worn = null, IReadOnlyList<StatusRecord>? statuses = null, AppearanceRecord? appearance = null)
+        double? hp, bool dead, int quantity, bool? mine, string? weapon = null, IReadOnlyList<string>? worn = null, IReadOnlyList<StatusRecord>? statuses = null, AppearanceRecord? appearance = null,
+        IReadOnlyList<ShownOutfit>? outfit = null)
     {
         w.WriteStartObject();
         w.WriteNumber("id", id);
@@ -698,6 +720,7 @@ public static class ProtocolJson
         if (worn is { Count: > 0 }) WriteStrings(w, "worn", worn);
         if (statuses is { Count: > 0 }) WriteStatuses(w, statuses);
         if (appearance is not null) WriteAppearance(w, "appearance", appearance);
+        if (outfit is { Count: > 0 }) WriteOutfit(w, "outfit", outfit);
         w.WriteEndObject();
     }
 
@@ -737,6 +760,29 @@ public static class ProtocolJson
             }
         }
         return gender is null || skin is null || face is null || hair is null || hairColor is null ? null : new AppearanceRecord(gender, skin, face, hair, hairColor);
+    }
+
+    /// <summary><c>"outfit":{"head":"outfit.x","body":"outfit.y"}</c> (T-708): ids by slot; <c>{}</c> when none shows.</summary>
+    internal static void WriteOutfit(Utf8JsonWriter w, string name, IReadOnlyList<ShownOutfit> outfit)
+    {
+        w.WriteStartObject(name);
+        for (var i = 0; i < outfit.Count; i++) w.WriteString(outfit[i].Slot, outfit[i].Outfit);
+        w.WriteEndObject();
+    }
+
+    /// <summary>What <see cref="WriteOutfit"/> writes; a value that is not a string is left out (the client then draws the gear there).</summary>
+    private static List<ShownOutfit> ReadOutfit(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject) throw Bad();
+        var outfit = new List<ShownOutfit>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var slot = reader.GetString()!;
+            reader.Read();
+            if (reader.TokenType == JsonTokenType.String) outfit.Add(new ShownOutfit(slot, reader.GetString()!));
+            else reader.Skip();
+        }
+        return outfit;
     }
 
     /// <summary><c>"statuses":[{"id":..,"stacks":..,"left_ms":..,"debuff":true},...]</c> (T-501); <c>debuff</c> only when true.</summary>
@@ -1007,7 +1053,7 @@ public static class ProtocolJson
     }
 
     internal static void WriteChange(Utf8JsonWriter w, long id, ChangedFields fields, GridCell cell, string? facing, GridCell? next, double speed, string? displayKey,
-        double hp, bool dead, bool mine, string? weapon = null, IReadOnlyList<string>? worn = null, IReadOnlyList<StatusRecord>? statuses = null)
+        double hp, bool dead, bool mine, string? weapon = null, IReadOnlyList<string>? worn = null, IReadOnlyList<StatusRecord>? statuses = null, IReadOnlyList<ShownOutfit>? outfit = null)
     {
         w.WriteStartObject();
         w.WriteNumber("id", id);
@@ -1033,6 +1079,7 @@ public static class ProtocolJson
             WriteStrings(w, "worn", worn ?? Array.Empty<string>());
         }
         if ((fields & ChangedFields.Statuses) != 0) WriteStatuses(w, statuses ?? Array.Empty<StatusRecord>());
+        if ((fields & ChangedFields.Outfit) != 0) WriteOutfit(w, "outfit", outfit ?? Array.Empty<ShownOutfit>());
         w.WriteEndObject();
     }
 
@@ -1065,6 +1112,7 @@ public static class ProtocolJson
             List<string>? worn = null;
             List<StatusRecord>? statuses = null;
             AppearanceRecord? appearance = null;
+            List<ShownOutfit>? outfit = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var name = reader.GetString();
@@ -1086,10 +1134,11 @@ public static class ProtocolJson
                     case "worn": worn = ReadStrings(ref reader); break;
                     case "statuses": statuses = ReadStatuses(ref reader); break;
                     case "appearance": appearance = ReadAppearance(ref reader); break;
+                    case "outfit": outfit = ReadOutfit(ref reader); break;
                     default: reader.Skip(); break;
                 }
             }
-            into.Add(new EntityRecord(id, kind ?? throw Bad(), key, cell, facing ?? throw Bad(), next, speed, hp, dead, quantity, mine, weapon, worn, statuses, appearance));
+            into.Add(new EntityRecord(id, kind ?? throw Bad(), key, cell, facing ?? throw Bad(), next, speed, hp, dead, quantity, mine, weapon, worn, statuses, appearance, outfit));
         }
     }
 
@@ -1108,6 +1157,7 @@ public static class ProtocolJson
             string? weapon = null;
             List<string>? worn = null;
             List<StatusRecord>? statuses = null;
+            List<ShownOutfit>? outfit = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var name = reader.GetString();
@@ -1126,10 +1176,11 @@ public static class ProtocolJson
                     case "weapon": weapon = String(ref reader); fields |= ChangedFields.Look; break;
                     case "worn": worn = ReadStrings(ref reader); fields |= ChangedFields.Look; break;
                     case "statuses": statuses = ReadStatuses(ref reader); fields |= ChangedFields.Statuses; break;
+                    case "outfit": outfit = ReadOutfit(ref reader); fields |= ChangedFields.Outfit; break;
                     default: reader.Skip(); break;
                 }
             }
-            into.Add(new ChangeRecord(id, fields, cell, facing, next, speed, key, hp, dead, mine, weapon, worn, statuses));
+            into.Add(new ChangeRecord(id, fields, cell, facing, next, speed, key, hp, dead, mine, weapon, worn, statuses, outfit));
         }
     }
 

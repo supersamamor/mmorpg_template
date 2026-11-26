@@ -22,6 +22,7 @@ namespace Game.Shared.Definitions
                 [typeof(NpcDef)] = NpcDef.IdPrefix,
                 [typeof(DialogueDef)] = DialogueDef.IdPrefix,
                 [typeof(ShopDef)] = ShopDef.IdPrefix,
+                [typeof(OutfitDef)] = OutfitDef.IdPrefix,
                 [typeof(DropTableDef)] = DropTableDef.IdPrefix,
                 [typeof(MapDef)] = MapDef.IdPrefix,
                 [typeof(ExpTableDef)] = ExpTableDef.IdPrefix,

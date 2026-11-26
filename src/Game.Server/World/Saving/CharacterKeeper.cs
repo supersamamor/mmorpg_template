@@ -152,6 +152,9 @@ public sealed class CharacterKeeper(CharacterSaves saves, IPlayerProgressionStor
             UnlockedJobs = progression.UnlockedJobs.Count == 0 ? [] : progression.UnlockedJobs.ToArray(),
             TurnInSequence = progression.TurnInSequence,
             OwedRewards = progression.OwedRewards.Count == 0 ? [] : progression.OwedRewards.ToArray(),
+            Outfits = progression.Wardrobe.Owned.Count == 0 ? [] : progression.Wardrobe.Owned.Order(StringComparer.Ordinal).ToArray(),
+            OutfitSlots = progression.Wardrobe.Chosen.Count == 0 ? NoTexts : new Dictionary<string, string>(progression.Wardrobe.Chosen, StringComparer.Ordinal),
+            OutfitsHidden = progression.Wardrobe.Hidden,
             Items = bag.Entries.Count == 0 ? [] : bag.Entries.ToArray(),   // the entries themselves are immutable
             Currency = bag.Currency,
             SettledTurnIns = bag.SettledTurnIns.Count == 0 ? [] : bag.SettledTurnIns.ToArray(),
@@ -165,4 +168,5 @@ public sealed class CharacterKeeper(CharacterSaves saves, IPlayerProgressionStor
     }
 
     private static readonly IReadOnlyDictionary<string, long> NoTimes = new Dictionary<string, long>();
+    private static readonly IReadOnlyDictionary<string, string> NoTexts = new Dictionary<string, string>();
 }

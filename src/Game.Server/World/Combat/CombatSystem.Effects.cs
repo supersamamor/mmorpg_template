@@ -7,6 +7,8 @@ using Game.Shared.Effects;
 using Game.Shared.Progression;
 using Game.Shared.Vocabulary;
 using Game.Shared.World;
+using Game.Shared.Wardrobe;
+using Game.Server.World.Outfits;
 
 namespace Game.Server.World.Combat;
 
@@ -104,7 +106,7 @@ public sealed partial class CombatSystem
 
     /// <summary>
     /// The rewards of completed quests that the progression host pays (T-602): base and job EXP through <see cref="ProgressionRules"/> (levels reach the sheet as
-    /// for a kill), stat and skill points, job unlocks (<c>requires_unlock</c> of a job change), and statuses through the runner. None of them can fail: the quest is
+    /// for a kill), stat and skill points, job unlocks (<c>requires_unlock</c> of a job change), outfits (T-708), and statuses through the runner. None of them can fail: the quest is
     /// already completed and its items are in the bag. They are owed in the character's progression until this step pays them (T-702): a player who warped in between is paid by
     /// the instance it arrives on, and a saved one when it is loaded. A status needs its bearer alive.
     /// </summary>
@@ -129,6 +131,8 @@ public sealed partial class CombatSystem
         var jobResult = _progression.GainJobExp(state, reward.JobExp);
         _progression.AwardPoints(state, reward.StatPoints, reward.SkillPoints);
         foreach (var job in reward.UnlockJobs) _progression.UnlockJob(state, job);
+        foreach (var outfit in reward.Outfits ?? [])   // T-708: looks only, so there is nothing else to do with it
+            if (WardrobeRules.Grant(state.Wardrobe, outfit)) _context!.Publish(new OutfitGranted(player, outfit));
         foreach (var change in baseResult.Events) _context!.Publish(new PlayerProgressed(player, change));
         foreach (var change in jobResult.Events) _context!.Publish(new PlayerProgressed(player, change));
         _combatants.TryGetValue(player.Value, out var user);

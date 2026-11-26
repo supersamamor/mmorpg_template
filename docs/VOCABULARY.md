@@ -15,6 +15,7 @@ Add new terms here in the same change that introduces them.
 | `npc.`       | NPC                   | `npc.guide`             |
 | `dialogue.`  | Dialogue graph        | `dialogue.guide_intro`  |
 | `shop.`      | Shop (T-603)          | `shop.meadow_goods`     |
+| `outfit.`    | Outfit, looks only (T-708) | `outfit.rain_cloak` |
 | `map.`       | Map                   | `map.starter_town`      |
 | `drop.`      | Drop table            | `drop.slime`            |
 | `exp.`       | EXP table             | `exp.base`              |
@@ -175,6 +176,15 @@ stat modifiers: `equip:<entry id>`. **Rev**: the change counter of the own inven
 `head_top`, `head_mid`, `head_low`, `body`, `weapon`, `shield`, `garment`, `footgear`, `accessory_1`, `accessory_2`
 An item's `equip.slots` lists the slots it fits: it fits **any one** of them (an accessory listing `accessory_1` and `accessory_2` goes in either).
 
+## Outfit slots
+`head`, `face`, `body`, `back`, `feet` (T-708, ARCHITECTURE §7.5.2): where an outfit's piece is drawn. A set of their own, because one look may stand for several equipment slots and nothing may
+hide what a character fights with. Each covers equipment slots: `head` → `head_top`; `face` → `head_mid`, `head_low`; `body` → `body`; `back` → `garment`; `feet` → `footgear`. No outfit slot
+covers `weapon`, `shield` or the accessories. While an outfit shows in a slot, the equipment and the job's pieces of the slots it covers are not drawn (only drawn: every rule still counts them).
+
+## Outfit reasons
+Why a `set_outfit` was refused (T-708), in `OutfitRefused` and on the wire as `rejected` (`intent` `set_outfit`, with `slot` and `item`, the outfit); nothing changed. In this order: `unknown_slot`
+(not an "Outfit slots" term), `unknown_outfit` (the content has none), `not_owned`, `slot_not_covered` (the outfit has no piece for the slot), `wrong_gender` (its piece for the slot is for the other gender).
+
 ## Weapon types
 `unarmed`, `dagger`, `sword_1h`, `sword_2h`, `spear`, `axe`, `mace`, `staff`, `bow`, `knuckle`
 Two-handed (`balance.yaml` `inventory.two_handed_weapon_types`): `sword_2h`, `staff`, `bow`. Such a weapon in `weapon` also takes the `shield` slot (ARCHITECTURE §6.8).
@@ -192,12 +202,12 @@ step is turned in), `talk` (`NpcTalked` with the NPC, counted only when every ot
 `equip` (`ItemEquipped`, or worn when the step starts; latched).
 
 ## Reward types
-`exp`, `item`, `currency`, `skill_point`, `stat_point`, `unlock_job`, `status`
+`exp`, `item`, `currency`, `skill_point`, `stat_point`, `unlock_job`, `status`, `outfit`
 
 Paid when the last step is turned in (T-602). `item` and `currency` go into the bag in the same inventory transaction as the step's consumed items (all or nothing);
 when they do not fit (`inventory_full`, `too_heavy`) **the quest waits**: nothing changed, the step stays met and *held*, and it is tried again whenever the bag changes.
 Then `exp` (through `ProgressionRules`), `skill_point`, `stat_point`, `unlock_job` (`UnlockedJobs`, a job change's `requires_unlock`) and `status` are paid by the
-progression host; none of them can fail.
+progression host; none of them can fail. `outfit` (T-708) is granted there too: the character owns it from then on, and owning it already changes nothing. It is never put on by itself.
 
 ## Quest states
 The `state` of a `quest_state` dialogue condition (T-602): `not_started` (neither active nor completed; an abandoned quest is not started), `available` (a start would be
@@ -277,7 +287,8 @@ Any reason other than `finished` ends the services the dialogue opened too.
 `StatRaised`, `StatRaiseRefused`, `StatsReset`, `SkillsReset`,
 `DialogueShown`, `DialogueEnded`, `DialogueRefused`, `ServiceOpened`, `ShopOpened`, `QuestStartRequested`, `SavePointSet`, `DialogueEffectsRequested`, `DialogueItemsRequested`, `DialogueItemsResolved`,
 `QuestProgressed`, `QuestAbandoned`, `QuestRefused`, `QuestItemsRequested`, `QuestItemsResolved`, `QuestRewardsRequested`, `QuestRewarded`, `QuestMarkersChanged`,
-`AutopilotChanged`, `AutopilotRefused`
+`AutopilotChanged`, `AutopilotRefused`,
+`OutfitGranted`, `WardrobeChanged`, `OutfitRefused`
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -285,13 +296,14 @@ Any reason other than `finished` ends the services the dialogue opened too.
 **Snapshot**: an observer's full view. **Delta**: one tick's `appeared` / `changed` / `disappeared`.
 
 ## View fields
-In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`, `speed`, `display_key`, `hp`, `dead`, `mine`, `weapon`, `worn`, `statuses`.
+In a view record and in a delta's `changed` field set: `cell`, `facing`, `next`, `speed`, `display_key`, `hp`, `dead`, `mine`, `weapon`, `worn`, `statuses`, `outfit`.
 `hp`: HP as a fraction 0–1 in steps of 0.01 (never 0 while alive, never 1 while hurt), only for entities that fight. `dead`: true while dead.
 `mine`: a ground item only, true when this client may pick it up now. `weapon` (a "Weapon types" term) and `worn` (item ids with a worn visual, in
 "Equipment slots" order): players only, what they hold and wear; a change sends both.
 `statuses` (T-501): every entity's active statuses, each `{id, stacks, left_ms, debuff}` (`left_ms`: simulated ms left at the message's tick; `debuff` only when
 true), sent when one starts, stacks, is refreshed or ends (the whole list; empty when none is left), never per tick; never a chance, a number or the applier. A ground item's record also has `quantity` (it never changes).
 A player's record in a snapshot or an `appeared` entry also has `appearance` (T-705): `{gender, skin, face, hair, hair_color}`, ids from `appearance.yaml`; it is not a view field, a `changed` record never carries it.
+`outfit` (T-708): a player's shown outfits by slot, `{"head":"outfit.x"}` ("Outfit slots" terms to outfit ids), left out of a record when none shows; a change sends all of them (`{}`: none). Looks only.
 A delta may also carry `hits` (this tick's attacks the client can see: `[attacker, target, amount, result]` with a "Hit results" term) and
 `vitals` (the client's own `hp`, `max_hp`, `sp`, `max_sp`, when they changed; also in every snapshot).
 
@@ -378,9 +390,9 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `pong`, `bye`
-Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`.
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`, `set_outfit`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`, `pong`, `bye`
+Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
@@ -397,7 +409,7 @@ The client reconnects after neither. `resume_failed`: the token in `hello` `resu
 client goes to the login screen and does not retry by itself (T-702, ARCHITECTURE §3 "Saving characters").
 `session_ended`: the account session the character is played with was ended (signed out, pushed out by a newer sign-in, or a password change), so the character left the world and is saved. The client goes to the login screen (T-710).
 A `rejected` message carries a "Movement reasons" (`MoveRejected`) term for `move`, an "Attack reasons" term for `attack`, or an "Item reasons" term for an
-item intent (`shop_buy` and `shop_sell` included), instead; the session goes on.
+item intent (`shop_buy` and `shop_sell` included), or an "Outfit reasons" term for `set_outfit`, instead; the session goes on.
 
 ## Account errors
 The `error` of a refused account request (T-701, ARCHITECTURE §10 "Accounts"): `invalid_request`, `invalid_username`, `invalid_password`, `same_password`, `username_taken`,
@@ -408,6 +420,10 @@ Appearance refusals (T-705): an id is unknown, or a face or hairstyle is not the
 **Account**: who signs in (a username and a password). **Session token**: proves a sign-in to the account endpoints and in `hello`; stored on the server as its SHA-256.
 **Resume token**: takes a character back after a drop; server memory only (ARCHITECTURE §10). **Character id**: a character's permanent id, a GUID; not the runtime
 entity id. **Slot**: a character's place in its account, from 0 (`characters.max_slots` in `balance.yaml`).
+
+## Wardrobe terms
+(T-708, ARCHITECTURE §7.5.2.) **Outfit**: an `outfit.*` definition, looks only. **Owned**: in the character's wardrobe, each outfit once, saved with it. **Chosen**: what a slot shows of the owned outfits. **Hidden**: the switch that shows every
+outfit as nothing, keeping the choices. **Shown**: the choices that stand (owned, known to the content, with a piece for the slot and the character's gender), unless hidden; what others see.
 
 ## Saving terms
 (T-702, ARCHITECTURE §3 "Saving characters".) **Copy**: a character's whole state, taken on the tick thread. **Save**: a copy in the database, with a number that only goes up. **Claim**: which stay of a character may

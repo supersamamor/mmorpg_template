@@ -24,6 +24,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>status</c>: Apply a status.</summary>
         public const string Status = "status";
 
+        /// <summary><c>outfit</c>: An outfit for the wardrobe (T-708), cosmetic only.</summary>
+        public const string Outfit = "outfit";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             Exp,
@@ -32,6 +35,7 @@ namespace Game.Shared.Vocabulary
             SkillPoint,
             StatPoint,
             UnlockJob,
-            Status);
+            Status,
+            Outfit);
     }
 }

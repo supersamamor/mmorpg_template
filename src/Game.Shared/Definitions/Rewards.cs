@@ -89,4 +89,14 @@ namespace Game.Shared.Definitions
         /// <summary>Duration in milliseconds.</summary>
         public int DurationMs { get; init; }
     }
+
+    /// <summary><c>outfit</c> (T-708): an outfit for the character's wardrobe; owning it already changes nothing. Cosmetic only.</summary>
+    public sealed record OutfitReward : RewardDef
+    {
+        /// <inheritdoc />
+        public override string Type => RewardTypes.Outfit;
+
+        /// <summary>Outfit id (<c>outfit.*</c>).</summary>
+        public string OutfitId { get; init; } = string.Empty;
+    }
 }

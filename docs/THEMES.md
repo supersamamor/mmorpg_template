@@ -109,6 +109,17 @@ theme supplies the models. The character's colours are **vertex colours**: paint
 - **Job pieces** (`look.pieces` in `content/jobs/*.yaml`) are worn pieces: exactly one of `attach` and `skinned` (**checked**), and gear in the piece's slot is drawn instead of it.
 - *By eye*, on the creation screen (`run-e2e.ps1 -Run appearance -Windowed -Screenshot shot.png`): every hairstyle on every face, the darkest and lightest tones, and headgear over long hair.
 
+### 1.8 Outfits (T-708)
+
+An outfit's pieces (`content/outfits/*.yaml`, ARCHITECTURE §7.5.2) are **worn pieces**, like equipment: each `model.*` key needs exactly one of `attach` and `skinned` (**checked**), and is merged into the
+character's one mesh in place of the gear of the slots it covers. Model a piece just outside the body (a coat over the torso and the hips, a hood over the head), on the shared `humanoid` rig.
+- **One per gender** where the body differs: give the outfit a piece per gender for that slot (the template's Rain Cloak has two coats).
+- **Colours:** a piece keeps its own vertex colours, unless the outfit lists `takes_colors`; then the parts painted with a role's colours (the contract's, §1.7, or the entry's `recolor`) take the
+  character's. The template's coat is painted with the cloth paint (`#efe3c8`, `#bbb19c`), so it takes the job's colour. An outfit that takes a colour none of its pieces is painted with is **checked** as a warning.
+- **`hides_hair`** on a head piece takes the hairstyle off while it shows (the template's hood); keep a scalp on the body.
+- **Budgets:** a piece is a worn piece (1,000 triangles at most, **checked**), and the body with its outfit is one mesh: keep a full outfit in the size of the gear it replaces.
+- Never a texture of its own unless it shares the character's atlas: it would be one more draw call per character wearing it (§1.7).
+
 ## 2. Variants
 
 One model can serve several keys. A variant entry names another entry's key in `variant_of` and draws that model, optionally changed:

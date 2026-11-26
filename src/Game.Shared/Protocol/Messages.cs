@@ -176,6 +176,19 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.StopAutopilot;
     }
 
+    /// <summary>
+    /// <c>set_outfit</c> (T-708): either what shows in one slot (<c>slot</c>, and <c>outfit</c> or nothing) or the switch that hides every outfit (<c>hidden</c>). Exactly one of
+    /// <paramref name="Slot"/> and <paramref name="Hidden"/> is given. A request: the server may refuse it (<c>rejected</c>, an "Outfit reasons" term).
+    /// </summary>
+    /// <param name="Slot">An "Outfit slots" term.</param>
+    /// <param name="Outfit">The outfit to show there; null: nothing.</param>
+    /// <param name="Hidden">Hide every outfit, or show the choices again.</param>
+    public sealed record SetOutfitMessage(string? Slot, string? Outfit = null, bool? Hidden = null) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.SetOutfit;
+    }
+
     /// <summary><c>stop_attack</c>: stop auto-attacking (a walk goes on). <c>{"type":"stop_attack"}</c>.</summary>
     public sealed record StopAttackMessage : ClientMessage
     {
@@ -330,9 +343,39 @@ namespace Game.Shared.Protocol
     /// bundle); null or empty when none. Never stats.</param>
     /// <param name="Statuses">Its active statuses (T-501), in application order; null or empty when none. Left out of the JSON when empty.</param>
     /// <param name="Appearance">A player: its looks as ids (T-705), in <c>snapshot</c> entries and <c>appeared</c> entries only; null for every other kind. Never in a change.</param>
+    /// <param name="Outfit">A player: the outfits it shows by slot (T-708), in "Outfit slots" order; null or empty when none. Left out of the JSON when empty. Display only.</param>
     public sealed record EntityRecord(long Id, string Kind, string? DisplayKey, GridCell Cell, string Facing, GridCell? Next, double Speed,
         double? Hp = null, bool Dead = false, int Quantity = 0, bool? Mine = null, string? Weapon = null, IReadOnlyList<string>? Worn = null,
-        IReadOnlyList<StatusRecord>? Statuses = null, AppearanceRecord? Appearance = null);
+        IReadOnlyList<StatusRecord>? Statuses = null, AppearanceRecord? Appearance = null, IReadOnlyList<ShownOutfit>? Outfit = null);
+
+    /// <summary>One slot that shows an outfit (T-708): an "Outfit slots" term and the outfit id. On the wire a list of them is an object, <c>{"head":"outfit.x"}</c>.</summary>
+    public readonly struct ShownOutfit : IEquatable<ShownOutfit>
+    {
+        /// <summary>Creates one.</summary>
+        public ShownOutfit(string slot, string outfit)
+        {
+            Slot = slot;
+            Outfit = outfit;
+        }
+
+        /// <summary>The slot.</summary>
+        public string Slot { get; }
+
+        /// <summary>The outfit id.</summary>
+        public string Outfit { get; }
+
+        /// <inheritdoc />
+        public bool Equals(ShownOutfit other) => Slot == other.Slot && Outfit == other.Outfit;
+
+        /// <inheritdoc />
+        public override bool Equals(object? obj) => obj is ShownOutfit other && Equals(other);
+
+        /// <inheritdoc />
+        public override int GetHashCode() => (Slot?.GetHashCode() ?? 0) * 397 ^ (Outfit?.GetHashCode() ?? 0);
+
+        /// <inheritdoc />
+        public override string ToString() => Slot + "=" + Outfit;
+    }
 
     /// <summary>
     /// One status on an entity, as every observer is told (ARCHITECTURE §10, T-501): <c>{"id":"status.poison","stacks":1,"left_ms":7400,"debuff":true}</c>.
@@ -402,6 +445,9 @@ namespace Game.Shared.Protocol
 
         /// <summary><c>statuses</c> (one started, stacked, was refreshed or ended; the whole list is sent, empty when none is left).</summary>
         Statuses = 512,
+
+        /// <summary><c>outfit</c> (T-708).</summary>
+        Outfit = 1024,
     }
 
     /// <summary>
@@ -421,9 +467,10 @@ namespace Game.Shared.Protocol
     /// <param name="Weapon">New weapon type, when <see cref="ChangedFields.Look"/>.</param>
     /// <param name="Worn">New worn item ids, when <see cref="ChangedFields.Look"/> (empty: nothing visible).</param>
     /// <param name="Statuses">All its statuses now, when <see cref="ChangedFields.Statuses"/> (empty: none left).</param>
+    /// <param name="Outfit">All the outfits it shows now, when <see cref="ChangedFields.Outfit"/> (empty: none).</param>
     public sealed record ChangeRecord(long Id, ChangedFields Fields, GridCell Cell, string? Facing, GridCell? Next, double Speed, string? DisplayKey,
         double Hp = 0, bool Dead = false, bool Mine = false, string? Weapon = null, IReadOnlyList<string>? Worn = null,
-        IReadOnlyList<StatusRecord>? Statuses = null);
+        IReadOnlyList<StatusRecord>? Statuses = null, IReadOnlyList<ShownOutfit>? Outfit = null);
 
     /// <summary>
     /// One attack seen in a tick, in a delta's <c>hits</c> as a compact array <c>[attacker, target, amount, result]</c>, e.g. <c>[42,7,13,"crit"]</c>.
@@ -519,6 +566,16 @@ namespace Game.Shared.Protocol
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Autopilot;
+    }
+
+    /// <summary><c>wardrobe</c> (T-708, owner only): after every snapshot and whenever something of it changes; it replaces what the client had. Ids only.</summary>
+    /// <param name="Owned">The outfits the character owns, in id order.</param>
+    /// <param name="Chosen">What is chosen by slot, also while it is hidden.</param>
+    /// <param name="Hidden">Every outfit is hidden.</param>
+    public sealed record WardrobeMessage(IReadOnlyList<string> Owned, IReadOnlyList<ShownOutfit> Chosen, bool Hidden) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Wardrobe;
     }
 
     /// <summary>

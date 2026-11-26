@@ -8,6 +8,7 @@ using Game.Server.World.Inventory;
 using Game.Server.World.Monsters;
 using Game.Server.World.Quests;
 using Game.Server.World.Saving;
+using Game.Server.World.Outfits;
 
 namespace Game.Server.Hosting;
 
@@ -141,7 +142,8 @@ public static class ServerPipeline
     /// positions movement just produced, and a death it causes is seen by the spawner and the AI in phase 4 of the same tick. The dialogue system (NPCs and their talk) runs after the AI and before combat, and the inventory comes
     /// after combat: a drop combat makes this tick is added in phase 3 and can be picked up from the next, and a weapon put on counts from the next
     /// swing. The quest system (T-602) comes after the inventory: it reacts to the previous tick's events (kills, uses, talks, bag changes) and its turn-ins go to the
-    /// inventory and combat as events, applied on their next tick. The autopilot (T-604) comes after all of them: it looks at what this tick made of
+    /// inventory and combat as events, applied on their next tick. The outfit system (T-708) only says what
+    /// others see, so its place does not matter. The autopilot (T-604) comes after all of them: it looks at what this tick made of
     /// the world and queues intents, which the systems get in the next tick like a player's. The AOI does
     /// its work in phase 5 (outbound), after every system, so its place in the list only orders its intents; it is last.
     /// </summary>
@@ -165,6 +167,7 @@ public static class ServerPipeline
         var dialogue = DialogueContent.From(content);   // and the NPCs (a placement of an unknown NPC fails at the first tick)
         var quests = QuestContent.From(content);         // and the quest numbers
         var shops = ShopContent.From(content);           // and the shops with their prices resolved
+        var outfits = new Game.Shared.Wardrobe.WardrobeRules(content.Outfits.All);   // and what outfits there are (T-708)
         var autopilot = AutopilotContent.From(content);  // and the autopilot numbers, with every journey it may have to make worked out
         var pipeline = new SystemPipeline()
             .Add(() => MovementSystem.Create(balance))
@@ -174,6 +177,7 @@ public static class ServerPipeline
             .Add(() => new CombatSystem(combat, progressions, savePoints))
             .Add(() => new InventorySystem(items, inventories, clock, progressions, shops))
             .Add(() => new QuestSystem(quests, progressions, inventories))
+            .Add(() => new OutfitSystem(outfits, progressions))
             .Add(() => new AutopilotSystem(autopilot, progressions, clock))
             .Add(() => AoiSystem.Create(balance));
         if (keeper is not null) pipeline.Add(() => new SaveSystem(keeper, clock, keeper.Saves.Options.IntervalMs));

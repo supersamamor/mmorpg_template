@@ -26,7 +26,12 @@ internal static class SchemaRules
         ["Stat"] = Stats.All,
         ["Facing"] = Directions.All,
         ["Failure"] = RefineFailures.All,
+        ["TakesColors"] = AppearanceColorRoles.All,
     };
+
+    /// <summary>The vocabulary of a string member: by the member itself where its name means something else there (an outfit's slot is no equipment slot, T-708), else by name.</summary>
+    public static VocabularySet? EnumOf(Type declaringType, string name) =>
+        declaringType == typeof(OutfitPieceDef) && name == nameof(OutfitPieceDef.Slot) ? OutfitSlots.All : Enums.GetValueOrDefault(name);
 
     /// <summary>(declaring type, property) → vocabulary per dictionary nesting level, for the keys.</summary>
     public static readonly IReadOnlyDictionary<(Type Type, string Property), VocabularySet[]> DictionaryKeys =
@@ -44,6 +49,7 @@ internal static class SchemaRules
         ("ExpTableId", IdPrefixes.Exp),
         ("DialogueId", IdPrefixes.Dialogue),
         ("ShopId", IdPrefixes.Shop),
+        ("OutfitId", IdPrefixes.Outfit),
         ("MonsterId", IdPrefixes.Monster),
         ("StatusId", IdPrefixes.Status),
         ("SkillId", IdPrefixes.Skill),

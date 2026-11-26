@@ -31,6 +31,10 @@ public sealed class LookView
     private AppearanceRecord? _looks;
     private string? _job;
     private bool _shown;
+    private string? _weapon;
+    private IReadOnlyList<string> _worn = Array.Empty<string>();
+    private IReadOnlyList<ShownOutfit> _outfit = Array.Empty<ShownOutfit>();
+    private int _gear;
     private bool _settled;
     private bool _renderPending;
     private bool _renderNow;
@@ -98,6 +102,7 @@ public sealed class LookView
         {
             if (_visual is not null) _entities.Discard(_visual);
             _visual = _entities.Preview(_stage!, jobId, looks);
+            PutOn(_visual);
             _visual.SetDetail(0);
             _visual.SetOutline(true); // as the world draws a character near the player
             _visual.SetMotion(false, 0, 0);
@@ -107,6 +112,28 @@ public sealed class LookView
         SetMode();
     }
 
+    /// <summary>
+    /// What the character shown wears (T-708: the wardrobe's preview shows exactly what others see): its weapon type, worn items and shown outfits. <paramref name="version"/> moves when
+    /// the gear changed. Without this a view shows no gear and no outfit, as the creation screen's does.
+    /// </summary>
+    public void Dress(string? weapon, IReadOnlyList<string> worn, IReadOnlyList<ShownOutfit> outfit, int version)
+    {
+        if (weapon == _weapon && version == _gear && ReferenceEquals(outfit, _outfit)) return;
+        _weapon = weapon;
+        _worn = worn;
+        _outfit = outfit;
+        _gear = version;
+        if (_visual is null) return;
+        PutOn(_visual);
+        _settled = false;
+    }
+
+    private void PutOn(ModelVisual visual)
+    {
+        visual.SetOutfit(_outfit);
+        visual.SetGear(_weapon, _worn, _gear);
+    }
+
     /// <summary>Frees the character and stops rendering.</summary>
     public void Clear()
     {
@@ -114,6 +141,10 @@ public sealed class LookView
         if (_visual is not null) _entities.Discard(_visual);
         _visual = null;
         _looks = null;
+        _weapon = null;
+        _worn = Array.Empty<string>();
+        _outfit = Array.Empty<ShownOutfit>();
+        _gear = 0;
         _settled = false;
         _renderPending = _renderNow = false;
         _table.Reset();

@@ -36,6 +36,7 @@ public sealed class ReferenceRule : IValidationRule
         RefKind.Npc => db.Npcs,
         RefKind.Dialogue => db.Dialogue,
         RefKind.Shop => db.Shops,
+        RefKind.Outfit => db.Outfits,
         RefKind.Drop => db.Drops,
         RefKind.Map => db.Maps,
         RefKind.ExpTable => db.ExpTables,

@@ -231,6 +231,7 @@ public static class WornSet
         {
             // A face or hairstyle takes the character's colours where the same file worn as gear would not, so its role is part of the key.
             var role = dressed[i].Role == PartRole.Hair ? "hair:" : dressed[i].Role == PartRole.Face ? "face:" : string.Empty;
+            if (dressed[i].TakesColors is { Count: > 0 } takes) role = "takes " + string.Join(",", takes) + ":"; // an outfit's piece (T-708)
             parts[i] = role + Part(dressed[i].Piece);
         }
         Array.Sort(parts, StringComparer.Ordinal);

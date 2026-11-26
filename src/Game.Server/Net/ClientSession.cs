@@ -9,6 +9,7 @@ using Game.Server.World.Inventory;
 using Game.Server.World.Quests;
 using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
+using Game.Server.World.Outfits;
 
 namespace Game.Server.Net;
 
@@ -148,6 +149,7 @@ public sealed class ClientSession : IViewSink
         _gateway.PostSkills(snapshot.MapId, snapshot.Observer); // and the own skills, points and cooldowns
         _gateway.PostStats(snapshot.MapId, snapshot.Observer); // and the own stats, stat points and derived stats (T-503)
         _gateway.PostQuests(snapshot.Observer); // and the own quest log and NPC markers (T-602)
+        _gateway.PostWardrobe(snapshot.MapId, snapshot.Observer); // and the own outfits (T-708)
         if (!_autopilotTold)
         {
             _autopilotTold = true;
@@ -462,6 +464,12 @@ public sealed class ClientSession : IViewSink
                 break;
             case RaiseStatMessage raise:
                 if (Entity is { } raiser) _gateway.Enqueue(new RaiseStat(raiser, raise.Stat, raise.Amount));
+                break;
+            case SetOutfitMessage { Hidden: { } hidden }:
+                if (Entity is { } hider) _gateway.Enqueue(new HideOutfits(hider, hidden));
+                break;
+            case SetOutfitMessage { Slot: { } outfitSlot } outfit:
+                if (Entity is { } dresser) _gateway.Enqueue(new SetOutfit(dresser, outfitSlot, outfit.Outfit));
                 break;
             case ChangeJobMessage job:
                 if (Entity is { } changer) _gateway.Enqueue(new ChangeJob(changer, job.Job));

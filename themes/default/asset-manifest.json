@@ -137,6 +137,12 @@
   "icon.job.warden": {
     "file": "icons/job/warden.png"
   },
+  "icon.outfit.harvest_garland": {
+    "file": "icons/outfit/harvest_garland.png"
+  },
+  "icon.outfit.rain_cloak": {
+    "file": "icons/outfit/rain_cloak.png"
+  },
   "icon.skill.call_seedling": {
     "file": "icons/skill/call_seedling.png"
   },
@@ -348,6 +354,31 @@
     "file": "models/npc/trainer.glb",
     "rig": "humanoid",
     "anims": "anim.humanoid"
+  },
+  "model.outfit.harvest_sash": {
+    "file": "models/outfit/harvest_sash.glb",
+    "skinned": "humanoid"
+  },
+  "model.outfit.harvest_wreath": {
+    "file": "models/outfit/harvest_wreath.glb",
+    "attach": "head"
+  },
+  "model.outfit.rain_cape": {
+    "file": "models/outfit/rain_cape.glb",
+    "skinned": "humanoid"
+  },
+  "model.outfit.rain_coat_female": {
+    "file": "models/outfit/rain_coat_female.glb",
+    "skinned": "humanoid"
+  },
+  "model.outfit.rain_coat_male": {
+    "file": "models/outfit/rain_coat_male.glb",
+    "skinned": "humanoid"
+  },
+  "model.outfit.rain_hood": {
+    "file": "models/outfit/rain_hood.glb",
+    "attach": "head",
+    "hides_hair": true
   },
   "model.prop.loot_bag": {
     "file": "models/prop/loot_bag.glb"

@@ -4,7 +4,7 @@ using Game.Shared.Definitions;
 namespace Game.Content.Validation.Rules;
 
 /// <summary>The kind of definition an id is expected to point at.</summary>
-internal enum RefKind { Job, Skill, Item, Monster, Status, Quest, Npc, Dialogue, Shop, Drop, Map, ExpTable }
+internal enum RefKind { Job, Skill, Item, Monster, Status, Quest, Npc, Dialogue, Shop, Outfit, Drop, Map, ExpTable }
 
 /// <summary>An id used inside a definition. <see cref="Path"/> is in YAML key naming.</summary>
 internal readonly record struct IdRef(string Owner, string Path, string Id, RefKind Kind);
@@ -154,6 +154,7 @@ internal static class ContentWalker
                     case ItemReward r: yield return new(q.Id, p + ".item_id", r.ItemId, RefKind.Item); break;
                     case UnlockJobReward u: yield return new(q.Id, p + ".job_id", u.JobId, RefKind.Job); break;
                     case StatusReward s: yield return new(q.Id, p + ".status_id", s.StatusId, RefKind.Status); break;
+                    case OutfitReward o: yield return new(q.Id, p + ".outfit_id", o.OutfitId, RefKind.Outfit); break;
                 }
             }
         }
@@ -239,6 +240,11 @@ internal static class ContentWalker
             yield return new(m.Id, "scene_asset_key", m.SceneAssetKey, true);
             yield return new(m.Id, "music_asset_key", m.MusicAssetKey, false);
             yield return new(m.Id, "ambience_asset_key", m.AmbienceAssetKey, false);
+        }
+        foreach (var o in db.Outfits.All)
+        {
+            yield return new(o.Id, "icon_asset_key", o.IconAssetKey, true);
+            for (var i = 0; i < o.Pieces.Count; i++) yield return new(o.Id, $"pieces[{i}].model_asset_key", o.Pieces[i].ModelAssetKey, true);
         }
         foreach (var d in db.Dialogue.All)
             foreach (var (key, node) in d.Nodes)

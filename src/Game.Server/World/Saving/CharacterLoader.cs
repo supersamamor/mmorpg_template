@@ -95,6 +95,7 @@ public sealed class CharacterLoader
         var asideItems = new List<SetAsideItem>();
         var inventory = Inventory(saved, progression, asideItems, notes);
         Quests(saved, progression, aside, notes);
+        Wardrobe(saved, progression, notes);
 
         SavePoint? savePoint = saved.SavePoint;
         if (savePoint is { } point && !Walkable(point.MapId, point.Cell))
@@ -222,6 +223,18 @@ public sealed class CharacterLoader
             }
             state.ActiveQuests[quest.QuestId] = QuestProgress.Load(quest.QuestId, step, counters, quest.Token);
         }
+    }
+
+    /// <summary>The outfits as they were (T-708): an id the content has lost is kept where it is and counts for nothing, so it comes back with the content, like a look.</summary>
+    private void Wardrobe(CharacterState saved, ProgressionState state, List<string> notes)
+    {
+        foreach (var outfit in saved.Outfits)
+        {
+            state.Wardrobe.Owned.Add(outfit);
+            if (!_content.Outfits.Contains(outfit)) notes.Add($"outfit {outfit} no longer exists: kept, not shown");
+        }
+        foreach (var (slot, outfit) in saved.OutfitSlots) state.Wardrobe.Chosen[slot] = outfit;
+        state.Wardrobe.Hidden = saved.OutfitsHidden;
     }
 
     // ---- items --------------------------------------------------------------------------------------------------------------------------

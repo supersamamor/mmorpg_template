@@ -119,6 +119,8 @@ public sealed class DisplayBundle
     private readonly Dictionary<string, NpcDisplay> _npcs = new(StringComparer.Ordinal);
     private readonly Dictionary<string, QuestDisplay> _quests = new(StringComparer.Ordinal);
     private readonly Dictionary<string, JobLook> _jobLooks = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ClientOutfit> _outfits = new(StringComparer.Ordinal);
+    private readonly List<ClientOutfit> _outfitList = new();
     private readonly List<RefineStep> _refineSteps = new List<RefineStep>();
 
     private DisplayBundle(int formatVersion, string contentHash)
@@ -188,6 +190,12 @@ public sealed class DisplayBundle
     /// <summary>What a job adds to a character's body (T-706); <see cref="JobLook.None"/> for an id the bundle does not have or a job that adds nothing.</summary>
     public JobLook JobLookOf(string? jobId) => jobId is not null && _jobLooks.TryGetValue(jobId, out var look) ? look : JobLook.None;
 
+    /// <summary>The outfits (T-708), in id order.</summary>
+    public IReadOnlyList<ClientOutfit> Outfits => _outfitList;
+
+    /// <summary>An outfit, or null for an id the bundle does not have.</summary>
+    public ClientOutfit? Outfit(string? outfitId) => outfitId is not null && _outfits.TryGetValue(outfitId, out var outfit) ? outfit : null;
+
     /// <summary>The character-creation options (T-706), or null in a bundle without them: characters are then drawn by their job's model.</summary>
     public ClientAppearance? Appearance { get; private set; }
 
@@ -252,6 +260,7 @@ public sealed class DisplayBundle
                 result._names[data.Id] = data.Name;
             }
             ReadRefine(result, root);
+            ReadOutfits(result, root);
             result.Appearance = ReadAppearance(root);
             result.CurrencyName = OptionalText(root, "currency_name") ?? string.Empty;
             bundle = result;
@@ -335,6 +344,24 @@ public sealed class DisplayBundle
             foreach (var piece in list.EnumerateArray()) pieces.Add(new ClientJobPiece(Text(piece, "model"), OptionalText(piece, "gender"), OptionalText(piece, "slot")));
         var cloth = OptionalText(entry, "cloth_color");
         return cloth is null && pieces.Count == 0 ? JobLook.None : new JobLook(cloth, pieces);
+    }
+
+    private static void ReadOutfits(DisplayBundle result, JsonElement root)
+    {
+        if (!root.TryGetProperty("outfits", out var all) || all.ValueKind != JsonValueKind.Array) return;
+        foreach (var entry in all.EnumerateArray())
+        {
+            var pieces = new List<ClientOutfitPiece>();
+            foreach (var piece in entry.GetProperty("pieces").EnumerateArray())
+                pieces.Add(new ClientOutfitPiece(Text(piece, "slot"), Text(piece, "model"), OptionalText(piece, "gender")));
+            var colors = new List<string>();
+            if (entry.TryGetProperty("takes_colors", out var list) && list.ValueKind == JsonValueKind.Array)
+                foreach (var color in list.EnumerateArray()) colors.Add(color.GetString() ?? string.Empty);
+            var outfit = new ClientOutfit(Text(entry, "id"), Text(entry, "name"), OptionalText(entry, "description"), Text(entry, "icon"), colors, pieces);
+            result._outfits[outfit.Id] = outfit;
+            result._outfitList.Add(outfit);
+            result._names[outfit.Id] = outfit.Name;
+        }
     }
 
     private static ClientAppearance? ReadAppearance(JsonElement root)

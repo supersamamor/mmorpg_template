@@ -46,6 +46,7 @@ public static class ContentLoader
         var npcs = ctx.LoadFolder<NpcDef>();
         var dialogue = ctx.LoadFolder<DialogueDef>();
         var shops = ctx.LoadFolder<ShopDef>();
+        var outfits = ctx.LoadFolder<OutfitDef>();
         var drops = ctx.LoadFolder<DropTableDef>();
         var maps = ctx.LoadFolder<MapDef>();
         var expTables = ctx.LoadRootDefs<ExpTableDef>(ContentLayout.ExpTablesFile);
@@ -80,7 +81,7 @@ public static class ContentLoader
             new Registry<MonsterDef>(monsters), new Registry<StatusDef>(statuses), new Registry<QuestDef>(quests),
             new Registry<NpcDef>(npcs), new Registry<DialogueDef>(dialogue), new Registry<DropTableDef>(drops),
             new Registry<MapDef>(maps), new Registry<ExpTableDef>(expTables), formulas!, elements!, balance!, appearance!, ctx.Sources, grids, refine!,
-            new Registry<ShopDef>(shops));
+            new Registry<ShopDef>(shops), new Registry<OutfitDef>(outfits));
         return new LoadResult(db, errors);
     }
 

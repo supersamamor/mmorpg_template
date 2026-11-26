@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OutfitDef",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^outfit\\.[a-z0-9_]+$",
+      "description": "Outfit id, e.g. outfit.rain_cloak."
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name."
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Display description."
+    },
+    "icon_asset_key": {
+      "type": "string",
+      "pattern": "^icon\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+      "description": "Icon (icon.*) in the wardrobe."
+    },
+    "takes_colors": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "skin",
+          "hair",
+          "cloth"
+        ]
+      },
+      "description": "The character's own colours its pieces take (AppearanceColorRoles: the skin tone, the hair colour, the job's cloth colour), where the theme's models are painted with them. Empty: the pieces keep their own colours."
+    },
+    "pieces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "slot": {
+            "type": "string",
+            "enum": [
+              "head",
+              "face",
+              "body",
+              "back",
+              "feet"
+            ],
+            "description": "Outfit slot (OutfitSlots): equipment and job pieces of the equipment slots it covers are not drawn while this is."
+          },
+          "model_asset_key": {
+            "type": "string",
+            "pattern": "^model\\.[a-z0-9_]+(\\.[a-z0-9_]+)*$",
+            "description": "Piece model (model.*): attach or skinned in the theme manifest, like worn equipment."
+          },
+          "gender": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "male",
+              "female",
+              null
+            ],
+            "description": "Gender it is for (Genders). Null: both."
+          }
+        },
+        "additionalProperties": false,
+        "description": "One piece of an outfit: what is drawn in one slot.",
+        "required": [
+          "slot",
+          "model_asset_key"
+        ]
+      },
+      "description": "Its pieces; the slots it covers are the ones that have a piece. At least one. A slot has one piece for everyone, or at most one per gender."
+    }
+  },
+  "additionalProperties": false,
+  "description": "An outfit (T-708, ARCHITECTURE §7.5.2): something a character can own and show in place of its gear. It only ever changes how a character looks. There is no field here for a modifier, an effect, a requirement, a price or a drop, and none may be added: an unknown key is a load error, and no item, shop or drop table can name an outfit.",
+  "required": [
+    "id",
+    "name",
+    "icon_asset_key"
+  ]
+}

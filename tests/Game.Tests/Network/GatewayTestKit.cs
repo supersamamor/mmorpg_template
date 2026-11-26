@@ -392,6 +392,7 @@ public sealed class TestClient : IDisposable
                     if ((c.Fields & ChangedFields.Hp) != 0) r = r with { Hp = c.Hp };
                     if ((c.Fields & ChangedFields.Dead) != 0) r = r with { Dead = c.Dead };
                     if ((c.Fields & ChangedFields.Mine) != 0) r = r with { Mine = c.Mine };
+                    if ((c.Fields & ChangedFields.Outfit) != 0) r = r with { Outfit = c.Outfit };
                     _view[c.Id] = r;
                 }
                 foreach (var id in d.Disappeared) _view.Remove(id);

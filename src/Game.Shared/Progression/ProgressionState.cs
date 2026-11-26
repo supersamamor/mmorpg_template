@@ -59,6 +59,12 @@ namespace Game.Shared.Progression
         /// <summary>Job ids unlocked by an <c>unlock_job</c> reward (T-602: applied by the progression host from a completed quest).</summary>
         public HashSet<string> UnlockedJobs { get; } = new HashSet<string>(StringComparer.Ordinal);
 
+        /// <summary>
+        /// Owned outfits and what shows of them (T-708); changed only by <see cref="Game.Shared.Wardrobe.WardrobeRules"/>. Kept here so it travels and is saved with the rest of the
+        /// character; no rule of progression, stats or combat reads it.
+        /// </summary>
+        public Game.Shared.Wardrobe.WardrobeState Wardrobe { get; } = new Game.Shared.Wardrobe.WardrobeState();
+
         /// <summary>Learned level of a skill, 0 if not learned.</summary>
         /// <param name="skillId">Skill id.</param>
         public int SkillLevel(string skillId) => Skills.TryGetValue(skillId, out var level) ? level : 0;
@@ -76,6 +82,7 @@ namespace Game.Shared.Progression
     /// <param name="SkillPoints">Skill points.</param>
     /// <param name="UnlockJobs">Job ids unlocked.</param>
     /// <param name="StatusKeys">Compiled <c>apply_status</c> effects to run (<c>QuestRules.RewardKey</c>).</param>
+    /// <param name="Outfits">Outfit ids to grant (T-708); null when there are none, and in what was saved before T-708.</param>
     public sealed record OwedQuestRewards(string QuestId, long BaseExp, long JobExp, int StatPoints, int SkillPoints, IReadOnlyList<string> UnlockJobs,
-        IReadOnlyList<string> StatusKeys);
+        IReadOnlyList<string> StatusKeys, IReadOnlyList<string>? Outfits = null);
 }

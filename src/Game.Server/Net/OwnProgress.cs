@@ -22,6 +22,7 @@ public sealed class OwnProgress
     private readonly ContentDatabase _database;
     private readonly ProgressionRules _rules;
     private readonly QuestRules _quests;
+    private readonly Game.Shared.Wardrobe.WardrobeRules _wardrobe;
     private readonly SortedSet<string> _offer = new(StringComparer.Ordinal);
     private readonly SortedSet<string> _turnIn = new(StringComparer.Ordinal);
 
@@ -34,6 +35,7 @@ public sealed class OwnProgress
         _rules = new ProgressionRules(content.Balance, new ContentProgression(content));
         _content = new ContentProgression(content);
         _quests = new QuestRules(content.Quests.All, content.Balance.Quests.MaxActive);
+        _wardrobe = new Game.Shared.Wardrobe.WardrobeRules(content.Outfits.All);
         var id = content.Balance.Progression.BaseExpTableId;
         if (!_content.TryGetExpTable(id, out var table) || table is null) throw new ArgumentException($"Base EXP table '{id}' not found.", nameof(content));
         _baseTable = table;
@@ -95,6 +97,11 @@ public sealed class OwnProgress
             return new QuestLogMessage(active, completed, _offer.ToList(), _turnIn.ToList());
         }
     }
+
+    /// <summary>The player's <c>wardrobe</c> (T-708): the outfits it owns that the content has, and what is chosen. Null without a progression.</summary>
+    public WardrobeMessage? WardrobeFor(Entity player) =>
+        _store.TryGet(player.Id, out var state)
+            ? new WardrobeMessage(_wardrobe.Owned(state.Wardrobe), _wardrobe.Chosen(state.Wardrobe, player.Appearance?.Gender), state.Wardrobe.Hidden) : null;
 
     /// <summary>EXP level <paramref name="level"/> needs to level up (entry <c>level - 1</c>); 0 at the cap or without a table.</summary>
     private static long Next(ExpTableDef? table, int level) => table is not null && level >= 1 && level <= table.Exp.Count ? table.Exp[level - 1] : 0;

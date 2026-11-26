@@ -29,13 +29,15 @@
 #                                                         all; that one is killed outright and the third has its interval saves (T-702). Needs PostgreSQL like account; about 3 minutes
 #   .\client\run-e2e.ps1 -Run appearance                  make a character with looks other than the defaults on the creation screen, enter and see it drawn with them; a second client (always
 #                                                         headless) logs in beside it and sees them too (T-706). Needs PostgreSQL like account
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, bye, release (account, saving
-#                                                         and appearance are skipped, and said so, when no database is configured)
+#   .\client\run-e2e.ps1 -Run wardrobe                    earn the first quest's outfits (content copy: its step is only the talk), put one on through the bag's wardrobe, see it drawn; a second
+#                                                         client (headless) sees it too; log out and in, it is still on; take it off (T-708). Needs PostgreSQL like account
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, bye, release (account, saving,
+#                                                         appearance and wardrobe are skipped, and said so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -169,6 +171,21 @@ function Get-QuestsContent {
     return (Join-Path $script:questsTemp "content")
 }
 
+# The wardrobe run's copy (T-708): the weak monsters, and the first quest's step is only its talk, so a new character earns the outfits by accepting it and talking again.
+# Objectives are server-only data: the bundle hash does not change.
+$script:wardrobeTemp = $null
+function Get-WardrobeContent {
+    if ($script:wardrobeTemp) { return (Join-Path $script:wardrobeTemp "content") }
+    $script:wardrobeTemp = Join-Path ([IO.Path]::GetTempPath()) ("t708-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $script:wardrobeTemp | Out-Null
+    Copy-Item (Get-EasyContent) (Join-Path $script:wardrobeTemp "content") -Recurse
+    Copy-Item (Join-Path $root "themes") (Join-Path $script:wardrobeTemp "themes") -Recurse
+    $quest = Join-Path $script:wardrobeTemp "content/quests/first_hunt.yaml"
+    $text = [IO.File]::ReadAllText($quest) -replace '(?m)^      - \{ type: (kill|collect),.*\r?\n', ''
+    [IO.File]::WriteAllText($quest, $text)
+    return (Join-Path $script:wardrobeTemp "content")
+}
+
 # The account run's connection string (T-701): $env:GAME_TEST_DB_CONNECTION with the database mmo_e2e.
 function Get-E2EConnection {
     $builder = New-Object System.Data.Common.DbConnectionStringBuilder
@@ -177,10 +194,11 @@ function Get-E2EConnection {
     return $builder.get_ConnectionString()
 }
 
-function Start-GameServer([switch] $Easy, [switch] $Items, [switch] $Statuses, [switch] $Skills, [switch] $Quests, [string[]] $Extra = @()) {
+function Start-GameServer([switch] $Easy, [switch] $Items, [switch] $Statuses, [switch] $Skills, [switch] $Quests, [switch] $Wardrobe, [string[]] $Extra = @()) {
     $log = [IO.Path]::GetTempFileName()
     $arguments = @("run", "--no-build", "--project", "src/Game.Server", "--")
-    if ($Quests) { $arguments += (Get-QuestsContent) }
+    if ($Wardrobe) { $arguments += (Get-WardrobeContent) }
+    elseif ($Quests) { $arguments += (Get-QuestsContent) }
     elseif ($Items) { $arguments += (Get-ItemsContent) }
     elseif ($Statuses) { $arguments += (Get-StatusesContent) }
     elseif ($Skills) { $arguments += (Get-SkillsContent) }
@@ -433,6 +451,24 @@ function Invoke-Scenario([string] $Name) {
                 if ($second.Code -ne 0) { Write-Host "[run-e2e] the second client failed (exit code $($second.Code))"; return 1 }
                 return $result.Code
             }
+            "wardrobe" {
+                # T-708: a database like account, and the wardrobe content copy. The first client asks for the second (the marker names the outfit it must see) and waits for it.
+                $env:GAME_DB_CONNECTION = Get-E2EConnection
+                try { $server = Start-GameServer -Wardrobe } finally { $env:GAME_DB_CONNECTION = $null }
+                $holder = @{ Second = $null }
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-wardrobe" @()) -EngineArgs $engineArgs
+                $result = Wait-GodotClient $run 300 -OnMarker {
+                    param($marker)
+                    if ($marker -like "watch-outfit:*") {
+                        Write-Host "[run-e2e] starting the second client"
+                        $holder.Second = Start-GodotClient @("--e2e-wardrobe-watch", $marker.Substring(13), "--server", "ws://127.0.0.1:$Port/ws", "--name", "e2e-watcher") -EngineArgs $engineArgs -Headless
+                    }
+                }
+                if (-not $holder.Second) { Write-Host "[run-e2e] the first client never asked for the second"; return 1 }
+                $second = Wait-GodotClient $holder.Second 60
+                if ($second.Code -ne 0) { Write-Host "[run-e2e] the second client failed (exit code $($second.Code))"; return 1 }
+                return $result.Code
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -559,12 +595,12 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 # The account, saving and appearance runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.
 $skipped = @()
-$databaseRuns = @("account", "saving", "appearance")
+$databaseRuns = @("account", "saving", "appearance", "wardrobe")
 if (@($runs | Where-Object { $databaseRuns -contains $_ }).Count -gt 0 -and -not $env:GAME_TEST_DB_CONNECTION) {
     if ($Run -ne "all") { throw "The $Run run needs a PostgreSQL server: set `$env:GAME_TEST_DB_CONNECTION." }
     $skipped = $databaseRuns
@@ -596,6 +632,7 @@ finally {
     if ($script:itemsTemp) { Remove-Item $script:itemsTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:skillsTemp) { Remove-Item $script:skillsTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:statusesTemp) { Remove-Item $script:statusesTemp -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($script:wardrobeTemp) { Remove-Item $script:wardrobeTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:questsTemp) { Remove-Item $script:questsTemp -Recurse -Force -ErrorAction SilentlyContinue }
 }
 if ($failed.Count -gt 0) { Write-Host "[run-e2e] FAILED: $($failed -join ', ')"; exit 1 }

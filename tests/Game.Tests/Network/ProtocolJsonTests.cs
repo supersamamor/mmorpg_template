@@ -56,6 +56,9 @@ public class ProtocolJsonTests
         },
         { "start_autopilot without skills", new StartAutopilotMessage(["quest.first_hunt"], []), """{"type":"start_autopilot","quests":["quest.first_hunt"],"skills":[]}""" },
         { "stop_autopilot", new StopAutopilotMessage(), """{"type":"stop_autopilot"}""" },
+        { "set_outfit", new SetOutfitMessage("head", "outfit.rain_cloak"), """{"type":"set_outfit","slot":"head","outfit":"outfit.rain_cloak"}""" },
+        { "set_outfit to nothing", new SetOutfitMessage("head"), """{"type":"set_outfit","slot":"head"}""" },
+        { "set_outfit hides them all", new SetOutfitMessage(null, null, true), """{"type":"set_outfit","hidden":true}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -110,6 +113,22 @@ public class ProtocolJsonTests
         },
         { "autopilot paused", new AutopilotMessage("paused", "quest.gear_up", null, "needs_equip"), """{"type":"autopilot","mode":"paused","quest":"quest.gear_up","reason":"needs_equip"}""" },
         { "autopilot off", new AutopilotMessage("off", null, null, "finished"), """{"type":"autopilot","mode":"off","reason":"finished"}""" },
+        {
+            "wardrobe", new WardrobeMessage(["outfit.harvest_garland", "outfit.rain_cloak"], [new ShownOutfit("head", "outfit.rain_cloak"), new ShownOutfit("body", "outfit.harvest_garland")], true),
+            """{"type":"wardrobe","owned":["outfit.harvest_garland","outfit.rain_cloak"],"chosen":{"head":"outfit.rain_cloak","body":"outfit.harvest_garland"},"hidden":true}"""
+        },
+        { "wardrobe, empty", new WardrobeMessage([], [], false), """{"type":"wardrobe","owned":[],"chosen":{}}""" },
+        {
+            "rejected set_outfit", new RejectedMessage(MessageTypes.SetOutfit, OutfitReasons.NotOwned, null, Slot: "head", Item: "outfit.rain_cloak"),
+            """{"type":"rejected","intent":"set_outfit","reason":"not_owned","slot":"head","item":"outfit.rain_cloak"}"""
+        },
+        {
+            "snapshot and delta with outfits", new DeltaMessage(9, [Standing with { Outfit = [new ShownOutfit("head", "outfit.rain_cloak")] }],
+                [new ChangeRecord(43, ChangedFields.Outfit, default, null, null, 0, null, Outfit: [new ShownOutfit("back", "outfit.rain_cloak")]),
+                    new ChangeRecord(44, ChangedFields.Outfit, default, null, null, 0, null, Outfit: [])], []),
+            """{"type":"delta","tick":9,"appeared":[{"id":42,"kind":"player","cell":[12,12],"facing":"n","outfit":{"head":"outfit.rain_cloak"}}],"changed":""" +
+            """[{"id":43,"outfit":{"back":"outfit.rain_cloak"}},{"id":44,"outfit":{}}]}"""
+        },
         { "rejected", new RejectedMessage("move", "no_path", new GridCell(30, 2)), """{"type":"rejected","intent":"move","reason":"no_path","cell":[30,2]}""" },
         {
             "rejected attack", new RejectedMessage("attack", "target_gone", null, 99),
@@ -332,6 +351,13 @@ public class ProtocolJsonTests
     [InlineData("""{"type":"start_autopilot","quests":["quest.a"],"skills":[["skill.a",99999999999]]}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"start_autopilot","quests":["quest.a"],"skills":["skill.a"]}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"autopilot","mode":"off"}""", ByeReasons.UnknownType)]
+    [InlineData("""{"type":"set_outfit"}""", ByeReasons.Malformed)]                                          // neither slot nor hidden
+    [InlineData("""{"type":"set_outfit","slot":"head","hidden":true}""", ByeReasons.Malformed)]             // both
+    [InlineData("""{"type":"set_outfit","outfit":"outfit.x","hidden":false}""", ByeReasons.Malformed)]      // an outfit without a slot
+    [InlineData("""{"type":"set_outfit","slot":7}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"set_outfit","slot":"head","outfit":["outfit.x"]}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"set_outfit","hidden":"yes"}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"wardrobe","owned":[],"chosen":{}}""", ByeReasons.UnknownType)]
     [InlineData("""{"type":"refine_result","entry":1,"item":"item.x","result":"success","refine":1}""", ByeReasons.UnknownType)]
     public void Bad_client_messages_name_their_reason(string json, string reason)
     {

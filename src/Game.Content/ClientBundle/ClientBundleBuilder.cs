@@ -29,7 +29,9 @@ public static class ClientBundleBuilder
         Appearance(content.Appearance, content.Balance.NewCharacter.StartJobId),
         new ClientRefine(content.Refine.MaxLevel, content.Refine.Levels.Select(l =>
             new ClientRefineLevel(l.Level, l.SuccessPercent, l.MaterialItemId, l.MaterialQuantity, l.Failure)).ToList()),
-        content.Balance.CurrencyName);
+        content.Balance.CurrencyName,
+        content.Outfits.All.Select(o => new ClientOutfit(o.Id, o.Name, o.Description, o.IconAssetKey, o.TakesColors.ToList(),
+            o.Pieces.Select(p => new ClientOutfitPiece(p.Slot, p.ModelAssetKey, p.Gender)).ToList())).ToList());
 
     private static ClientAppearance Appearance(AppearanceDef a, string startJobId) => new(
         Genders.All.Where(a.Genders.ContainsKey).Select(g =>

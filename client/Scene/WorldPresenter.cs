@@ -90,6 +90,12 @@ public sealed class WorldPresenter
 
     private Game.Shared.Protocol.AppearanceRecord? LooksOf(EntityView entity) => LooksOverride is { } looks && entity.Kind == EntityKinds.Player ? looks(entity) : entity.Appearance;
 
+    /// <summary>Measuring only: draws every player in these outfits instead of its own (T-708).</summary>
+    public Func<EntityView, IReadOnlyList<Game.Shared.Protocol.ShownOutfit>>? OutfitOverride { get; set; }
+
+    private IReadOnlyList<Game.Shared.Protocol.ShownOutfit> OutfitOf(EntityView entity) =>
+        OutfitOverride is { } outfits && entity.Kind == EntityKinds.Player ? outfits(entity) : entity.Outfit;
+
     /// <summary>Measuring only: gives every visual back, so the next frame draws every entity anew (after a setting that decides the model changed).</summary>
     public void Redraw()
     {
@@ -343,6 +349,7 @@ public sealed class WorldPresenter
             if (entity.LookDirty)
             {
                 visual.SetLook(new EntityLook(entity.Id == ownId, entity.DeadShown, entity.Mine));
+                visual.SetOutfit(OutfitOf(entity)); // before the rest: one merge, not two
                 visual.SetCharacter(entity.DisplayKey, LooksOf(entity)); // a job change puts the new job's look on the same body (T-706)
                 // Worn equipment (T-403): the visual re-dresses only when the look counter moved, and swaps only the changed pieces.
                 var worn = _dressOverride is not null && entity.Kind == EntityKinds.Player ? _dressOverride : entity.Worn;

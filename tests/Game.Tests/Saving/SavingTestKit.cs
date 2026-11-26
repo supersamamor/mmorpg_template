@@ -312,7 +312,8 @@ public static class SavedContent
             db.Monsters, db.Statuses,
             new Registry<QuestDef>(db.Quests.All.Where(q => !gone.Contains(q.Id)).Select(q => quests?.Invoke(q) ?? q)),
             db.Npcs, db.Dialogue, db.Drops, db.Maps, db.ExpTables, db.Formulas, db.Elements, db.Balance, db.Appearance,
-            grids: grids ?? db.Grids.Where(g => !gone.Contains(g.Key)).ToDictionary(g => g.Key, g => g.Value));
+            grids: grids ?? db.Grids.Where(g => !gone.Contains(g.Key)).ToDictionary(g => g.Key, g => g.Value),
+            outfits: new Registry<OutfitDef>(db.Outfits.All.Where(o => !gone.Contains(o.Id))));
     }
 
     /// <summary>A state with something in every field, of sample content.</summary>
@@ -338,7 +339,10 @@ public static class SavedContent
         CompletedQuests = ["quest.warden_trial"],
         UnlockedJobs = ["job.warden"],
         TurnInSequence = 9,
-        OwedRewards = [new OwedQuestRewards("quest.gear_up", 10, 20, 1, 2, ["job.warden"], ["quest.gear_up#reward#0"])],
+        OwedRewards = [new OwedQuestRewards("quest.gear_up", 10, 20, 1, 2, ["job.warden"], ["quest.gear_up#reward#0"], ["outfit.rain_cloak"])],
+        Outfits = ["outfit.harvest_garland", "outfit.rain_cloak"],   // T-708
+        OutfitSlots = new Dictionary<string, string> { ["head"] = "outfit.harvest_garland", ["back"] = "outfit.rain_cloak" },
+        OutfitsHidden = true,
         Items =
         [
             new InventoryEntry(newId(), "item.bone_dirk", 1, "weapon") { Refine = 3 },
@@ -365,6 +369,7 @@ public static class SavedContent
             {
                 IReadOnlyDictionary<string, int> d => d.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"),
                 IReadOnlyDictionary<string, long> d => d.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"),
+                IReadOnlyDictionary<string, string> d => d.OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => $"{p.Key}={p.Value}"),   // jsonb keeps no key order (T-708)
                 var value => value,
             });
         return fields;

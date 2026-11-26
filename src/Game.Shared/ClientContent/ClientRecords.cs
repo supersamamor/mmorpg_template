@@ -101,6 +101,21 @@ namespace Game.Shared.ClientContent
     /// <param name="Slot">The equipment slot whose worn equipment replaces it, or null.</param>
     public sealed record ClientJobPiece(string ModelAssetKey, string? Gender, string? Slot);
 
+    /// <summary>An outfit as the wardrobe shows and draws it (T-708). An outfit has nothing else.</summary>
+    /// <param name="Id">Outfit id.</param>
+    /// <param name="Name">Display name.</param>
+    /// <param name="Description">Display text.</param>
+    /// <param name="IconAssetKey">Icon key.</param>
+    /// <param name="TakesColors">The character's colours its pieces take (<c>AppearanceColorRoles</c> terms).</param>
+    /// <param name="Pieces">Its pieces.</param>
+    public sealed record ClientOutfit(string Id, string Name, string? Description, string IconAssetKey, IReadOnlyList<string> TakesColors, IReadOnlyList<ClientOutfitPiece> Pieces);
+
+    /// <summary>One piece of an outfit (T-708).</summary>
+    /// <param name="Slot">An <c>OutfitSlots</c> term.</param>
+    /// <param name="ModelAssetKey">Piece model key.</param>
+    /// <param name="Gender">A <c>Genders</c> term, or null for both.</param>
+    public sealed record ClientOutfitPiece(string Slot, string ModelAssetKey, string? Gender);
+
     /// <summary>A status as the client shows it.</summary>
     /// <param name="Id">Status id.</param>
     /// <param name="Name">Display name.</param>
@@ -222,16 +237,18 @@ namespace Game.Shared.ClientContent
     /// <param name="Appearance">Character-creation options.</param>
     /// <param name="Refine">The refine steps (chance, material, failure outcome); null is written as no levels.</param>
     /// <param name="CurrencyName">The currency's display name (<c>balance.yaml</c> <c>currency_name</c>, T-602): the bag shows the balance with it.</param>
+    /// <param name="Outfits">Outfits, by id (T-708); null is written as none.</param>
     public sealed record ClientBundle(
         int FormatVersion, IReadOnlyList<string> Elements, IReadOnlyList<string> Stats, IReadOnlyList<ClientItem> Items,
         IReadOnlyList<ClientSkill> Skills, IReadOnlyList<ClientJob> Jobs, IReadOnlyList<ClientStatus> Statuses,
         IReadOnlyList<ClientMonster> Monsters, IReadOnlyList<ClientNpc> Npcs,
-        IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps, ClientAppearance Appearance, ClientRefine? Refine = null, string CurrencyName = "")
+        IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps, ClientAppearance Appearance, ClientRefine? Refine = null, string CurrencyName = "",
+        IReadOnlyList<ClientOutfit>? Outfits = null)
     {
         /// <summary>
         /// The format this build writes and reads (7: the looks of jobs and the start job, T-706; 6: the currency's display name, T-602; 5: no dialogue graphs, they are server-run since T-601; 4: item card slots and
         /// refinable, and the refine steps, T-402).
         /// </summary>
-        public const int CurrentFormatVersion = 7;
+        public const int CurrentFormatVersion = 8;
     }
 }

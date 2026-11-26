@@ -371,6 +371,23 @@
             "required": [
               "status_id"
             ]
+          },
+          {
+            "properties": {
+              "type": {
+                "const": "outfit"
+              },
+              "outfit_id": {
+                "type": "string",
+                "pattern": "^outfit\\.[a-z0-9_]+$",
+                "description": "Outfit id (outfit.*)."
+              }
+            },
+            "additionalProperties": false,
+            "description": "outfit (T-708): an outfit for the character's wardrobe; owning it already changes nothing. Cosmetic only.",
+            "required": [
+              "outfit_id"
+            ]
           }
         ],
         "description": "A quest reward. Selected by the type key; the table is Rewards."

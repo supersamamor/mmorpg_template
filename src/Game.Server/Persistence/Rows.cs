@@ -211,8 +211,24 @@ public sealed class CharacterStateRow
     /// <summary>jsonb: skill and item cooldowns, milliseconds left at <see cref="SavedAt"/>.</summary>
     public string Cooldowns { get; set; } = "{}";
 
+    /// <summary>jsonb: outfit slot → the outfit chosen for it (T-708). Which outfits it owns is in <see cref="OutfitRow"/>.</summary>
+    public string OutfitSlots { get; set; } = "{}";
+
+    /// <summary>Every outfit is hidden (T-708).</summary>
+    public bool OutfitsHidden { get; set; }
+
     /// <summary>jsonb: what the content had no place for, items excepted (<see cref="ItemRow.Aside"/>).</summary>
     public string SetAside { get; set; } = "[]";
+}
+
+/// <summary>Table <c>character_outfits</c> (T-708): one outfit a character owns. The primary key is what keeps it from owning one twice. The id is kept whatever the content says.</summary>
+public sealed class OutfitRow
+{
+    /// <summary>Whose it is.</summary>
+    public Guid CharacterId { get; set; }
+
+    /// <summary>The outfit.</summary>
+    public string OutfitId { get; set; } = string.Empty;
 }
 
 /// <summary>Table <c>character_items</c> (T-702): one inventory entry. The primary key is what keeps one item from being two characters'.</summary>

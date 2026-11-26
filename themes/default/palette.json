@@ -42,6 +42,12 @@
     "model.char.spellbinder": { "colors": ["violet", "teal"], "trim": "gold", "look": "hat" },
     "model.char.body_male": { "colors": ["cream", "leather"], "trim": "leather_deep", "look": "plain" },
     "model.char.body_female": { "colors": ["cream", "bark"], "trim": "leather_deep", "look": "plain" },
+    "model.outfit.harvest_wreath": { "colors": ["leaf", "berry"], "trim": "sun", "look": "wreath" },
+    "model.outfit.harvest_sash": { "colors": ["sun", "berry"], "trim": "cream", "look": "sash" },
+    "model.outfit.rain_hood": { "colors": ["cream", "bark"], "trim": "bark", "look": "hood_up" },
+    "model.outfit.rain_coat_male": { "colors": ["cream", "bark"], "trim": "bark", "look": "coat" },
+    "model.outfit.rain_coat_female": { "colors": ["cream", "bark"], "trim": "bark", "look": "coat_flared" },
+    "model.outfit.rain_cape": { "colors": ["cream", "bark"], "trim": "bark", "look": "cape" },
     "model.npc.guide": { "colors": ["amber", "cream"], "trim": "bark", "look": "hood" },
     "model.npc.trainer": { "colors": ["navy", "steel"], "trim": "gold", "look": "helm" }
   }

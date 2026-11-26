@@ -43,6 +43,9 @@ public interface IEntityVisual
     /// </summary>
     void SetCharacter(string? jobId, Game.Shared.Protocol.AppearanceRecord? looks);
 
+    /// <summary>The outfits a player shows (T-708), in the drawing in place of the gear of the slots they cover. The same list does nothing.</summary>
+    void SetOutfit(IReadOnlyList<Game.Shared.Protocol.ShownOutfit> shown);
+
     /// <summary>The level of detail: 0 for the nearest characters, 1 for the rest. A model with one level ignores it.</summary>
     void SetDetail(int lod);
 

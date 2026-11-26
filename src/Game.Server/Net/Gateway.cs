@@ -17,6 +17,7 @@ using Game.Shared.Protocol;
 using Game.Shared.Time;
 using Game.Shared.Vocabulary;
 using Game.Shared.World;
+using Game.Server.World.Outfits;
 
 namespace Game.Server.Net;
 
@@ -202,6 +203,10 @@ public sealed class Gateway
             // Autopilot (T-604), owner only: its status when it changes, and a refused start as rejected.
             events.Subscribe<AutopilotChanged>(e => Owner(e.Player)?.Post(AutopilotStatus(e.Status)));
             events.Subscribe<AutopilotRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(MessageTypes.StartAutopilot, e.Reason, null, Skill: e.SkillId, Quest: e.QuestId)));
+            // Outfits (T-708), owner only: the whole wardrobe after anything that changes it, and a refused set_outfit as rejected.
+            events.Subscribe<OutfitGranted>(e => PostWardrobe(instance.MapId, e.Player));
+            events.Subscribe<WardrobeChanged>(e => PostWardrobe(instance.MapId, e.Player));
+            events.Subscribe<OutfitRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(MessageTypes.SetOutfit, e.Reason, null, Slot: e.Slot, Item: e.Outfit)));
             events.Subscribe<QuestRewarded>(e =>
             {
                 PostExp(e.Player);
@@ -646,6 +651,13 @@ public sealed class Gateway
     {
         if (Owner(player) is { } session && _world.TryGetInstance(mapId, out var instance) && instance.TryGetEntity(player, out var entity) && entity.Autopilot is { } run)
             session.Post(AutopilotStatus(run.Status));
+    }
+
+    /// <summary>Tick thread of the player's instance (the only thread that touches its wardrobe).</summary>
+    internal void PostWardrobe(string mapId, EntityId player)
+    {
+        if (Progress is null || Owner(player) is not { } session || !_world.TryGetInstance(mapId, out var instance) || !instance.TryGetEntity(player, out var entity)) return;
+        if (Progress.WardrobeFor(entity) is { } wardrobe) session.Post(wardrobe);
     }
 
     private static AutopilotMessage AutopilotStatus(AutopilotStatus status) => new(status.Mode, status.QuestId, status.Doing, status.Reason);

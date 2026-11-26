@@ -42,6 +42,8 @@ public sealed class ModelVisual : IEntityVisual
     private readonly List<PartModel> _dressed = new();
     private readonly List<DressPart> _plan = new();
     private readonly List<WornItem> _wornItems = new();
+    private readonly List<OutfitPart> _outfit = new();
+    private IReadOnlyList<ShownOutfit> _shownOutfit = System.Array.Empty<ShownOutfit>();
     private CharacterLook? _character;
     private string _dressKey = string.Empty;
     private AppearanceRecord? _looksSeen;
@@ -334,6 +336,16 @@ public sealed class ModelVisual : IEntityVisual
     }
 
     /// <inheritdoc />
+    public void SetOutfit(IReadOnlyList<ShownOutfit> shown)
+    {
+        if (ReferenceEquals(shown, _shownOutfit)) return; // asked on every look change: the same list means nothing changed
+        var same = shown.Count == _shownOutfit.Count;
+        for (var i = 0; same && i < shown.Count; i++) same = shown[i].Equals(_shownOutfit[i]);
+        _shownOutfit = shown;
+        if (!same) Redress();
+    }
+
+    /// <inheritdoc />
     public void SetGear(string? weaponType, IReadOnlyList<string> worn, int version)
     {
         if (weaponType != _weapon)
@@ -366,7 +378,8 @@ public sealed class ModelVisual : IEntityVisual
     {
         _wornItems.Clear();
         foreach (var piece in _pieces) _wornItems.Add(new WornItem(piece.Worn, _equipment.SlotsOf(piece.ItemId)));
-        DressPlan.Fill(_character, _wornItems, _plan);
+        _appearance.ResolveOutfit(_shownOutfit, _character?.Ids.Gender, _resolution.Asset?.Rig, _outfit);
+        DressPlan.Fill(_character, _wornItems, _outfit, _plan);
         _dressKey = WornSet.Key(PoolKey, _character, _plan); // once: a crowd waiting for its merges asks every frame
         for (var i = _dressed.Count - 1; i >= 0; i--)
             if (!_plan.Contains(_dressed[i].Part)) _dressed.RemoveAt(i); // a part still worn keeps its meshes
@@ -462,7 +475,7 @@ public sealed class ModelVisual : IEntityVisual
         foreach (var model in _dressed)
         {
             var piece = model.Part.Piece;
-            var colors = _character?.ColorsOf(model.Part.Role);
+            var colors = _character?.ColorsOf(model.Part);
             var meshes = model.Meshes;
             Mesh mesh = MarkerMesh();
             Skin? skin = null;

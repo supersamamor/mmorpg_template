@@ -24,7 +24,7 @@ public class ClientBundleTests
     // ---- shape ----
 
     private static readonly Shared.ClientContent.ClientBundle Fixture = new(
-        7, ["fire"], ["str"],
+        8, ["fire"], ["str"],
         [new ClientItem("item.a", "A \"quoted\" é", null, "equip", "icon.a", null, ["weapon"], "dagger", "model.a", "sfx.use", null, 2, true)],
         [new ClientSkill("skill.a", "Bolt", "Hits.", 3, false, 6, true, false, ClientAreaShapes.Square, 2, 500, "cast", "icon.s", null, null)],
         [new ClientJob("job.a", "Jobber", null, null, [], null, null, [new ClientJobSkill("skill.a", null, [new ClientSkillRequirement("skill.b", 2)])], "#102030", [new ClientJobPiece("model.j", "female", "body"), new ClientJobPiece("model.k", null, null)])],
@@ -37,11 +37,12 @@ public class ClientBundleTests
         new ClientAppearance(
             [new ClientGender("male", "Male", "model.b", [new ClientAppearanceOption("face.a", "Calm", "model.f")], [new ClientAppearanceOption("hair.a", "Crop", "model.h")], "face.a", "hair.a")],
             [new ClientColorOption("skin.a", "Fair", "#F6D9C4")], "skin.a", [new ClientColorOption("haircolor.a", "Raven", "#1E1B1D")], "haircolor.a", "job.a"),
-        new ClientRefine(1, [new ClientRefineLevel(1, 90, "item.m", 2, "break")]), "crowns");
+        new ClientRefine(1, [new ClientRefineLevel(1, 90, "item.m", 2, "break")]), "crowns",
+        [new ClientOutfit("outfit.a", "Cloak", null, "icon.o", ["cloth"], [new ClientOutfitPiece("body", "model.o", "male"), new ClientOutfitPiece("head", "model.p", null)])]);
 
     private static readonly string FixtureBody =
         """
-        {"format_version":7,
+        {"format_version":8,
         HASH
         "currency_name":"crowns",
         "elements":["fire"],"stats":["str"],
@@ -55,6 +56,7 @@ public class ClientBundleTests
         "maps":[{"id":"map.a","name":"Map","scene":"scene.a","ambience":"ambience.a","width":2,"height":1,"cells":"AwM=",
         "warps":[{"cell":[1,0],"map":"map.b","target":[0,0]}],"npcs":[{"npc":"npc.a","cell":[0,0],"facing":"s"}],
         "zones":[{"kind":"safe","area":[0,0,2,1]}]}],
+        "outfits":[{"id":"outfit.a","name":"Cloak","icon":"icon.o","takes_colors":["cloth"],"pieces":[{"slot":"body","model":"model.o","gender":"male"},{"slot":"head","model":"model.p"}]}],
         "appearance":{"genders":[{"gender":"male","name":"Male","body":"model.b","faces":[{"id":"face.a","name":"Calm","model":"model.f"}],"hairstyles":[{"id":"hair.a","name":"Crop","model":"model.h"}],"default_face":"face.a","default_hairstyle":"hair.a"}],
         "skin_tones":[{"id":"skin.a","name":"Fair","color":"#F6D9C4"}],"default_skin_tone":"skin.a","hair_colors":[{"id":"haircolor.a","name":"Raven","color":"#1E1B1D"}],"default_hair_color":"haircolor.a","start_job":"job.a"},
         "refine":{"max_level":1,"levels":[{"level":1,"success_percent":90,"material":"item.m","material_quantity":2,"failure":"break"}]}}
@@ -89,7 +91,7 @@ public class ClientBundleTests
         [
             "ClientAppearance: Genders,SkinTones,DefaultSkinToneId,HairColors,DefaultHairColorId,StartJobId",
             "ClientAppearanceOption: Id,Name,ModelAssetKey",
-            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Quests,Maps,Appearance,Refine,CurrencyName",
+            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Quests,Maps,Appearance,Refine,CurrencyName,Outfits",
             "ClientColorOption: Id,Name,Color",
             "ClientGender: Gender,Name,BodyModelAssetKey,Faces,Hairstyles,DefaultFaceId,DefaultHairstyleId",
             "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey,UseSfx,EquipSfx,CardSlots,Refinable,ConfirmUse",
@@ -101,6 +103,8 @@ public class ClientBundleTests
             "ClientMonsterSounds: Aggro,Hit,Die",
             "ClientNpc: Id,Name,Title,ModelAssetKey,PortraitAssetKey",
             "ClientNpcPlacement: NpcId,Cell,Facing",
+            "ClientOutfit: Id,Name,Description,IconAssetKey,TakesColors,Pieces",
+            "ClientOutfitPiece: Slot,ModelAssetKey,Gender",
             "ClientQuest: Id,Name,Description,GiverNpcId,StepTexts",
             "ClientRefine: MaxLevel,Levels",
             "ClientRefineLevel: Level,SuccessPercent,MaterialItemId,MaterialQuantity,Failure",
@@ -117,7 +121,9 @@ public class ClientBundleTests
     {
         using var doc = JsonDocument.Parse(Export(Content).FileBytes);
         var root = doc.RootElement;
-        root.GetProperty("format_version").GetInt32().ShouldBe(7);
+        root.GetProperty("format_version").GetInt32().ShouldBe(8);
+        root.GetProperty("outfits").GetArrayLength().ShouldBe(Content.Outfits.Count);   // T-708
+        Content.Outfits.Count.ShouldBeGreaterThan(0);
         root.GetProperty("currency_name").GetString().ShouldBe(Content.Balance.CurrencyName);   // T-602: the bag shows the balance with it
         // T-402: card slots and refinable on equipment, and the refine steps as far as a player needs them to decide (chance, material, outcome).
         var vest = root.GetProperty("items").EnumerateArray().Single(i => i.GetProperty("id").GetString() == "item.padded_vest");
@@ -379,5 +385,5 @@ public class ClientBundleTests
         Registry<ExpTableDef>? expTables = null, FormulaSetDef? formulas = null, BalanceDef? balance = null, RefineDef? refine = null) =>
         new(jobs ?? c.Jobs, skills ?? c.Skills, items ?? c.Items, monsters ?? c.Monsters, statuses ?? c.Statuses, quests ?? c.Quests,
             npcs ?? c.Npcs, c.Dialogue, drops ?? c.Drops, maps ?? c.Maps, expTables ?? c.ExpTables, formulas ?? c.Formulas, c.Elements,
-            balance ?? c.Balance, c.Appearance, grids: c.Grids, refine: refine ?? c.Refine);
+            balance ?? c.Balance, c.Appearance, grids: c.Grids, refine: refine ?? c.Refine, shops: c.Shops, outfits: c.Outfits);
 }

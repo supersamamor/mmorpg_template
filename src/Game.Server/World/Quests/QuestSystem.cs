@@ -327,11 +327,13 @@ public sealed class QuestSystem : ITickSystem
         if (completed)
         {
             rewards ??= _rules.Rewards(progress.QuestId);
-            if (rewards.BaseExp > 0 || rewards.JobExp > 0 || rewards.StatPoints > 0 || rewards.SkillPoints > 0 || rewards.UnlockJobs.Count > 0 || rewards.StatusRewards.Count > 0)
+            if (rewards.BaseExp > 0 || rewards.JobExp > 0 || rewards.StatPoints > 0 || rewards.SkillPoints > 0 || rewards.UnlockJobs.Count > 0 || rewards.StatusRewards.Count > 0
+                || rewards.Outfits.Count > 0)
             {
                 // Owed from this step on, so nothing between completing and paying can lose or repeat them (T-702); the event only tells combat to pay.
                 state.OwedRewards.Add(new OwedQuestRewards(progress.QuestId, rewards.BaseExp, rewards.JobExp, rewards.StatPoints, rewards.SkillPoints, rewards.UnlockJobs.ToArray(),
-                    rewards.StatusRewards.Select(i => QuestRules.RewardKey(progress.QuestId, i)).ToArray()));
+                    rewards.StatusRewards.Select(i => QuestRules.RewardKey(progress.QuestId, i)).ToArray(),
+                    rewards.Outfits.Count > 0 ? rewards.Outfits.ToArray() : null));
                 _context!.Publish(new QuestRewardsRequested(id, progress.QuestId));
             }
             _context!.Publish(new QuestCompleted(id, progress.QuestId));
