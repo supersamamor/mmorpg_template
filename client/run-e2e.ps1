@@ -31,13 +31,15 @@
 #                                                         headless) logs in beside it and sees them too (T-706). Needs PostgreSQL like account
 #   .\client\run-e2e.ps1 -Run wardrobe                    earn the first quest's outfits (content copy: its step is only the talk), put one on through the bag's wardrobe, see it drawn; a second
 #                                                         client (headless) sees it too; log out and in, it is still on; take it off (T-708). Needs PostgreSQL like account
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, bye, release (account, saving,
-#                                                         appearance and wardrobe are skipped, and said so, when no database is configured)
+#   .\client\run-e2e.ps1 -Run kick                        a new account's character plays; the script kicks the account through the admin API (its own port, a credential made for
+#                                                         the run); the client says so and goes to the sign-in screen, signs in again; the audit row is there (T-804). Needs PostgreSQL like account
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, kick, bye, release (account,
+#                                                         saving, appearance, wardrobe and kick are skipped, and said so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -469,6 +471,48 @@ function Invoke-Scenario([string] $Name) {
                 if ($second.Code -ne 0) { Write-Host "[run-e2e] the second client failed (exit code $($second.Code))"; return 1 }
                 return $result.Code
             }
+            "kick" {
+                # T-804: a database like account, and the admin API on the next port with a service credential made for this run. The credential goes through the
+                # environment and the request headers only: never the command line or the output. The client asks for the kick with a marker naming its username.
+                $env:GAME_DB_CONNECTION = Get-E2EConnection
+                $adminPort = $Port + 1
+                $bytes = New-Object byte[] 32
+                [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+                $credential = [Convert]::ToBase64String($bytes)
+                $env:GAME_ADMIN_CREDENTIAL = $credential
+                try { $server = Start-GameServer -Extra @("--admin-port", "$adminPort") } finally { $env:GAME_DB_CONNECTION = $null; $env:GAME_ADMIN_CREDENTIAL = $null }
+                $deadline = (Get-Date).AddSeconds(10)
+                while (-not (Select-String -Path $server.Log -Pattern "Admin API listening" -Quiet)) {
+                    if ((Get-Date) -gt $deadline) { Get-Content $server.Log | Select-Object -Last 20; throw "The admin API did not start." }
+                    Start-Sleep -Milliseconds 100
+                }
+                $admin = "http://127.0.0.1:$adminPort/admin/v1"
+                $headers = @{ "Authorization" = "Bearer $credential"; "X-Staff-Id" = "e2e-staff"; "X-Staff-Name" = "E2E%20Staff"; "X-Staff-Role" = "support"; "X-Request-Id" = "e2e-kick" }
+                $reason = "e2e: the admin API kick run"
+                $holder = @{ Account = $null; Kick = $null }
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-kick" @()) -EngineArgs $engineArgs
+                $result = Wait-GodotClient $run 180 -OnMarker {
+                    param($marker)
+                    if ($marker -like "kick:*") {
+                        try {
+                            $found = Invoke-RestMethod -Uri "$admin/accounts?name=$($marker.Substring(5))" -Headers $headers
+                            $holder.Account = @($found.items)[0].id
+                            $body = @{ account_id = $holder.Account; reason = $reason } | ConvertTo-Json
+                            $holder.Kick = Invoke-RestMethod -Method Post -Uri "$admin/commands/kick" -Headers $headers -ContentType "application/json" -Body $body
+                            Write-Host "[run-e2e] kicked the account through the admin API: outcome $($holder.Kick.outcome), audit row $($holder.Kick.audit_id), $($holder.Kick.result.sessions_ended) session(s) ended"
+                        } catch { Write-Host "[run-e2e] the admin API call failed: $($_.Exception.Message)" }
+                    }
+                }
+                if (-not $holder.Kick) { Write-Host "[run-e2e] the account was never kicked"; return 1 }
+                $audit = Invoke-RestMethod -Uri "$admin/audit?target=$($holder.Account)" -Headers $headers
+                $row = @($audit.items) | Where-Object { $_.id -eq $holder.Kick.audit_id } | Select-Object -First 1
+                if (-not $row -or $row.action -ne "kick" -or $row.reason -ne $reason -or $row.staff_id -ne "e2e-staff" -or $row.request_id -ne "e2e-kick" -or -not $row.before.online) {
+                    Write-Host "[run-e2e] the audit row is missing or wrong"; return 1
+                }
+                Write-Host "[run-e2e] audit row $($row.id): $($row.action) of account $($row.target_id) by $($row.staff_id) ($($row.staff_role)), before online=$($row.before.online) on $($row.before.map), after sessions_ended=$($row.after.sessions_ended)"
+                if (Select-String -Path $server.Log -Pattern ([regex]::Escape($credential)) -Quiet) { Write-Host "[run-e2e] THE CREDENTIAL IS IN THE SERVER LOG"; return 1 }
+                return $result.Code
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -595,12 +639,12 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 # The account, saving and appearance runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.
 $skipped = @()
-$databaseRuns = @("account", "saving", "appearance", "wardrobe")
+$databaseRuns = @("account", "saving", "appearance", "wardrobe", "kick")
 if (@($runs | Where-Object { $databaseRuns -contains $_ }).Count -gt 0 -and -not $env:GAME_TEST_DB_CONNECTION) {
     if ($Run -ne "all") { throw "The $Run run needs a PostgreSQL server: set `$env:GAME_TEST_DB_CONNECTION." }
     $skipped = $databaseRuns

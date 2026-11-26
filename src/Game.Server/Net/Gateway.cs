@@ -393,20 +393,28 @@ public sealed class Gateway
     /// other leave), so its resume token stops working. A login that is still pending with one ends as well: it named its session before it was checked. Called after the database has the
     /// sessions ended, on the request's thread; nothing is looked up while playing. Sessions ended on another server do not reach this one.
     /// </summary>
-    public void EndSessions(EndedSessions ended)
+    public void EndSessions(EndedSessions ended) => EndSessions(ended, ByeReasons.SessionEnded, "its account session ended");
+
+    /// <summary>
+    /// The same, with another <c>bye</c> reason: <c>kicked</c> when staff ended the account's game through the admin API (T-804). <paramref name="why"/> is for the log only.
+    /// </summary>
+    public void EndSessions(EndedSessions ended, string byeReason, string why)
     {
         lock (_linkLock)
         {
             foreach (var session in _sessions.Keys)
-                if (session.SessionKey is { } key && ended.Keys.Contains(key)) session.Bye(ByeReasons.SessionEnded);
+                if (session.SessionKey is { } key && ended.Keys.Contains(key)) session.Bye(byeReason);
             foreach (var link in _links.Values.ToList())
             {
                 if (link.SessionKey is not { } key || !(ended.Keys.Contains(key) || (ended.All && link.AccountId == ended.Account))) continue;
-                link.Session?.Bye(ByeReasons.SessionEnded);
-                Release(link, "its account session ended");
+                link.Session?.Bye(byeReason);
+                Release(link, why);
             }
         }
     }
+
+    /// <summary>The characters of the account the gateway holds (played, or in their grace period): at most one, as an account plays one at a time. Any thread (T-804: the admin API reads it).</summary>
+    public IReadOnlyList<CharacterLink> LinksOf(Guid account) => _links.Values.Where(l => l.AccountId == account).ToList();
 
     /// <summary>The server can no longer save the character (T-702): its session ends and it leaves at once, as if the server had crashed for it alone.</summary>
     private void OnLost(CharacterTicket ticket)

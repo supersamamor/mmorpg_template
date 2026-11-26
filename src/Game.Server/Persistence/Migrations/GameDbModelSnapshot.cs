@@ -84,6 +84,120 @@ namespace Game.Server.Persistence.Migrations
                     b.ToTable("accounts", (string)null);
                 });
 
+            modelBuilder.Entity("Game.Server.Persistence.AdminAuditRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("action");
+
+                    b.Property<string>("After")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("after");
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<string>("Before")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("before");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("RequestId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("request_id");
+
+                    b.Property<string>("StaffId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("staff_id");
+
+                    b.Property<string>("StaffRole")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("staff_role");
+
+                    b.Property<string>("TargetId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("target_id");
+
+                    b.Property<string>("TargetKind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("target_kind");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("At")
+                        .HasDatabaseName("ix_admin_audit_at");
+
+                    b.HasIndex("StaffId", "Id")
+                        .HasDatabaseName("ix_admin_audit_staff");
+
+                    b.HasIndex("TargetId", "Id")
+                        .HasDatabaseName("ix_admin_audit_target");
+
+                    b.ToTable("admin_audit", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_admin_audit_reason", "length(btrim(reason)) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.AdminStaffRow", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("display_name");
+
+                    b.Property<DateTime>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<DateTime>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("role");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("admin_staff", (string)null);
+                });
+
             modelBuilder.Entity("Game.Server.Persistence.CharacterRow", b =>
                 {
                     b.Property<Guid>("Id")
@@ -450,6 +564,15 @@ namespace Game.Server.Persistence.Migrations
                         .HasDatabaseName("ix_account_sessions_account_id");
 
                     b.ToTable("account_sessions", (string)null);
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.AdminAuditRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.AdminStaffRow", null)
+                        .WithMany()
+                        .HasForeignKey("StaffId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Game.Server.Persistence.CharacterRow", b =>

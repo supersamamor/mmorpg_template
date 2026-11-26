@@ -263,10 +263,13 @@ namespace Game.Shared.Protocol
         /// <summary><c>session_ended</c>: the account session this connection signed in with was ended (signed out, pushed out by a newer sign-in, or a password change); the character left the world. Sign in again (T-710).</summary>
         public const string SessionEnded = "session_ended";
 
+        /// <summary><c>kicked</c>: staff ended this account's game through the admin API (T-804); every session of the account ended with it and the character left the world, saved. Sign in again.</summary>
+        public const string Kicked = "kicked";
+
         /// <summary>Every bye reason.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             Timeout, BadVersion, Malformed, UnknownType, Oversize, BeforeHello, DuplicateHello, RateLimit, LoginRefused, ServerFull, TooSlow,
-            Shutdown, ServerError, UpdateRequired, Logout, Replaced, ResumeFailed, LoadFailed, SavePending, SaveLost, SessionEnded);
+            Shutdown, ServerError, UpdateRequired, Logout, Replaced, ResumeFailed, LoadFailed, SavePending, SaveLost, SessionEnded, Kicked);
     }
 
     /// <summary>Entity kinds in a view record's <c>kind</c> field (VOCABULARY.md "Entity kinds").</summary>

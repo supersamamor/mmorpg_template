@@ -162,6 +162,33 @@ public sealed class MemoryAccountStore : IAccountStore
         }
     }
 
+    /// <summary>T-804's in-memory admin store: ends every session of the account, or null when there is no such account.</summary>
+    public IReadOnlyList<byte[]>? EndAllSessions(Guid account)
+    {
+        lock (_lock)
+        {
+            if (!_accounts.ContainsKey(account)) return null;
+            var ended = _sessions.Where(s => s.Value.Account == account).Select(s => s.Key).ToList();
+            foreach (var key in ended) _sessions.Remove(key);
+            return ended.Select(Convert.FromHexString).ToList();
+        }
+    }
+
+    /// <summary>The stored hash of one account (T-804's tests look for it in answers and logs).</summary>
+    public string OnlyHashOf(Guid account)
+    {
+        lock (_lock) return _accounts[account].Hash;
+    }
+
+    /// <summary>The account ids and usernames (T-804's in-memory admin store reads them).</summary>
+    public IReadOnlyList<(Guid Id, string Username, int Sessions)> AccountList
+    {
+        get
+        {
+            lock (_lock) return _accounts.Select(a => (a.Key, a.Value.Username, _sessions.Count(s => s.Value.Account == a.Key))).ToList();
+        }
+    }
+
     private readonly Dictionary<Guid, DateTime> _eraseAfter = new();
 
     /// <summary>Deletions recorded: when asked, and when erased.</summary>

@@ -144,6 +144,7 @@ public class ConnectionMachineTests
         { ByeReasons.SavePending, ConnectionPhase.LoginScreen, ConnectionNotice.SavePending, false },
         { ByeReasons.SaveLost, ConnectionPhase.LoginScreen, ConnectionNotice.SaveLost, false },
         { ByeReasons.SessionEnded, ConnectionPhase.LoginScreen, ConnectionNotice.SessionEnded, false },
+        { ByeReasons.Kicked, ConnectionPhase.LoginScreen, ConnectionNotice.Kicked, false },
         { ByeReasons.Shutdown, ConnectionPhase.Backoff, ConnectionNotice.ServerShutdown, false },
         // The server keeps the character through these (§10 step 6), so they are a drop: resume.
         { ByeReasons.Timeout, ConnectionPhase.Backoff, ConnectionNotice.Reconnecting, true },

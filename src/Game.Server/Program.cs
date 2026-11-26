@@ -3,6 +3,7 @@ using Game.Content.ClientExport;
 using Game.Content.Loading;
 using Game.Content.Validation;
 using Game.Server.Accounts;
+using Game.Server.Admin;
 using Game.Server.Hosting;
 using Game.Server.Net;
 using Game.Server.Persistence;
@@ -18,6 +19,7 @@ if (options is null)
     Console.Error.WriteLine(argError);
     Console.Error.WriteLine(ServerOptions.Usage);
     Console.Error.WriteLine(GatewayOptions.Usage);
+    Console.Error.WriteLine(AdminOptions.Usage);
     return 2;
 }
 
@@ -31,7 +33,16 @@ if (netOptions is null)
     return 2;
 }
 
-var log = new ConsoleLog();
+var adminOptions = AdminOptions.Parse(options.AdminArgs, Environment.GetEnvironmentVariable, development, out var adminError);
+if (adminOptions is null)
+{
+    Console.Error.WriteLine(adminError);
+    Console.Error.WriteLine(AdminOptions.Usage);
+    return 2;
+}
+
+var log = new CountingLog(new ConsoleLog()); // the admin API's status reports its counts
+var startedAt = DateTime.UtcNow;
 log.Info($"Environment: {environmentName}{(development ? " (development: ws:// on loopback, dev login enabled)" : "")}");
 
 // The database (T-701): accounts and characters. Optional in development (then only the dev login works), required everywhere else.
@@ -57,6 +68,15 @@ var netProblems = netOptions.Problems();
 if (netProblems.Count > 0)
 {
     foreach (var problem in netProblems) log.Error("Gateway: " + problem);
+    log.Error("Refusing to start.");
+    return 1;
+}
+// T-804: the admin API, when it is configured. Its audit log is in the database, so it needs one.
+var adminProblems = adminOptions.Problems(netOptions.Port, Environment.GetEnvironmentVariable).ToList();
+if (adminOptions.Enabled && database is null) adminProblems.Add($"the admin API writes its audit log to the database: set {GameDatabase.ConnectionVariable}");
+if (adminProblems.Count > 0)
+{
+    foreach (var problem in adminProblems) log.Error("Admin API: " + problem);
     log.Error("Refusing to start.");
     return 1;
 }
@@ -120,6 +140,28 @@ catch (Exception e) when (e is InvalidOperationException or IOException)
     if (saves is not null) await saves.DrainAsync(TimeSpan.Zero);
     return 1;
 }
+AdminHost? adminHost = null;
+if (adminOptions.Enabled)
+{
+    try
+    {
+        var adminStore = new PostgresAdminStore(database!);
+        var adminEvents = new AdminEvents(log);
+        var road = new AdminRoad(world, gateway, adminStore, adminOptions, TimeProvider.System);
+        var commands = new AdminCommands([new KickCommand()], road, adminEvents, log);
+        var api = new AdminApi(adminOptions, new ServiceCredential(Environment.GetEnvironmentVariable(adminOptions.CredentialEnv)!), new AdminRateLimit(adminOptions, TimeProvider.System),
+            commands, adminStore, new AdminStatusSource(world, gateway, saves, log, contentHash, startedAt), gateway, log);
+        adminHost = await AdminHost.StartAsync(adminOptions, host.Endpoint.Port, api);
+    }
+    catch (Exception e) when (e is InvalidOperationException or IOException)
+    {
+        log.Error("Admin API could not start: " + e.Message);
+        await host.StopAsync();
+        await host.DisposeAsync();
+        if (saves is not null) await saves.DrainAsync(TimeSpan.Zero);
+        return 1;
+    }
+}
 
 using var stop = new ManualResetEventSlim();
 void RequestStop(PosixSignalContext context)
@@ -136,6 +178,7 @@ foreach (var runner in runners) runner.Start();
 gateway.Start();
 await using var eraser = database is null ? null : AccountEraser.Start(new PostgresAccountStore(database), TimeProvider.System, log); // T-703
 log.Info($"Gateway listening on {host.Endpoint}{(accounts is null ? "" : " (account endpoints on the same port)")}");
+if (adminHost is not null) log.Info($"Admin API listening on {adminHost.Endpoint} (T-804; docs/ADMIN_API.md)");
 log.Info(options.DurationSeconds is { } d ? $"Running for {d} s." : "Running. Press Ctrl+C to stop.");
 
 if (options.DurationSeconds is { } seconds) stop.Wait(TimeSpan.FromSeconds(seconds));
@@ -145,6 +188,11 @@ var unsaved = 0;
 if (eraser is not null) await eraser.DisposeAsync(); // an erasure in progress is one transaction: it is finished or undone
 log.Info($"Stopping: saying bye to {gateway.SessionCount} session(s), releasing {gateway.CharactersInGrace} character(s) in their grace period, " +
          "then finishing the current tick of each instance.");
+if (adminHost is not null)
+{
+    await adminHost.StopAsync(); // no admin command starts while the sessions are said bye to
+    await adminHost.DisposeAsync();
+}
 await gateway.ShutdownAsync();
 await host.StopAsync();
 await host.DisposeAsync();

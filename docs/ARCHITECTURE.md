@@ -112,7 +112,7 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
   on Windows, to measure the difference). Each runner logs start lateness (p50 / p99 / max) every 600 ticks. Each `MapInstance` records
   its tick durations in a fixed 600-sample ring (`TickTimings`, no allocation per tick); `GetStats()` returns an immutable
   `InstanceStats` (p50 / p99 / max of the window, lifetime max, tick number, counters) that is safe to read from another thread. The
-  admin panel (T-804/T-805) reads it; there is no endpoint yet.
+  admin API's `GET /admin/v1/status` reads it (T-804, §12.6).
 - **One content boot.** `ContentBoot` (`Game.Content/Loading`) loads the content and runs every validation rule, including the theme
   manifest's asset keys and audio data. The server calls it at start and refuses to run on an error, printing the same lines
   `Game.Tools validate` prints; `validate` adds only the JSON Schema check (YAML documents and `maps/*.grid.json`) and the map scene check (§5.3).
@@ -1513,6 +1513,28 @@ Staff browser ──HTTPS + SSO──► Game.Admin (ASP.NET Core, Blazor Server
   and validated (`validate`) before they ship. The panel can show content, not change it.
 - Running arbitrary SQL or scripts against the live database.
 - Anything a player can see. The panel is internal; it is not the "web client" excluded in §13.
+
+### 12.6 The admin API as built (T-804)
+Endpoints, headers and local use: **docs/ADMIN_API.md**. Code: `src/Game.Server/Admin`; contracts and terms in `Game.Shared` (`AdminPaths`, `AdminHeaders`, "Staff roles", "Admin actions", "Admin errors").
+- **Listener.** A second Kestrel listener (`AdminHost`), off unless `--admin-port` is set, never on the game's port, serving `/admin/v1` only. Loopback by default; development allows only loopback and
+  plain HTTP; outside development it needs a certificate, and a non-loopback address needs `--admin-private-network true` (the deployer's word that only a VPN or an allowlist reaches it). Headers 8 KB,
+  bodies 8 KB, 10 s a request, 64 connections; every answer `no-store`. It needs the database (the audit log): without one the server refuses to start.
+- **Who calls.** The **service credential** (an environment variable, 32+ characters, never logged) proves the panel: kept as a SHA-256 digest and compared in constant time. Each request names the
+  **staff member** (`X-Staff-Id`, `-Name`, `-Role`). The server checks the credential, the shape, that the role is a role, the command's lowest role, the reason and the rate limits (per credential, and
+  failed credentials per address); it **takes from the panel** that the person is who it says and holds that role, because the panel did the OIDC sign-in and only the credential's holder can say it. A
+  forwarded, signed ID token checked here is the way to close that gap (not built).
+- **Commands** (`IAdminCommand`) go through `AdminCommands`: the role table (`AdminCommandTable`, one place, `kick` → `support`), a required reason (1-500 characters), then the command. A command
+  that touches the world runs a **step on the tick** (`AdminRoad.OnTickAsync` → `AdminIntent` → `AdminSystem`, last before the AOI) and waits for it (3 s, else `timeout` and nothing is changed). The
+  answer is an outcome: `done`, `accepted` (the world applies it on a coming tick) or `refused` with an "Admin errors" term.
+- **Audit log.** `admin_audit` (+ `admin_staff` for the names). A change in the database is written with its row in one transaction (rule 10); one that is not gets its row before the answer. Before and
+  after are JSON of ids and numbers only. **Triggers** refuse `UPDATE`, `DELETE` and `TRUNCATE` for every role, the owner included (the server owns its tables, so grants alone could not); only DDL gets past,
+  which only migrations run (docs/ADMIN_API.md says how a deployment closes that with a second role). Erasing an account leaves its rows: they name only ids (docs/STORE_COMPLIANCE.md §6).
+- **Events.** After the change and its row, `AdminActionApplied` is raised on the **admin event bus** (`AdminEvents`, an `EventBus` dispatched at once on the request's thread; a subscriber that must
+  touch the world queues an intent). Admin commands do not belong to one instance, so they have a bus of their own.
+- **Reads.** Status (players online, sessions, every instance's tick p50/p99/max and counters, saving, errors logged, the content hash `ClientBundleExporter.Hash`), accounts and characters by name prefix
+  or id (paged), one character's saved state, the audit log by target, staff, action and time. No answer holds a password hash or a token.
+- **Kick** (`support`): every session of the account ends with its row in one transaction; the gateway says `bye kicked` and the character (in its grace period too) leaves, saved, its resume token dead,
+  exactly as T-710's session end. The client says so and goes to the sign-in screen.
 
 ## 13. Non-goals for v1
 Sharding/multi-server, client prediction beyond movement interpolation, PvP balance,

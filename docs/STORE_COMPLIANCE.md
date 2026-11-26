@@ -22,6 +22,8 @@ Store rules change. Everything marked "read" was read on **2026-11-25**; read th
 | Characters: name, job, looks, slot, when created or deleted | `characters` | The game. A *character* that is deleted keeps its row and name, so support can undo it | The account is erased |
 | Their state: place, levels, stats, skills, quests, currency, items | `character_states`, `character_items` | The game | The account is erased |
 | That an account was asked to be deleted, and when it was erased | `account_deletions`: the account's id and two times | Support, and cleaning a restored backup (§6) | Kept. It holds nothing about the person; the id leads nowhere once the account is gone |
+| What staff did to an account (T-804): who (staff id), with which role, the action, the account or character **id**, before and after (ids and numbers only: online or not, map and cell, sessions ended), the reason in the staff member's words, the time, the request id | `admin_audit` (append-only) | Accountability for staff actions, support, disputes, security | Kept, also after the account is erased: see §6 "Audit rows" |
+| Staff members' ids (the identity provider's subject), display names and last role | `admin_staff` | Naming who wrote an audit row | Staff, not players: the fork's own staff policy. Kept while an audit row names them |
 | IP address | Server **logs** only (sign-ins and connections), and in memory for the limits on guessing (`AccountGuard.cs`) | Security | The log's own lifetime: **the fork decides** and says so in its policy. The template writes to standard output and keeps no log files |
 | Preferences: sound volumes, UI size | On the device only (`user://preferences.json`) | Convenience | The app is removed |
 
@@ -85,6 +87,13 @@ names and ids that are left. Data a service of somebody else holds must be delet
    has left. The **username and the character names become free**: keeping them would keep something about the person, and hashing a name hides nothing. Somebody can take a name a minute after it was erased; the wait is what
    keeps that from being used against a player who comes back.
 4. What others got from the player (traded items) stays theirs. The app cannot tell the player that it is done, since it has no way to reach them; signing in then answers as if the account had never been.
+
+**Audit rows** (T-804, ARCHITECTURE §12.3). Erasing an account leaves the audit rows about it: nothing may change or delete them (the table's triggers refuse it, the server's own role included), so a staff
+action can always be traced. They hold nothing personal of the player: the target is the account or character **id**, which leads nowhere once the account is gone, and before and after hold ids and numbers
+only, never a username, a character name, a password hash or a token (the server writes nothing else there; a test reads them after an erasure). What can hold personal data is the **reason**, because staff write it:
+the panel (T-805) must tell them to write what happened and never a name, an e-mail address or anything else about a person. A row that holds personal data all the same, and must go, is taken out by whoever owns the
+database, in a reviewed maintenance step outside the game (as a migration would: drop the trigger, delete the row, put the trigger back), and that step is recorded where your policy says. Say in the policy that staff
+actions are kept, why and for how long; a fork that must not keep them for ever adds a retention step the same way.
 
 **Restoring a backup** brings erased accounts back, so clean it before anybody can sign in:
 

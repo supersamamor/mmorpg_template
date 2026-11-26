@@ -66,6 +66,7 @@ public static class UiText
             case ConnectionNotice.SavePending: return "Your character is still being saved. Please try again in a moment.";
             case ConnectionNotice.SaveLost: return "The server lost touch with your character's save. Please log in again.";
             case ConnectionNotice.SessionEnded: return "You were signed out from another device, or your password was changed.";
+            case ConnectionNotice.Kicked: return "A game master ended your session. Please sign in again.";
             case ConnectionNotice.ConnectionFailed: return "Could not reach the server.";
             case ConnectionNotice.UpdateRequired: return "A new version is required to play. Please update the app.";
             case ConnectionNotice.Replaced: return "You are playing on another connection.";
