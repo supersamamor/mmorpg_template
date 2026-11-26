@@ -239,6 +239,8 @@ root settings away from the Godot SDK. Godot, SDK and framework versions are tho
 
 ### 8.1 Run it on one PC
 
+This is the developer's way, with the server and the client run from the source. To only **play** it (server in Docker, a Windows build of the game, one command), see [LOCAL_PLAY.md](LOCAL_PLAY.md).
+
 ```powershell
 dotnet run --project src/Game.Server                  # terminal 1; dev loopback on ws://127.0.0.1:7780/ws
 dotnet build client/GameClient.csproj                 # terminal 2; also packs the bundle (below)
@@ -324,7 +326,7 @@ The path is relative to `client`, and `client/exports/` is gitignored. §4's got
 .\client\export-android.ps1 -Release   # release preset; signed with GODOT_ANDROID_KEYSTORE_RELEASE_{PATH,USER,PASSWORD} (the debug keystore is fine to measure size)
 ```
 
-**What the APK carries (T-216).** The presets are `Android arm64 (debug)`, `Android arm64 (release)`, `iOS (Xcode project)`, and two desktop presets used only by `-Run release` (`Windows Desktop (release check)`, `Linux (release check)`).
+**What the APK carries (T-216).** The presets are `Android arm64 (debug)`, `Android arm64 (release)`, `iOS (Xcode project)`, two desktop presets used only by `-Run release` (`Windows Desktop (release check)`, `Linux (release check)`), and `Windows Desktop (local play)` for [LOCAL_PLAY.md](LOCAL_PLAY.md).
 The Android ones export `arm64-v8a` only (§7.1) and no other architecture.
 
 | | Before (T-206) | After (T-216) |
@@ -364,6 +366,7 @@ Every headless Godot step the scripts run (the import, the map export, the Andro
 | map export (`export-maps.ps1 -TimeoutSeconds`) | 300 s (about 2 s here) | none (the exit code is the result) | 3 | a hang only: a bad map exits 1 every time |
 | Android export (`export-android.ps1 -TimeoutSeconds`, `-ExitSeconds`) | 900 s (600 s on CI) | `.apk` and `.apk.idsig` written by this attempt, then 30 s, then Godot is stopped and the APK kept | 2 | a timeout |
 | release export (`run-e2e.ps1 -ExportTimeoutSeconds`, `-ExportExitSeconds`, `-ExportAttempts`) | 600 s (about 21 s here) | the exe, console exe and `.pck` written by this attempt, then 60 s | 3 (2 on CI) | a hang, before or after writing |
+| local play export (`export-windows.ps1 -TimeoutSeconds`, `-ExitSeconds`, `-Attempts`) | 600 s (18 to 42 s here) | the same three files, then 60 s | 3 | a hang, before or after writing |
 
 Each attempt prints one line, for example `[godot] import attempt 1/3: ok, exit 0 after 7.3 s`. A stuck attempt's whole process tree is stopped by
 process id and creation time (`Stop-ProcessTree`, never by name: other worktrees run Godot too, and Windows reuses ids, T-226). When the attempts run out, the script exits non-zero.

@@ -4,6 +4,24 @@ A data-driven, server-authoritative 3D MMORPG template for **Android and iOS**
 (Ragnarok-style progression). The engine knows nothing about the game — maps, jobs, skills,
 items, monsters, quests and art are all data that can be swapped without code changes.
 
+## Play it on your PC
+
+Windows, with Docker Desktop **running** (the script never starts it), the .NET 10 SDK, Godot 4.7.2 .NET **with its export templates**
+([`docs/MOBILE_BUILD.md`](docs/MOBILE_BUILD.md) §1) and the art checked out (`git lfs pull`). From the repo root:
+
+1. Start the server, its database and two game windows (the first time takes several minutes):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\play-local.ps1 -Players 2
+   ```
+2. In each window: enter a username and a password (not one you use elsewhere), **Register**, create a character, **Play**. With a second account in the second window, the two see each other.
+3. Stop (accounts and characters are kept; `-Reset` instead wipes them, after asking):
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\play-local.ps1 -Stop
+   ```
+
+The server runs in Docker, reachable from this PC only, over `wss://` with a self-signed certificate made on your PC. It does not touch the development database below.
+Details, ports, dev passwords and Linux/macOS: [`docs/LOCAL_PLAY.md`](docs/LOCAL_PLAY.md).
+
 ## Prerequisites (Windows)
 
 1. Start **Docker Desktop** (not installed by the script).
@@ -74,6 +92,7 @@ docker compose down -v    # stop and WIPE all data
 
 - [`CLAUDE.md`](CLAUDE.md) — rules for AI agents (read first)
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/LOCAL_PLAY.md`](docs/LOCAL_PLAY.md) — play on one PC: the server in Docker, a Windows game build
 - [`docs/VOCABULARY.md`](docs/VOCABULARY.md)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - [`docs/TASKS.md`](docs/TASKS.md) — task tracker: agent, model, prompt, status per task
