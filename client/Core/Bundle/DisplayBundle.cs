@@ -111,6 +111,8 @@ public sealed class DisplayBundle
     private readonly Dictionary<string, string?[]> _skillSounds = new Dictionary<string, string?[]>(StringComparer.Ordinal);
     private readonly SortedSet<string> _soundKeys = new SortedSet<string>(StringComparer.Ordinal);
     private readonly SortedSet<string> _modelKeys = new SortedSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> _jobModelKeys = new HashSet<string>(StringComparer.Ordinal);
+    private readonly HashSet<string> _otherModelKeys = new HashSet<string>(StringComparer.Ordinal);
     private readonly Dictionary<string, MapData> _maps = new Dictionary<string, MapData>(StringComparer.Ordinal);
     private readonly Dictionary<string, ItemDisplay> _items = new Dictionary<string, ItemDisplay>(StringComparer.Ordinal);
     private readonly Dictionary<string, StatusDisplay> _statuses = new(StringComparer.Ordinal);
@@ -156,6 +158,9 @@ public sealed class DisplayBundle
 
     /// <summary>Every distinct model key the bundle names, in order (for preloading).</summary>
     public IReadOnlyCollection<string> ModelKeys => _modelKeys;
+
+    /// <summary>True when only jobs name this model key (T-711): a job model is drawn only when a character's body is missing (ADR-002 row 311), so it need not be preloaded.</summary>
+    public bool IsJobModelOnly(string key) => _jobModelKeys.Contains(key) && !_otherModelKeys.Contains(key);
 
     /// <summary>Every distinct sound key the bundle names (monster, item, skill and map sounds), for preloading.</summary>
     public IReadOnlyCollection<string> SoundKeys => _soundKeys;
@@ -248,6 +253,7 @@ public sealed class DisplayBundle
                     {
                         result._models[id] = key;
                         result._modelKeys.Add(key);
+                        (list == "jobs" ? result._jobModelKeys : result._otherModelKeys).Add(key);
                     }
                 }
             }

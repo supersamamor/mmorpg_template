@@ -39,16 +39,18 @@ bigger elite, or a plain alias.
 1. a **body** per gender and every **face** and **hairstyle** key of `appearance.yaml` (add or remove options there; keep the ids players may have saved: a removed id is drawn as the default);
 2. the **paint**: skin, cloth and scalp vertex colours by the contract, or named in `recolor` (THEMES.md §1.7);
 3. each **job's look** in `content/jobs/*.yaml`: `look.cloth_color`, and `look.pieces` for a silhouette (hat, tabard, pauldrons; worn-piece models of the theme). The template ships colours only;
-4. `hides_hair` on headgear that swallows the hair.
+4. `hides_hair` on headgear that swallows the hair;
+5. if the art is **textured**: one atlas image for every character part (bodies, faces, hairstyles, job and outfit pieces, worn gear) with the same material settings, so each character stays one draw call
+   (THEMES.md §1.9). A part on another image still works, at one draw call more per character wearing it.
 
-`validate --theme <theme>` checks all of it. The job models in the table are drawn only when a body is missing (§7.5.1); a fork may point them at a body or leave them to `default`.
+`validate --theme <theme>` checks all of it. The job models in the table are drawn only when a body is missing (§7.5.1), and are loaded only then (T-711); a fork may point them at a body or leave them to `default`.
 
 | Model key | Job id | Role | Needs |
 |-----------|--------|------|-------|
 | `model.char.wanderer` | `job.wanderer` | Starting job: light melee, everyone begins here | Humanoid; light clothing; reads as a beginner |
 | `model.char.warden` | `job.warden` | Second job: armoured melee, sword and shield | Humanoid; heavy shoulders or a helm |
 | `model.char.spellbinder` | `job.spellbinder` | Second job: caster with a staff | Humanoid; a hat or hood; staff clips (`idle.staff`, `attack.staff`) |
-| `model.char.body_male`, `model.char.body_female` | (appearance) | What every player is drawn on: gear, face, hair and the job's pieces are merged into it | Humanoid; skin, cloth and scalp are painted vertex colours (THEMES.md §1.7), no baked skin texture |
+| `model.char.body_male`, `model.char.body_female` | (appearance) | What every player is drawn on: gear, face, hair and the job's pieces are merged into it | Humanoid; skin, cloth and scalp are painted vertex colours (THEMES.md §1.7), no baked skin texture; textured: the theme's one character atlas (§1.9) |
 | `model.char.face_*`, `model.char.hair_*` | (appearance) | Face and hairstyle options per gender | Faces skinned to `head`; hair attached to `head`; a hairstyle takes the hair colour as a whole |
 
 **NPCs** — humanoid, stand still, talk.

@@ -19,8 +19,16 @@ if ($item -and -not $Copy -and $item.LinkType -eq "Junction" -and (@($item.Targe
 if ($item) {
     if ($item.LinkType) { $item.Delete() } else { Remove-Item $mount -Recurse -Force }
 }
+# A real copy leaves out themes generated for a test or a measurement (T-711's textured one): they ignore themselves in Git (a .gitignore of their own) and are never shipped.
+function Copy-Themes {
+    New-Item -ItemType Directory -Path $mount | Out-Null
+    foreach ($theme in Get-ChildItem $source) {
+        if ($theme.PSIsContainer -and (Test-Path (Join-Path $theme.FullName ".gitignore"))) { continue }
+        Copy-Item $theme.FullName (Join-Path $mount $theme.Name) -Recurse
+    }
+}
 if ($Copy) {
-    Copy-Item $source $mount -Recurse
+    Copy-Themes
     "themes copied to $mount"
     return
 }
@@ -30,6 +38,6 @@ try {
 }
 catch {
     Write-Warning "Could not make a junction ($($_.Exception.Message)); copying instead."
-    Copy-Item $source $mount -Recurse
+    Copy-Themes
     "themes copied to $mount"
 }

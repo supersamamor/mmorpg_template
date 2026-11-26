@@ -5,9 +5,20 @@ using Game.ThemeGen;
 //   dotnet run --project tools/themegen -- --check       write nothing; exit 1 if the files on disk differ from what the generator produces
 //   dotnet run --project tools/themegen -- --themes dir  use another themes directory
 //   dotnet run --project tools/themegen -- --content dir  read item weapon types (for the placeholder weapon shapes) from another content directory
+//   dotnet run --project tools/themegen -- --textured name [--other key,key]   T-711: write themes/<name>, a textured copy of default's character parts for tests and
+//                                                         measuring (one atlas image in every file; the keys after --other get another image). Never committed.
 var check = args.Contains("--check");
 var themesAt = Array.IndexOf(args, "--themes");
 var themes = themesAt >= 0 && themesAt + 1 < args.Length ? args[themesAt + 1] : Path.Combine(RepoRoot(), "themes");
+
+var texturedAt = Array.IndexOf(args, "--textured");
+if (texturedAt >= 0 && texturedAt + 1 < args.Length)
+{
+    var otherAt = Array.IndexOf(args, "--other");
+    var other = otherAt >= 0 && otherAt + 1 < args.Length ? args[otherAt + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : Array.Empty<string>();
+    Console.WriteLine($"textured theme '{args[texturedAt + 1]}': {TexturedTheme.Write(themes, args[texturedAt + 1], other)} file(s) written");
+    return 0;
+}
 
 var contentAt = Array.IndexOf(args, "--content");
 var content = contentAt >= 0 && contentAt + 1 < args.Length ? args[contentAt + 1] : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(themes))!, "content");

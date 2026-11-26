@@ -7,4 +7,8 @@
   <ItemGroup>
     <InternalsVisibleTo Include="Game.Tests" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- T-711: the textured test theme edits the default pack's glTF files with the content library's reader. -->
+    <ProjectReference Include="..\..\src\Game.Content\Game.Content.csproj" />
+  </ItemGroup>
 </Project>

@@ -163,7 +163,9 @@ public class ThemePackTests
     [Fact]
     public void Textures_are_no_larger_than_1024_and_the_whole_pack_is_small()
     {
-        foreach (var file in Directory.EnumerateFiles(Themes, "*.png", SearchOption.AllDirectories))
+        // A theme generated for a test or a measurement (T-711's textured one) ignores itself in Git: it is never shipped, so it is not counted.
+        bool Shipped(string file) => !Directory.GetDirectories(Themes).Any(d => File.Exists(Path.Combine(d, ".gitignore")) && file.StartsWith(d + Path.DirectorySeparatorChar, StringComparison.Ordinal));
+        foreach (var file in Directory.EnumerateFiles(Themes, "*.png", SearchOption.AllDirectories).Where(Shipped))
         {
             var bytes = PackFiles.ReadAllBytes(file);
             var width = (bytes[16] << 24) | (bytes[17] << 16) | (bytes[18] << 8) | bytes[19];
@@ -171,7 +173,7 @@ public class ThemePackTests
             width.ShouldBeInRange(1, 1024, file);
             height.ShouldBeInRange(1, 1024, file);
         }
-        var total = Directory.EnumerateFiles(Themes, "*", SearchOption.AllDirectories).Sum(f => new FileInfo(f).Length);
+        var total = Directory.EnumerateFiles(Themes, "*", SearchOption.AllDirectories).Where(Shipped).Sum(f => new FileInfo(f).Length);
         total.ShouldBeLessThan(3L * 1024 * 1024, "the generated pack is a few hundred KB of the 200 MB install budget");
     }
 

@@ -82,6 +82,16 @@ public sealed class ModelFacts
     /// <summary>Every texture's size, by image index.</summary>
     public IReadOnlyList<(int Image, int Width, int Height)> Textures { get; private init; } = System.Array.Empty<(int, int, int)>();
 
+    /// <summary>
+    /// How each material joins a character's merge (T-711), by material index, as the client groups them: materials with the same group share one surface. The group
+    /// is <c>none</c> (no texture) or <c>image:&lt;hash of the base colour image's bytes&gt;</c>, followed by the shading the client also compares (roughness, metallic,
+    /// two-sided); a material that is see-through or uses another texture than the base colour is <c>own:&lt;index&gt;</c>, a surface of its own in any case.
+    /// </summary>
+    public IReadOnlyDictionary<int, string> MaterialGroups { get; private init; } = new Dictionary<int, string>();
+
+    /// <summary>The kind of a <see cref="MaterialGroups"/> value without its shading: <c>none</c>, <c>image:&lt;hash&gt;</c> or <c>own:&lt;index&gt;</c>.</summary>
+    public static string ImageOf(string group) => group.Split('|')[0];
+
     /// <summary>Indexes of materials that are blended (<c>alphaMode: BLEND</c>) or cut out (<c>MASK</c>): the toon look leaves those alone.</summary>
     public IReadOnlySet<int> SeeThroughMaterials { get; private init; } = new HashSet<int>();
 
@@ -96,6 +106,30 @@ public sealed class ModelFacts
             for (var v = 0; width >= 3 && v + width <= values.Length; v += width) colors.Add(Channel(v) << 16 | Channel(v + 1) << 8 | Channel(v + 2));
         }
         return colors;
+    }
+
+    private static readonly string[] OtherTextures = { "normalTexture", "occlusionTexture", "emissiveTexture" };
+
+    /// <summary>One material's <see cref="MaterialGroups"/> value.</summary>
+    private static string GroupOf(GltfFile file, JsonNode? material, int index, bool seeThrough)
+    {
+        var pbr = material?["pbrMetallicRoughness"];
+        if (seeThrough || OtherTextures.Any(t => material?[t] is not null) || pbr?["metallicRoughnessTexture"] is not null) return "own:" + index;
+        var image = "none";
+        if (pbr?["baseColorTexture"]?["index"] is { } texture)
+        {
+            var source = file.Json["textures"]?[texture.GetValue<int>()]?["source"];
+            var bytes = source is null ? null : file.ImageBytes(source.GetValue<int>());
+            var uri = source is null ? null : file.Json["images"]?[source.GetValue<int>()]?["uri"]?.GetValue<string>();
+            image = bytes is { Length: > 0 }
+                ? "image:" + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes), 0, 6).ToLowerInvariant()
+                : "image:" + (uri ?? "unreadable" + index);
+        }
+        var roughness = pbr?["roughnessFactor"] is { } r ? GltfFile.Number(r) : 1f;
+        var metallic = pbr?["metallicFactor"] is { } m ? GltfFile.Number(m) : 1f;
+        var twoSided = material?["doubleSided"]?.GetValue<bool>() ?? false;
+        var unlit = material?["extensions"]?["KHR_materials_unlit"] is not null ? "|unlit" : "";
+        return FormattableString.Invariant($"{image}|r{roughness:0.###}|m{metallic:0.###}|{(twoSided ? "two-sided" : "one-sided")}{unlit}");
     }
 
     /// <summary>Measures a loaded asset.</summary>
@@ -193,8 +227,14 @@ public sealed class ModelFacts
             for (var i = 0; i < materialList.Count; i++)
                 if (materialList[i]?["alphaMode"]?.GetValue<string>() is "BLEND" or "MASK") seeThrough.Add(i);
 
+        var groups = new Dictionary<int, string>();
+        if (file.Json["materials"] is JsonArray materialGroups)
+            for (var i = 0; i < materialGroups.Count; i++)
+                groups[i] = GroupOf(file, materialGroups[i], i, seeThrough.Contains(i));
+
         return new ModelFacts
         {
+            MaterialGroups = groups,
             Meshes = meshes,
             Bones = bones,
             BoneAt = boneAt,

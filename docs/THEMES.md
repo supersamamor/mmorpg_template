@@ -21,7 +21,7 @@ phone-sized view (ADR-003 point 7).
 | Mesh names | The mesh node is `Body_LOD0`; a cheaper `Body_LOD1` is optional | **checked** (`theme.model`) |
 | Materials | 1 material per model (one draw call per character, two with the outline; §9) | **checked** (`theme.budget`) |
 | Texture size | Each texture ≤ 1024 × 1024 (§9) | **checked** (`theme.budget`) |
-| Atlas | Equipment shares its rig's atlas, so a dressed character merges into one surface (ADR-003 point 5, §7.5) | *by eye*: a worn piece with its own texture still draws, but as one more surface |
+| Atlas | A character's parts share one atlas image, so a dressed character merges into one surface (ADR-003 point 5, §7.5, §1.9) | **checked** as a warning for every character part (§1.9) |
 | Scale | 1 cell = 1 world unit. A living model is 0.1 to 8 units tall; a worn piece or prop is at most 4 units across | **checked** (`theme.model`, with the `scale` to set) |
 | Origin | On the ground under the model: its lowest point within 35 % of its height of the origin | **checked** as a warning (`warn.theme_look`) |
 | Facing | Faces **-Z** (north at yaw 0) | **checked** for the humanoid rig (its right hand must be on +X); *by eye* for other rigs |
@@ -41,7 +41,7 @@ phone-sized view (ADR-003 point 7).
 
 ### 1.3 The shared humanoid rig
 
-Every character body, face, hairstyle and garment uses **one** rig named `humanoid`, so gear and appearance attach to any character (§7.5, §7.5.1). Its bones
+Every character body, face, hairstyle and garment uses **one** rig named `humanoid`, so gear and appearance attach to any character (§7.5, §7.5.1), and, when textured, **one** atlas image (§1.9), so they merge into one draw call. Its bones
 must include these names (more bones, such as fingers, are fine):
 
 `hips` (the root, and the default attach point), `spine`, `head`, `arm_l`, `hand_l`, `arm_r`, `hand_r`, `leg_l`, `leg_r` — **checked**.
@@ -100,8 +100,8 @@ theme supplies the models. The character's colours are **vertex colours**: paint
 
 - **Other paint:** name a model's own in its manifest entry: `"recolor": { "skin": ["#ffccaa", "#dd9977"], "cloth": [] }`. The first colour of a list becomes the character's, the others keep their relation to it; an empty
   list means nothing on this model takes that colour. On a hairstyle, naming `hair` colours only that paint, so a ribbon can stay. Names and values are **checked** (`theme.appearance`).
-- **Textured art:** a vertex colour multiplies the texture, so leave skin and cloth white (or grey shading) in the atlas and paint them by vertex colour. A face or hairstyle with a texture of its own stays a second surface: one
-  more draw call per character (**checked** as a warning).
+- **Textured art:** a vertex colour multiplies the texture, so leave skin and cloth white (or grey shading) in the atlas and paint them by vertex colour. Faces and hairstyles go on the body's atlas (§1.9); one with
+  an image of its own stays a second surface, one more draw call per character (**checked** as a warning).
 - **Body without paint:** a body whose skin paint no vertex has shows no skin tone, and one without cloth paint shows no job (**checked** as warnings).
 - **Budgets:** the body with its largest face and hairstyle must be inside 5,000 triangles near and 2,000 far (**checked**, `theme.budget`); faces and hairstyles may have a `Body_LOD1`, and need one when the far sum is too big.
 - **A hairstyle that headgear hides:** `"hides_hair": true` on the worn piece's entry (**checked**: a worn piece, true or false). The hairstyle is then not drawn at all, so the body needs a scalp under it (the placeholder body
@@ -118,7 +118,35 @@ character's one mesh in place of the gear of the slots it covers. Model a piece 
   character's. The template's coat is painted with the cloth paint (`#efe3c8`, `#bbb19c`), so it takes the job's colour. An outfit that takes a colour none of its pieces is painted with is **checked** as a warning.
 - **`hides_hair`** on a head piece takes the hairstyle off while it shows (the template's hood); keep a scalp on the body.
 - **Budgets:** a piece is a worn piece (1,000 triangles at most, **checked**), and the body with its outfit is one mesh: keep a full outfit in the size of the gear it replaces.
-- Never a texture of its own unless it shares the character's atlas: it would be one more draw call per character wearing it (§1.7).
+- Never a texture of its own: put it on the character's atlas (§1.9), or it is one more draw call per character wearing it (**checked** as a warning).
+
+### 1.9 One draw call a character: the atlas rule (T-711)
+
+The client merges a character's body, face, hairstyle, job pieces, outfit pieces and worn equipment into one mesh. Parts become **one surface** (one draw call; two with the outline) when their materials match:
+
+- **The same image.** Every `.glb` embeds its own copy of a texture, so the client tells images apart by **content**: the bytes of the image as imported, hashed once per texture at load (`ImageIdentity`).
+  The same atlas exported into twenty files is one image; one changed pixel is another. A part without a texture matches only parts without a texture.
+- **The same material settings:** opaque, the base colour texture only (no normal, emission, occlusion or metallic-roughness map), the same roughness, metallic, sides and shading (unlit or not).
+  The base colour *factor* may differ: it is baked into the vertex colours like the vertex-coloured art's.
+
+**What an artist does for one draw call per character:** one atlas image per theme for all character parts (by asset key: every `model.char.body_*`, face, hairstyle, job piece, `model.outfit.*` and worn
+`model.equip.*` a body can wear), at most 1024 × 1024, with one material on each model that points at it and the same settings everywhere. Paint skin, hair and cloth by vertex colour over white
+or grey in the atlas (§1.7), so skin tones, hair colours and job colours still show. Or go without textures altogether, as `default` does: vertex colours only, which is also one image ("none").
+
+**What costs a second draw call:** each part whose image or settings differ from its body's (a hairstyle on its own texture, an untextured weapon on a textured body, a cape with a normal map, a
+see-through veil). It still draws, as one more surface on every character that has it at that moment, so 40 characters with one such part cost 40 draw calls more (§9: 100 in a scene).
+
+**What `validate --theme <theme>` checks** (warnings, `warn.theme_look`, at the part's manifest line): for each gender, every part above whose `Body_LOD0` materials differ from its body's, naming the
+part's key, the bodies it splits from, and what differs (the image, by its hash; "no texture"; the settings; "a material of its own"). It compares the image's bytes in the file, so the same
+pixels encoded twice differently are a warning the client does not need (it compares the imported pixels); the same bytes are never missed. A body with more than one material is the budget's error (§1.1).
+
+**Why a rule and not an atlas built at load:** packing the parts' textures into one atlas on the phone would need a texture as big as all of them (up to 1024² per part, so 4 MB each uncompressed,
+more than the 1024² §9 allows a character), re-written texture coordinates in every part, mipmaps that bleed between neighbours, and the GPU-compressed formats (ETC2, ASTC) decompressed and
+compressed again, at every start, on a worker; a texture that changes with every look also defeats the cache shared by every character. An artist packs the atlas once, in Blender, at no cost on the phone.
+
+**Testing it:** `dotnet run --project tools/themegen -- --textured <name> [--other key,key]` writes `themes/<name>`, a textured copy of `default`'s character parts (one atlas in every file, another
+image for the keys after `--other`), which ignores itself in Git and is left out of exports; `validate --theme <name>` shows the warnings, `--set theme=<name>` draws it, and `run-e2e.ps1 -Run textured`
+checks it in the engine.
 
 ## 2. Variants
 

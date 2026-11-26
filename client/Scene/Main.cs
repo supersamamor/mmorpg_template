@@ -80,6 +80,14 @@ public partial class Main : Node3D
     private long _quietBytes, _quietFrames, _busyBytes, _busyFrames;
 
     /// <inheritdoc />
+    public override void _EnterTree()
+    {
+        // Scripted and measuring runs with a window (T-711, ADR-002 row 346): Godot 4.7 puts a window it is told to open off every screen (--position) back on one, so the
+        // window is moved off once it exists. It only moves a window, so it is safe in any build.
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--offscreen") >= 0 && DisplayServer.GetName() != "headless") DisplayServer.WindowSetPosition(new Vector2I(-10000, -10000));
+    }
+
+    /// <inheritdoc />
     public override void _Ready()
     {
         var args = OS.GetCmdlineUserArgs();

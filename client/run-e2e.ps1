@@ -33,13 +33,16 @@
 #                                                         client (headless) sees it too; log out and in, it is still on; take it off (T-708). Needs PostgreSQL like account
 #   .\client\run-e2e.ps1 -Run kick                        a new account's character plays; the script kicks the account through the admin API (its own port, a credential made for
 #                                                         the run); the client says so and goes to the sign-in screen, signs in again; the audit row is there (T-804). Needs PostgreSQL like account
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, kick, bye, release (account,
+#   .\client\run-e2e.ps1 -Run textured                  the textured test theme (tools/themegen --textured, generated before the import, never committed): characters whose parts share
+#                                                         one atlas are one textured surface, dressed and in outfits too; a hairstyle with another image is a second one; job models
+#                                                         load only when a character needs one (T-711)
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, kick, textured, bye, release (account,
 #                                                         saving, appearance, wardrobe and kick are skipped, and said so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "textured", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -69,6 +72,11 @@ if ($LASTEXITCODE -ne 0) { throw "The server does not build." }
 dotnet build (Join-Path $client "GameClient.csproj") -v q --nologo | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "The client does not build." }
 & (Join-Path $client "mount-themes.ps1") | Out-Null   # res://themes (ARCHITECTURE §7.7)
+# T-711: the textured test theme, written before the import (only files that changed), so the textured run and a textured measurement find it imported.
+$texturedTheme = "textured-test"
+$texturedOther = "model.char.hair_female_curls,model.char.hair_male_topknot"   # parts given another image than the atlas (not the default hairstyles) (asset keys: data for the run)
+dotnet run --project (Join-Path $root "tools/themegen") -v q --nologo -- --textured $texturedTheme --other $texturedOther | Out-Host
+if ($LASTEXITCODE -ne 0) { throw "The textured test theme could not be written." }
 Import-GodotProject $godot $client -Force -TimeoutSeconds $ImportTimeoutSeconds
 
 $script:temp = $null
@@ -377,6 +385,12 @@ function Invoke-Scenario([string] $Name) {
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-stats" @()) -EngineArgs $engineArgs
                 return (Wait-GodotClient $run 180).Code
             }
+            "textured" {
+                $server = Start-GameServer
+                $extra = @("--e2e-textured", $texturedOther, "--e2e-textured-dress", "item.bone_dirk,item.leather_cap,item.padded_vest,item.wooden_buckler", "--set", "theme=$texturedTheme")
+                $run = Start-GodotClient (Get-RunClientArgs @() $extra) -EngineArgs $engineArgs
+                return (Wait-GodotClient $run 180).Code
+            }
             "dialogue" {
                 $server = Start-GameServer
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-dialogue" @()) -EngineArgs $engineArgs
@@ -639,7 +653,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "textured", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 # The account, saving and appearance runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.
