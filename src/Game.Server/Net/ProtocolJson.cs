@@ -484,8 +484,14 @@ public static class ProtocolJson
             case PongMessage pong:
                 w.WriteNumber("seq", pong.Seq);
                 break;
+            case AnnouncementMessage announcement:
+                w.WriteString("kind", announcement.Kind);
+                if (announcement.Text is { } said) w.WriteString("text", said);
+                if (announcement.InSeconds is { } inSeconds) w.WriteNumber("in", inSeconds);
+                break;
             case ByeMessage bye:
                 w.WriteString("reason", bye.Reason);
+                if (bye.RetryAfterSeconds is { } retry) w.WriteNumber("retry_after", retry);
                 break;
         }
         w.WriteEndObject();
@@ -548,6 +554,8 @@ public static class ProtocolJson
             List<string>? completed = null, offer = null, turnIn = null, owned = null;
             List<ShownOutfit>? chosen = null;
             bool hidden = false;
+            string? kind = null;
+            long? inSeconds = null, retryAfter = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var key = reader.GetString();
@@ -637,6 +645,9 @@ public static class ProtocolJson
                     case "turn_in": turnIn = ReadStrings(ref reader); break;
                     case "owned": owned = ReadStrings(ref reader); break;
                     case "chosen": chosen = ReadOutfit(ref reader); break;
+                    case "kind": kind = String(ref reader); break;
+                    case "in": inSeconds = reader.GetInt64(); break;
+                    case "retry_after": retryAfter = reader.GetInt64(); break;
                     case "hidden": hidden = reader.GetBoolean(); break;
                     case "removed":
                         if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
@@ -679,7 +690,8 @@ public static class ProtocolJson
                 MessageTypes.Autopilot => mode is null ? null : new AutopilotMessage(mode, quest, doing, reason),
                 MessageTypes.Wardrobe => new WardrobeMessage((IReadOnlyList<string>?)owned ?? Array.Empty<string>(), (IReadOnlyList<ShownOutfit>?)chosen ?? Array.Empty<ShownOutfit>(), hidden),
                 MessageTypes.Pong => new PongMessage(seq),
-                MessageTypes.Bye => reason is null ? null : new ByeMessage(reason),
+                MessageTypes.Announcement => kind is null ? null : new AnnouncementMessage(kind, text, inSeconds),
+                MessageTypes.Bye => reason is null ? null : new ByeMessage(reason, retryAfter),
                 null => null,
                 _ => throw new UnknownTypeException(),
             };

@@ -113,7 +113,7 @@ public sealed class CharacterKeeper(CharacterSaves saves, IPlayerProgressionStor
             else links.Add(link);
         }
         if (landed is not null) foreach (var other in landed) ticket.Links.Remove(other);
-        saves.Submit(new CharacterSave(ticket, ++ticket.TakenVersion, state, final, links));
+        saves.Submit(new CharacterSave(ticket, ++ticket.TakenVersion, state, final, links, ticket.PendingNotes()));   // T-806: staff changes it has, with their audit rows
     }
 
     /// <summary>A copy of everything that is saved (see ARCHITECTURE §3 for what is not, and why), or null when the systems have not made the character yet.</summary>

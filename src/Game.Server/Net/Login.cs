@@ -17,6 +17,9 @@ namespace Game.Server.Net;
 public sealed record LoginResult(string? DisplayName, string? Refusal, EntityId? Character = null, Guid? AccountId = null, Guid? CharacterId = null,
     AppearanceRecord? Appearance = null)
 {
+    /// <summary>For a <c>banned</c> refusal (T-806): seconds until the ban ends, or null when it never does.</summary>
+    public long? RetryAfterSeconds { get; init; }
+
     /// <summary>Accepted.</summary>
     public static LoginResult Accept(string displayName) => new(displayName, null);
 
@@ -88,6 +91,8 @@ public sealed class AccountLogin(AccountService accounts, DevLogin dev) : ILogin
         if (hello.Session is not { } session || hello.Character is not { } character) return dev.Login(hello);
         var result = await accounts.ResolveAsync(session, character, AddressKeys.Of(address), cancellation).ConfigureAwait(false);
         if (result.Ok) return LoginResult.Play(result.Value.Character.Name, result.Value.Account, result.Value.Character.Id, result.Value.Appearance);
+        if (result.Error == AccountErrors.AccountBanned)   // T-806: its own answer, with how long is left; never staff's reason
+            return LoginResult.Refuse(ByeReasons.Banned) with { RetryAfterSeconds = result.RetryAfterMs > 0 ? (result.RetryAfterMs + 999) / 1000 : null };
         return LoginResult.Refuse(result.Error switch
         {
             AccountErrors.RateLimited => ByeReasons.RateLimit,

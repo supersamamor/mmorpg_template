@@ -219,11 +219,14 @@ public sealed class ClientSession : IViewSink
     /// <summary>
     /// Queues <c>bye</c> and starts closing; the send loop sends it and the close frame. Only the first call counts. Thread-safe.
     /// </summary>
-    public void Bye(string reason)
+    public void Bye(string reason) => Bye(reason, null);
+
+    /// <summary>The same, with how long is left for a <c>banned</c> bye (T-806: seconds, or null when the ban never ends).</summary>
+    public void Bye(string reason, long? retryAfterSeconds)
     {
         if (Interlocked.CompareExchange(ref _byeReason, reason, null) is not null) return;
         BeginClosing();
-        Queue.PostFinal(ProtocolJson.ToBytes(new ByeMessage(reason)));
+        Queue.PostFinal(ProtocolJson.ToBytes(new ByeMessage(reason, retryAfterSeconds)));
         _gateway.Stats.CountBye(reason);
     }
 
@@ -533,12 +536,17 @@ public sealed class ClientSession : IViewSink
             _gateway.Resume(this, hello);
             return;
         }
+        if (_gateway.InMaintenance)
+        {
+            Bye(ByeReasons.Maintenance);   // T-806: no new game while the server is in maintenance; a resume still gets back in until the games end
+            return;
+        }
         Volatile.Write(ref _sessionKey, Accounts.SessionTokens.KeyOf(hello.Session));
         var login = await _gateway.Login.LoginAsync(hello, Address, stop).ConfigureAwait(false);
         stop.ThrowIfCancellationRequested();   // dropped while it was pending: nothing is claimed or spawned for it
         if (login.Refusal is { } refusal)
         {
-            Bye(refusal);
+            Bye(refusal, login.RetryAfterSeconds);
             return;
         }
         if (Closing) return; // timed out, or the server is stopping

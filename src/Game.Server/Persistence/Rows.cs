@@ -320,3 +320,88 @@ public sealed class AdminAuditRow
     /// <summary>Why, in the staff member's words.</summary>
     public string Reason { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// Table <c>account_sanctions</c> (T-806): one ban or mute of an account (<c>kind</c>, a "Sanction kinds" term). It is in force from <see cref="CreatedAt"/> until <see cref="Until"/> (never ends when
+/// null; a mute always ends) unless it was lifted. Why is in the audit rows it names, not here: this row holds ids and times only. Erased with the account (docs/STORE_COMPLIANCE.md).
+/// </summary>
+public sealed class AccountSanctionRow
+{
+    /// <summary>From an identity sequence.</summary>
+    public long Id { get; set; }
+
+    /// <summary>Whose.</summary>
+    public Guid AccountId { get; set; }
+
+    /// <summary><c>ban</c> or <c>mute</c>.</summary>
+    public string Kind { get; set; } = string.Empty;
+
+    /// <summary>When it began (UTC).</summary>
+    public DateTime CreatedAt { get; set; }
+
+    /// <summary>When it ends (UTC), or null for a ban that never does.</summary>
+    public DateTime? Until { get; set; }
+
+    /// <summary>The audit row that made it.</summary>
+    public long AuditId { get; set; }
+
+    /// <summary>When staff lifted it (UTC), or null.</summary>
+    public DateTime? LiftedAt { get; set; }
+
+    /// <summary>The audit row that lifted it, or null.</summary>
+    public long? LiftedAuditId { get; set; }
+}
+
+/// <summary>
+/// Table <c>support_requests</c> (T-806, ARCHITECTURE §12.4 "Store compliance"): a deletion or data-export request that came in through support, and where it stands. Ids, terms and times only;
+/// what the player wrote stays in the support tool, the staff member's reason in the audit rows. Erased with the account.
+/// </summary>
+public sealed class SupportRequestRow
+{
+    /// <summary>From an identity sequence: the request's number.</summary>
+    public long Id { get; set; }
+
+    /// <summary>Whose.</summary>
+    public Guid AccountId { get; set; }
+
+    /// <summary>A "Support request kinds" term.</summary>
+    public string Kind { get; set; } = string.Empty;
+
+    /// <summary>A "Support request statuses" term.</summary>
+    public string Status { get; set; } = string.Empty;
+
+    /// <summary>When it was put in the queue (UTC).</summary>
+    public DateTime OpenedAt { get; set; }
+
+    /// <summary>The audit row that put it there.</summary>
+    public long OpenedAuditId { get; set; }
+
+    /// <summary>When it was completed or cancelled (UTC), or null.</summary>
+    public DateTime? ClosedAt { get; set; }
+
+    /// <summary>The audit row that closed it, or null.</summary>
+    public long? ClosedAuditId { get; set; }
+}
+
+/// <summary>
+/// Table <c>admin_items</c> (T-806, ARCHITECTURE §12.3): where <c>source = admin</c> lives. An inventory entry whose permanent id is here was made by staff (<c>give_item</c>), so a dupe audit can
+/// tell it from one the game made. It names no character (the item may change hands; the audit row says who got it): the item id, how many were made, and the audit row. Rows go when the item is
+/// erased with its owner's account.
+/// </summary>
+public sealed class AdminItemRow
+{
+    /// <summary>The entry's permanent id (<c>character_items.id</c>).</summary>
+    public long ItemInstanceId { get; set; }
+
+    /// <summary>The item.</summary>
+    public string ItemId { get; set; } = string.Empty;
+
+    /// <summary>How many units staff put in this entry.</summary>
+    public int Quantity { get; set; }
+
+    /// <summary>When (UTC).</summary>
+    public DateTime CreatedAt { get; set; }
+
+    /// <summary>The audit row of the <c>give_item</c> that made it.</summary>
+    public long AuditId { get; set; }
+}

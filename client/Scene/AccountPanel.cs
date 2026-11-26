@@ -297,7 +297,9 @@ public sealed class AccountPanel
         var screen = _samples is null ? flow.Screen : _sampleScreen;
         var characters = _samples ?? flow.Characters;
         _title.Text = screen == AccountScreen.SignIn ? UiText.SignInTitle : screen == AccountScreen.Password ? UiText.PasswordTitle : screen == AccountScreen.DeleteAccount ? UiText.DeleteAccount : UiText.CharactersTitle;
-        Set(_notice, screen is AccountScreen.Password or AccountScreen.DeleteAccount ? string.Empty : UiText.Notice(connection.Notice)); // how the last game ended is said on the screens around it
+        Set(_notice, screen is AccountScreen.Password or AccountScreen.DeleteAccount ? string.Empty
+            : _samples is not null ? UiText.LongestNotice   // T-806: the layout check sees the longest (a ban's)
+            : UiText.Notice(connection.Notice, connection.NoticeSeconds)); // how the last game ended is said on the screens around it
         if (_samples is null)
             Set(_accountNotice, flow.Busy ? UiText.AccountBusy
                 : screen is (AccountScreen.Password or AccountScreen.DeleteAccount) && flow.Notice == AccountNotice.Refused && flow.Error == AccountErrors.InvalidCredentials ? UiText.WrongCurrentPassword

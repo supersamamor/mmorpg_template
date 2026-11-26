@@ -1536,6 +1536,33 @@ Endpoints, headers and local use: **docs/ADMIN_API.md**. Code: `src/Game.Server/
 - **Kick** (`support`): every session of the account ends with its row in one transaction; the gateway says `bye kicked` and the character (in its grace period too) leaves, saved, its resume token dead,
   exactly as T-710's session end. The client says so and goes to the sign-in screen.
 
+### 12.7 Moderation and support as built (T-806)
+Every endpoint and field: **docs/ADMIN_API.md**. Code: `src/Game.Server/Admin` (`ModerationCommands`, `ModerationChecks`, `IModerationStore`), `PostgresModerationStore`, the `Moderation` migration
+(`account_sanctions`, `support_requests`, `admin_items`). Roles (`AdminCommandTable`): `support` mutes and runs the support queue; `gm` bans, gives and removes items and currency, unsticks and announces;
+`admin` runs maintenance.
+- **Bans** are the database's: a ban, its sessions' end and its audit row are one transaction; sign-in and every `hello` ask the database (after the password or the session is proved, so only
+  the owner hears of it), so a ban holds on every server process and through restarts. Sign-in answers `account_banned` with `retry_after` (seconds; none for a ban without an end), `hello` and
+  a game it ends `bye banned` with the same. Staff's reason is never shown: it is written for staff and may name others. The game the ban's own server holds ends at once; a game on **another
+  process** ends at that process's **ban watch**, which asks every 10 s which accounts playing there are banned: such a player keeps playing at most about 10 s (row 320's limit, for bans).
+- **Mutes** are stored the same way (always timed). There is no chat yet: `ModerationChecks.MaySpeakAsync(account)` is the check T-901 calls before it sends a line; it caches an answer 5 s per
+  account (a mute made here is seen at once, one made through another process within 5 s) and fails closed when the database is away.
+- **Support fixes to a character** go one of two roads, never both (`CharacterFix`): in this server's world, the system that owns the thing changes it on the tick (`StaffItemChange` in the
+  inventory system, `StaffUnstick` in combat, which knows the save point), a step that either runs or is given up for good, so `timeout` means nothing changed. An item or currency change of a
+  saved character carries its audit row as a **staff note** on the character's ticket into the next save's transaction (§3): the change and its row land together, a retried or later save never
+  writes it twice (only notes above the stored save number are written), and a character the server loses takes its note with it. The command waits for that save (10 s) and answers `done` with
+  the row, else `accepted`. Not in the world, the change is made in the database under the claim rules: the character and its state are locked in a save's order, a live holder is refused
+  (`character_busy`), and the claim number moves on, so a late save of an earlier stay is refused (`Lost`) instead of undoing the fix.
+- **Items staff make** are new entries with new permanent ids, never merged into a stack (`InventoryRules.TryAdd(separate: true)`), and each id is put in `admin_items` with its audit row:
+  that table is where `source = admin` lives (§12.3). It names no character, because the item may change hands. A worn entry staff remove comes off first. Weight is not checked.
+- **Unstick**: in the world as a respawn moves (a dead one respawns); offline to the stored save point, or the content's start when there is none or it is gone.
+- **Server**: `announce` sends an `announcement` to every session playing here; `start_maintenance` refuses new logins (`bye maintenance` at `hello`; a resume still gets back in), announces
+  the warning, and after it ends every game here (`bye maintenance`, characters leave saved) with the server still running; `end_maintenance` opens logins and calls off a pending end. Both are
+  this process's only, and end with it.
+- **Support queue** (§12.4 "Store compliance"): `open_request` (deletion or export, after support checked who asked), `complete_request`, `cancel_request`. A deletion takes T-703's own path: the
+  erasure wait, `account_deletions`, every session and game ended; the owner can still keep the account by signing in. An export answers with everything stored about the account
+  (docs/STORE_COMPLIANCE.md §2) as JSON for staff to send, read in one snapshot; never a hash or a token, not who of staff did what or why. The server sends no e-mail.
+- **Erasing** an account takes its sanctions, requests and the `admin_items` marks of the items erased with it; its audit rows stay (§12.6).
+
 ## 13. Non-goals for v1
 Sharding/multi-server, client prediction beyond movement interpolation, PvP balance,
 guild wars, cash shop / in-app purchases, multi-floor maps / jumping / flying,

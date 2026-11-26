@@ -855,9 +855,26 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.Pong;
     }
 
-    /// <summary><c>bye</c>: the last message before the server closes the connection. <c>{"type":"bye","reason":"timeout"}</c>.</summary>
+    /// <summary>
+    /// <c>announcement</c> (T-806): staff speak to everyone playing on this server. <c>{"type":"announcement","kind":"staff","text":"..."}</c>, or
+    /// <c>{"type":"announcement","kind":"maintenance","in":300}</c>: the server goes into maintenance and every game ends in <c>in</c> seconds (saved). The client shows it on the HUD.
+    /// </summary>
+    /// <param name="Kind">An <see cref="AnnouncementKinds"/> term.</param>
+    /// <param name="Text">Staff's words (for <c>staff</c>; at most <see cref="AnnouncementKinds.MaxTextLength"/> characters), else null.</param>
+    /// <param name="InSeconds">Seconds until the games end (for <c>maintenance</c>), else null.</param>
+    public sealed record AnnouncementMessage(string Kind, string? Text, long? InSeconds) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Announcement;
+    }
+
+    /// <summary>
+    /// <c>bye</c>: the last message before the server closes the connection. <c>{"type":"bye","reason":"timeout"}</c>. A <c>banned</c> bye of a timed ban says how long is left:
+    /// <c>{"type":"bye","reason":"banned","retry_after":86400}</c> (seconds; none for a ban without an end, T-806).
+    /// </summary>
     /// <param name="Reason">A <see cref="ByeReasons"/> term.</param>
-    public sealed record ByeMessage(string Reason) : ServerMessage
+    /// <param name="RetryAfterSeconds">For <c>banned</c>: seconds until the ban ends, or null when it never does. Null for every other reason.</param>
+    public sealed record ByeMessage(string Reason, long? RetryAfterSeconds = null) : ServerMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Bye;

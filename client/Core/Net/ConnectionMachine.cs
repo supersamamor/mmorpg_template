@@ -69,6 +69,12 @@ public enum ConnectionNotice
     /// <summary><c>bye kicked</c>: staff ended the game, and the account's sessions with it (T-804).</summary>
     Kicked,
 
+    /// <summary><c>bye banned</c>: staff banned the account (T-806); <see cref="ConnectionMachine.NoticeSeconds"/> says how long is left (null: no end).</summary>
+    Banned,
+
+    /// <summary><c>bye maintenance</c>: the server is in maintenance (T-806): no game now; try later.</summary>
+    Maintenance,
+
     /// <summary>A new login could not reach the server, or the server ended it.</summary>
     ConnectionFailed,
 
@@ -141,6 +147,9 @@ public sealed class ConnectionMachine
 
     /// <summary>The message to show for the current phase.</summary>
     public ConnectionNotice Notice { get; private set; }
+
+    /// <summary>For <see cref="ConnectionNotice.Banned"/>: seconds the ban had left when it was told, or null when it has no end (T-806).</summary>
+    public long? NoticeSeconds { get; private set; }
 
     /// <summary>Counts changes of <see cref="Phase"/> and <see cref="Notice"/>, so a UI redraws only on a change.</summary>
     public int Version { get; private set; }
@@ -231,7 +240,10 @@ public sealed class ConnectionMachine
     }
 
     /// <summary>A <c>bye</c> arrived: every reason does what §10 says.</summary>
-    public void OnBye(string reason, double now)
+    public void OnBye(string reason, double now) => OnBye(reason, now, null);
+
+    /// <summary>The same, with a ban's time left (<c>retry_after</c>, seconds; T-806).</summary>
+    public void OnBye(string reason, double now, long? retryAfterSeconds)
     {
         if (Phase == ConnectionPhase.LoginScreen || Phase == ConnectionPhase.Stopped) return;
         var duringResume = _resuming && (Phase == ConnectionPhase.Connecting || Phase == ConnectionPhase.AwaitingWelcome);
@@ -270,6 +282,15 @@ public sealed class ConnectionMachine
             case ByeReasons.Kicked:
                 // Staff ended the game (T-804): every session of the account ended with it, so it is back to signing in; nothing to resume.
                 ToLogin(ConnectionNotice.Kicked);
+                return;
+            case ByeReasons.Banned:
+                // T-806: staff banned the account; the sessions are gone with it. Nothing to resume, and signing in says the same until the ban ends.
+                NoticeSeconds = retryAfterSeconds;
+                ToLogin(ConnectionNotice.Banned);
+                return;
+            case ByeReasons.Maintenance:
+                // T-806: no automatic retry: maintenance takes as long as it takes.
+                ToLogin(ConnectionNotice.Maintenance);
                 return;
             case ByeReasons.Shutdown:
                 // A server restart invalidates every token (§10): the retry is a normal login.

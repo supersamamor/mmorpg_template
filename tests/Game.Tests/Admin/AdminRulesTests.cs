@@ -199,7 +199,7 @@ public class AdminRulesTests
         AdminCommandTable.ReadRole.ShouldBe(StaffRoles.Support);
         foreach (var role in StaffRoles.All) AdminCommandTable.Allows(AdminActions.Kick, role).ShouldBeTrue(role);
         AdminCommandTable.Allows(AdminActions.Kick, "guest").ShouldBeFalse();
-        AdminCommandTable.Allows("ban", StaffRoles.Admin).ShouldBeFalse("an action that is not in the table is never allowed");
+        AdminCommandTable.Allows("no_such_action", StaffRoles.Admin).ShouldBeFalse("an action that is not in the table is never allowed");
     }
 
     // ---- rate limits ----

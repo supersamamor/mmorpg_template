@@ -25,6 +25,15 @@ namespace Game.Shared.Protocol
 
         /// <summary><c>GET</c>: every command and its lowest role. <c>POST</c> <c>/{action}</c> with the command's body: runs it (<see cref="AdminCommandAnswer"/>).</summary>
         public const string Commands = Root + "/commands";
+
+        /// <summary><c>GET</c> <c>?status=&amp;account=&amp;before=&amp;limit=</c> (T-806): the support queue, newest first.</summary>
+        public const string Requests = Root + "/requests";
+
+        /// <summary>After <c>/accounts/{id}</c> (T-806): <c>GET</c> its bans, mutes and support requests.</summary>
+        public const string ModerationSuffix = "/moderation";
+
+        /// <summary>After <c>/characters/{id}</c> (T-806): <c>GET</c> the item, currency and place changes staff made to it (its audit rows).</summary>
+        public const string StaffChangesSuffix = "/staff-changes";
     }
 
     /// <summary>The headers of an admin request.</summary>
@@ -57,6 +66,42 @@ namespace Game.Shared.Protocol
 
         /// <summary>The account a command is for (a GUID).</summary>
         public const string AccountId = "account_id";
+
+        /// <summary>The character a command is for (a GUID; T-806).</summary>
+        public const string CharacterId = "character_id";
+
+        /// <summary>An item id (<c>item.*</c>; T-806).</summary>
+        public const string ItemId = "item_id";
+
+        /// <summary>How many units (1 or more; T-806).</summary>
+        public const string Quantity = "quantity";
+
+        /// <summary>An inventory entry's permanent instance id (T-806).</summary>
+        public const string EntryId = "entry_id";
+
+        /// <summary>A currency amount: more than 0 adds, less than 0 takes (T-806).</summary>
+        public const string Amount = "amount";
+
+        /// <summary>How long a ban or mute lasts, in minutes (1 to <see cref="MaxMinutes"/>); a ban without it never ends (T-806).</summary>
+        public const string Minutes = "minutes";
+
+        /// <summary>The longest timed ban or mute: ten years.</summary>
+        public const int MaxMinutes = 10 * 366 * 24 * 60;
+
+        /// <summary>An announcement's text (1 to <see cref="AnnouncementKinds.MaxTextLength"/> characters; T-806).</summary>
+        public const string Text = "text";
+
+        /// <summary>How many seconds those playing have before maintenance ends their games (0 to <see cref="MaxMaintenanceWarningSeconds"/>; T-806).</summary>
+        public const string WarningSeconds = "warning_seconds";
+
+        /// <summary>The longest maintenance warning: an hour.</summary>
+        public const int MaxMaintenanceWarningSeconds = 3_600;
+
+        /// <summary>A support request's kind (a "Support request kinds" term; T-806).</summary>
+        public const string Kind = "kind";
+
+        /// <summary>A support request's number (T-806).</summary>
+        public const string RequestId = "request_id";
     }
 
     /// <summary>The body of <c>POST /admin/v1/commands/kick</c>.</summary>
@@ -80,8 +125,12 @@ namespace Game.Shared.Protocol
     /// <param name="Instances">Every map instance.</param>
     /// <param name="Saves">The saving figures, or null without a database.</param>
     /// <param name="Errors">Error and warning counts.</param>
+    /// <param name="Maintenance">Maintenance mode on this server (T-806).</param>
     public sealed record AdminStatusAnswer(string ContentHash, string StartedAt, int PlayersOnline, int Sessions, IReadOnlyList<AdminInstanceStatus> Instances,
-        AdminSaveStatus? Saves, AdminErrorCounts Errors);
+        AdminSaveStatus? Saves, AdminErrorCounts Errors, AdminMaintenanceStatus? Maintenance = null);
+
+    /// <summary>Maintenance mode (T-806): on or not, since when, and when the games of those playing end (null once they have, or with no warning left).</summary>
+    public sealed record AdminMaintenanceStatus(bool On, string? Since, string? GamesEndAt);
 
     /// <summary>One map instance's figures; times in microseconds.</summary>
     public sealed record AdminInstanceStatus(string MapId, long Tick, long TickP50Micros, long TickP99Micros, long TickMaxMicros, long TickLifetimeMaxMicros,

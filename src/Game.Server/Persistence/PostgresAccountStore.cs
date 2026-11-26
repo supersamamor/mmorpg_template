@@ -117,6 +117,10 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
         var holders = await db.CharacterStates.Where(s => characters.Contains(s.CharacterId) && s.HeldBy != null).Select(s => s.HeldBy!.Value).Distinct().ToListAsync(cancellation).ConfigureAwait(false);
         foreach (var run in holders)
             if (await PostgresCharacterStore.IsAliveAsync(db, run, cancellation).ConfigureAwait(false)) return EraseOutcome.InUse;
+        // T-806: the mark of staff-made items that go with it (an item it gave away keeps its mark: it is someone else's now), its bans and mutes, its support requests.
+        await db.AdminItems.Where(a => db.Items.Any(i => i.Id == a.ItemInstanceId && characters.Contains(i.CharacterId))).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        await db.Sanctions.Where(s => s.AccountId == account).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        await db.SupportRequests.Where(r => r.AccountId == account).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.Items.Where(i => characters.Contains(i.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.Outfits.Where(o => characters.Contains(o.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.CharacterStates.Where(s => characters.Contains(s.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);

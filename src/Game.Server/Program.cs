@@ -127,6 +127,10 @@ var accounts = database is null ? null : new AccountService(new PostgresAccountS
 var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log, contentHash, accounts is null ? devLogin : new AccountLogin(accounts, devLogin), tokens,
     progress: new OwnProgress(content, progressions), inventory: new OwnInventory(content.Balance.Inventory, inventories), keeper: keeper); // subscribes to instance events: before ticking
 
+// T-806: bans and mutes are the database's, so every server with one asks it (sign-in, hello, the ban watch), admin API or not.
+var moderation = database is null ? null : new PostgresModerationStore(database);
+var checks = moderation is null ? null : new ModerationChecks(moderation, TimeProvider.System);
+if (accounts is not null && checks is not null) accounts.BanOf = checks.BanOfAsync;
 GatewayHost host;
 try
 {
@@ -147,10 +151,13 @@ if (adminOptions.Enabled)
     {
         var adminStore = new PostgresAdminStore(database!);
         var adminEvents = new AdminEvents(log);
-        var road = new AdminRoad(world, gateway, adminStore, adminOptions, TimeProvider.System);
-        var commands = new AdminCommands([new KickCommand()], road, adminEvents, log);
+        var road = new AdminRoad(world, gateway, adminStore, adminOptions, TimeProvider.System)
+        {
+            Moderation = moderation, Checks = checks, NextItemId = saves is null ? null : saves.NextItemId, Content = content, EraseWait = TimeSpan.FromDays(options.AccountEraseDays),
+        };
+        var commands = new AdminCommands(AdminCommandTable.AllCommands(), road, adminEvents, log);
         var api = new AdminApi(adminOptions, new ServiceCredential(Environment.GetEnvironmentVariable(adminOptions.CredentialEnv)!), new AdminRateLimit(adminOptions, TimeProvider.System),
-            commands, adminStore, new AdminStatusSource(world, gateway, saves, log, contentHash, startedAt), gateway, log);
+            commands, adminStore, new AdminStatusSource(world, gateway, saves, log, contentHash, startedAt), gateway, log, moderation, road.Maintenance);
         adminHost = await AdminHost.StartAsync(adminOptions, host.Endpoint.Port, api);
     }
     catch (Exception e) when (e is InvalidOperationException or IOException)
@@ -177,6 +184,7 @@ log.Info($"Starting {runners.Count} map instance(s) at {TickRate.Hz} Hz, seed {s
 foreach (var runner in runners) runner.Start();
 gateway.Start();
 await using var eraser = database is null ? null : AccountEraser.Start(new PostgresAccountStore(database), TimeProvider.System, log); // T-703
+await using var banWatch = moderation is null ? null : BanWatch.Start(moderation, gateway, TimeProvider.System, log); // T-806: bans made through another process end games here too
 log.Info($"Gateway listening on {host.Endpoint}{(accounts is null ? "" : " (account endpoints on the same port)")}");
 if (adminHost is not null) log.Info($"Admin API listening on {adminHost.Endpoint} (T-804; docs/ADMIN_API.md)");
 log.Info(options.DurationSeconds is { } d ? $"Running for {d} s." : "Running. Press Ctrl+C to stop.");
@@ -186,6 +194,7 @@ else stop.Wait();
 
 var unsaved = 0;
 if (eraser is not null) await eraser.DisposeAsync(); // an erasure in progress is one transaction: it is finished or undone
+if (banWatch is not null) await banWatch.DisposeAsync();
 log.Info($"Stopping: saying bye to {gateway.SessionCount} session(s), releasing {gateway.CharactersInGrace} character(s) in their grace period, " +
          "then finishing the current tick of each instance.");
 if (adminHost is not null)

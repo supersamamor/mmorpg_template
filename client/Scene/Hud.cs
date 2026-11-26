@@ -362,7 +362,7 @@ public sealed class Hud
     /// <summary>Fills the HUD with the longest words it has to show, so a layout check sees the worst case. <see cref="ForceRefresh"/> takes them away.</summary>
     public void ShowSamples(string longName)
     {
-        SetText(_banner, UiText.Notice(ConnectionNotice.Reconnecting));
+        SetText(_banner, UiText.LongestAnnouncement);   // T-806: longer than any connection notice
         SetText(_flash, UiText.HitYou(longName, 123456, HitResults.Crit));
         _target.Text = longName;
         _targetFrame.Visible = true;
@@ -726,11 +726,7 @@ public sealed class Hud
         {
             _connectionVersion = connection.Version;
             panelChanged = true;
-            SetText(_banner, connection.Phase switch
-            {
-                ConnectionPhase.Backoff or ConnectionPhase.Connecting or ConnectionPhase.AwaitingWelcome when connection.Notice != ConnectionNotice.None => UiText.Notice(connection.Notice),
-                _ => string.Empty,
-            });
+            RefreshBanner(connection, ui);
             SetText(_connection, UiText.Connection(connection.Phase));
             _connection.AddThemeColorOverride("font_color", connection.Phase == ConnectionPhase.Online ? new Color(0.55f, 0.9f, 0.55f) : new Color(1f, 0.8f, 0.4f));
             _logout.Visible = connection.Phase == ConnectionPhase.Online;
@@ -751,6 +747,7 @@ public sealed class Hud
             _uiVersion = ui.Version;
             panelChanged = true;
             SetText(_flash, ui.Flash);
+            RefreshBanner(connection, ui);
             var targetName = ui.Target is { } id ? _bundle!.NameOf(world.Find(id)?.DisplayKey) : string.Empty;
             _target.Text = targetName;
             _targetFrame.Visible = targetName.Length > 0;
@@ -793,6 +790,14 @@ public sealed class Hud
         _questPanel?.Refresh();
         RefreshAutopilot();
     }
+
+    /// <summary>The banner line: how a connection is being got back, or else, while playing, the latest announcement (T-806).</summary>
+    private void RefreshBanner(ConnectionMachine connection, UiState ui) => SetText(_banner, connection.Phase switch
+    {
+        ConnectionPhase.Backoff or ConnectionPhase.Connecting or ConnectionPhase.AwaitingWelcome when connection.Notice != ConnectionNotice.None => UiText.Notice(connection.Notice),
+        ConnectionPhase.Online => ui.Announcement,
+        _ => string.Empty,
+    });
 
     /// <summary>The autopilot indicator: redrawn when the run, the quest log (a pause's level or item comes from it) or the connection changed.</summary>
     private void RefreshAutopilot()
@@ -1032,7 +1037,7 @@ public sealed class Hud
                 _panel.Visible = true;
                 return;
             case ConnectionPhase.Stopped when connection.Notice == ConnectionNotice.Replaced:
-                ShowPanel(UiText.Notice(connection.Notice), UiText.BackToLogin, session.BackToLogin);
+                ShowPanel(UiText.Notice(connection.Notice, connection.NoticeSeconds), UiText.BackToLogin, session.BackToLogin);
                 return;
             case ConnectionPhase.Stopped:
                 ShowPanel(UiText.Notice(connection.Notice), _config.StoreUrl.Length > 0 ? UiText.GoToStore : null,

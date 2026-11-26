@@ -103,7 +103,24 @@ public sealed class UiState
         else if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.ShopBuy && change.Item is { } bought) SetFlash(UiText.Bought(_bundle.NameOf(bought)), now);
         else if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.ShopSell && change.Item is { } sold) SetFlash(UiText.Sold(_bundle.NameOf(sold)), now);
         else if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.CardInserted && change.Item is { } socketed) SetFlash(UiText.CardInserted(_bundle.NameOf(socketed)), now);
+        else if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.Staff) SetFlash(UiText.StaffChangedItems, now);   // T-806
     }
+
+    /// <summary>How long an announcement stays on the HUD (T-806): long enough to read 200 characters.</summary>
+    public const double AnnouncementSeconds = 12;
+
+    /// <summary>The announcement shown now (T-806), or empty.</summary>
+    public string Announcement { get; private set; } = string.Empty;
+
+    /// <summary>An <c>announcement</c> (T-806): staff's words, or a coming maintenance, on the HUD's banner line for <see cref="AnnouncementSeconds"/>.</summary>
+    public void OnAnnouncement(AnnouncementMessage message, double now)
+    {
+        Announcement = UiText.Announcement(message.Kind, message.Text, message.InSeconds);
+        _announcementEnds = now + AnnouncementSeconds;
+        Version++;
+    }
+
+    private double _announcementEnds;
 
     /// <summary>A <c>quest</c> change (T-602): accepted, a step done, completed or abandoned goes on the flash line with the quest's name.</summary>
     public void OnQuest(QuestMessage message, double now)
@@ -250,6 +267,11 @@ public sealed class UiState
             Flash = string.Empty;
             Version++;
         }
+        if (Announcement.Length > 0 && now >= _announcementEnds)
+        {
+            Announcement = string.Empty;
+            Version++;
+        }
     }
 
     /// <summary>Clears everything (a new login).</summary>
@@ -260,6 +282,7 @@ public sealed class UiState
         PendingSkill = null;
         Dead = false;
         Flash = string.Empty;
+        Announcement = string.Empty;
         Version++;
     }
 

@@ -52,10 +52,15 @@ public static class UiText
     public static string TransportRefused(TransportVerdict verdict) => verdict == TransportVerdict.CleartextRefused ? CleartextRefused : ServerAddressInvalid;
 
     /// <summary>The line for a connection notice.</summary>
-    public static string Notice(ConnectionNotice notice)
+    public static string Notice(ConnectionNotice notice) => Notice(notice, null);
+
+    /// <summary>The line for a connection notice; <paramref name="seconds"/> is how long a ban had left (T-806; null: it has no end).</summary>
+    public static string Notice(ConnectionNotice notice, long? seconds)
     {
         switch (notice)
         {
+            case ConnectionNotice.Banned: return Banned(seconds);
+            case ConnectionNotice.Maintenance: return "The server is closed for maintenance. Please try again later.";
             case ConnectionNotice.Reconnecting: return "Connection lost. Reconnecting...";
             case ConnectionNotice.SessionExpired: return "You were away too long. Please log in again.";
             case ConnectionNotice.ResumeFailed: return "Your session has ended. Please log in again.";
@@ -75,6 +80,51 @@ public static class UiText
             default: return string.Empty;
         }
     }
+
+    /// <summary>The longest line <see cref="Notice(ConnectionNotice, long?)"/> can return, for the layout check (T-806: a ban's line is the longest).</summary>
+    public static string LongestNotice
+    {
+        get
+        {
+            var longest = Banned(9_999L * 86_400);
+            foreach (ConnectionNotice notice in Enum.GetValues(typeof(ConnectionNotice)))
+                if (Notice(notice, null).Length > longest.Length) longest = Notice(notice, null);
+            return longest;
+        }
+    }
+
+    /// <summary>
+    /// A ban's line (T-806): how long is left, or that it has no end, and where to turn. Staff's reason is never shown: it is written for staff and may name others.
+    /// </summary>
+    public static string Banned(long? seconds) => seconds is { } left && left > 0
+        ? "This account is banned for " + BanTime(left) + ". If you think this is a mistake, contact support."
+        : "This account is banned. If you think this is a mistake, contact support.";
+
+    /// <summary>How long a ban has left, in its largest whole unit, rounded up: "3 days", "an hour", "12 minutes".</summary>
+    public static string BanTime(long seconds)
+    {
+        if (seconds >= 86_400) return Plural((seconds + 86_399) / 86_400, "day");
+        if (seconds >= 3_600) return Plural((seconds + 3_599) / 3_600, "hour");
+        return Plural(Math.Max(1, (seconds + 59) / 60), "minute");
+    }
+
+    private static string Plural(long n, string unit) => n == 1 ? (unit == "hour" ? "an hour" : "a " + unit) : n.ToString(CultureInfo.InvariantCulture) + " " + unit + "s";
+
+    /// <summary>An <c>announcement</c> on the HUD (T-806): staff's words as they wrote them, or when maintenance ends the games.</summary>
+    public static string Announcement(string kind, string? text, long? inSeconds)
+    {
+        if (kind == AnnouncementKinds.Maintenance)
+            return inSeconds is { } left && left > 0
+                ? "The server closes for maintenance in " + BanTime(left) + ". Your character is saved."
+                : "The server closes for maintenance now. Your character is saved.";
+        return "Announcement: " + (text ?? string.Empty);
+    }
+
+    /// <summary>The longest announcement line, for the layout check: the most staff may write, in wide letters.</summary>
+    public static string LongestAnnouncement => Announcement(AnnouncementKinds.Staff, string.Concat(System.Linq.Enumerable.Repeat("Wm ", AnnouncementKinds.MaxTextLength / 3)), null);
+
+    /// <summary>The flash line when staff gave or took items or currency (T-806).</summary>
+    public const string StaffChangedItems = "A game master changed your items.";
 
     // ---- sign-in and character select (T-701) ----
 
@@ -212,6 +262,7 @@ public static class UiText
             case AccountErrors.InvalidPassword: return "A password has 10 to 128 characters.";
             case AccountErrors.SamePassword: return "The new password is the same as the old one.";
             case AccountErrors.AccountDeleting: return "This account will be erased " + EraseTime(retryAfterSeconds) + ". You can still keep it.";
+            case AccountErrors.AccountBanned: return Banned(retryAfterSeconds);   // T-806
             case AccountErrors.UsernameTaken: return "That username is taken.";
             case AccountErrors.InvalidSession: return Account(AccountNotice.SessionEnded, error, 0);
             case AccountErrors.InvalidCredentials: return "Wrong username or password.";
@@ -231,7 +282,15 @@ public static class UiText
     }
 
     /// <summary>The longest line <see cref="Account"/> can return, for the layout check.</summary>
-    public static string LongestAccount => Account(AccountNotice.Refused, AccountErrors.InvalidUsername, 0);
+    public static string LongestAccount
+    {
+        get
+        {
+            var a = Account(AccountNotice.Refused, AccountErrors.InvalidUsername, 0);
+            var b = Account(AccountNotice.Refused, AccountErrors.AccountBanned, 9_999L * 86_400);   // T-806
+            return a.Length >= b.Length ? a : b;
+        }
+    }
 
     /// <summary>The line while a connection is being made, with no notice.</summary>
     public const string Connecting = "Connecting...";

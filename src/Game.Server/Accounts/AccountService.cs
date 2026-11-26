@@ -105,6 +105,12 @@ public sealed class AccountService
     /// <summary>Whether a character is in the world now (played, or in its grace period): the gateway's answer. Such a character is not deleted.</summary>
     public Func<Guid, bool> InWorld { get; set; } = _ => false;
 
+    /// <summary>
+    /// The account's ban in force now (T-806), or null: asked at every sign-in and every <c>hello</c>, after the password or the session is proved, so a ban is told only to its owner. The
+    /// database decides (<c>IModerationStore.ActiveSanctionAsync</c>), so it holds on every server process. None without a database of bans.
+    /// </summary>
+    public Func<Guid, CancellationToken, Task<BanState?>> BanOf { get; set; } = (_, _) => Task.FromResult<BanState?>(null);
+
     /// <summary>Called after sessions have ended (the database has them ended by then): the gateway closes what was playing with them.</summary>
     public Action<EndedSessions> SessionsEnded { get; set; } = _ => { };
 
@@ -163,6 +169,7 @@ public sealed class AccountService
                     if (!await _store.TryCancelErasureAsync(account.Id, account.PasswordHash, cancellation).ConfigureAwait(false)) continue; // erased, or taken back elsewhere: look again
                     _log.Info($"[accounts] account {account.Id} is kept: its deletion was taken back from {address}.");
                 }
+                if (await BanOf(account.Id, cancellation).ConfigureAwait(false) is { } ban) return Banned(ban);   // T-806
                 var rehash = check == PasswordCheck.RightButOutdated ? await _hashes.RunAsync(() => _hasher.Hash(secret), cancellation).ConfigureAwait(false) : null;
                 if (await OpenSessionAsync(account.Id, account.PasswordHash, rehash, cancellation).ConfigureAwait(false) is not { } session) continue; // the hash changed meanwhile: check again
                 _log.Info($"[accounts] account {account.Id} signed in from {address}{(rehash is null ? "" : "; its password was rehashed with the current parameters")}.");
@@ -171,7 +178,7 @@ public sealed class AccountService
             return AccountResult<NewSession>.Fail(AccountErrors.InvalidCredentials);
         }).ConfigureAwait(false);
 
-        if (result.Ok || result.Error == AccountErrors.AccountDeleting) // the password was right
+        if (result.Ok || result.Error is AccountErrors.AccountDeleting or AccountErrors.AccountBanned) // the password was right
         {
             _accountFailures.Succeed(name);
             _addressFailures.Undo(address); // not forgotten: an attacker's own good login must not buy them more guesses
@@ -337,12 +344,20 @@ public sealed class AccountService
         var result = !Guid.TryParseExact(character, "D", out var id)
             ? AccountResult<CharacterLogin>.Fail(AccountErrors.UnknownCharacter)
             : await WithSessionAsync<CharacterLogin>(token, async account =>
-                await _store.FindCharacterAsync(account, id, cancellation).ConfigureAwait(false) is { } found
-                    ? new CharacterLogin(account, found, _looks.Resolve(found.Id, found.Appearance))
-                    : AccountResult<CharacterLogin>.Fail(AccountErrors.UnknownCharacter), cancellation).ConfigureAwait(false);
-        if (result.Ok || result.Error == AccountErrors.Unavailable) _helloFailures.Undo(address);
+                await _store.FindCharacterAsync(account, id, cancellation).ConfigureAwait(false) is not { } found
+                    ? AccountResult<CharacterLogin>.Fail(AccountErrors.UnknownCharacter)
+                    : await BanOf(account, cancellation).ConfigureAwait(false) is { } ban   // T-806: a session that outlived its ban's start (signed in on another process meanwhile) plays nothing
+                        ? Banned<CharacterLogin>(ban)
+                        : new CharacterLogin(account, found, _looks.Resolve(found.Id, found.Appearance)), cancellation).ConfigureAwait(false);
+        if (result.Ok || result.Error is AccountErrors.Unavailable or AccountErrors.AccountBanned) _helloFailures.Undo(address);
         return result;
     }
+
+    /// <summary>A ban's refusal: how long is left (at least a millisecond), or 0 for a ban that never ends.</summary>
+    private AccountResult<T> Banned<T>(BanState ban) where T : class =>
+        AccountResult<T>.Fail(AccountErrors.AccountBanned, ban.Until is { } until ? Math.Max(1, (long)Math.Ceiling((until - UtcNow).TotalMilliseconds)) : 0);
+
+    private AccountResult<NewSession> Banned(BanState ban) => Banned<NewSession>(ban);
 
     private CharacterRecord Record(CharacterEntry c) => new(c.Id.ToString("D"), c.Slot, c.Name, c.JobId, _looks.Resolve(c.Id, c.Appearance));
 
@@ -383,3 +398,6 @@ public sealed class AccountService
 
 /// <summary>Who a <c>hello</c> signs in as, and how it looks now (<see cref="AppearanceRules.Resolve"/>).</summary>
 public sealed record CharacterLogin(Guid Account, CharacterEntry Character, AppearanceRecord Appearance);
+
+/// <summary>A ban in force (T-806): until when, or null when it never ends. Why is not here: staff's reason is never shown to the player.</summary>
+public sealed record BanState(DateTime? Until);

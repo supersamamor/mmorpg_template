@@ -127,10 +127,11 @@ namespace Game.Shared.Items
         /// (<c>too_heavy</c>) or the new entries do not fit <c>inventory.max_entries</c> (<c>inventory_full</c>); also <c>item_gone</c> for an unknown
         /// item and <c>invalid_quantity</c> below 1. New entries take ids from <paramref name="newId"/>, except that a single equipment item
         /// keeps <paramref name="instanceId"/> when it is above 0 (an item dropped and picked up again). A single equipment item also gets
-        /// <paramref name="cards"/> and <paramref name="refine"/> (what it had when it was dropped).
+        /// <paramref name="cards"/> and <paramref name="refine"/> (what it had when it was dropped). With <paramref name="separate"/> true nothing goes into existing stacks:
+        /// every unit is in new entries with new ids (T-806: items staff make, so their ids tell them apart).
         /// </summary>
         public string? TryAdd(InventoryState state, string itemId, int quantity, int weightLimit, Func<long> newId, InventoryDelta delta, long instanceId = 0,
-            IReadOnlyList<string>? cards = null, int refine = 0)
+            IReadOnlyList<string>? cards = null, int refine = 0, bool separate = false)
         {
             if (newId == null) throw new ArgumentNullException(nameof(newId));
             if (!_items.TryGet(itemId, out var item)) return ItemReasons.ItemGone;
@@ -140,7 +141,7 @@ namespace Game.Shared.Items
 
             var limit = StackLimit(item);
             var room = 0L;
-            if (item.Kind != ItemKind.Equip)
+            if (item.Kind != ItemKind.Equip && !separate)
             {
                 var entries = state.Entries;
                 for (var i = 0; i < entries.Count; i++)
@@ -152,7 +153,7 @@ namespace Game.Shared.Items
 
             // Checked: from here nothing can fail.
             var left = quantity;
-            if (item.Kind != ItemKind.Equip)
+            if (item.Kind != ItemKind.Equip && !separate)
             {
                 for (var i = 0; i < state.Entries.Count && left > 0; i++)
                 {

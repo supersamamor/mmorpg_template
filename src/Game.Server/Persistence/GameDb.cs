@@ -58,6 +58,15 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
     /// <summary>The audit log (T-804): append-only.</summary>
     public DbSet<AdminAuditRow> Audit => Set<AdminAuditRow>();
 
+    /// <summary>Bans and mutes (T-806).</summary>
+    public DbSet<AccountSanctionRow> Sanctions => Set<AccountSanctionRow>();
+
+    /// <summary>The support queue (T-806).</summary>
+    public DbSet<SupportRequestRow> SupportRequests => Set<SupportRequestRow>();
+
+    /// <summary>Items staff made (T-806): <c>source = admin</c>.</summary>
+    public DbSet<AdminItemRow> AdminItems => Set<AdminItemRow>();
+
     /// <summary>The trigger function that refuses changing or deleting audit rows.</summary>
     public const string AuditGuard = "admin_audit_append_only";
 
@@ -224,6 +233,48 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
             e.HasIndex(a => new { a.StaffId, a.Id }).HasDatabaseName("ix_admin_audit_staff");
             e.HasIndex(a => a.At).HasDatabaseName("ix_admin_audit_at");
             e.HasOne<AdminStaffRow>().WithMany().HasForeignKey(a => a.StaffId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<AccountSanctionRow>(e =>
+        {
+            e.ToTable("account_sanctions", t => t.HasCheckConstraint("ck_account_sanctions_kind", "kind IN ('ban', 'mute') AND (kind = 'ban' OR until IS NOT NULL)"));
+            e.HasKey(s => s.Id);
+            e.Property(s => s.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(s => s.AccountId).HasColumnName("account_id");
+            e.Property(s => s.Kind).HasColumnName("kind").HasMaxLength(16);
+            e.Property(s => s.CreatedAt).HasColumnName("created_at");
+            e.Property(s => s.Until).HasColumnName("until");
+            e.Property(s => s.AuditId).HasColumnName("audit_id");
+            e.Property(s => s.LiftedAt).HasColumnName("lifted_at");
+            e.Property(s => s.LiftedAuditId).HasColumnName("lifted_audit_id");
+            e.HasIndex(s => new { s.AccountId, s.Kind }).HasDatabaseName("ix_account_sanctions_account");
+            e.HasOne<AccountRow>().WithMany().HasForeignKey(s => s.AccountId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<SupportRequestRow>(e =>
+        {
+            e.ToTable("support_requests", t => t.HasCheckConstraint("ck_support_requests_terms",
+                "kind IN ('deletion', 'export') AND status IN ('open', 'done', 'cancelled')"));
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(r => r.AccountId).HasColumnName("account_id");
+            e.Property(r => r.Kind).HasColumnName("kind").HasMaxLength(16);
+            e.Property(r => r.Status).HasColumnName("status").HasMaxLength(16);
+            e.Property(r => r.OpenedAt).HasColumnName("opened_at");
+            e.Property(r => r.OpenedAuditId).HasColumnName("opened_audit_id");
+            e.Property(r => r.ClosedAt).HasColumnName("closed_at");
+            e.Property(r => r.ClosedAuditId).HasColumnName("closed_audit_id");
+            e.HasIndex(r => new { r.Status, r.Id }).HasDatabaseName("ix_support_requests_status");
+            e.HasIndex(r => r.AccountId).HasDatabaseName("ix_support_requests_account");
+            e.HasOne<AccountRow>().WithMany().HasForeignKey(r => r.AccountId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<AdminItemRow>(e =>
+        {
+            e.ToTable("admin_items");
+            e.HasKey(i => i.ItemInstanceId);
+            e.Property(i => i.ItemInstanceId).HasColumnName("item_instance_id").ValueGeneratedNever();
+            e.Property(i => i.ItemId).HasColumnName("item_id").HasMaxLength(128);
+            e.Property(i => i.Quantity).HasColumnName("quantity");
+            e.Property(i => i.CreatedAt).HasColumnName("created_at");
+            e.Property(i => i.AuditId).HasColumnName("audit_id");
         });
     }
 }
