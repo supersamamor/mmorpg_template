@@ -462,7 +462,7 @@ A request that came in through support (T-806, `support_requests`): `deletion` (
 `open`, `done`, `cancelled`.
 
 ## Announcement kinds
-The `kind` of an `announcement` (T-806): `staff` (staff's words in `text`, at most 200 characters), `maintenance` (every game here ends, saved, in `in` seconds).
+The `kind` of an `announcement` (T-806): `staff` (staff's words in `text`, at most 80 characters), `maintenance` (every game here ends, saved, in `in` seconds).
 
 ## Admin terms
 (T-804, ARCHITECTURE §12.) **Admin API**: the server's private HTTP listener for staff tooling, on its own port. **Service credential**: the secret that proves a request comes from the panel.

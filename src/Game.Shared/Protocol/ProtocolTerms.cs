@@ -285,7 +285,7 @@ namespace Game.Shared.Protocol
     public static class AnnouncementKinds
     {
         /// <summary>The longest text staff may announce.</summary>
-        public const int MaxTextLength = 200;
+        public const int MaxTextLength = 80;
 
         /// <summary><c>staff</c>: staff's own words, in <c>text</c>.</summary>
         public const string Staff = "staff";

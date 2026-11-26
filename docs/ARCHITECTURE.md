@@ -1555,7 +1555,7 @@ Every endpoint and field: **docs/ADMIN_API.md**. Code: `src/Game.Server/Admin` (
 - **Items staff make** are new entries with new permanent ids, never merged into a stack (`InventoryRules.TryAdd(separate: true)`), and each id is put in `admin_items` with its audit row:
   that table is where `source = admin` lives (§12.3). It names no character, because the item may change hands. A worn entry staff remove comes off first. Weight is not checked.
 - **Unstick**: in the world as a respawn moves (a dead one respawns); offline to the stored save point, or the content's start when there is none or it is gone.
-- **Server**: `announce` sends an `announcement` to every session playing here; `start_maintenance` refuses new logins (`bye maintenance` at `hello`; a resume still gets back in), announces
+- **Server**: `announce` sends an `announcement` (at most 80 characters: two lines on the smallest phone at the largest UI scale) to every session playing here, which the HUD shows for 12 s on the flash line's place, in the tracker's font; `start_maintenance` refuses new logins (`bye maintenance` at `hello`; a resume still gets back in), announces
   the warning, and after it ends every game here (`bye maintenance`, characters leave saved) with the server still running; `end_maintenance` opens logins and calls off a pending end. Both are
   this process's only, and end with it.
 - **Support queue** (§12.4 "Store compliance"): `open_request` (deletion or export, after support checked who asked), `complete_request`, `cancel_request`. A deletion takes T-703's own path: the

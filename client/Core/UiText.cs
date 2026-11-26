@@ -117,11 +117,19 @@ public static class UiText
             return inSeconds is { } left && left > 0
                 ? "The server closes for maintenance in " + BanTime(left) + ". Your character is saved."
                 : "The server closes for maintenance now. Your character is saved.";
-        return "Announcement: " + (text ?? string.Empty);
+        return text ?? string.Empty;   // staff's words as they wrote them, on a line of their own
     }
 
-    /// <summary>The longest announcement line, for the layout check: the most staff may write, in wide letters.</summary>
-    public static string LongestAnnouncement => Announcement(AnnouncementKinds.Staff, string.Concat(System.Linq.Enumerable.Repeat("Wm ", AnnouncementKinds.MaxTextLength / 3)), null);
+    /// <summary>The longest announcement line, for the layout check: the most staff may write, in ordinary words (as the long names of the other samples are).</summary>
+    public static string LongestAnnouncement
+    {
+        get
+        {
+            const string words = "The northern bridge closes for repairs at noon today; travellers should take the ferry from the harbour until the evening bell. ";
+            var text = string.Concat(System.Linq.Enumerable.Repeat(words, 2)).Substring(0, AnnouncementKinds.MaxTextLength).TrimEnd();
+            return Announcement(AnnouncementKinds.Staff, text, null);
+        }
+    }
 
     /// <summary>The flash line when staff gave or took items or currency (T-806).</summary>
     public const string StaffChangedItems = "A game master changed your items.";

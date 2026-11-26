@@ -106,7 +106,7 @@ public sealed class UiState
         else if (change.Cause == Game.Shared.Vocabulary.InventoryChanges.Staff) SetFlash(UiText.StaffChangedItems, now);   // T-806
     }
 
-    /// <summary>How long an announcement stays on the HUD (T-806): long enough to read 200 characters.</summary>
+    /// <summary>How long an announcement stays on the HUD (T-806): long enough to read 80 characters.</summary>
     public const double AnnouncementSeconds = 12;
 
     /// <summary>The announcement shown now (T-806), or empty.</summary>
