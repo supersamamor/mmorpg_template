@@ -322,9 +322,10 @@ public sealed class AccountErasureDatabaseTests(DatabaseFixture fixture) : IClas
     [DatabaseFact]
     public async Task It_is_either_kept_or_erased_and_either_entered_or_erased_never_both()
     {
-        var run = await Characters.StartRunAsync(default);
         for (var round = 0; round < 25; round++)
         {
+            // A run of its own each round: a run nobody beats for its lease (20 s) is dead, and a busy machine took longer than that over all the rounds (ADR-002 row 343).
+            var run = await Characters.StartRunAsync(default);
             var (account, character, _, _) = await AccountAsync(Accounts);
             await Accounts.TryRequestErasureAsync(account, "hash", Now, Now, default);
             var erase = Task.Run(() => Accounts.EraseAsync(account, Now, default));
