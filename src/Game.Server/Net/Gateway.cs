@@ -398,18 +398,93 @@ public sealed class Gateway
     /// <summary>
     /// The same, with another <c>bye</c> reason: <c>kicked</c> when staff ended the account's game through the admin API (T-804). <paramref name="why"/> is for the log only.
     /// </summary>
-    public void EndSessions(EndedSessions ended, string byeReason, string why)
+    public void EndSessions(EndedSessions ended, string byeReason, string why) => EndSessions(ended, byeReason, why, null);
+
+    /// <summary>The same, with how long is left for <c>bye banned</c> (T-806: seconds, or null when the ban never ends).</summary>
+    public void EndSessions(EndedSessions ended, string byeReason, string why, long? retryAfterSeconds)
     {
         lock (_linkLock)
         {
             foreach (var session in _sessions.Keys)
-                if (session.SessionKey is { } key && ended.Keys.Contains(key)) session.Bye(byeReason);
+                if (session.SessionKey is { } key && ended.Keys.Contains(key)) session.Bye(byeReason, retryAfterSeconds);
             foreach (var link in _links.Values.ToList())
             {
                 if (link.SessionKey is not { } key || !(ended.Keys.Contains(key) || (ended.All && link.AccountId == ended.Account))) continue;
-                link.Session?.Bye(byeReason);
+                link.Session?.Bye(byeReason, retryAfterSeconds);
                 Release(link, why);
             }
+        }
+    }
+
+    // ---- moderation and maintenance (T-806) -------------------------------------------------------------------------------------------------
+
+    private volatile bool _maintenance;
+
+    /// <summary>
+    /// Maintenance mode (T-806): while it is on, a new login is refused at its <c>hello</c> with <c>bye maintenance</c>; a resume still gets back in until <see cref="EndGames"/> ends the
+    /// games. This server only: another process with the same database has its own (ADR-002 row 320). Any thread.
+    /// </summary>
+    public bool InMaintenance
+    {
+        get => _maintenance;
+        set => _maintenance = value;
+    }
+
+    /// <summary>The accounts playing here now (in the world, in a grace period, or logging in): what a ban watch checks. Any thread.</summary>
+    public IReadOnlyCollection<Guid> PlayingAccounts()
+    {
+        lock (_linkLock)
+            return _links.Values.Where(l => l.AccountId is not null).Select(l => l.AccountId!.Value).Concat(_accountSessions.Keys).Distinct().ToList();
+    }
+
+    /// <summary>
+    /// Ends whatever the account plays here (T-806: a ban this server learnt of from the database): its connection gets <paramref name="byeReason"/>, and its character, in its grace period
+    /// too, leaves the world saved, its resume token dead. Returns how many characters left.
+    /// </summary>
+    public int EndAccount(Guid account, string byeReason, long? retryAfterSeconds, string why)
+    {
+        var ended = 0;
+        lock (_linkLock)
+        {
+            if (_accountSessions.TryGetValue(account, out var session)) session.Bye(byeReason, retryAfterSeconds);
+            foreach (var link in _links.Values.Where(l => l.AccountId == account).ToList())
+            {
+                link.Session?.Bye(byeReason, retryAfterSeconds);
+                Release(link, why);
+                ended++;
+            }
+        }
+        return ended;
+    }
+
+    /// <summary>
+    /// A server-wide <c>announcement</c> (T-806): queued to every session that plays (its welcome sent). Returns how many got it. A session in its grace period has no connection and
+    /// misses it, as it misses everything else.
+    /// </summary>
+    public int Announce(AnnouncementMessage message)
+    {
+        var sent = 0;
+        foreach (var session in _sessions.Keys)
+        {
+            if (session.State != SessionState.Joined) continue;   // one still joining has not had its welcome: nothing comes before it
+            session.Post(message);
+            sent++;
+        }
+        return sent;
+    }
+
+    /// <summary>
+    /// Ends every game on this server and keeps the server running (T-806, maintenance): every connection gets <paramref name="byeReason"/>, and every character, those in their grace period
+    /// too, leaves the world, saved on its way out like on any leave. Returns how many characters left.
+    /// </summary>
+    public int EndGames(string byeReason, string why)
+    {
+        lock (_linkLock)
+        {
+            foreach (var session in _sessions.Keys) session.Bye(byeReason);
+            var links = _links.Values.ToList();
+            foreach (var link in links) Release(link, why);
+            return links.Count;
         }
     }
 

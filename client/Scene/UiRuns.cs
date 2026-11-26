@@ -42,6 +42,9 @@ public sealed class UiRuns
 
         await LoginAsync();
         await LayoutMatrixAsync("playing");
+        Hud.SampleAnnouncement = true;   // T-806: the longest announcement, where the flash line is while it shows
+        await LayoutMatrixAsync("announcement shown");
+        Hud.SampleAnnouncement = false;
         await PanelsLayoutAsync();
         Hud.SetScale(originalScale, false);
         Hud.ForceRefresh();

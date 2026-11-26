@@ -56,6 +56,7 @@ public sealed class ClientSession : IViewSink
     private long _bytesSent;
     private long _messagesSent;
     private string? _byeReason;
+    private string? _closeReason;   // T-806: the bye in the close frame, with its retry_after
     private volatile string? _mapId;
     private volatile bool _welcomed;
     private bool _autopilotTold;             // tick thread: the autopilot's status went out with this session's first snapshot (T-604)
@@ -219,11 +220,16 @@ public sealed class ClientSession : IViewSink
     /// <summary>
     /// Queues <c>bye</c> and starts closing; the send loop sends it and the close frame. Only the first call counts. Thread-safe.
     /// </summary>
-    public void Bye(string reason)
+    public void Bye(string reason) => Bye(reason, null);
+
+    /// <summary>The same, with how long is left for a <c>banned</c> bye (T-806: seconds, or null when the ban never ends).</summary>
+    public void Bye(string reason, long? retryAfterSeconds)
     {
         if (Interlocked.CompareExchange(ref _byeReason, reason, null) is not null) return;
         BeginClosing();
-        Queue.PostFinal(ProtocolJson.ToBytes(new ByeMessage(reason)));
+        var bye = new ByeMessage(reason, retryAfterSeconds);
+        Volatile.Write(ref _closeReason, ProtocolJson.CloseReasonOf(bye));
+        Queue.PostFinal(ProtocolJson.ToBytes(bye));
         _gateway.Stats.CountBye(reason);
     }
 
@@ -533,12 +539,17 @@ public sealed class ClientSession : IViewSink
             _gateway.Resume(this, hello);
             return;
         }
+        if (_gateway.InMaintenance)
+        {
+            Bye(ByeReasons.Maintenance);   // T-806: no new game while the server is in maintenance; a resume still gets back in until the games end
+            return;
+        }
         Volatile.Write(ref _sessionKey, Accounts.SessionTokens.KeyOf(hello.Session));
         var login = await _gateway.Login.LoginAsync(hello, Address, stop).ConfigureAwait(false);
         stop.ThrowIfCancellationRequested();   // dropped while it was pending: nothing is claimed or spawned for it
         if (login.Refusal is { } refusal)
         {
-            Bye(refusal);
+            Bye(refusal, login.RetryAfterSeconds);
             return;
         }
         if (Closing) return; // timed out, or the server is stopping
@@ -693,7 +704,7 @@ public sealed class ClientSession : IViewSink
             }
 
             if (ByeReason is { } reason && _socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
-                await _socket.CloseOutputAsync(CloseStatusFor(reason), reason, token).ConfigureAwait(false);
+                await _socket.CloseOutputAsync(CloseStatusFor(reason), Volatile.Read(ref _closeReason) ?? reason, token).ConfigureAwait(false);
         }
         catch (Exception e) when (e is WebSocketException or OperationCanceledException or IOException or ObjectDisposedException)
         {

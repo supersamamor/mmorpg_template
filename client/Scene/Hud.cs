@@ -67,6 +67,7 @@ public sealed class Hud
     private readonly Label _target = Wrapped(HorizontalAlignment.Center);
     private readonly ProgressBar _targetBar = Bar(new Color(0.9f, 0.35f, 0.3f));
     private readonly Label _flash = Wrapped(HorizontalAlignment.Center);
+    private readonly Label _announcement = Wrapped(HorizontalAlignment.Center);   // T-806: staff's announcement, with the bottom's whole width to wrap in
     private readonly Label _connection = Wrapped(HorizontalAlignment.Right);
     private readonly Button _uiSize = new();
     private readonly Button _logout = new() { Text = UiText.Logout };
@@ -186,6 +187,7 @@ public sealed class Hud
 
         _banner.Visible = false;
         _flash.Visible = false;
+        _announcement.Visible = false;
         var targetBox = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
         targetBox.AddChild(_target);
         targetBox.AddChild(_targetBar);
@@ -222,6 +224,7 @@ public sealed class Hud
         _bottom.AnchorTop = 1;
         _bottom.AnchorBottom = 1;
         _bottom.GrowVertical = Control.GrowDirection.Begin;
+        _bottom.AddChild(_announcement);
         _bottom.AddChild(_flash);
         // The hotbar row: a spacer as wide as the bag, the hotbar centred, the bag in the bottom-right corner (the top-right column is full on a 360 dp
         // phone at 1.5x). The flash line above keeps the whole width.
@@ -363,7 +366,8 @@ public sealed class Hud
     public void ShowSamples(string longName)
     {
         SetText(_banner, UiText.Notice(ConnectionNotice.Reconnecting));
-        SetText(_flash, UiText.HitYou(longName, 123456, HitResults.Crit));
+        SetText(_announcement, SampleAnnouncement ? UiText.LongestAnnouncement : string.Empty);   // T-806: an announcement takes the flash line's place while it shows, so the two are sampled apart
+        SetText(_flash, SampleAnnouncement ? string.Empty : UiText.HitYou(longName, 123456, HitResults.Crit));
         _target.Text = longName;
         _targetFrame.Visible = true;
         _levels.Text = UiText.Exp(99, 123456789, 987654321);
@@ -381,6 +385,9 @@ public sealed class Hud
         _autopilot.Visible = true;
         ShowInfo(longName, UiText.EntityKind(EntityKinds.Item, true), new Vector2((float)_metrics.CanvasWidth, (float)_metrics.CanvasHeight));
     }
+
+    /// <summary>For the layout check (T-806): <see cref="ShowSamples"/> shows the longest announcement in place of the longest flash line.</summary>
+    public bool SampleAnnouncement { get; set; }
 
     /// <summary>Draws everything again from the model on the next <see cref="Refresh"/>.</summary>
     public void ForceRefresh()
@@ -668,6 +675,7 @@ public sealed class Hud
         var readOut = Mathf.Max(8, Mathf.RoundToInt((float)(BodyFontDp * Math.Min(scale, 1.0) * unit)));
         foreach (var label in new[] { _levels, _hpText, _spText }) label.AddThemeFontSizeOverride("font_size", readOut);
         _tracker.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(Dp(TrackerFontDp))));
+        _announcement.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(Dp(TrackerFontDp))));   // T-806: the tracker's size, read as easily, a line shorter
         _soundGrid.AddThemeConstantOverride("h_separation", Mathf.RoundToInt(Dp(8)));
         _soundGrid.AddThemeConstantOverride("v_separation", Mathf.RoundToInt(Dp(8)));
         _soundCenter.Position = Vector2.Zero; // inside _safe, which is already at the safe area
@@ -726,11 +734,7 @@ public sealed class Hud
         {
             _connectionVersion = connection.Version;
             panelChanged = true;
-            SetText(_banner, connection.Phase switch
-            {
-                ConnectionPhase.Backoff or ConnectionPhase.Connecting or ConnectionPhase.AwaitingWelcome when connection.Notice != ConnectionNotice.None => UiText.Notice(connection.Notice),
-                _ => string.Empty,
-            });
+            RefreshBanner(connection, ui);
             SetText(_connection, UiText.Connection(connection.Phase));
             _connection.AddThemeColorOverride("font_color", connection.Phase == ConnectionPhase.Online ? new Color(0.55f, 0.9f, 0.55f) : new Color(1f, 0.8f, 0.4f));
             _logout.Visible = connection.Phase == ConnectionPhase.Online;
@@ -750,7 +754,8 @@ public sealed class Hud
         {
             _uiVersion = ui.Version;
             panelChanged = true;
-            SetText(_flash, ui.Flash);
+            SetText(_flash, ui.Announcement.Length > 0 && connection.Phase == ConnectionPhase.Online ? string.Empty : ui.Flash);   // T-806: an announcement has the line while it shows
+            RefreshBanner(connection, ui);
             var targetName = ui.Target is { } id ? _bundle!.NameOf(world.Find(id)?.DisplayKey) : string.Empty;
             _target.Text = targetName;
             _targetFrame.Visible = targetName.Length > 0;
@@ -792,6 +797,17 @@ public sealed class Hud
         }
         _questPanel?.Refresh();
         RefreshAutopilot();
+    }
+
+    /// <summary>The banner line (how a connection is being got back) and, while playing, the latest announcement above the flash line (T-806).</summary>
+    private void RefreshBanner(ConnectionMachine connection, UiState ui)
+    {
+        SetText(_banner, connection.Phase switch
+        {
+            ConnectionPhase.Backoff or ConnectionPhase.Connecting or ConnectionPhase.AwaitingWelcome when connection.Notice != ConnectionNotice.None => UiText.Notice(connection.Notice),
+            _ => string.Empty,
+        });
+        SetText(_announcement, connection.Phase == ConnectionPhase.Online ? ui.Announcement : string.Empty);
     }
 
     /// <summary>The autopilot indicator: redrawn when the run, the quest log (a pause's level or item comes from it) or the connection changed.</summary>
@@ -995,7 +1011,7 @@ public sealed class Hud
         if (!_autopilot.IsVisibleInTree()) return found;
         var mine = _autopilot.GetGlobalRect().Grow(-0.6f);
         foreach (var control in _slots.Cast<Control>().Concat([_skillsButton, _bagButton, _uiSize, _soundButton, _logout, _tracker, _levels, _hpText, _spText, _hpBar, _spBar, _expBar,
-                     _statusRow, _targetFrame, _banner, _flash, _connection]))
+                     _statusRow, _targetFrame, _banner, _announcement, _flash, _connection]))
         {
             if (!control.IsVisibleInTree()) continue;
             if (mine.Intersects(control.GetGlobalRect())) found.Add($"{control.GetType().Name}\"{(control as Button)?.Text ?? (control as Label)?.Text}\" {Describe(control.GetGlobalRect())}");
@@ -1032,7 +1048,7 @@ public sealed class Hud
                 _panel.Visible = true;
                 return;
             case ConnectionPhase.Stopped when connection.Notice == ConnectionNotice.Replaced:
-                ShowPanel(UiText.Notice(connection.Notice), UiText.BackToLogin, session.BackToLogin);
+                ShowPanel(UiText.Notice(connection.Notice, connection.NoticeSeconds), UiText.BackToLogin, session.BackToLogin);
                 return;
             case ConnectionPhase.Stopped:
                 ShowPanel(UiText.Notice(connection.Notice), _config.StoreUrl.Length > 0 ? UiText.GoToStore : null,

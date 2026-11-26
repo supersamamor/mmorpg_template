@@ -70,6 +70,52 @@ public sealed class CharacterTicket
         return new SaveLink(this, TakenVersion + 1);
     }
 
+    /// <summary>
+    /// Staff changed the character in this tick (T-806): <paramref name="note"/>, its audit row, lands in the transaction of the first save that has the change (the next copy), never
+    /// without it and never twice. Tick thread.
+    /// </summary>
+    public void Note(StaffNote note)
+    {
+        ArgumentNullException.ThrowIfNull(note);
+        note.Version = TakenVersion + 1;
+        SaveSoon = true;
+        lock (_notes) _notes.Add(note);
+    }
+
+    private readonly List<StaffNote> _notes = new();
+
+    /// <summary>The notes no save has landed yet, for the next copy. Tick thread.</summary>
+    internal IReadOnlyList<StaffNote> PendingNotes()
+    {
+        lock (_notes) return _notes.Count == 0 ? [] : _notes.ToArray();
+    }
+
+    /// <summary>Save <paramref name="version"/> landed: its notes are in the database. Any thread.</summary>
+    internal void NotesLanded(long version)
+    {
+        List<StaffNote>? landed = null;
+        lock (_notes)
+            for (var i = _notes.Count - 1; i >= 0; i--)
+                if (_notes[i].Version <= version)
+                {
+                    (landed ??= new()).Add(_notes[i]);
+                    _notes.RemoveAt(i);
+                }
+        if (landed is not null) foreach (var note in landed) note.Settle(true);
+    }
+
+    /// <summary>The stay is over without its notes' saves (lost, or given up): their changes never existed. Any thread.</summary>
+    internal void NotesLost()
+    {
+        StaffNote[] lost;
+        lock (_notes)
+        {
+            lost = _notes.ToArray();
+            _notes.Clear();
+        }
+        foreach (var note in lost) note.Settle(false);
+    }
+
     /// <summary>This character got something another gave away: its saves wait for <paramref name="link"/>, or take it along.</summary>
     public void DependOn(SaveLink link)
     {
@@ -130,11 +176,47 @@ public sealed class CharacterTicket
 /// <param name="State">The state.</param>
 /// <param name="Final">The character has left: the server gives it up when this has landed.</param>
 /// <param name="Links">Others' saves it must not land before.</param>
-public sealed record CharacterSave(CharacterTicket Ticket, long Version, CharacterState State, bool Final, IReadOnlyList<SaveLink> Links)
+/// <param name="Notes">Staff changes in it whose audit rows have not landed (T-806): the store writes those above the stored save, in the same transaction.</param>
+public sealed record CharacterSave(CharacterTicket Ticket, long Version, CharacterState State, bool Final, IReadOnlyList<SaveLink> Links, IReadOnlyList<StaffNote>? Notes = null)
 {
+    /// <summary>The notes (none when null).</summary>
+    public IReadOnlyList<StaffNote> StaffNotes => Notes ?? [];
+
     /// <summary>The character.</summary>
     public Guid CharacterId => Ticket.CharacterId;
 
     /// <summary>The stay's claim.</summary>
     public long Claim => Ticket.Claim;
+}
+
+/// <summary>
+/// A staff change to a saved character in the world (T-806): its audit row and the items it made (<c>source = admin</c>), written in the transaction of the save that first has the change, so the
+/// change and its row land together or not at all (rule 10). <see cref="Landed"/> says which: true once that save is in the database, false when the stay ended without it (the change is gone
+/// with the unsaved time, as after a crash).
+/// </summary>
+public sealed class StaffNote(Game.Server.Admin.AuditDraft audit, IReadOnlyList<(long Id, string ItemId, int Quantity)>? made = null)
+{
+    private readonly TaskCompletionSource<bool> _landed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private long _auditId;
+
+    /// <summary>The audit row to write.</summary>
+    public Game.Server.Admin.AuditDraft Audit { get; } = audit;
+
+    /// <summary>The entries staff made (for <c>admin_items</c>): each one's id, item and quantity when it was made.</summary>
+    public IReadOnlyList<(long Id, string ItemId, int Quantity)> Made { get; } = made ?? [];
+
+    /// <summary>The first save number that has the change.</summary>
+    public long Version { get; internal set; }
+
+    /// <summary>The audit row's id once the store wrote it (0 before, and when a retried save found it written already).</summary>
+    public long AuditId
+    {
+        get => Interlocked.Read(ref _auditId);
+        set => Interlocked.Exchange(ref _auditId, value);
+    }
+
+    /// <summary>True when the change and its row are in the database; false when they never will be.</summary>
+    public Task<bool> Landed => _landed.Task;
+
+    internal void Settle(bool landed) => _landed.TrySetResult(landed);
 }

@@ -45,7 +45,7 @@ public sealed class AutoRun
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
         Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-autopilot") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 || Array.IndexOf(args, "--e2e-appearance") >= 0 || Array.IndexOf(args, "--e2e-appearance-watch") >= 0 ||
-        Array.IndexOf(args, "--e2e-wardrobe") >= 0 || Array.IndexOf(args, "--e2e-wardrobe-watch") >= 0 || Array.IndexOf(args, "--e2e-kick") >= 0 ||
+        Array.IndexOf(args, "--e2e-wardrobe") >= 0 || Array.IndexOf(args, "--e2e-wardrobe-watch") >= 0 || Array.IndexOf(args, "--e2e-kick") >= 0 || Array.IndexOf(args, "--e2e-moderation") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -84,6 +84,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-account") >= 0) await AccountRunAsync();
             else if (Array.IndexOf(_args, "--e2e-saving") >= 0) await SavingRunAsync();
             else if (Array.IndexOf(_args, "--e2e-kick") >= 0) await KickRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-moderation") >= 0) await ModerationRunAsync();
             else if (Value("--e2e-appearance-watch") is { } looks) await new LookRuns(_main, ShotAsync).WatcherAsync(looks);
             else if (Array.IndexOf(_args, "--e2e-appearance") >= 0) await new LookRuns(_main, ShotAsync).CreatorAsync();
             else if (Value("--e2e-wardrobe-watch") is { } outfit) await new WardrobeRuns(_main, ShotAsync).WatcherAsync(outfit);
@@ -305,6 +306,78 @@ public sealed class AutoRun
         Press(screen.Rows[0].Play);
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null, 15, "entering the world again");
         Print($"kick: signed in again and back in the world as entity {World.OwnId}");
+        Session.Logout(Clocks.Wall());
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy, 10, "bye logout");
+    }
+
+    /// <summary>
+    /// T-806's run, against a server with a database and its admin API: a new account's character plays; the script (asked by markers) has staff give it an item, which it must see in its
+    /// bag; then bans the account: the client must be put out with <c>bye banned</c> and be refused at sign-in, the screen saying so; then the script lifts the ban, and the client signs in
+    /// and plays again, with the item.
+    /// </summary>
+    private async Task ModerationRunAsync()
+    {
+        var accounts = Session.Accounts;
+        await FramesAsync(3);
+        var screen = _main.Hud!.Accounts!;
+        var tag = new string(System.Security.Cryptography.RandomNumberGenerator.GetItems<char>("abcdefghijklmnopqrstuvwxyz", 10));
+        var username = "e2e-mod-" + tag;
+        var password = Guid.NewGuid().ToString("N"); // thrown away with the run
+        screen.Username.Text = username;
+        screen.Password.Text = password;
+        Press(screen.RegisterButton);
+        await UntilAsync(() => accounts.Screen == Game.Client.Core.Accounts.AccountScreen.Characters && !accounts.Busy, 15, "the character list after registering");
+        await LookRuns.CreateAsync(_main, "Mod" + tag);
+        Press(screen.Rows[0].Play);
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null && _main.LoadedMap == World.MapId && Session.Inventory.Entries.Count > 0, 15,
+            "entering the world");
+        await FramesAsync(5);
+        var before = Session.Inventory.Entries.Select(e => e.Id).ToHashSet();
+        InventoryChangedMessage? staff = null;
+        void Seen(InventoryChangedMessage m)
+        {
+            if (m.Cause == InventoryChanges.Staff) staff = m;
+        }
+        Session.InventoryChanged += Seen;
+        Print($"moderation: in the world as entity {World.OwnId}; asking the script to give an item");
+        Print("@ moderation-give:" + username);
+        await UntilAsync(() => staff is not null, 30, "the item staff gave");
+        Session.InventoryChanged -= Seen;
+        var given = Session.Inventory.Entries.Where(e => !before.Contains(e.Id)).ToList();
+        Check(given.Count > 0 && given.All(e => staff!.Entries.Any(s => s.Id == e.Id)), "the bag has the new entry, with a new id");
+        Check(Session.Ui.Flash == UiText.StaffChangedItems, "the flash line says staff changed the items: \"" + Session.Ui.Flash + "\"");
+        Print($"moderation: the bag got {string.Join(", ", given.Select(e => $"{e.Item} x{e.Quantity} (#{e.Id})"))}");
+
+        Print("@ moderation-ban:" + username);
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen, 30, "bye banned");
+        Check(Session.Connection.Notice == ConnectionNotice.Banned && Session.Connection.NoticeSeconds is > 0, "the game ended with a timed bye banned, was " + Session.Connection.Notice);
+        await UntilAsync(() => !accounts.Busy && accounts.Screen == Game.Client.Core.Accounts.AccountScreen.SignIn, 15, "the sign-in screen");
+        await FramesAsync(3);
+        Check(screen.Text.Contains(UiText.Notice(ConnectionNotice.Banned, Session.Connection.NoticeSeconds)), "the screen says the account is banned: \"" + screen.Text + "\"");
+        Print("moderation: put out, on the sign-in screen: \"" + screen.Text.Replace("\n", " / ") + "\"");
+        await ShotAsync();
+        screen.Username.Text = username;
+        screen.Password.Text = password;
+        Press(screen.SignInButton);
+        await UntilAsync(() => !accounts.Busy && accounts.Error.Length > 0, 15, "the refused sign-in");
+        Check(accounts.Error == AccountErrors.AccountBanned && !accounts.SignedIn, "signing in is refused: " + accounts.Error);
+        Print("moderation: signing in is refused: \"" + screen.Text.Replace("\n", " / ") + "\"");
+
+        // The script lifts the ban when asked; it cannot say when it has, so the client tries to sign in until it may.
+        Print("@ moderation-unban:" + username);
+        for (var attempt = 0; accounts.Screen != Game.Client.Core.Accounts.AccountScreen.Characters; attempt++)
+        {
+            if (attempt >= 30) throw new InvalidOperationException("still refused after the ban was to be lifted: " + accounts.Error);
+            await SecondsAsync(1);
+            screen.Username.Text = username;
+            screen.Password.Text = password;
+            Press(screen.SignInButton);
+            await UntilAsync(() => !accounts.Busy, 15, "an answer to signing in");
+        }
+        Press(screen.Rows[0].Play);
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.Online && World.Own is not null, 15, "entering the world again");
+        await UntilAsync(() => given.All(g => Session.Inventory.Find(g.Id) is not null), 10, "the given item, saved");
+        Print($"moderation: signed in again after the unban and back in the world as entity {World.OwnId}, with the item");
         Session.Logout(Clocks.Wall());
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen && !accounts.Busy, 10, "bye logout");
     }

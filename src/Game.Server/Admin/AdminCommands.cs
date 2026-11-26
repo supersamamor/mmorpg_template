@@ -53,6 +53,49 @@ public sealed class AdminRoad(GameWorld world, Gateway gateway, IAdminStore stor
     /// <summary>Now (UTC).</summary>
     public DateTime Now => time.GetUtcNow().UtcDateTime;
 
+    /// <summary>The clock (T-806: maintenance's timer).</summary>
+    public TimeProvider Time => time;
+
+    /// <summary>Bans, mutes, the support queue and offline character changes (T-806); null without them (a command that needs them answers <c>unavailable</c>).</summary>
+    public IModerationStore? Moderation { get; init; }
+
+    /// <summary>The moderation checks (T-806), to forget a cached mute when one changes here; null without them.</summary>
+    public ModerationChecks? Checks { get; init; }
+
+    /// <summary>New permanent item ids (<c>CharacterSaves.NextItemId</c>, T-702) for items staff make offline; null without saving.</summary>
+    public Func<long>? NextItemId { get; init; }
+
+    /// <summary>The loaded content: item ids, stack sizes, the bag's size, walkable cells and the start point (T-806).</summary>
+    public Game.Content.Registry.ContentDatabase? Content { get; init; }
+
+    /// <summary>How long an account waits to be erased after a deletion request (<c>--account-erase-days</c>, T-703).</summary>
+    public TimeSpan EraseWait { get; init; } = TimeSpan.FromDays(14);
+
+    /// <summary>How long an item or currency change in the world waits for the save that carries its audit row before it answers <c>accepted</c> instead of <c>done</c> (T-806).</summary>
+    public int SaveWaitMs { get; init; } = 10_000;
+
+    /// <summary>Maintenance mode's timer (T-806): one per server.</summary>
+    public MaintenanceClock Maintenance { get; } = new();
+
+    /// <summary>
+    /// Queues a change that a game system runs on the tick of the instance holding its entity (T-806, <see cref="StaffIntent"/>) and waits for it like <see cref="OnTickAsync"/>. When it has
+    /// not started in time it is given up for good (<see cref="StaffIntent.TryAbandon"/>) and <see cref="AdminStepTimeoutException"/> is thrown: nothing was changed. One that started is waited
+    /// for to the end (it is one step of one tick).
+    /// </summary>
+    public async Task<AdminStepResult> SendAsync(StaffIntent intent, CancellationToken cancellation)
+    {
+        if (World.TryEnqueue(intent) != EnqueueResult.Accepted) throw new AdminStepTimeoutException();
+        try
+        {
+            return await intent.Done.WaitAsync(TimeSpan.FromMilliseconds(options.StepTimeoutMs), time, cancellation).ConfigureAwait(false);
+        }
+        catch (Exception e) when (e is TimeoutException or OperationCanceledException)
+        {
+            if (intent.TryAbandon()) throw new AdminStepTimeoutException();
+            return await intent.Done.ConfigureAwait(false);   // it is running on the tick right now
+        }
+    }
+
     /// <summary>
     /// Queues <paramref name="step"/> into the tick of the instance that holds <paramref name="entity"/> (as an <see cref="AdminIntent"/>, validated and routed like a player's intent)
     /// and waits for it. Throws <see cref="AdminStepTimeoutException"/> when the world does not know the entity, its queue is full, or the step has not run within

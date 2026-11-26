@@ -249,6 +249,7 @@ public sealed class CharacterSaves
     {
         lock (_lock) Remove(ticket);
         ticket.Gone.TrySetResult();
+        ticket.NotesLost();
     }
 
     /// <summary>Under the lock.</summary>
@@ -453,6 +454,7 @@ public sealed class CharacterSaves
         Interlocked.Add(ref _saves, group.Count);
         Interlocked.Increment(ref _groups);
         lock (_lock) _largest = Math.Max(_largest, group.Count);
+        foreach (var save in group) save.Ticket.NotesLanded(save.Version);   // T-806: their audit rows landed with them
         foreach (var ticket in ended) ticket.Gone.TrySetResult();
     }
 
@@ -499,6 +501,7 @@ public sealed class CharacterSaves
         }
         Interlocked.Increment(ref _lostCount);
         ticket.Gone.TrySetResult();
+        ticket.NotesLost();
         _log.Error($"[saves] character {ticket.CharacterId} IS LOST to this server ({why}): it goes back to its last save ({ticket.LandedVersion}).");
         try
         {

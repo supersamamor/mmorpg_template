@@ -97,6 +97,7 @@ public sealed class PostgresCharacterStore(GameDatabase database) : ICharacterSt
         // What is there already (this is a second try after an answer that was lost, or a late save): it changes nothing.
         var write = group.Where(s => rows[s.CharacterId].Version < s.Version).ToList();
         if (write.Count == 0) return new SaveResult.Saved();
+        var stored = write.ToDictionary(s => s.CharacterId, s => rows[s.CharacterId].Version);   // T-806: which staff notes are new in this save
         foreach (var save in write) Write(rows[save.CharacterId], save);
         await db.SaveChangesAsync(cancellation).ConfigureAwait(false);
         await StepAsync("states").ConfigureAwait(false);
@@ -110,10 +111,32 @@ public sealed class PostgresCharacterStore(GameDatabase database) : ICharacterSt
         await db.Database.ExecuteSqlAsync(
             $"UPDATE characters c SET job_id = n.job_id FROM unnest({owners}, {jobs}) AS n(id, job_id) WHERE c.id = n.id AND c.job_id <> n.job_id", cancellation).ConfigureAwait(false);
         await StepAsync("checked").ConfigureAwait(false);
+        var notes = await WriteNotesAsync(db, write, stored, cancellation).ConfigureAwait(false);
         await transaction.CommitAsync(cancellation).ConfigureAwait(false);
         await StepAsync("committed").ConfigureAwait(false);
+        foreach (var (note, id) in notes) note.AuditId = id;
         return new SaveResult.Saved();
     });
+
+    /// <summary>
+    /// T-806: the audit rows (and <c>admin_items</c> marks) of staff changes this save is the first to have: each note above the stored save number and not above this one, so a save that
+    /// lands twice, or a later one, never writes a note again. In the save's transaction: the change and its row land together.
+    /// </summary>
+    private static async Task<List<(StaffNote Note, long Id)>> WriteNotesAsync(GameDb db, List<CharacterSave> write, Dictionary<Guid, long> stored, CancellationToken cancellation)
+    {
+        var written = new List<(StaffNote, long)>();
+        foreach (var save in write)
+            foreach (var note in save.StaffNotes)
+            {
+                if (note.Version <= stored[save.CharacterId] || note.Version > save.Version) continue;
+                var id = await PostgresAdminStore.WriteAuditAsync(db, note.Audit, cancellation).ConfigureAwait(false);
+                foreach (var (item, itemId, quantity) in note.Made)
+                    db.AdminItems.Add(new AdminItemRow { ItemInstanceId = item, ItemId = itemId, Quantity = quantity, CreatedAt = note.Audit.At, AuditId = id });
+                written.Add((note, id));
+            }
+        if (db.ChangeTracker.HasChanges()) await db.SaveChangesAsync(cancellation).ConfigureAwait(false);
+        return written;
+    }
 
     // ---- items --------------------------------------------------------------------------------------------------------------------------
 

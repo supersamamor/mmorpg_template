@@ -141,14 +141,20 @@ public sealed class AdminRig : IAsyncDisposable
 
     public AdminHttp Http { get; }
 
+    /// <summary>The road the commands take (T-806).</summary>
+    public AdminRoad Road { get; private init; } = null!;
+
+    /// <summary>The moderation checks, when the rig has a moderation store.</summary>
+    public ModerationChecks? Checks { get; private init; }
+
     /// <summary>
     /// Starts a gateway rig with accounts over <paramref name="accounts"/> (or a memory store) and the admin API over <paramref name="store"/> (or a <see cref="MemoryAdminStore"/>
     /// over the same accounts).
     /// </summary>
     public static async Task<AdminRig> StartAsync(Func<AdminOptions, AdminOptions>? configure = null, IAdminStore? store = null, AccountRigOptions? accounts = null,
-        IEnumerable<IAdminCommand>? commands = null, IReadOnlyDictionary<string, string>? table = null)
+        IEnumerable<IAdminCommand>? commands = null, IReadOnlyDictionary<string, string>? table = null, IModerationStore? moderation = null, int saveWaitMs = 10_000)
     {
-        var time = new FakeTime { Now = DateTimeOffset.UtcNow };
+        var time = accounts?.Time as FakeTime ?? new FakeTime { Now = DateTimeOffset.UtcNow };   // one clock for accounts and the admin road
         var memory = accounts is null ? new MemoryAccountStore() : accounts.Store as MemoryAccountStore;
         var game = await GatewayRig.StartAsync(accounts: accounts ?? new AccountRigOptions(memory!, new FakeHasher(), new AccountLimits(), time));
         store ??= new MemoryAdminStore(memory);
@@ -156,12 +162,17 @@ public sealed class AdminRig : IAsyncDisposable
         if (configure is not null) options = configure(options);
         var log = new CountingLog(game.Log);
         var events = new AdminEvents(log);
-        var road = new AdminRoad(game.World, game.Gateway, store, options, time);
+        var checks = moderation is null ? null : new ModerationChecks(moderation, time);
+        if (checks is not null) game.Accounts!.BanOf = checks.BanOfAsync;   // T-806, as Program wires it
+        var road = new AdminRoad(game.World, game.Gateway, store, options, time)
+        {
+            Moderation = moderation, Checks = checks, NextItemId = game.Saves is null ? null : game.Saves.NextItemId, Content = game.Content, SaveWaitMs = saveWaitMs,
+        };
         var runner = new AdminCommands(commands ?? [new KickCommand()], road, events, log, table);
         var api = new AdminApi(options, new ServiceCredential(Credential), new AdminRateLimit(options, time), runner, store,
-            new AdminStatusSource(game.World, game.Gateway, game.Saves, log, game.ContentHash, new DateTime(2026, 11, 26, 0, 0, 0, DateTimeKind.Utc)), game.Gateway, log);
+            new AdminStatusSource(game.World, game.Gateway, game.Saves, log, game.ContentHash, new DateTime(2026, 11, 26, 0, 0, 0, DateTimeKind.Utc)), game.Gateway, log, moderation, road.Maintenance);
         var host = await AdminHost.StartAsync(options, game.Endpoint.Port, api, name => name == options.CredentialEnv ? Credential : null);
-        return new AdminRig(game, store, host, events, log, memory, time, options);
+        return new AdminRig(game, store, host, events, log, memory, time, options) { Road = road, Checks = checks };
     }
 
     public async ValueTask DisposeAsync()

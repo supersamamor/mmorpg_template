@@ -145,6 +145,8 @@ public class ConnectionMachineTests
         { ByeReasons.SaveLost, ConnectionPhase.LoginScreen, ConnectionNotice.SaveLost, false },
         { ByeReasons.SessionEnded, ConnectionPhase.LoginScreen, ConnectionNotice.SessionEnded, false },
         { ByeReasons.Kicked, ConnectionPhase.LoginScreen, ConnectionNotice.Kicked, false },
+        { ByeReasons.Banned, ConnectionPhase.LoginScreen, ConnectionNotice.Banned, false },
+        { ByeReasons.Maintenance, ConnectionPhase.LoginScreen, ConnectionNotice.Maintenance, false },
         { ByeReasons.Shutdown, ConnectionPhase.Backoff, ConnectionNotice.ServerShutdown, false },
         // The server keeps the character through these (§10 step 6), so they are a drop: resume.
         { ByeReasons.Timeout, ConnectionPhase.Backoff, ConnectionNotice.Reconnecting, true },
@@ -157,6 +159,14 @@ public class ConnectionMachineTests
         { ByeReasons.DuplicateHello, ConnectionPhase.Backoff, ConnectionNotice.Reconnecting, true },
         { ByeReasons.RateLimit, ConnectionPhase.Backoff, ConnectionNotice.Reconnecting, true },
     };
+
+    [Fact]
+    public void A_ban_says_how_long_it_has_left_and_nothing_is_resumed()
+    {
+        var machine = Online();
+        machine.OnBye(ByeReasons.Banned, 5, 7_200);   // T-806
+        (machine.Phase, machine.Notice, machine.NoticeSeconds, machine.HasToken).ShouldBe((ConnectionPhase.LoginScreen, ConnectionNotice.Banned, (long?)7_200, false));
+    }
 
     [Fact]
     public void The_table_covers_every_bye_reason()

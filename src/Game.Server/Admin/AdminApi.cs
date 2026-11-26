@@ -18,7 +18,7 @@ namespace Game.Server.Admin;
 /// JSON, <c>no-store</c>, with the request id; nothing outside <see cref="AdminPaths.Root"/> is served.
 /// </summary>
 public sealed class AdminApi(AdminOptions options, ServiceCredential credential, AdminRateLimit limits, AdminCommands commands, IAdminStore store, AdminStatusSource status,
-    Gateway gateway, IServerLog log)
+    Gateway gateway, IServerLog log, IModerationStore? moderation = null, MaintenanceClock? maintenance = null)
 {
     /// <summary>The default page size.</summary>
     public const int DefaultPageSize = 25;
@@ -136,7 +136,7 @@ public sealed class AdminApi(AdminOptions options, ServiceCredential credential,
             switch (rest)
             {
                 case "/status":
-                    await WriteAsync(context, StatusCodes.Status200OK, status.Read()).ConfigureAwait(false);
+                    await WriteAsync(context, StatusCodes.Status200OK, status.Read() with { Maintenance = maintenance?.Status() }).ConfigureAwait(false);
                     return;
                 case "/commands":
                     await WriteAsync(context, StatusCodes.Status200OK, new
@@ -163,6 +163,15 @@ public sealed class AdminApi(AdminOptions options, ServiceCredential credential,
                     await WriteAsync(context, StatusCodes.Status200OK, new { items = page.Items.Select(WithPresence), next = page.Next }).ConfigureAwait(false);
                     return;
                 }
+                case "/requests":
+                {
+                    if (moderation is null) throw new StoreUnavailableException("no moderation store");
+                    var state = Text(query, "status");
+                    if (state is not null && !SupportRequestStatuses.All.Contains(state)) throw new BadQuery();
+                    var page = await moderation.FindRequestsAsync(state, Id(query, "account"), Number(query, "before"), Limit(query), cancel).ConfigureAwait(false);
+                    await WriteAsync(context, StatusCodes.Status200OK, new { items = page.Items.Select(RequestJson), next = page.Next }).ConfigureAwait(false);
+                    return;
+                }
                 case "/audit":
                 {
                     var action = Text(query, "action");
@@ -172,6 +181,42 @@ public sealed class AdminApi(AdminOptions options, ServiceCredential credential,
                     await WriteAsync(context, StatusCodes.Status200OK, new { items = page.Items.Select(AuditJson), next = page.Next }).ConfigureAwait(false);
                     return;
                 }
+            }
+            if (rest.StartsWith("/accounts/", StringComparison.Ordinal) && rest.EndsWith(AdminPaths.ModerationSuffix, StringComparison.Ordinal)
+                && Guid.TryParseExact(rest["/accounts/".Length..^AdminPaths.ModerationSuffix.Length], "D", out var moderated))
+            {
+                if (moderation is null) throw new StoreUnavailableException("no moderation store");
+                if (await store.GetAccountAsync(moderated, cancel).ConfigureAwait(false) is null)
+                {
+                    await FailAsync(context, StatusCodes.Status404NotFound, AdminErrors.UnknownTarget, requestId).ConfigureAwait(false);
+                    return;
+                }
+                var now = DateTime.UtcNow;
+                var sanctions = await moderation.SanctionsAsync(moderated, cancel).ConfigureAwait(false);
+                var requests = await moderation.FindRequestsAsync(null, moderated, null, options.MaxPageSize, cancel).ConfigureAwait(false);
+                await WriteAsync(context, StatusCodes.Status200OK, new
+                {
+                    account_id = moderated,
+                    banned = sanctions.Any(s => s.Kind == SanctionKinds.Ban && s.InForce(now)),
+                    muted = sanctions.Any(s => s.Kind == SanctionKinds.Mute && s.InForce(now)),
+                    bans = sanctions.Where(s => s.Kind == SanctionKinds.Ban).Select(s => SanctionJson(s, now)),
+                    mutes = sanctions.Where(s => s.Kind == SanctionKinds.Mute).Select(s => SanctionJson(s, now)),
+                    requests = requests.Items.Select(RequestJson),
+                }).ConfigureAwait(false);
+                return;
+            }
+            if (rest.StartsWith("/characters/", StringComparison.Ordinal) && rest.EndsWith(AdminPaths.StaffChangesSuffix, StringComparison.Ordinal)
+                && Guid.TryParseExact(rest["/characters/".Length..^AdminPaths.StaffChangesSuffix.Length], "D", out var changed))
+            {
+                if (await store.GetCharacterAsync(changed, cancel).ConfigureAwait(false) is null)
+                {
+                    await FailAsync(context, StatusCodes.Status404NotFound, AdminErrors.UnknownTarget, requestId).ConfigureAwait(false);
+                    return;
+                }
+                // Every audit row about a character is a staff change to it: give_item, remove_item, change_currency, unstick.
+                var page = await store.SearchAuditAsync(new AuditQuery(changed.ToString(), null, null, null, null, Number(query, "before"), Limit(query)), cancel).ConfigureAwait(false);
+                await WriteAsync(context, StatusCodes.Status200OK, new { items = page.Items.Select(AuditJson), next = page.Next }).ConfigureAwait(false);
+                return;
             }
             if (rest.StartsWith("/accounts/", StringComparison.Ordinal) && Guid.TryParseExact(rest["/accounts/".Length..], "D", out var accountId))
             {
@@ -215,6 +260,16 @@ public sealed class AdminApi(AdminOptions options, ServiceCredential credential,
     private object WithPresence(AdminCharacter c) => new
     {
         id = c.Id, account_id = c.AccountId, slot = c.Slot, name = c.Name, job_id = c.JobId, created_at = c.CreatedAt, deleted_at = c.DeletedAt, online = gateway.HoldsCharacter(c.Id),
+    };
+
+    private static object SanctionJson(Sanction s, DateTime now) => new
+    {
+        id = s.Id, kind = s.Kind, from = s.CreatedAt, until = s.Until, in_force = s.InForce(now), audit_id = s.AuditId, lifted_at = s.LiftedAt, lifted_audit_id = s.LiftedAuditId,
+    };
+
+    private static object RequestJson(SupportRequest r) => new
+    {
+        id = r.Id, account_id = r.AccountId, kind = r.Kind, status = r.Status, opened_at = r.OpenedAt, opened_audit_id = r.OpenedAuditId, closed_at = r.ClosedAt, closed_audit_id = r.ClosedAuditId,
     };
 
     private static object AuditJson(AuditRecord r) => new

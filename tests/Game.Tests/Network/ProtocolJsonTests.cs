@@ -275,6 +275,9 @@ public class ProtocolJsonTests
         },
         { "pong", new PongMessage(7), """{"type":"pong","seq":7}""" },
         { "bye", new ByeMessage("timeout"), """{"type":"bye","reason":"timeout"}""" },
+        { "bye banned", new ByeMessage("banned", 3600), """{"type":"bye","reason":"banned","retry_after":3600}""" },
+        { "announcement", new AnnouncementMessage("staff", "Noon.", null), """{"type":"announcement","kind":"staff","text":"Noon."}""" },
+        { "announcement maintenance", new AnnouncementMessage("maintenance", null, 300), """{"type":"announcement","kind":"maintenance","in":300}""" },
     };
 
     [Theory]

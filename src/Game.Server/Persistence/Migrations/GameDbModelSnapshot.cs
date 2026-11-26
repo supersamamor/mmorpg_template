@@ -84,6 +84,56 @@ namespace Game.Server.Persistence.Migrations
                     b.ToTable("accounts", (string)null);
                 });
 
+            modelBuilder.Entity("Game.Server.Persistence.AccountSanctionRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<long>("AuditId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("audit_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTime?>("LiftedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("lifted_at");
+
+                    b.Property<long?>("LiftedAuditId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("lifted_audit_id");
+
+                    b.Property<DateTime?>("Until")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("until");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId", "Kind")
+                        .HasDatabaseName("ix_account_sanctions_account");
+
+                    b.ToTable("account_sanctions", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_account_sanctions_kind", "kind IN ('ban', 'mute') AND (kind = 'ban' OR until IS NOT NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Game.Server.Persistence.AdminAuditRow", b =>
                 {
                     b.Property<long>("Id")
@@ -164,6 +214,35 @@ namespace Game.Server.Persistence.Migrations
                         {
                             t.HasCheckConstraint("ck_admin_audit_reason", "length(btrim(reason)) > 0");
                         });
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.AdminItemRow", b =>
+                {
+                    b.Property<long>("ItemInstanceId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("item_instance_id");
+
+                    b.Property<long>("AuditId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("audit_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ItemId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("item_id");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.HasKey("ItemInstanceId");
+
+                    b.ToTable("admin_items", (string)null);
                 });
 
             modelBuilder.Entity("Game.Server.Persistence.AdminStaffRow", b =>
@@ -566,6 +645,70 @@ namespace Game.Server.Persistence.Migrations
                     b.ToTable("account_sessions", (string)null);
                 });
 
+            modelBuilder.Entity("Game.Server.Persistence.SupportRequestRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<long?>("ClosedAuditId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("closed_audit_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("kind");
+
+                    b.Property<DateTime>("OpenedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("opened_at");
+
+                    b.Property<long>("OpenedAuditId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("opened_audit_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId")
+                        .HasDatabaseName("ix_support_requests_account");
+
+                    b.HasIndex("Status", "Id")
+                        .HasDatabaseName("ix_support_requests_status");
+
+                    b.ToTable("support_requests", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_support_requests_terms", "kind IN ('deletion', 'export') AND status IN ('open', 'done', 'cancelled')");
+                        });
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.AccountSanctionRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.AccountRow", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Game.Server.Persistence.AdminAuditRow", b =>
                 {
                     b.HasOne("Game.Server.Persistence.AdminStaffRow", null)
@@ -622,6 +765,15 @@ namespace Game.Server.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("AccountId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.SupportRequestRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.AccountRow", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 #pragma warning restore 612, 618

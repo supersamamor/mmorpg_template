@@ -313,7 +313,8 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
     {
         var seconds = (retryAfterMs + 999) / 1000;
         var erasing = error == AccountErrors.AccountDeleting; // waiting does not help: it says how long there is left to take the deletion back
-        if (seconds > 0 && !erasing) context.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
+        // T-806: a ban says how long is left in the body (none: it never ends); trying again sooner does not help, so no Retry-After either.
+        if (seconds > 0 && !erasing && error != AccountErrors.AccountBanned) context.Response.Headers.RetryAfter = seconds.ToString(CultureInfo.InvariantCulture);
         return SendAsync(context, StatusOf(error), w =>
         {
             w.WriteString("error", error);
@@ -328,6 +329,7 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
         AccountErrors.InvalidCredentials or AccountErrors.InvalidSession => StatusCodes.Status401Unauthorized,
         AccountErrors.UnknownCharacter => StatusCodes.Status404NotFound,
         AccountErrors.UsernameTaken or AccountErrors.NameTaken or AccountErrors.NoFreeSlot or AccountErrors.CharacterInUse or AccountErrors.AccountDeleting => StatusCodes.Status409Conflict,
+        AccountErrors.AccountBanned => StatusCodes.Status403Forbidden,
         AccountErrors.RateLimited => StatusCodes.Status429TooManyRequests,
         AccountErrors.Unavailable => StatusCodes.Status503ServiceUnavailable,
         _ => StatusCodes.Status400BadRequest,

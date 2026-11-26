@@ -353,7 +353,7 @@ In `inventory` and `inventory_changed` (`load`).
 In `inventory_changed` `cause`: `picked_up`, `used`, `equipped`, `unequipped`, `dropped`, `weight` (only the weight limit or state changed),
 `card_inserted`, `refined` (any refine attempt: the material is used up whatever the result), `exchanged` (a dialogue's `take_item` / `give_item` actions, T-601),
 `quest` (a quest step's turn-in: its consumed items taken and its item and currency rewards given, one transaction, T-602),
-`shop_buy` (items bought; the currency went down in the same change, T-603), `shop_sell` (items sold; the currency went up, T-603).
+`shop_buy` (items bought; the currency went down in the same change, T-603), `shop_sell` (items sold; the currency went up, T-603), `staff` (staff gave or took items or currency through the admin API, T-806).
 
 ## Refine failures
 What a failed refine does, per step of `refine.yaml` (`failure`): `keep` (the level stays), `down` (one level down, not below 0), `break` (the item is gone, with its cards).
@@ -392,13 +392,14 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
 Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`, `set_outfit`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`, `pong`, `bye`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`, `announcement`, `pong`, `bye`
 Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
 `oversize`, `before_hello`, `duplicate_hello`, `rate_limit`, `login_refused`, `server_full`, `too_slow`, `shutdown`, `server_error`, `update_required`,
-`logout`, `replaced`, `resume_failed`, `load_failed`, `save_pending`, `save_lost`, `session_ended`, `kicked`.
+`logout`, `replaced`, `resume_failed`, `load_failed`, `save_pending`, `save_lost`, `session_ended`, `kicked`, `banned`, `maintenance`.
+`banned` (T-806): staff banned the account; a timed ban carries `retry_after` (seconds left), one without an end none; sent at `hello` and to a game the ban ends. `maintenance` (T-806): the server is in maintenance: a new login is refused at `hello`, and every game ends (saved) when the warning time is up.
 `login_refused`: the dev login outside development or with a bad name, a session token that is unknown, expired or revoked, or a character that is not the account's
 (T-701: one answer for all of them). `server_error` also ends a `hello` whose login the database could not answer.
 `update_required`: the client's content hash differs from the server's, or it sent none outside development (ARCHITECTURE §5.4).
@@ -415,7 +416,8 @@ item intent (`shop_buy` and `shop_sell` included), or an "Outfit reasons" term f
 
 ## Account errors
 The `error` of a refused account request (T-701, ARCHITECTURE §10 "Accounts"): `invalid_request`, `invalid_username`, `invalid_password`, `same_password`, `username_taken`,
-`invalid_credentials`, `account_deleting`, `invalid_session`, `rate_limited`, `invalid_name`, `invalid_appearance`, `name_taken`, `no_free_slot`, `unknown_character`, `character_in_use`, `unavailable`.
+`invalid_credentials`, `account_deleting`, `invalid_session`, `rate_limited`, `invalid_name`, `invalid_appearance`, `name_taken`, `no_free_slot`, `unknown_character`, `character_in_use`, `unavailable`, `account_banned`.
+`account_banned` (T-806): staff banned the account; told only to someone who has its password, with `retry_after` (seconds until the ban ends; none when it has no end); never staff's reason.
 Appearance refusals (T-705): an id is unknown, or a face or hairstyle is not the chosen gender's. `invalid_credentials` answers an unknown username and a wrong password alike, and a password change whose current password is wrong. `same_password` (T-710): a password change to the one the account has. `account_deleting` (T-703): the account waits to be erased, told only to someone who has its password; it comes with `erased_in` (seconds). `rate_limited` and `unavailable` come with `retry_after` (seconds).
 
 ## Account terms
@@ -436,23 +438,40 @@ save it; the newest. **Run**: one server start, numbered by the database. **Link
 (T-804, ARCHITECTURE §12.2.) In the `X-Staff-Role` header of an admin request, lowest first; each may do what the ones before it may: `support`, `gm`, `admin`.
 
 ## Admin actions
-What an admin command does; the `action` of its audit row (T-804; T-806 adds more): `kick`.
+What an admin command does; the `action` of its audit row (T-804, T-806): `kick`, `ban`, `unban`, `mute`, `unmute`, `give_item`, `remove_item`, `change_currency`, `unstick`, `announce`,
+`start_maintenance`, `end_maintenance`, `open_request`, `complete_request`, `cancel_request`.
 
 ## Admin target kinds
-What an admin command or audit row is about: `account`, `character`.
+What an admin command or audit row is about: `account`, `character`, `request` (a support request's number, T-806), `server` (this server process; its id is `server`, T-806).
 
 ## Admin errors
 The `error` of a refused admin request or command (T-804, docs/ADMIN_API.md): `invalid_request`, `unauthorized`, `invalid_staff`, `unknown_role`, `forbidden`, `reason_required`, `not_found`,
-`unknown_target`, `rate_limited`, `timeout`, `unavailable`. `rate_limited` comes with a `Retry-After` header. A refused command changed nothing and wrote no audit row.
+`unknown_target`, `rate_limited`, `timeout`, `unavailable`, and (T-806) `already_banned`, `not_banned`, `already_muted`, `not_muted`, `character_busy` (a server holds the character but this one's world
+does not have it), `never_saved`, `unknown_item`, `item_gone`, `not_enough`, `inventory_full`, `currency_limit`, `maintenance_on`, `maintenance_off`, `request_closed`, `account_deleting`. `rate_limited` comes with a `Retry-After` header. A refused command changed nothing and wrote no audit row.
 
 ## Admin outcomes
 The `outcome` of an admin command: `done` (made and audited), `accepted` (audited; the world applies it on a coming tick), `refused` (with an "Admin errors" term).
+
+## Sanction kinds
+An account restriction (T-806, `account_sanctions`): `ban` (no sign-in and no game; timed or without an end), `mute` (no speaking; always timed: the check chat calls, T-901).
+
+## Support request kinds
+A request that came in through support (T-806, `support_requests`): `deletion` (completing it starts T-703's erasure wait), `export` (completing it answers with the account's data as JSON).
+
+## Support request statuses
+`open`, `done`, `cancelled`.
+
+## Announcement kinds
+The `kind` of an `announcement` (T-806): `staff` (staff's words in `text`, at most 80 characters), `maintenance` (every game here ends, saved, in `in` seconds).
 
 ## Admin terms
 (T-804, ARCHITECTURE §12.) **Admin API**: the server's private HTTP listener for staff tooling, on its own port. **Service credential**: the secret that proves a request comes from the panel.
 **Staff member**: who the panel says makes the request (id, display name, role). **Admin command**: a write through the admin API, checked against the role table and the game like an intent.
 **Admin step**: the part of a command that runs on an instance's tick (`AdminIntent`). **Audit row**: one append-only record of an admin change (staff, role, action, target, before, after,
 reason, time, request id). **Reason**: the staff member's own words for a write; required.
+(T-806.) **Ban** / **mute**: an account restriction the database holds, so every server process enforces it. **Ban watch**: each server's look, every 10 s, for banned accounts playing on it. **Staff note**: the audit row of a
+staff change to a character in the world, written in the transaction of the save that first has the change. **`source = admin`**: an item entry whose permanent id is in `admin_items`. **Offline change**: a support fix
+to a character no server holds, made in the database under T-702's claim rules. **Maintenance mode**: no new logins on this server, a warning, then every game ends. **Support queue**: deletion and data-export requests that came in through support.
 
 ## Entity kinds
 In a view record's `kind`: `player`, `monster`, `npc`, `item` (a ground item a monster dropped, `EntityKind.Item`; its `display_key` is the item id).
