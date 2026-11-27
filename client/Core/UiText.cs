@@ -294,6 +294,148 @@ public static class UiText
         _ => "The party is not available right now.",
     };
 
+    // ---- trade (T-903) ----
+
+    /// <summary>The trade window's heading, e.g. <c>Trade with Bo</c>.</summary>
+    public static string TradeTitle(string name) => "Trade with " + name;
+
+    /// <summary>The Trade button beside a tapped player or a party member.</summary>
+    public const string TradeAskButton = "Trade";
+
+    /// <summary>The ask prompt's accept.</summary>
+    public const string TradeAccept = "Trade";
+
+    /// <summary>The ask prompt's decline.</summary>
+    public const string TradeDecline = "No";
+
+    /// <summary>The ask prompt, e.g. <c>Ada wants to trade (18 s)</c>.</summary>
+    public static string TradeAsked(string name, int secondsLeft) =>
+        name + " wants to trade (" + Math.Max(0, secondsLeft).ToString(CultureInfo.InvariantCulture) + " s)";
+
+    /// <summary>This side's column heading.</summary>
+    public const string TradeYouOffer = "You give";
+
+    /// <summary>The other side's column heading, e.g. <c>Bo gives</c>.</summary>
+    public static string TradeTheyOffer(string name) => name + " gives";
+
+    /// <summary>An offer with nothing in it.</summary>
+    public const string TradeNothing = "Nothing yet.";
+
+    /// <summary>Opens the bag's list of what can be offered.</summary>
+    public const string TradeAdd = "Add";
+
+    /// <summary>Back from the list of what can be offered.</summary>
+    public const string TradeBack = "Back";
+
+    /// <summary>The list of what can be offered, when nothing can.</summary>
+    public const string TradeNothingToOffer = "Nothing you carry can be traded.";
+
+    /// <summary>One unit fewer in the quantity picker.</summary>
+    public const string TradeLess = "-";
+
+    /// <summary>One unit more in the quantity picker.</summary>
+    public const string TradeMore = "+";
+
+    /// <summary>Puts the chosen units in the offer.</summary>
+    public const string TradeOfferButton = "Offer";
+
+    /// <summary>The currency field's hint.</summary>
+    public const string TradeCurrencyHint = "Amount";
+
+    /// <summary>Puts the typed amount in the offer.</summary>
+    public const string TradeSetCurrency = "Set";
+
+    /// <summary>Lock.</summary>
+    public const string TradeLock = "Lock";
+
+    /// <summary>Unlock.</summary>
+    public const string TradeUnlock = "Unlock";
+
+    /// <summary>Confirm.</summary>
+    public const string TradeConfirm = "Confirm";
+
+    /// <summary>Cancel.</summary>
+    public const string TradeCancel = "Cancel";
+
+    /// <summary>One offered entry, e.g. <c>Iron Blade +4 [1]</c> or <c>Healing Draught x3</c>.</summary>
+    public static string TradeLine(string itemName, int quantity, int refine, int cards) =>
+        itemName + (refine > 0 ? " +" + refine.ToString(CultureInfo.InvariantCulture) : string.Empty) + (cards > 0 ? " [" + cards.ToString(CultureInfo.InvariantCulture) + "]" : string.Empty)
+        + (quantity > 1 ? " " + QuantityLabel(quantity) : string.Empty);
+
+    /// <summary>The quantity picker, e.g. <c>2 / 5</c>.</summary>
+    public static string TradeQuantity(int chosen, int carried) => chosen.ToString(CultureInfo.InvariantCulture) + " / " + carried.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>
+    /// The state line under the offers: who has locked and confirmed, and what to do next. Locked offers are final; the confirm is for the two offers shown.
+    /// </summary>
+    public static string TradeState(string name, bool mineLocked, bool theirsLocked, bool mineConfirmed, bool theirsConfirmed)
+    {
+        if (mineConfirmed && theirsConfirmed) return "Both confirmed. Trading...";
+        if (mineConfirmed) return "You confirmed these offers. Waiting for " + name + ".";
+        if (theirsConfirmed) return name + " confirmed these offers. Check them, then confirm.";
+        if (mineLocked && theirsLocked) return "Both locked. Check both offers, then confirm.";
+        if (mineLocked) return "You locked. Waiting for " + name + " to lock.";
+        if (theirsLocked) return name + " locked. Lock yours when it is ready.";
+        return "Any change unlocks both offers.";
+    }
+
+    /// <summary>The words of a "Trade notices" term.</summary>
+    public static string TradeNotice(string notice, string? name) => notice switch
+    {
+        TradeNotices.AskSent => "Trade asked of " + (name is { Length: > 0 } ? name : "them") + ".",
+        TradeNotices.Declined => (name is { Length: > 0 } ? name : "They") + " said no to trading.",
+        TradeNotices.Expired => "The trade request ran out.",
+        _ => "Trade news.",
+    };
+
+    /// <summary>The words of a "Trade ends" term (a <c>trade_closed</c>); <paramref name="own"/> when this side caused it.</summary>
+    public static string TradeClosed(string reason, string? name, bool own)
+    {
+        var who = name is { Length: > 0 } ? name : "The other player";
+        return reason switch
+        {
+            TradeEnds.Done => "Trade done.",
+            TradeEnds.Cancelled => own ? "You cancelled the trade." : who + " cancelled the trade.",
+            TradeEnds.TooFar => "Trade cancelled: you moved too far apart.",
+            TradeEnds.Dead => "Trade cancelled: " + (own ? "you were" : who + " was") + " knocked out.",
+            TradeEnds.LeftMap => "Trade cancelled: " + (own ? "you" : who) + " left the area.",
+            TradeEnds.Disconnected => "Trade cancelled: " + (own ? "your" : who + "'s") + " connection dropped.",
+            TradeEnds.Left => "Trade cancelled: " + (own ? "you" : who) + " left the game.",
+            TradeEnds.TooHeavy => "Trade cancelled: " + (own ? "you" : who) + " could not carry that much. Nothing moved.",
+            TradeEnds.InventoryFull => "Trade cancelled: " + (own ? "your" : who + "'s") + " bag is full. Nothing moved.",
+            TradeEnds.CurrencyFull => "Trade cancelled: " + (own ? "you" : who) + " cannot hold that much money. Nothing moved.",
+            TradeEnds.OfferChanged => "Trade cancelled: " + (own ? "your" : who + "'s") + " offer changed. Nothing moved.",
+            _ => "Trade cancelled. Nothing moved.",
+        };
+    }
+
+    /// <summary>The words of a "Trade reasons" term (a <c>trade_refused</c>).</summary>
+    public static string TradeRefused(string reason, long? retryAfterSeconds) => reason switch
+    {
+        TradeReasons.NotOnline => "That player is not online here.",
+        TradeReasons.InvalidTarget => "You cannot trade with that.",
+        TradeReasons.Busy => "That player is busy with another trade.",
+        TradeReasons.TooFar => "Stand closer to trade.",
+        TradeReasons.Dead => "Nobody can trade while knocked out.",
+        TradeReasons.AskPending => "Wait for an answer to your last request.",
+        TradeReasons.NoAsk => "That trade request is no longer there.",
+        TradeReasons.RateLimited => retryAfterSeconds is { } wait ? "Too many trade requests. Wait " + BanTimeSeconds(wait) + "." : "Too many trade requests.",
+        TradeReasons.NotTrading => "You are not trading.",
+        TradeReasons.NotTradeable => "That item cannot be traded.",
+        TradeReasons.ItemGone => "You no longer have that.",
+        TradeReasons.ItemEquipped => "Take it off first.",
+        TradeReasons.InvalidQuantity => "You do not have that many.",
+        TradeReasons.OfferFull => "Your offer is full.",
+        TradeReasons.NotLocked => "Both offers must be locked first.",
+        TradeReasons.Stale => "The offers changed. Check them again.",
+        TradeReasons.Swapping => "The trade is going through.",
+        TradeReasons.CannotTrade => "You cannot trade with that player.",
+        _ => "Trading is not available right now.",
+    };
+
+    /// <summary>The longest item line the trade window may show, for the layout check.</summary>
+    public static string LongestTradeLine => TradeLine(new string('W', 24), 99, 10, 4);
+
     private static string BanTimeSeconds(long seconds) => seconds < 60 ? (seconds == 1 ? "a second" : seconds.ToString(CultureInfo.InvariantCulture) + " seconds") : BanTime(seconds);
 
     /// <summary>The longest speaker the log may show, for the layout check: a whisper between two names of the longest length.</summary>

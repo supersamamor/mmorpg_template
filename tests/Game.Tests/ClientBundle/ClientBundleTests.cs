@@ -94,7 +94,7 @@ public class ClientBundleTests
             "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Quests,Maps,Appearance,Refine,CurrencyName,Outfits",
             "ClientColorOption: Id,Name,Color",
             "ClientGender: Gender,Name,BodyModelAssetKey,Faces,Hairstyles,DefaultFaceId,DefaultHairstyleId",
-            "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey,UseSfx,EquipSfx,CardSlots,Refinable,ConfirmUse",
+            "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey,UseSfx,EquipSfx,CardSlots,Refinable,ConfirmUse,Tradeable",
             "ClientJob: Id,Name,Description,ParentJobId,WeaponTypes,ModelAssetKey,IconAssetKey,Skills,ClothColor,Pieces",
             "ClientJobPiece: ModelAssetKey,Gender,Slot",
             "ClientJobSkill: SkillId,MaxLevel,Requires",

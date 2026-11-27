@@ -105,6 +105,9 @@ public sealed class ClientSession
     /// <summary>The party of this session (T-902): what the server last said, in memory only, emptied at every new login and back on the login screen.</summary>
     public Game.Client.Core.Party.PartyBook Party { get; } = new Game.Client.Core.Party.PartyBook();
 
+    /// <summary>The trade (T-903): the ask, both offers as the server holds them, how the last one ended.</summary>
+    public Game.Client.Core.Trade.TradeBook Trade { get; } = new Game.Client.Core.Trade.TradeBook();
+
     private readonly List<string> _gainedOutfits = new();
 
     /// <summary>Server messages applied so far (for measuring).</summary>
@@ -140,6 +143,7 @@ public sealed class ClientSession
         Wardrobe.Reset();
         Chat.Clear();
         Party.Clear();
+        Trade.Clear();
         Numbers.Clear();
         Connection.Login(name, wallNow);
         RunCommands();
@@ -157,6 +161,7 @@ public sealed class ClientSession
             Autopilot.Reset();   // a run belongs to the session that ended
             Chat.Clear();        // T-901: no chat outlives its session on the device
             Party.Clear();       // T-902: nor a party
+            Trade.Clear();       // T-903: nor a trade
         }
         if (_characterId is not null && Connection.Phase == ConnectionPhase.LoginScreen) Accounts.Refresh();
     }
@@ -379,6 +384,7 @@ public sealed class ClientSession
         RunCommands();
         WatchLogin();
         Party.Expire(wallNow);   // T-902: an invite past its end is no longer offered
+        Trade.Expire(wallNow);   // T-903: nor an ask
         Accounts.Update();
         _lastViewNow = viewNow;
         World.Advance(viewNow);
@@ -413,6 +419,7 @@ public sealed class ClientSession
                 World.ApplyWelcome(welcome);
                 Chat.OwnId = welcome.Id;
                 Party.OwnId = welcome.Id;
+                Trade.Clear();   // T-903: a new session never finds a trade under way (the server ended it)
                 break;
             case ExpMessage exp:
                 World.ApplyExp(exp);
@@ -532,6 +539,29 @@ public sealed class ClientSession
                 Party.Apply(partyRefused);
                 Ui.OnParty(UiText.PartyRefused(partyRefused.Reason, partyRefused.RetryAfterSeconds, partyRefused.Name), viewNow);
                 PartyRefusedReceived?.Invoke(partyRefused);
+                break;
+            case TradeAskedMessage tradeAsked:
+                Trade.Apply(tradeAsked, wallNow);
+                TradeReceived?.Invoke(tradeAsked);
+                break;
+            case TradeMessage trade:
+                Trade.Apply(trade);
+                TradeReceived?.Invoke(trade);
+                break;
+            case TradeNoticeMessage tradeNotice:
+                Trade.Apply(tradeNotice);
+                Ui.OnParty(Trade.Notice!, viewNow);
+                TradeReceived?.Invoke(tradeNotice);
+                break;
+            case TradeClosedMessage tradeClosed:
+                Trade.Apply(tradeClosed);
+                Ui.OnParty(Trade.Notice!, viewNow);
+                TradeReceived?.Invoke(tradeClosed);
+                break;
+            case TradeRefusedMessage tradeRefused:
+                Trade.Apply(tradeRefused);
+                Ui.OnParty(Trade.Notice!, viewNow);
+                TradeReceived?.Invoke(tradeRefused);
                 break;
             case ChatReportedMessage chatReported:
                 Chat.Apply(chatReported);
@@ -679,6 +709,53 @@ public sealed class ClientSession
     public void HandPartyLead(long member)
     {
         if (Connection.Phase == ConnectionPhase.Online && Party.Leading) Send(new PartyLeadMessage(member));
+    }
+
+    /// <summary>Raised for every trade message (for the scripted run).</summary>
+    public event Action<ServerMessage>? TradeReceived;
+
+    /// <summary>Asks a player in view (tapped, or a party member) to trade, by its entity id; the server decides the rest.</summary>
+    public void AskTrade(long entity)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && entity > 0) Send(new TradeAskMessage(entity));
+    }
+
+    /// <summary>Answers the ask this character has.</summary>
+    public void AnswerTrade(bool accept)
+    {
+        if (Connection.Phase != ConnectionPhase.Online || Trade.Ask is null) return;
+        Send(new TradeAnswerMessage(accept));
+        Trade.Answered();
+    }
+
+    /// <summary>Puts <paramref name="quantity"/> units of a carried entry in this side's offer (0 takes it out).</summary>
+    public void OfferTrade(long entry, int quantity)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Trade.Open is not null) Send(new TradeOfferMessage(entry, Math.Max(0, quantity)));
+    }
+
+    /// <summary>The currency in this side's offer.</summary>
+    public void OfferTradeCurrency(long amount)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Trade.Open is not null) Send(new TradeCurrencyMessage(Math.Max(0, amount)));
+    }
+
+    /// <summary>Locks this side's offer, or unlocks both.</summary>
+    public void LockTrade(bool locked)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Trade.Open is not null) Send(locked ? new TradeLockMessage() : new TradeUnlockMessage());
+    }
+
+    /// <summary>Confirms the two offers drawn now (their version): offers that changed since are refused by the server.</summary>
+    public void ConfirmTrade()
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Trade.Open is { } trade && Trade.CanConfirm) Send(new TradeConfirmMessage(trade.Version));
+    }
+
+    /// <summary>Ends the ask this character made, or the trade.</summary>
+    public void CancelTrade()
+    {
+        if (Connection.Phase == ConnectionPhase.Online) Send(new TradeCancelMessage());
     }
 
     /// <summary>A player was tapped in the world: the party panel offers to invite it (nothing goes to the server yet).</summary>

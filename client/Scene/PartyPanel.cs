@@ -48,6 +48,7 @@ public sealed class PartyPanel
     private readonly Button _invite = new() { Text = UiText.PartyInvite };
     private readonly Button _inviteTapped = new() { Text = UiText.PartyInviteTapped, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis };
     private readonly Button _leave = new() { Text = UiText.PartyLeave };
+    private readonly Button _tradeTapped = new() { Text = UiText.TradeAskButton };   // T-903: ask the tapped player to trade
     private readonly List<Row> _rows = new();
 
     // the invite prompt
@@ -93,6 +94,7 @@ public sealed class PartyPanel
         _inviteRow.AddChild(_name);
         _inviteRow.AddChild(_invite);
         _inviteRow.AddChild(_inviteTapped);
+        _inviteRow.AddChild(_tradeTapped);
         _box.AddChild(_inviteRow);
 
         safe.AddChild(_prompt);
@@ -121,10 +123,16 @@ public sealed class PartyPanel
             if (_party.Tapped != 0) _session.InviteToParty(_party.Tapped);
             _party.Tap(0);
         };
+        _tradeTapped.Pressed += () =>
+        {
+            _tap();
+            if (_party.Tapped != 0) _session.AskTrade(_party.Tapped);
+            _party.Tap(0);
+        };
         _leave.Pressed += () => { _tap(); _session.LeaveParty(); };
         _accept.Pressed += () => { _tap(); _session.AnswerParty(true); };
         _decline.Pressed += () => { _tap(); _session.AnswerParty(false); };
-        foreach (var control in new Control[] { _panel, _close, _name, _invite, _inviteTapped, _leave, _prompt, _accept, _decline }) _interactive.Add(control);
+        foreach (var control in new Control[] { _panel, _close, _name, _invite, _inviteTapped, _tradeTapped, _leave, _prompt, _accept, _decline }) _interactive.Add(control);
     }
 
     /// <summary>True while the panel is open.</summary>
@@ -141,6 +149,12 @@ public sealed class PartyPanel
 
     /// <summary>Leave.</summary>
     public Button LeaveButton => _leave;
+
+    /// <summary>Trade beside the tapped player's invite (T-903).</summary>
+    public Button TradeTappedButton => _tradeTapped;
+
+    /// <summary>Trade on the row of the member <paramref name="id"/> (T-903), or null.</summary>
+    public Button? TradeButtonOf(long id) => _rows.FirstOrDefault(r => r.Root.Visible && r.Id == id)?.Trade;
 
     /// <summary>The invite prompt's Join.</summary>
     public Button AcceptButton => _accept;
@@ -180,7 +194,7 @@ public sealed class PartyPanel
             style.SetCornerRadiusAll(Mathf.RoundToInt(dp(6)));
         }
         foreach (var box in new BoxContainer[] { _box, _head, _list, _inviteRow, _promptRow }) box.AddThemeConstantOverride("separation", gap);
-        foreach (var button in new[] { _close, _invite, _leave, _accept, _decline }) button.CustomMinimumSize = new Vector2(dp(72), target);
+        foreach (var button in new[] { _close, _invite, _leave, _accept, _decline, _tradeTapped }) button.CustomMinimumSize = new Vector2(dp(72), target);
         _inviteTapped.CustomMinimumSize = new Vector2(dp(96), target);
         _name.CustomMinimumSize = new Vector2(dp(96), target);
         foreach (var row in _rows) row.Apply(dp, target);
@@ -333,10 +347,13 @@ public sealed class PartyPanel
             row.Hp.Value = m.Hp;
             row.Sp.Value = m.Sp;
             row.Lead.Visible = row.Kick.Visible = leading && !m.Mine;
+            row.Trade.Visible = !m.Mine;   // T-903: a member may be asked to trade from here (the server checks it is near)
         }
         _leave.Visible = inParty;
-        _inviteRow.Visible = !inParty || leading;
+        _inviteRow.Visible = !inParty || leading || tapped;
+        _name.Visible = _invite.Visible = !inParty || leading;
         _inviteTapped.Visible = tapped && (!inParty || leading);
+        _tradeTapped.Visible = tapped;
     }
 
     /// <summary>The panel centred in the safe area, as wide as fits, at most as tall as the safe area less margins.</summary>
@@ -368,6 +385,7 @@ public sealed class PartyPanel
         public readonly ProgressBar Sp = Bar(new Color(0.35f, 0.6f, 0.95f));
         public readonly Button Lead = new() { Text = UiText.PartyLead };
         public readonly Button Kick = new() { Text = UiText.PartyKick };
+        public readonly Button Trade = new() { Text = UiText.TradeAskButton };
         public long Id;
 
         public Row(ClientSession session, Action tap, List<Control> interactive)
@@ -380,6 +398,9 @@ public sealed class PartyPanel
             Root.AddChild(Bars);
             Root.AddChild(Lead);
             Root.AddChild(Kick);
+            Root.AddChild(Trade);
+            Trade.Pressed += () => { tap(); session.AskTrade(Id); };
+            interactive.Add(Trade);
             Lead.Pressed += () => { tap(); session.HandPartyLead(Id); };
             Kick.Pressed += () => { tap(); session.KickFromParty(Id); };
             interactive.Add(Lead);
@@ -393,7 +414,7 @@ public sealed class PartyPanel
             Bars.AddThemeConstantOverride("separation", Mathf.RoundToInt(dp(3)));
             Name.CustomMinimumSize = new Vector2(dp(60), 0);
             foreach (var bar in new[] { Hp, Sp }) bar.CustomMinimumSize = new Vector2(dp(BarWidthDp), dp(7));
-            foreach (var button in new[] { Lead, Kick }) button.CustomMinimumSize = new Vector2(dp(64), target);
+            foreach (var button in new[] { Lead, Kick, Trade }) button.CustomMinimumSize = new Vector2(dp(64), target);
         }
 
         private static ProgressBar Bar(Color fill)

@@ -48,6 +48,7 @@ public sealed class AutoRun
         Array.IndexOf(args, "--e2e-wardrobe") >= 0 || Array.IndexOf(args, "--e2e-wardrobe-watch") >= 0 || Array.IndexOf(args, "--e2e-kick") >= 0 || Array.IndexOf(args, "--e2e-moderation") >= 0 || Array.IndexOf(args, "--e2e-textured") >= 0 ||
         Array.IndexOf(args, "--e2e-chat") >= 0 || Array.IndexOf(args, "--e2e-chat-listen") >= 0 ||
         Array.IndexOf(args, "--e2e-party") >= 0 || Array.IndexOf(args, "--e2e-party-join") >= 0 ||
+        Array.IndexOf(args, "--e2e-trade") >= 0 || Array.IndexOf(args, "--e2e-trade-join") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -63,6 +64,14 @@ public sealed class AutoRun
         }
         Print($"refused: the client stopped at the refusal screen for {what}, as it must");
         main.GetTree().Quit(0);
+    }
+
+    /// <summary>The trade runs (T-903) with the content ids the script gives after <c>--e2e-trade-ids</c>.</summary>
+    private TradeRuns TradeRunsOf()
+    {
+        var at = Array.IndexOf(_args, "--e2e-trade-ids");
+        if (at < 0 || at + 3 >= _args.Length) throw new InvalidOperationException("the trade runs need --e2e-trade-ids <stack item> <single item> <merchant npc>");
+        return new TradeRuns(_main, _args[at + 1], _args[at + 2], _args[at + 3]);
     }
 
     /// <summary>Runs the script and quits with 0 on success, 1 on failure.</summary>
@@ -89,6 +98,8 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-moderation") >= 0) await ModerationRunAsync();
             else if (PartyRuns.Args(_args, "--e2e-party-join") is { } join) await new PartyRuns(_main, _monster ?? string.Empty).AllyAsync(join.Name, join.Base, join.Job);   // T-902
             else if (PartyRuns.Args(_args, "--e2e-party") is { } lead) await new PartyRuns(_main, _monster ?? throw new InvalidOperationException("the party run needs --e2e-monster")).LeaderAsync(lead.Name, lead.Base, lead.Job);
+            else if (Value("--e2e-trade-join") is { } trader) await TradeRunsOf().PartnerAsync(trader);   // T-903
+            else if (Array.IndexOf(_args, "--e2e-trade") >= 0) await TradeRunsOf().TraderAsync();
             else if (Value("--e2e-chat-listen") is { } speaker) await new ChatRuns(_main, () => ShotAsync()).ListenerAsync(speaker);   // T-901
             else if (Array.IndexOf(_args, "--e2e-chat") >= 0) await new ChatRuns(_main, () => ShotAsync()).SpeakerAsync();
             else if (Value("--e2e-appearance-watch") is { } looks) await new LookRuns(_main, ShotAsync).WatcherAsync(looks);
