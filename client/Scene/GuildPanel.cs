@@ -408,7 +408,7 @@ public sealed class GuildPanel
         {
             Root.AddThemeConstantOverride("separation", Mathf.RoundToInt(dp(6)));
             Line.CustomMinimumSize = new Vector2(dp(80), 0);
-            foreach (var button in new[] { Promote, Demote, Kick, Lead }) button.CustomMinimumSize = new Vector2(dp(56), target);
+            foreach (var button in new[] { Promote, Demote, Kick, Lead }) button.CustomMinimumSize = new Vector2(Mathf.Max(target, dp(56)), target);   // never under the touch minimum at a small UI scale
         }
     }
 }
