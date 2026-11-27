@@ -184,7 +184,29 @@ public static class AdminCommandTable
     public static readonly IReadOnlyDictionary<string, string> LowestRole = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         [AdminActions.Kick] = StaffRoles.Support,
+        // T-806 (ARCHITECTURE §12.2): support mutes and handles the store-compliance queue; gm bans, fixes items, currency and places, and announces; admin runs maintenance.
+        [AdminActions.Mute] = StaffRoles.Support,
+        [AdminActions.Unmute] = StaffRoles.Support,
+        [AdminActions.OpenRequest] = StaffRoles.Support,
+        [AdminActions.CompleteRequest] = StaffRoles.Support,
+        [AdminActions.CancelRequest] = StaffRoles.Support,
+        [AdminActions.Ban] = StaffRoles.Gm,
+        [AdminActions.Unban] = StaffRoles.Gm,
+        [AdminActions.GiveItem] = StaffRoles.Gm,
+        [AdminActions.RemoveItem] = StaffRoles.Gm,
+        [AdminActions.ChangeCurrency] = StaffRoles.Gm,
+        [AdminActions.Unstick] = StaffRoles.Gm,
+        [AdminActions.Announce] = StaffRoles.Gm,
+        [AdminActions.StartMaintenance] = StaffRoles.Admin,
+        [AdminActions.EndMaintenance] = StaffRoles.Admin,
     };
+
+    /// <summary>Every command the server runs (T-804 and T-806), one of each.</summary>
+    public static IReadOnlyList<IAdminCommand> AllCommands() =>
+    [
+        new KickCommand(), new BanCommand(), new UnbanCommand(), new MuteCommand(), new UnmuteCommand(), new GiveItemCommand(), new RemoveItemCommand(), new ChangeCurrencyCommand(),
+        new UnstickCommand(), new AnnounceCommand(), new StartMaintenanceCommand(), new EndMaintenanceCommand(), new OpenRequestCommand(), new CompleteRequestCommand(), new CancelRequestCommand(),
+    ];
 
     /// <summary>The lowest role for reads (status, lookups, the audit log).</summary>
     public const string ReadRole = StaffRoles.Support;

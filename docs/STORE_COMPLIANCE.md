@@ -23,6 +23,9 @@ Store rules change. Everything marked "read" was read on **2026-11-25**; read th
 | Their state: place, levels, stats, skills, quests, currency, items | `character_states`, `character_items` | The game | The account is erased |
 | That an account was asked to be deleted, and when it was erased | `account_deletions`: the account's id and two times | Support, and cleaning a restored backup (§6) | Kept. It holds nothing about the person; the id leads nowhere once the account is gone |
 | What staff did to an account (T-804): who (staff id), with which role, the action, the account or character **id**, before and after (ids and numbers only: online or not, map and cell, sessions ended), the reason in the staff member's words, the time, the request id | `admin_audit` (append-only) | Accountability for staff actions, support, disputes, security | Kept, also after the account is erased: see §6 "Audit rows" |
+| Bans and mutes of an account (T-806): kind, from, until, lifted, and the audit rows that made and lifted them (ids and times; why is in the audit row) | `account_sanctions` | Moderation: enforcing them at sign-in and in the game | The account is erased (a ban of an erased account protects nothing: the id can never sign in again, and keeping it would keep a record about the person) |
+| Support requests for deletion or a data copy (T-806): kind, status, times, audit row ids. What the player wrote stays in the support tool | `support_requests` | The store-compliance queue (ARCHITECTURE §12.4) | The account is erased |
+| That an item was made by staff (T-806): its permanent id, item id, quantity, audit row | `admin_items` | Dupe audits (`source = admin`, ARCHITECTURE §12.3) | The item is erased with its owner's account; an item it gave away keeps its mark, and the mark names no character |
 | Staff members' ids (the identity provider's subject), display names and last role | `admin_staff` | Naming who wrote an audit row | Staff, not players: the fork's own staff policy. Kept while an audit row names them |
 | IP address | Server **logs** only (sign-ins and connections), and in memory for the limits on guessing (`AccountGuard.cs`) | Security | The log's own lifetime: **the fork decides** and says so in its policy. The template writes to standard output and keeps no log files |
 | Preferences: sound volumes, UI size | On the device only (`user://preferences.json`) | Convenience | The app is removed |
@@ -64,8 +67,8 @@ only on a Mac.** On the Mac, open the generated `PrivacyInfo.xcprivacy` and comp
 ## 5. What a fork must add
 
 1. **A privacy policy** on the web, linked in both stores and in the app's store page. Outline (*your lawyer finishes it*): who you are and how to reach you; what is stored, why and for how long (§2, with your log
-   lifetime and your hosting company); who else sees it (your hosting company; nobody else in the template); the country it is in; people's rights and how to use them (deletion in the app; a copy of one's data: T-806
-   is planned, until then support does it by hand); children; changes to the policy.
+   lifetime and your hosting company); who else sees it (your hosting company; nobody else in the template); the country it is in; people's rights and how to use them (deletion in the app or through support; a copy of one's data: support
+   asks for it with `complete_request` on an `export` request (T-806, docs/ADMIN_API.md) and sends the JSON; the server sends no e-mail); children; changes to the policy.
 2. **A web page for deletion** (Google Play). It names the app or developer as in the store, loads without signing in, says what is deleted and what is kept (§2) and how long it takes, and takes a request: a short form
    or an e-mail address is enough. Somebody then checks that the request is the owner's and deletes the account. With no e-mail stored, the proof is the password: the simplest page tells people to install
    the app and delete there, and offers the form to those who cannot.
@@ -86,6 +89,10 @@ names and ids that are left. Data a service of somebody else holds must be delet
 3. **Erasing** (`AccountEraser`): a pass a minute takes what is due, one transaction per account: items, states, characters (deleted ones too), sessions, the account. A character that a live server still holds puts it off until it
    has left. The **username and the character names become free**: keeping them would keep something about the person, and hashing a name hides nothing. Somebody can take a name a minute after it was erased; the wait is what
    keeps that from being used against a player who comes back.
+3a. **Through support** (T-806): a deletion request that came in by e-mail or the web page goes into the support queue (`open_request`, once support has checked who asked) and is completed with
+   `complete_request`: the same request as the in-app one, with the same wait, record and ended sessions; the owner can keep the account by signing in during the wait. Erasing also takes the
+   account's bans, mutes and support requests, and the `admin_items` marks of the items erased with it (`PostgresAccountStore.EraseAsync`; the test `Erasing_the_account_takes_its_bans_mutes_requests_and_item_marks`).
+   A banned player cannot sign in to delete in the app: the support path is theirs.
 4. What others got from the player (traded items) stays theirs. The app cannot tell the player that it is done, since it has no way to reach them; signing in then answers as if the account had never been.
 
 **Audit rows** (T-804, ARCHITECTURE §12.3). Erasing an account leaves the audit rows about it: nothing may change or delete them (the table's triggers refuse it, the server's own role included), so a staff

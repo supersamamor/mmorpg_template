@@ -62,6 +62,11 @@ $h = @{ Authorization = "Bearer $env:GAME_ADMIN_CREDENTIAL"; "X-Staff-Id" = "dev
 | `GET /admin/v1/characters/{id}` | `character` and its saved `state` (null when never saved): place, vitals, save point, levels, EXP, job, points, currency, stats, skills, quests, cooldowns, set-aside, outfits, items |
 | `GET /admin/v1/audit?target=&staff=&action=&from=&to=&before=&limit=` | `items[]` newest first (`id`, `at`, `request_id`, `staff_id`, `staff_name`, `staff_role`, `action`, `target_kind`, `target_id`, `before`, `after`, `reason`) and `next` (pass it as `before`). `from` and `to` are ISO 8601 |
 | `GET /admin/v1/commands` | Every command with its `lowest_role`, the `read_role` and the `roles` |
+| `GET /admin/v1/accounts/{id}/moderation` (T-806) | `account_id`, `banned`, `muted` (in force now), `bans[]` and `mutes[]` newest first (`id`, `kind`, `from`, `until` (null: no end), `in_force`, `audit_id`, `lifted_at`, `lifted_audit_id`), `requests[]` (as below) |
+| `GET /admin/v1/characters/{id}/staff-changes?before=&limit=` (T-806) | The item, currency and place changes staff made to the character: its audit rows (as `/audit`), newest first, and `next` |
+| `GET /admin/v1/requests?status=&account=&before=&limit=` (T-806) | The support queue, newest first: `items[]` (`id`, `account_id`, `kind`, `status`, `opened_at`, `opened_audit_id`, `closed_at`, `closed_audit_id`) and `next` (pass it as `before`). `status` is a "Support request statuses" term |
+
+`/status` (T-806) also has `maintenance`: `on`, `since`, `games_end_at` (null once the games have ended).
 
 No answer ever holds a password hash, a session token or its hash. A query parameter that is malformed, given twice, or over 128 characters is `invalid_request`; `limit` is 1 to `max-page-size`.
 
@@ -80,12 +85,40 @@ the command's), 404 (`not_found`: no such command), 409 (`unknown_target`), 503 
 |--------|-------------|------|--------------|
 | `kick` | `support` | `account_id`, `reason` | Ends every session of the account and its live game, as a password change does (T-710): `bye kicked`, the character (also one in its grace period) leaves on its next tick, saved, its resume token dead. The player signs in again. `accepted` when it was in the world, `done` when not; `result`: `was_online`, `sessions_ended` |
 
+T-806's commands (ARCHITECTURE §12.7). Every one is refused with nothing changed and no row for a field that is missing or out of range (`invalid_request`), and `unavailable` without a database.
+Times in answers and rows are ISO 8601, UTC.
+
+| Action | Lowest role | Body | What it does |
+|--------|-------------|------|--------------|
+| `ban` | `gm` | `account_id`, `minutes` (1 to 5,270,400; leave it out for a ban without an end), `reason` | In one transaction: the ban, every session of the account ended, the row. Then `bye banned` (with `retry_after`) to whatever plays here, and the character leaves saved; sign-in answers `account_banned`, every `hello` `bye banned`, on every process; a game on another process ends at its ban watch (10 s). `accepted` when it was playing here, else `done`; `result`: `until`, `was_online`, `sessions_ended`. Refused: `unknown_target`, `already_banned` |
+| `unban` | `gm` | `account_id`, `reason` | Lifts the ban in force; `result.sanction_id`. Refused: `unknown_target`, `not_banned` |
+| `mute` | `support` | `account_id`, `minutes` (required), `reason` | Stores the mute; chat (T-901) asks `ModerationChecks.MaySpeakAsync`. `result.until`. Refused: `unknown_target`, `already_muted` |
+| `unmute` | `support` | `account_id`, `reason` | Lifts the mute. Refused: `unknown_target`, `not_muted` |
+| `give_item` | `gm` | `character_id`, `item_id`, `quantity` (1 to 10,000), `reason` | New entries with new ids (never into a stack), marked `source = admin` in `admin_items`. In the world: on the tick, the player sees it (`inventory_changed`, cause `staff`), and the row lands with the next save (`done` with `audit_id`, or `accepted` with `result.saving = "pending"` after 10 s). Not in the world: in the database (`done`). `result`: `carried`, `entry_ids` (comma-separated), `was_online`. Refused: `unknown_item`, `unknown_target`, `never_saved`, `character_busy` (another server holds it, or its last save has not landed: retry, or kick first), `inventory_full`. Weight is not checked |
+| `remove_item` | `gm` | `character_id`, `entry_id` (the permanent instance id, from `/characters/{id}`), `quantity`, `reason` | Takes units of that entry; a worn one comes off first. Roads as `give_item`; `result.quantity` (what is left). Refused: `item_gone`, `not_enough`, and as `give_item` |
+| `change_currency` | `gm` | `character_id`, `amount` (not 0; below 0 takes), `reason` | Roads as `give_item`; `result.currency`. Refused: `not_enough`, `currency_limit`, and as `give_item` |
+| `unstick` | `gm` | `character_id`, `reason` | To its save point: in the world as a respawn moves it (its fight ends; a dead one respawns), else its stored place (the content's start when it has no save point). `result`: where from and to |
+| `announce` | `gm` | `text` (1 to 80 characters, one line: two lines on the smallest phone HUD at its largest scale), `reason` | An `announcement` to every session playing on this server; `result.sent`. The text is in the row |
+| `start_maintenance` | `admin` | `warning_seconds` (0 to 3,600), `reason` | No new login here from now (`bye maintenance`); those playing get an `announcement` of kind `maintenance`; when the warning is over every game here ends (`bye maintenance`, saved) and the server runs on. `accepted`; `result`: `warned`, `games_end_at`. Refused: `maintenance_on` |
+| `end_maintenance` | `admin` | `reason` | Logins open again; a pending end of the games is called off (`result.games_end_called_off`). Refused: `maintenance_off` |
+| `open_request` | `support` | `account_id`, `kind` (`deletion`, `export`), `reason` | Puts a request that came in through support in the queue, once support has checked it is the owner's; `result.request_id` |
+| `complete_request` | `support` | `request_id`, `reason` | A `deletion`: T-703's path, with its wait (`--account-erase-days`): every session and game ends, nobody signs in, it is erased after the wait unless the owner keeps it; `result`: `erase_after`, `sessions_ended`. An `export`: `result.export`, everything stored about the account as JSON, for staff to send (no e-mail is sent); the row says it was done, never the data. Refused: `unknown_target`, `request_closed`, `account_deleting` |
+| `cancel_request` | `support` | `request_id`, `reason` | Closes the request without handling it. Refused: `unknown_target`, `request_closed` |
+
+Maintenance and announcements are this server process's only (ADR-002 row 320); bans and mutes are the database's.
+
 ```powershell
 $body = @{ account_id = "<id>"; reason = "spamming the start square" } | ConvertTo-Json
 Invoke-RestMethod -Method Post -Headers $h -ContentType application/json -Body $body http://127.0.0.1:7781/admin/v1/commands/kick
 ```
 
-`client/run-e2e.ps1 -Run kick` does exactly this against a real client.
+`client/run-e2e.ps1 -Run kick` does exactly this against a real client; `-Run moderation` gives an item, bans and unbans (T-806).
+
+```powershell
+$gm = $h.Clone(); $gm["X-Staff-Role"] = "gm"
+$body = @{ character_id = "<id>"; item_id = "<item id>"; quantity = 1; reason = "ticket 1234: reward lost in a crash" } | ConvertTo-Json
+Invoke-RestMethod -Method Post -Headers $gm -ContentType application/json -Body $body http://127.0.0.1:7781/admin/v1/commands/give_item
+```
 
 ## Trust: what the server checks, and what it takes from the panel
 

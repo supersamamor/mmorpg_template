@@ -51,9 +51,12 @@ namespace Game.Shared.Vocabulary
         /// <summary>The server could not answer now (the database is away, or too many logins at once): try again later.</summary>
         public const string Unavailable = "unavailable";
 
+        /// <summary>Staff banned the account (T-806): told only to someone who has its password, with <c>retry_after</c> (seconds until the ban ends; none when it never does).</summary>
+        public const string AccountBanned = "account_banned";
+
         /// <summary>Every account error.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             InvalidRequest, InvalidUsername, InvalidPassword, SamePassword, UsernameTaken, InvalidCredentials, AccountDeleting, InvalidSession, RateLimited, InvalidName, InvalidAppearance, NameTaken,
-            NoFreeSlot, UnknownCharacter, CharacterInUse, Unavailable);
+            NoFreeSlot, UnknownCharacter, CharacterInUse, Unavailable, AccountBanned);
     }
 }

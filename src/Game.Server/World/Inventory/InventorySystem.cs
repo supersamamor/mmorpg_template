@@ -40,7 +40,7 @@ namespace Game.Server.World.Inventory;
 public sealed class InventorySystem : ITickSystem
 {
     private static readonly IReadOnlyCollection<Type> Owned =
-        [typeof(PickUp), typeof(UseItem), typeof(Equip), typeof(Unequip), typeof(DropItem), typeof(InsertCard), typeof(RefineItem), typeof(ShopBuy), typeof(ShopSell)];
+        [typeof(PickUp), typeof(UseItem), typeof(Equip), typeof(Unequip), typeof(DropItem), typeof(InsertCard), typeof(RefineItem), typeof(ShopBuy), typeof(ShopSell), typeof(Admin.StaffItemChange)];
     private static readonly int WeightLimitStat = StatIndex.IndexOf(DerivedStats.WeightLimit);
     private const int PickupGraceTicks = 3;   // a pick-up whose walk never started within this many ticks has no way there
 
@@ -108,9 +108,14 @@ public sealed class InventorySystem : ITickSystem
         var intents = context.Intents;
         for (var i = 0; i < intents.Count; i++)
         {
-            if (!_instance!.TryGetEntity(intents[i].Entity, out var entity) || !_holders.TryGetValue(entity.Id.Value, out var holder)) continue;
+            if (!_instance!.TryGetEntity(intents[i].Entity, out var entity) || !_holders.TryGetValue(entity.Id.Value, out var holder))
+            {
+                if (intents[i] is Admin.StaffItemChange lost && lost.TryStart()) lost.Complete(Admin.AdminStepResult.Refused(AdminErrors.UnknownTarget));   // T-806: say so at once
+                continue;
+            }
             switch (intents[i])
             {
+                case Admin.StaffItemChange staff: StaffChange(context, holder, staff); break;
                 case PickUp pick: StartPickup(context, holder, pick.Target); break;
                 case UseItem use: Use(context, holder, use.EntryId); break;
                 case Equip equip: PutOn(context, holder, equip.EntryId, equip.Slot); break;
@@ -604,6 +609,108 @@ public sealed class InventorySystem : ITickSystem
         _rules.TryRemove(state, entryId, quantity, _delta);   // checked above: this cannot refuse
         state.Currency += gain;
         Changed(context, holder, InventoryChanges.ShopSell, entry!.ItemId);
+    }
+
+    // ---- staff fixes (T-806) --------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// A support fix through the admin API (<see cref="Admin.StaffItemChange"/>), with this system's rules: given items are new entries with new ids, never merged into a stack it had (so
+    /// <c>source = admin</c> can mark them); a worn entry comes off before units of it are taken; weight is not checked. The owner hears of it like any change (<c>staff</c>). For a saved
+    /// character the audit row goes with its next save (<see cref="Saving.StaffNote"/>).
+    /// </summary>
+    private void StaffChange(TickContext context, Holder holder, Admin.StaffItemChange staff)
+    {
+        if (!staff.TryStart()) return;   // the command gave up waiting: nothing happens
+        try
+        {
+            var state = holder.State;
+            var before = new Dictionary<string, object?> { ["online"] = true, ["map"] = holder.Entity.MapId };
+            var after = new Dictionary<string, object?>();
+            var made = new List<(long, string, int)>();
+            string? itemId = null;
+            _delta.Clear();
+            if (staff.GiveItemId is { } give)
+            {
+                itemId = give;
+                before["item_id"] = give;
+                before["carried"] = Carried(state, give);
+                var reason = _rules.TryAdd(state, give, staff.Quantity, int.MaxValue, _newId, _delta, separate: true);
+                if (reason is not null)
+                {
+                    staff.Complete(Admin.AdminStepResult.Refused(reason == ItemReasons.InventoryFull ? AdminErrors.InventoryFull
+                        : reason == ItemReasons.ItemGone ? AdminErrors.UnknownItem : AdminErrors.InvalidRequest));
+                    return;
+                }
+                foreach (var entry in _delta.Upserted) made.Add((entry.Id, entry.ItemId, entry.Quantity));
+                after["carried"] = Carried(state, give);
+                after["entry_ids"] = string.Join(',', made.Select(m => m.Item1));
+            }
+            else if (staff.RemoveEntryId is { } entryId)
+            {
+                if (state.Find(entryId) is not { } entry)
+                {
+                    staff.Complete(Admin.AdminStepResult.Refused(AdminErrors.ItemGone));
+                    return;
+                }
+                if (staff.Quantity > entry.Quantity)
+                {
+                    staff.Complete(Admin.AdminStepResult.Refused(AdminErrors.NotEnough));
+                    return;
+                }
+                itemId = entry.ItemId;
+                before["entry_id"] = entryId;
+                before["item_id"] = entry.ItemId;
+                before["quantity"] = entry.Quantity;
+                before["worn"] = entry.Slot;
+                if (entry.Slot is { } slot && _rules.TryUnequip(state, slot, _delta) is null && _delta.TakenOff.Count > 0)
+                {
+                    var off = _delta.TakenOff[0];
+                    Remove(holder.Entity.Stats!, off);
+                    context.Publish(new ItemUnequipped(holder.Entity.Id, off.ItemId, off.Id, slot));
+                    Refresh(holder);
+                }
+                _rules.TryRemove(state, entryId, staff.Quantity, _delta);   // checked above, and it is carried now: this cannot refuse
+                after["quantity"] = state.Find(entryId)?.Quantity ?? 0;
+            }
+            else
+            {
+                before["currency"] = state.Currency;
+                var delta = staff.CurrencyDelta;
+                if (delta < 0 && state.Currency + delta < 0)
+                {
+                    staff.Complete(Admin.AdminStepResult.Refused(AdminErrors.NotEnough));
+                    return;
+                }
+                if (delta > 0 && !ShopRules.TryCredit(state.Currency, delta, out _))
+                {
+                    staff.Complete(Admin.AdminStepResult.Refused(AdminErrors.CurrencyLimit));
+                    return;
+                }
+                state.Currency += delta;
+                after["currency"] = state.Currency;
+            }
+            Changed(context, holder, InventoryChanges.Staff, itemId);
+            var values = new Dictionary<string, object?>(after) { ["saved"] = holder.Entity.Save is not null };
+            if (holder.Entity.Save is { } ticket)
+            {
+                staff.Note = new Saving.StaffNote(staff.Audit(before, after), made);
+                ticket.Note(staff.Note);
+            }
+            staff.Complete(Admin.AdminStepResult.Ok(new Dictionary<string, object?> { ["before"] = before, ["after"] = after, ["values"] = values }));
+        }
+        catch (Exception e)
+        {
+            staff.Fail(e);
+            throw;
+        }
+    }
+
+    private static long Carried(InventoryState state, string itemId)
+    {
+        long carried = 0;
+        foreach (var entry in state.Entries)
+            if (string.Equals(entry.ItemId, itemId, StringComparison.Ordinal)) carried += entry.Quantity;
+        return carried;
     }
 
     private void StartPickup(TickContext context, Holder holder, EntityId targetId)

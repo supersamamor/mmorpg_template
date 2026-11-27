@@ -168,6 +168,9 @@ namespace Game.Shared.Protocol
         /// <summary><c>pong</c> (server → client): answer to <c>ping</c>.</summary>
         public const string Pong = "pong";
 
+        /// <summary><c>announcement</c> (server → client, T-806): staff's words, or a coming maintenance, for everyone playing on this server.</summary>
+        public const string Announcement = "announcement";
+
         /// <summary><c>bye</c> (server → client, last message): why the server is closing the connection.</summary>
         public const string Bye = "bye";
 
@@ -175,7 +178,7 @@ namespace Game.Shared.Protocol
         public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot, SetOutfit);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Announcement, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);
@@ -266,10 +269,32 @@ namespace Game.Shared.Protocol
         /// <summary><c>kicked</c>: staff ended this account's game through the admin API (T-804); every session of the account ended with it and the character left the world, saved. Sign in again.</summary>
         public const string Kicked = "kicked";
 
+        /// <summary><c>banned</c>: staff banned the account (T-806); a timed ban says how long is left (<c>retry_after</c>, seconds). Sent at <c>hello</c> and to a game the ban ends. Do not reconnect.</summary>
+        public const string Banned = "banned";
+
+        /// <summary><c>maintenance</c>: the server is in maintenance (T-806): no new login now, or the game ended (saved) when maintenance began. Try again later.</summary>
+        public const string Maintenance = "maintenance";
+
         /// <summary>Every bye reason.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             Timeout, BadVersion, Malformed, UnknownType, Oversize, BeforeHello, DuplicateHello, RateLimit, LoginRefused, ServerFull, TooSlow,
-            Shutdown, ServerError, UpdateRequired, Logout, Replaced, ResumeFailed, LoadFailed, SavePending, SaveLost, SessionEnded, Kicked);
+            Shutdown, ServerError, UpdateRequired, Logout, Replaced, ResumeFailed, LoadFailed, SavePending, SaveLost, SessionEnded, Kicked, Banned, Maintenance);
+    }
+
+    /// <summary>What an <c>announcement</c> is (VOCABULARY.md "Announcement kinds", T-806).</summary>
+    public static class AnnouncementKinds
+    {
+        /// <summary>The longest text staff may announce.</summary>
+        public const int MaxTextLength = 80;
+
+        /// <summary><c>staff</c>: staff's own words, in <c>text</c>.</summary>
+        public const string Staff = "staff";
+
+        /// <summary><c>maintenance</c>: the server goes into maintenance; every game ends (saved) in <c>in</c> seconds.</summary>
+        public const string Maintenance = "maintenance";
+
+        /// <summary>Every kind.</summary>
+        public static readonly VocabularySet All = new VocabularySet(Staff, Maintenance);
     }
 
     /// <summary>Entity kinds in a view record's <c>kind</c> field (VOCABULARY.md "Entity kinds").</summary>

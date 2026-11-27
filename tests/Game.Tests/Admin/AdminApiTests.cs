@@ -157,7 +157,7 @@ public class AdminApiTests
                  })
             (await rig.Http.GetAsync(AdminPaths.Accounts + bad)).Status.ShouldBe(400, bad);
         foreach (var bad in new[] { "?account=x", "?limit=-1" }) (await rig.Http.GetAsync(AdminPaths.Characters + bad)).Status.ShouldBe(400, bad);
-        foreach (var bad in new[] { "?before=0", "?before=x", "?from=yesterday", "?action=ban", "?limit=1000" }) (await rig.Http.GetAsync(AdminPaths.Audit + bad)).Status.ShouldBe(400, bad);
+        foreach (var bad in new[] { "?before=0", "?before=x", "?from=yesterday", "?action=no_such_action", "?limit=1000" }) (await rig.Http.GetAsync(AdminPaths.Audit + bad)).Status.ShouldBe(400, bad);
         (await rig.Http.GetAsync(AdminPaths.Audit + "?target=x&staff=s&action=kick&from=2026-01-01T00:00:00Z&to=2027-01-01&before=9&limit=2")).Status.ShouldBe(200);
         var query = (AuditQuery)rig.Memory!.LastQuery!;
         (query.TargetId, query.StaffId, query.Action, query.BeforeId, query.Limit, query.From).ShouldBe(("x", "s", "kick", (long?)9, 2, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc)));

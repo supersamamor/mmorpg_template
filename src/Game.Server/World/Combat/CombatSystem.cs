@@ -44,7 +44,7 @@ namespace Game.Server.World.Combat;
 /// </remarks>
 public sealed partial class CombatSystem : ITickSystem
 {
-    private static readonly IReadOnlyCollection<Type> Owned = [typeof(AttackTarget), typeof(StopAttack), typeof(Respawn), typeof(UseSkill), typeof(LearnSkill), typeof(ChangeJob), typeof(RaiseStat)];
+    private static readonly IReadOnlyCollection<Type> Owned = [typeof(AttackTarget), typeof(StopAttack), typeof(Respawn), typeof(UseSkill), typeof(LearnSkill), typeof(ChangeJob), typeof(RaiseStat), typeof(Admin.StaffUnstick)];
     private static readonly int AspdStat = StatIndex.IndexOf(DerivedStats.Aspd);
     private static readonly int HpRegenStat = StatIndex.IndexOf(DerivedStats.HpRegen);
     private static readonly int SpRegenStat = StatIndex.IndexOf(DerivedStats.SpRegen);
@@ -317,6 +317,7 @@ public sealed partial class CombatSystem : ITickSystem
                     if (_chaseById.TryGetValue(entity.Id.Value, out var chase)) End(context, chase, AttackReasons.Cancelled);
                     break;
                 case Respawn: Revive(context, entity); break;
+                case Admin.StaffUnstick unstick: Unstick(context, entity, unstick); break;
                 case UseSkill use: StartSkill(context, entity, use); break;
                 case LearnSkill learn: Learn(context, entity, learn.SkillId); break;
                 case ChangeJob change: ChangeJobOf(context, entity, change.JobId); break;
@@ -379,6 +380,29 @@ public sealed partial class CombatSystem : ITickSystem
         var (mapId, cell) = SavePointOf(player);
         context.Warp(player.Id, mapId, cell);
         context.Publish(new PlayerRespawned(player.Id, mapId, cell, vitals.Hp));
+    }
+
+    /// <summary>
+    /// T-806: staff move a stuck player to its save point (<see cref="SavePointOf"/>), as a respawn would: any fight it was in ends, and a dead one comes back there. The step's values are
+    /// where it was and where it goes (the warp lands at the end of this tick).
+    /// </summary>
+    private void Unstick(TickContext context, Entity player, Admin.StaffUnstick unstick)
+    {
+        if (!unstick.TryStart()) return;
+        if (player.Kind != EntityKind.Player)
+        {
+            unstick.Complete(Admin.AdminStepResult.Refused(Game.Shared.Vocabulary.AdminErrors.UnknownTarget));
+            return;
+        }
+        var values = new Dictionary<string, object?> { ["from_map"] = player.MapId, ["from_x"] = player.Cell.X, ["from_y"] = player.Cell.Y, ["dead"] = player.Dead };
+        if (_chaseById.TryGetValue(player.Id.Value, out var chase)) End(context, chase, AttackReasons.Cancelled);
+        var (mapId, cell) = SavePointOf(player);
+        if (player.Dead) Revive(context, player);
+        else context.Warp(player.Id, mapId, cell);
+        values["to_map"] = mapId;
+        values["to_x"] = cell.X;
+        values["to_y"] = cell.Y;
+        unstick.Complete(Admin.AdminStepResult.Ok(values));
     }
 
     // ---- monster attack requests ----------------------------------------------------------------------------------------------------

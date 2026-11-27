@@ -478,8 +478,11 @@ public sealed class ClientSession
                 Ui.OnLevelUp(level, viewNow);
                 LevelUpReceived?.Invoke(level);
                 break;
+            case AnnouncementMessage announcement:
+                Ui.OnAnnouncement(announcement, viewNow);   // T-806
+                break;
             case ByeMessage bye:
-                Connection.OnBye(bye.Reason, wallNow);
+                Connection.OnBye(bye.Reason, wallNow, bye.RetryAfterSeconds);
                 break;
         }
     }
