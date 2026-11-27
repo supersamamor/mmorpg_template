@@ -357,7 +357,7 @@ In `inventory` and `inventory_changed` (`load`).
 In `inventory_changed` `cause`: `picked_up`, `used`, `equipped`, `unequipped`, `dropped`, `weight` (only the weight limit or state changed),
 `card_inserted`, `refined` (any refine attempt: the material is used up whatever the result), `exchanged` (a dialogue's `take_item` / `give_item` actions, T-601),
 `quest` (a quest step's turn-in: its consumed items taken and its item and currency rewards given, one transaction, T-602),
-`shop_buy` (items bought; the currency went down in the same change, T-603), `shop_sell` (items sold; the currency went up, T-603), `staff` (staff gave or took items or currency through the admin API, T-806), `traded` (a trade swapped both offers: items and currency in one change on each side, T-903), `guild_founded` (founding a guild took its cost, `guild.found_cost`; the guild and the change land in one transaction, T-904).
+`shop_buy` (items bought; the currency went down in the same change, T-603), `shop_sell` (items sold; the currency went up, T-603), `staff` (staff gave or took items or currency through the admin API, T-806), `traded` (a trade swapped both offers: items and currency in one change on each side, T-903), `guild_founded` (founding a guild took its cost, `guild.found_cost`; the guild and the change land in one transaction, T-904), `guild_storage` (items or currency went into or out of the guild's storage; the storage's side lands in the same transaction, T-905).
 
 ## Refine failures
 What a failed refine does, per step of `refine.yaml` (`failure`): `keep` (the level stays), `down` (one level down, not below 0), `break` (the item is gone, with its cards).
@@ -429,7 +429,7 @@ item intent (`shop_buy` and `shop_sell` included), or an "Outfit reasons" term f
 
 ## Account errors
 The `error` of a refused account request (T-701, ARCHITECTURE §10 "Accounts"): `invalid_request`, `invalid_username`, `invalid_password`, `same_password`, `username_taken`,
-`invalid_credentials`, `account_deleting`, `invalid_session`, `rate_limited`, `invalid_name`, `invalid_appearance`, `name_taken`, `no_free_slot`, `unknown_character`, `character_in_use`, `unavailable`, `account_banned`.
+`invalid_credentials`, `account_deleting`, `invalid_session`, `rate_limited`, `invalid_name`, `invalid_appearance`, `name_taken`, `no_free_slot`, `unknown_character`, `character_in_use`, `unavailable`, `account_banned`, `guild_storage_not_empty` (T-905: the character is the last member of a guild whose storage holds something; it cannot be deleted until the storage is empty).
 `account_banned` (T-806): staff banned the account; told only to someone who has its password, with `retry_after` (seconds until the ban ends; none when it has no end); never staff's reason.
 Appearance refusals (T-705): an id is unknown, or a face or hairstyle is not the chosen gender's. `invalid_credentials` answers an unknown username and a wrong password alike, and a password change whose current password is wrong. `same_password` (T-710): a password change to the one the account has. `account_deleting` (T-703): the account waits to be erased, told only to someone who has its password; it comes with `erased_in` (seconds). `rate_limited` and `unavailable` come with `retry_after` (seconds).
 
@@ -536,7 +536,8 @@ nothing; whole entries keep their ids, a part of a stack becomes a new entry. **
 
 ## Guild permissions
 What a guild rank may do (T-904, ARCHITECTURE §6.11): `invite` (invite characters), `kick` (take out a member of a lower rank), `edit_notice` (write the notice), `set_rank` (give a member of
-a lower rank another rank, also below one's own). The leader's rank holds every one; naming and ordering the ranks (`guild_ranks`) and handing the leader rank over (`guild_lead`) are the
+a lower rank another rank, also below one's own); T-905: `storage_deposit` (put items and currency into the guild's storage), `storage_items` (take items out), `storage_currency` (take
+currency out), `storage_log` (read the storage's log). The leader's rank holds every one; naming and ordering the ranks (`guild_ranks`) and handing the leader rank over (`guild_lead`) are the
 leader's alone. Nobody acts on a member of the same or a higher rank.
 
 ## Guild reasons
@@ -545,7 +546,12 @@ answer, as for a party), `invalid_target` (oneself, or not a member), `invalid_n
 `already_in_guild` (one guild per character), `not_in_guild`, `invite_pending`, `no_invite` (nothing to answer: none came, it expired, or the inviter may no longer invite), `full`
 (`guild.max_members`), `not_allowed` (the rank lacks the permission, or the act is the leader's), `rank_too_high` (the member's rank, or the rank asked for, is the actor's own or above),
 `invalid_ranks` (a rank list the rules refuse), `too_long` (the notice, `--guild-notice-length`), `cannot_afford` (the founding cost), `busy` (a founding of this character is under way),
-`rate_limited` (with `retry_after`), `unavailable` (a dev login, or a database that does not answer).
+`rate_limited` (with `retry_after`), `unavailable` (a dev login, or a database that does not answer); T-905's storage: `item_gone` (the entry is not there, or not in that quantity; too little
+currency), `item_equipped` (worn items stay in the bag), `not_tradeable` (content's `tradeable: false`), `storage_full` (`guild.storage.size` places, or `max_currency`), `inventory_full`,
+`too_heavy`, `currency_full` (the bag's side of a withdrawal), `storage_not_empty` (the last member cannot leave while the storage holds anything).
+
+## Guild storage moves
+What a guild storage log line records (T-905, ARCHITECTURE §6.11): `deposit` (into the storage), `withdraw` (out of it).
 
 ## Guild news
 The `news` of a `guild_news` (T-904): `invite_sent`, `declined`, `expired`, `founded`, `joined`, `left`, `kicked`, `rank` (a member has another rank), `leader` (a new leader), `ranks` (the
@@ -557,7 +563,8 @@ cleaned like a chat line, at most `--guild-notice-length`), ranks and members; i
 with a name and "Guild permissions"; a new member joins at the last. **Member number**: a member's id in the protocol (`member`), never the character's permanent id. **Founding**: the name is
 reserved, the tick takes `guild.found_cost` and the founder's next save founds the guild in the same transaction (a **reservation** whose save never lands is dropped). **Successor**: when the
 leader goes, the member of the highest rank, the earliest to join among equals; with nobody left the guild is **disbanded** and its name is free. **Tag**: a guild member's emblem shown where its
-name shows (`guild_tags`). **Online**: playing on this server process (v1).
+name shows (`guild_tags`). **Online**: playing on this server process (v1). **Storage** (T-905): the guild's shared entries and currency (`guild.storage`). **Hold**: a move under way, made in
+the database before the tick moves the bag's side and settled by the character's save that has it (undone when that save never lands). **Storage log**: the landed moves, by character id.
 
 ## Admin terms
 (T-804, ARCHITECTURE §12.) **Admin API**: the server's private HTTP listener for staff tooling, on its own port. **Service credential**: the secret that proves a request comes from the panel.

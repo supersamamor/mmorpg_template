@@ -172,6 +172,10 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
     refused whole and reported (`DUPLICATED ITEMS`).
   - **A guild founding rides the save** (T-904, §6.11): the inventory system takes the cost on the tick and puts a `StaffNote.ForGuild` on the ticket (the road T-806's staff changes use); the first save
     without the cost founds the reserved guild in its transaction (`UPDATE guilds SET founded_at`), so the cost and the guild land together or not at all, and a save that lands twice founds nothing twice.
+  - **A guild storage move rides the save too** (T-905, §6.11): the storage's side is first a **hold** in the database (`guild_storage_holds`); the inventory system moves the bag's side on the tick
+    and puts a `StaffNote.ForStorage` on the ticket; the first save with the bag's side settles the hold in its transaction (`PostgresGuildStorageStore.LandAsync`: a deposit's entry and currency
+    go into the storage, a withdrawal's hold goes, a log line is written). A hold whose save never lands is undone by the server when the note settles as not landed, else in the transaction of
+    the character's **next claim** (`ClaimAsync`), when no older stay of it can save any more. No new dependency between saves: the storage's side is not another character's.
   - **A lost character** (claimed elsewhere, deleted, or with a duplicated item) is not saved any more: its session gets `bye save_lost` and it leaves. Whoever holds something it gave away after its last landed
     save is lost with it (for them it is a crash), and what it put down can no longer be picked up.
   - **Loading.** Claimed and read in one transaction, which also re-checks that the character is not deleted (row 289; a held character cannot be deleted: both take the same row lock). Then `CharacterLoader`
@@ -754,6 +758,24 @@ and `GuildPanel`. Rules from `balance.yaml` `guild` (name lengths and separators
   speaker's process only, as T-901's whispers do. A follow-up would relay both through the database (PostgreSQL `LISTEN`/`NOTIFY` on a `guild_events` channel: a line or a presence change is
   published once and each process delivers it to its members) or a message bus once there is one.
 - **Guild chat**: the service is the `guild` channel's `IChannelMembers` (`ChatService.Register`): chat does the mute, rate limit, text rules, blocks and reports as on every channel.
+- **Storage** (T-905; `Game.Server/Guild/GuildStorage`, `IGuildStorageStore`, `Persistence/PostgresGuildStorageStore`, `World/Guild/GuildStorageTransfer`, pure `Game.Shared/Guild/GuildStorageRules`;
+  migration `20261127224051_GuildStorage`: `guild_storage_items`, `guild_storage_holds`, `guild_storage_log`, `guilds.storage_currency`). Per guild: item entries under their permanent ids (cards
+  and refine kept) and currency, at most `guild.storage.size` entries (50) and `guild.storage.max_currency`. Any member may look (`guild_storage_open`); `storage_deposit` puts in,
+  `storage_items` and `storage_currency` take out, `storage_log` reads the log. **No daily withdrawal limit** in v1: taking out is a rank's permission the leader gives, and every move is in the
+  log. **No storage NPC**: it opens from the guild panel, because nothing the server checks depends on where the character stands and a phone player reaches the panel anywhere.
+  - **A move, in three steps** (rule 10): (1) a **hold**, one transaction that locks the guild's row (`FOR UPDATE`, as every rank change does) and then reads the member's rank: a rank change
+    racing a withdrawal commits before it (and refuses it) or after it, never in between; two members withdrawing the last unit on two server processes are run one after the other and the
+    second gets `item_gone`. A deposit's hold keeps a place (holds count toward `size`) and its currency toward `max_currency`; a withdrawal's hold takes the entry (or part of a stack, as a
+    new entry with a new id from `CharacterSaves.NextItemId`) or the currency out of the storage at once. (2) The **bag's side** on the tick (`GuildStorageRules`): a deposit checks again that
+    the bag carries the entry in that quantity, not worn and tradeable (content's `tradeable`), and the currency; a withdrawal that the bag stays within `inventory.max_entries`, its weight
+    limit and the most currency a bag holds; a whole entry keeps its id, part of a stack becomes a new entry, never merged. (3) The character's **save** settles the hold (§3). A refusal on the
+    tick, a tick that never starts it (`--guild-payment-wait-ms`), or a stay that ends before the save undoes the hold (a withdrawal's units go back onto a stack of the same item if one is
+    there); a crash leaves it to the next claim. The same entry twice: the second finds it gone on the tick; a drop or use first: the same.
+  - **Log**: every landed move (who by character id, the move, item and entry id, units, currency, when: the save's time), newest first in `guild_storage`, at most `guild.storage.log_shown`,
+    kept `guild.storage.log_days` (older lines are deleted when the storage is read). Names are read at that time from `characters`; an erased account's moves stay without the id (§13).
+  - **Disbanding**: the last member cannot leave (`storage_not_empty`) nor its character be deleted (`guild_storage_not_empty`) while the storage holds an entry, currency or a move under way:
+    nothing in it is ever deleted unasked; they take it out first. Erasing an account (T-703) cannot be refused: a guild its last member's erasure ends goes with its storage, as the rest of that
+    account's things do.
 - **Emblems** (rule 3): asset keys (`icon.emblem.*`) the theme maps to files and `guild.emblems` lists, validated at load (each must be a key of the theme; at least one, none twice); the bundle
   has them as `guild_emblems`; never uploaded. The placeholder theme has four plain ones from `tools/themegen`. Every pulse (`--guild-pulse-ms`), each player gets the emblems of the guild
   members on its map instance when that list changed for it (`guild_tags`); the client shows the emblem beside a member's name in the target frame, and on the guild panel and its invite prompt.
@@ -928,6 +950,10 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   buttons. The **invite prompt** (who, which guild with its emblem, seconds left, Join and No) at the top of the safe area. The chat switch goes map, whisper, party, guild while in them. The
   target frame shows a guild member's emblem before its name (one texture, no extra draw call beyond the frame's). The layout check runs the panel with the longest names, rank names and notice,
   every button on every row and the prompt, and the founding form with the picker, at every screen, notch and scale.
+- **Guild storage** (T-905, §6.11; `GuildStoragePanel`): the guild panel's **Storage** button (beside Leave). A heading (entries out of the size, the currency); tabs **Storage** (what it holds;
+  a tap takes out, disabled without `storage_items`), **Bag** (carried entries that are not worn and are tradeable, by the bundle; a tap puts in) and **Log** (only with `storage_log`); Close;
+  the scroll list; the quantity picker (−, units, +, Take or Put) once a stack is tapped, in the coins row's place (one row under the list at a time); the coins row (an amount, Put, Take).
+  The layout check runs it full (fifty of the longest lines, the largest currency) with the picker, and with fifty of the longest log lines.
 
 ### 7.5 Characters & equipment
 Modular 3D characters. Each body type has one shared rig. Equipment is either:
@@ -1469,6 +1495,9 @@ A headless run of the same (no draw calls or triangles without a renderer) gave 
   | `guild_ranks` | C→S | `ranks` (`[{"name":"Officer","permissions":["invite"]},...]`, the places below the leader's), leader only |
   | `guild_lead` | C→S | `member`, leader only |
   | `guild_notice` | C→S | `text` (empty clears it) |
+  | `guild_storage_open` | C→S | none: answered by `guild_storage` (T-905, §6.11) |
+  | `guild_deposit` | C→S | `entry` and `quantity`, or `currency` (exactly one of the two; `storage_deposit`): answered by `guild_storage` once it landed, or `guild_refused` (T-905) |
+  | `guild_withdraw` | C→S | `entry` and `quantity` (`storage_items`), or `currency` (`storage_currency`): as `guild_deposit` (T-905) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
@@ -1511,6 +1540,7 @@ A headless run of the same (no draw calls or triangles without a renderer) gave 
   | `guild_news` | S→C | `news` (a "Guild news" term), `name` (whom it is about) |
   | `guild_refused` | S→C (own) | `intent` (a `guild_*` type), `reason` (a "Guild reasons" term), `retry_after` (`rate_limited`), `name` (an invited character, or the name taken) |
   | `guild_tags` | S→C | `tags` (`[{"entity":42,"emblem":"icon.emblem.oak"}]`: the guild members on this map instance), when the list changes for this player |
+  | `guild_storage` | S→C (own) | `size`, `currency`, `entries` (inventory entry records, oldest first), `log` (only for `storage_log`: `[{"at" (unix s),"name" (empty once erased),"move","item","entry","quantity","currency"}]`, newest first) (T-905) |
   | `pong` | S→C | `seq` |
   | `bye` | S→C (last) | `reason` (VOCABULARY "Bye reasons"), followed by the close frame |
 

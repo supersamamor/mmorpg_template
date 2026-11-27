@@ -135,7 +135,7 @@ public sealed class UiRuns
         storage.ShowSamples(log: true);
         await FramesAsync(3);
         await LayoutMatrixAsync("guild storage log");
-        Check(Hud.Blocks(storage.TakeCoinsButton.GetGlobalRect().GetCenter()), "the coins row shows and takes its touches");
+        Check(storage.LogTab.IsVisibleInTree() && Hud.Blocks(storage.LogTab.GetGlobalRect().GetCenter()), "the log tab shows and takes its touches");
         storage.ClearSamples();
         // T-903: the trade window with both offers full of the longest lines, the longest name and state, the currency field and the footer, the ask prompt over it; then the bag's
         // list of what can be offered with the quantity picker in the columns' place.

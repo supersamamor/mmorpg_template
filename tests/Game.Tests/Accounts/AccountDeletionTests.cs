@@ -240,6 +240,12 @@ public sealed class AccountErasureDatabaseTests(DatabaseFixture fixture) : IClas
             await PostgresGuildStore.FoundAsync(found, others, othersCharacter, default);
         }
         (await guilds.JoinAsync(others, othersCharacter, gone.Id, 30, Now, default)).Refusal.ShouldBe(Game.Shared.Vocabulary.GuildReasons.Unavailable, "a deleted character joins nothing");
+        // T-905: a move of the erased character in the other guild's storage log (as when it was a member there once): the move stays for that guild, without who made it.
+        await using (var log = Database.Open())
+        {
+            log.GuildStorageLog.Add(new GuildStorageLogRow { GuildId = others, CharacterId = character, Move = Game.Shared.Vocabulary.GuildStorageMoves.Deposit, Currency = 7, At = Now });
+            await log.SaveChangesAsync();
+        }
 
         (await Accounts.TryRequestErasureAsync(account, "hash", Now, Now.AddDays(14), default))!.Count.ShouldBe(1);
         (await Accounts.EraseAsync(account, Now.AddDays(14).AddSeconds(-1), default)).ShouldBe(EraseOutcome.Nothing, "not due");
@@ -255,6 +261,7 @@ public sealed class AccountErasureDatabaseTests(DatabaseFixture fixture) : IClas
         var everything = await EverythingAsync(db);
         foreach (var text in new[] { name, deleted, username, character.ToString(), gone.Id.ToString(), guildName }) everything.ShouldNotContain(text, Case.Insensitive);
         everything.ShouldContain(othersGuildName, Case.Sensitive, "the other account's guild stays");
+        (await db.GuildStorageLog.SingleAsync(l => l.GuildId == others)).CharacterId.ShouldBeNull("T-905: the storage log keeps the move, not who made it");
         (await Accounts.EraseAsync(account, Now.AddDays(15), default)).ShouldBe(EraseOutcome.Nothing);
         (await Accounts.CreateCharacterAsync(other, Guid.NewGuid(), name, CharacterNameRules.Key(name), "job.wanderer", 3, null, Now, default)).Outcome.ShouldBe(CreateCharacterOutcome.Created);
     }
