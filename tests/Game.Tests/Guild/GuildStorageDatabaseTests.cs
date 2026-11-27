@@ -287,7 +287,7 @@ public sealed class GuildStorageDatabaseTests(DatabaseFixture fixture) : IClassF
 
     // ---- the service: tick refusals and a disconnect before the save ---------------------------------------------------------------------------
 
-    private GuildStorage Service(Func<GuildStorageTransfer, (string? Refusal, bool Lands)> tick) => new(new GuildStorageDef { Size = 10, MaxCurrency = 1_000 }, Store, NewId, intent =>
+    private GuildStorage Service(Func<GuildStorageTransfer, (string? Refusal, bool Lands)> tick) => new(new GuildStorageDef { MaxEntries = 10, MaxCurrency = 1_000 }, Store, NewId, intent =>
     {
         var transfer = (GuildStorageTransfer)intent;
         _ = Task.Run(() =>

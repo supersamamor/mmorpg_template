@@ -206,7 +206,7 @@ namespace Game.Shared.Protocol
     /// <c>guild_storage</c> (T-905, own only): <c>{"type":"guild_storage","size":50,"currency":1200,"entries":[{"id":981,"item":"item.herb","quantity":5}],"log":[...]}</c>, the answer to
     /// <see cref="GuildStorageOpenMessage"/> and to every move that landed. <c>log</c> is there only for a rank with <c>storage_log</c>.
     /// </summary>
-    /// <param name="Size">Most entries the storage holds (<c>guild.storage.size</c>).</param>
+    /// <param name="Size">Most entries the storage holds (<c>guild.storage.max_entries</c>).</param>
     /// <param name="Currency">The storage's currency.</param>
     /// <param name="Entries">Its entries, oldest first.</param>
     /// <param name="Log">The newest moves first, or null when this character's rank may not read the log.</param>

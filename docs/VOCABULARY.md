@@ -547,7 +547,7 @@ answer, as for a party), `invalid_target` (oneself, or not a member), `invalid_n
 (`guild.max_members`), `not_allowed` (the rank lacks the permission, or the act is the leader's), `rank_too_high` (the member's rank, or the rank asked for, is the actor's own or above),
 `invalid_ranks` (a rank list the rules refuse), `too_long` (the notice, `--guild-notice-length`), `cannot_afford` (the founding cost), `busy` (a founding of this character is under way),
 `rate_limited` (with `retry_after`), `unavailable` (a dev login, or a database that does not answer); T-905's storage: `item_gone` (the entry is not there, or not in that quantity; too little
-currency), `item_equipped` (worn items stay in the bag), `not_tradeable` (content's `tradeable: false`), `storage_full` (`guild.storage.size` places, or `max_currency`), `inventory_full`,
+currency), `item_equipped` (worn items stay in the bag), `not_tradeable` (content's `tradeable: false`), `storage_full` (`guild.storage.max_entries` places, or `max_currency`), `inventory_full`,
 `too_heavy`, `currency_full` (the bag's side of a withdrawal), `storage_not_empty` (the last member cannot leave while the storage holds anything).
 
 ## Guild storage moves

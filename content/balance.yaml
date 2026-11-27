@@ -237,7 +237,7 @@ guild:
   # T-905: the guild's shared storage. Fifty entries fill two screens of the storage window on a phone; a move stays in the log for thirty days and the window shows the newest fifty.
   # No daily withdrawal limit: who may take out is the rank's permission (storage_items, storage_currency), and every move is in the log the leader reads.
   storage:
-    size: 50
+    max_entries: 50
     max_currency: 1000000000
     log_days: 30
     log_shown: 50

@@ -34,7 +34,7 @@ public sealed class GuildStorage(GuildStorageDef settings, IGuildStorageStore st
     public async Task<string?> DepositAsync(Guid me, EntityId entity, GuildDepositMessage message, CancellationToken cancellation)
     {
         if (!Valid(message.Entry, message.Quantity, message.Currency)) return GuildReasons.ItemGone;
-        var hold = await store.HoldDepositAsync(me, message.Entry is not null, message.Currency, Settings.Size, Settings.MaxCurrency, Now, cancellation).ConfigureAwait(false);
+        var hold = await store.HoldDepositAsync(me, message.Entry is not null, message.Currency, Settings.MaxEntries, Settings.MaxCurrency, Now, cancellation).ConfigureAwait(false);
         if (hold.Refusal is not null) return hold.Refusal;
         var transfer = new GuildStorageTransfer(entity, hold.Hold, hold.Guild, GuildStorageMoves.Deposit, message.Entry, message.Quantity, null, message.Currency);
         return await RunAsync(me, transfer).ConfigureAwait(false);
@@ -56,7 +56,7 @@ public sealed class GuildStorage(GuildStorageDef settings, IGuildStorageStore st
         view.Log?.Select(l => new GuildStorageLogRecord(new DateTimeOffset(DateTime.SpecifyKind(l.At, DateTimeKind.Utc)).ToUnixTimeSeconds(), l.Name, l.Move, l.ItemId, l.EntryId, l.Quantity,
             l.Currency)).ToList());
 
-    private GuildStorageMessage Message(StorageView view) => Message(view, Settings.Size);
+    private GuildStorageMessage Message(StorageView view) => Message(view, Settings.MaxEntries);
 
     /// <summary>Exactly one of an entry (with at least one unit) and currency.</summary>
     private static bool Valid(long? entry, int quantity, long currency) => entry is not null ? quantity >= 1 && currency == 0 : currency > 0;

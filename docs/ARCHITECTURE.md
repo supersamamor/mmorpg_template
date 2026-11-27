@@ -760,12 +760,12 @@ and `GuildPanel`. Rules from `balance.yaml` `guild` (name lengths and separators
 - **Guild chat**: the service is the `guild` channel's `IChannelMembers` (`ChatService.Register`): chat does the mute, rate limit, text rules, blocks and reports as on every channel.
 - **Storage** (T-905; `Game.Server/Guild/GuildStorage`, `IGuildStorageStore`, `Persistence/PostgresGuildStorageStore`, `World/Guild/GuildStorageTransfer`, pure `Game.Shared/Guild/GuildStorageRules`;
   migration `20261127224051_GuildStorage`: `guild_storage_items`, `guild_storage_holds`, `guild_storage_log`, `guilds.storage_currency`). Per guild: item entries under their permanent ids (cards
-  and refine kept) and currency, at most `guild.storage.size` entries (50) and `guild.storage.max_currency`. Any member may look (`guild_storage_open`); `storage_deposit` puts in,
+  and refine kept) and currency, at most `guild.storage.max_entries` entries (50) and `guild.storage.max_currency`. Any member may look (`guild_storage_open`); `storage_deposit` puts in,
   `storage_items` and `storage_currency` take out, `storage_log` reads the log. **No daily withdrawal limit** in v1: taking out is a rank's permission the leader gives, and every move is in the
   log. **No storage NPC**: it opens from the guild panel, because nothing the server checks depends on where the character stands and a phone player reaches the panel anywhere.
   - **A move, in three steps** (rule 10): (1) a **hold**, one transaction that locks the guild's row (`FOR UPDATE`, as every rank change does) and then reads the member's rank: a rank change
     racing a withdrawal commits before it (and refuses it) or after it, never in between; two members withdrawing the last unit on two server processes are run one after the other and the
-    second gets `item_gone`. A deposit's hold keeps a place (holds count toward `size`) and its currency toward `max_currency`; a withdrawal's hold takes the entry (or part of a stack, as a
+    second gets `item_gone`. A deposit's hold keeps a place (holds count toward `max_entries`) and its currency toward `max_currency`; a withdrawal's hold takes the entry (or part of a stack, as a
     new entry with a new id from `CharacterSaves.NextItemId`) or the currency out of the storage at once. (2) The **bag's side** on the tick (`GuildStorageRules`): a deposit checks again that
     the bag carries the entry in that quantity, not worn and tradeable (content's `tradeable`), and the currency; a withdrawal that the bag stays within `inventory.max_entries`, its weight
     limit and the most currency a bag holds; a whole entry keeps its id, part of a stack becomes a new entry, never merged. (3) The character's **save** settles the hold (§3). A refusal on the

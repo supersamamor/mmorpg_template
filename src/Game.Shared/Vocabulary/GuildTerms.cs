@@ -105,7 +105,7 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>not_tradeable</c> (T-905): content marks the item not tradeable; it cannot be deposited.</summary>
         public const string NotTradeable = "not_tradeable";
 
-        /// <summary><c>storage_full</c> (T-905): the storage holds <c>guild.storage.size</c> entries, or would hold more than <c>guild.storage.max_currency</c>.</summary>
+        /// <summary><c>storage_full</c> (T-905): the storage holds <c>guild.storage.max_entries</c> entries, or would hold more than <c>guild.storage.max_currency</c>.</summary>
         public const string StorageFull = "storage_full";
 
         /// <summary><c>inventory_full</c> (T-905): the bag has <c>inventory.max_entries</c> entries.</summary>

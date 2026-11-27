@@ -115,7 +115,7 @@ namespace Game.Shared.Definitions
     public sealed record GuildStorageDef
     {
         /// <summary>Most entries the storage holds (moves under way count). At least 1, at most 500.</summary>
-        public int Size { get; init; } = 50;
+        public int MaxEntries { get; init; } = 50;
 
         /// <summary>Most currency the storage holds (deposits under way count). At least 0.</summary>
         public long MaxCurrency { get; init; } = 1_000_000_000;

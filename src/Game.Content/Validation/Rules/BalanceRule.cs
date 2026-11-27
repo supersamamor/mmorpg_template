@@ -120,7 +120,7 @@ public sealed class BalanceRule : IValidationRule
         if (g.RankNameMaxLength < 1 || g.RankNameMaxLength > CharacterNameRules.LongestAllowed)
             Range(context, "guild.rank_name_max_length", $"must be between 1 and {CharacterNameRules.LongestAllowed}.");
         if (g.InviteTimeoutMs <= 0) Range(context, "guild.invite_timeout_ms", "must be above 0.");
-        if (g.Storage.Size < 1 || g.Storage.Size > 500) Range(context, "guild.storage.size", "must be between 1 and 500.");   // T-905
+        if (g.Storage.MaxEntries < 1 || g.Storage.MaxEntries > 500) Range(context, "guild.storage.max_entries", "must be between 1 and 500.");   // T-905
         if (g.Storage.MaxCurrency < 0) Range(context, "guild.storage.max_currency", "must not be negative.");
         if (g.Storage.LogDays < 1) Range(context, "guild.storage.log_days", "must be at least 1.");
         if (g.Storage.LogShown < 1 || g.Storage.LogShown > 200) Range(context, "guild.storage.log_shown", "must be between 1 and 200.");

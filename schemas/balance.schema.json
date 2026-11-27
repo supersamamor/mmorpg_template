@@ -618,6 +618,29 @@
             "type": "string"
           },
           "description": "The emblems a founder chooses from: asset keys of the theme (rule 3), at least one. Never uploaded."
+        },
+        "storage": {
+          "type": "object",
+          "properties": {
+            "max_entries": {
+              "type": "integer",
+              "description": "Most entries the storage holds (moves under way count). At least 1, at most 500."
+            },
+            "max_currency": {
+              "type": "integer",
+              "description": "Most currency the storage holds (deposits under way count). At least 0."
+            },
+            "log_days": {
+              "type": "integer",
+              "description": "Days a move stays in the log. At least 1."
+            },
+            "log_shown": {
+              "type": "integer",
+              "description": "Most log lines one storage message carries, newest first. At least 1, at most 200."
+            }
+          },
+          "additionalProperties": false,
+          "description": "The guild's shared storage (T-905)."
         }
       },
       "additionalProperties": false,
