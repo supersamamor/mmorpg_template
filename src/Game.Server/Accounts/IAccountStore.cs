@@ -44,6 +44,9 @@ public enum DeleteCharacterOutcome
 
     /// <summary>A live server holds it (this one or another): nothing was changed.</summary>
     InUse,
+
+    /// <summary>It is the last member of a guild whose storage holds something (T-905): nothing was changed.</summary>
+    GuildStorageNotEmpty,
 }
 
 /// <summary>How erasing an account ended.</summary>

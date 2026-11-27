@@ -63,6 +63,8 @@ public sealed class PostgresCharacterStore(GameDatabase database) : ICharacterSt
         row.Claim++;
         row.HeldBy = run;
         await db.SaveChangesAsync(cancellation).ConfigureAwait(false);
+        // T-905: guild storage moves of earlier stays never landed (no earlier stay can save from here on): their holds are undone in this transaction.
+        await PostgresGuildStorageStore.ReleaseHoldsOfAsync(db, character, cancellation).ConfigureAwait(false);
         var items = row.Version == 0
             ? []
             : await db.Items.AsNoTracking().Where(i => i.CharacterId == character).OrderBy(i => i.Id).ToListAsync(cancellation).ConfigureAwait(false);
@@ -133,6 +135,12 @@ public sealed class PostgresCharacterStore(GameDatabase database) : ICharacterSt
                 {
                     // T-904: the founding cost is out of this save, so the reserved guild is founded in the same transaction (PostgresGuildStore.ReserveAsync made it).
                     await PostgresGuildStore.FoundAsync(db, guild, save.CharacterId, cancellation).ConfigureAwait(false);
+                    continue;
+                }
+                if (note.Storage is { } move)
+                {
+                    // T-905: the bag's side of a guild storage move is in this save, so the storage's side lands in the same transaction (PostgresGuildStorageStore made the hold).
+                    await PostgresGuildStorageStore.LandAsync(db, move, save.CharacterId, save.State.TakenAt, cancellation).ConfigureAwait(false);
                     continue;
                 }
                 if (note.Audit is null) continue;

@@ -126,6 +126,8 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
             .ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.ChatBlocks.Where(b => b.AccountId == account || characters.Contains(b.BlockedCharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         // T-904: its characters leave their guilds (a leader hands over by the same rule as leaving; a guild left empty goes, its name free).
+        // T-905: first the log forgets who they were and their storage holds are undone.
+        await PostgresGuildStorageStore.ForgetAsync(db, characters, cancellation).ConfigureAwait(false);
         foreach (var character in characters) await PostgresGuildStore.RemoveCharacterAsync(db, character, Game.Shared.Vocabulary.GuildNews.Left, cancellation).ConfigureAwait(false);
         await db.Items.Where(i => characters.Contains(i.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.Outfits.Where(o => characters.Contains(o.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
@@ -181,7 +183,9 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
         if (holder is { } run && await PostgresCharacterStore.IsAliveAsync(db, run, cancellation).ConfigureAwait(false)) return DeleteCharacterOutcome.InUse;
         row.DeletedAt = now;
         await db.SaveChangesAsync(cancellation).ConfigureAwait(false);
-        await PostgresGuildStore.RemoveCharacterAsync(db, character, Game.Shared.Vocabulary.GuildNews.Left, cancellation).ConfigureAwait(false);   // T-904: a deleted character leaves its guild
+        // T-904: a deleted character leaves its guild; T-905: not as its last member while the storage holds anything (nothing is changed then).
+        if (await PostgresGuildStore.RemoveCharacterAsync(db, character, Game.Shared.Vocabulary.GuildNews.Left, cancellation, keepStorage: true).ConfigureAwait(false) is { Refusal: not null })
+            return DeleteCharacterOutcome.GuildStorageNotEmpty;
         await transaction.CommitAsync(cancellation).ConfigureAwait(false);
         return DeleteCharacterOutcome.Deleted;
     });

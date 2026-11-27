@@ -328,7 +328,7 @@ public sealed class AccountEndpoints(AccountService service, IServerLog log)
     {
         AccountErrors.InvalidCredentials or AccountErrors.InvalidSession => StatusCodes.Status401Unauthorized,
         AccountErrors.UnknownCharacter => StatusCodes.Status404NotFound,
-        AccountErrors.UsernameTaken or AccountErrors.NameTaken or AccountErrors.NoFreeSlot or AccountErrors.CharacterInUse or AccountErrors.AccountDeleting => StatusCodes.Status409Conflict,
+        AccountErrors.UsernameTaken or AccountErrors.NameTaken or AccountErrors.NoFreeSlot or AccountErrors.CharacterInUse or AccountErrors.AccountDeleting or AccountErrors.GuildStorageNotEmpty => StatusCodes.Status409Conflict,
         AccountErrors.AccountBanned => StatusCodes.Status403Forbidden,
         AccountErrors.RateLimited => StatusCodes.Status429TooManyRequests,
         AccountErrors.Unavailable => StatusCodes.Status503ServiceUnavailable,

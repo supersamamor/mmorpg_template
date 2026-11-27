@@ -730,6 +730,12 @@ namespace Game.Server.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("notice");
 
+                    b.Property<long>("StorageCurrency")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("storage_currency");
+
                     b.Property<long>("Version")
                         .HasColumnType("bigint")
                         .HasColumnName("version");
@@ -741,6 +747,165 @@ namespace Game.Server.Persistence.Migrations
                         .HasDatabaseName("ux_guilds_name_key");
 
                     b.ToTable("guilds", (string)null);
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.GuildStorageHoldRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.PrimitiveCollection<string[]>("Cards")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("cards");
+
+                    b.Property<Guid>("CharacterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("character_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("Currency")
+                        .HasColumnType("bigint")
+                        .HasColumnName("currency");
+
+                    b.Property<long?>("EntryId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("entry_id");
+
+                    b.Property<long>("GuildId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("ItemId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("item_id");
+
+                    b.Property<string>("Move")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("move");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<int>("Refine")
+                        .HasColumnType("integer")
+                        .HasColumnName("refine");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CharacterId")
+                        .HasDatabaseName("ix_guild_storage_holds_character");
+
+                    b.HasIndex("GuildId")
+                        .HasDatabaseName("ix_guild_storage_holds_guild");
+
+                    b.ToTable("guild_storage_holds", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_guild_storage_holds_amounts", "quantity >= 0 AND currency >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.GuildStorageItemRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    b.PrimitiveCollection<string[]>("Cards")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("cards");
+
+                    b.Property<long>("GuildId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("ItemId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("item_id");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<int>("Refine")
+                        .HasColumnType("integer")
+                        .HasColumnName("refine");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GuildId")
+                        .HasDatabaseName("ix_guild_storage_items_guild");
+
+                    b.ToTable("guild_storage_items", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_guild_storage_items_quantity", "quantity > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.GuildStorageLogRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<Guid?>("CharacterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("character_id");
+
+                    b.Property<long>("Currency")
+                        .HasColumnType("bigint")
+                        .HasColumnName("currency");
+
+                    b.Property<long?>("EntryId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("entry_id");
+
+                    b.Property<long>("GuildId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("ItemId")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("item_id");
+
+                    b.Property<string>("Move")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("move");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CharacterId")
+                        .HasDatabaseName("ix_guild_storage_log_character");
+
+                    b.HasIndex("GuildId", "At")
+                        .HasDatabaseName("ix_guild_storage_log_guild_at");
+
+                    b.ToTable("guild_storage_log", (string)null);
                 });
 
             modelBuilder.Entity("Game.Server.Persistence.ItemRow", b =>
@@ -1022,6 +1187,33 @@ namespace Game.Server.Persistence.Migrations
                 });
 
             modelBuilder.Entity("Game.Server.Persistence.GuildRankRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.GuildRow", null)
+                        .WithMany()
+                        .HasForeignKey("GuildId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.GuildStorageHoldRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.GuildRow", null)
+                        .WithMany()
+                        .HasForeignKey("GuildId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.GuildStorageItemRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.GuildRow", null)
+                        .WithMany()
+                        .HasForeignKey("GuildId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.GuildStorageLogRow", b =>
                 {
                     b.HasOne("Game.Server.Persistence.GuildRow", null)
                         .WithMany()

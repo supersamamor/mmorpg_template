@@ -701,6 +701,7 @@ public static class UiText
             case AccountErrors.NoFreeSlot: return "You have no free character slot.";
             case AccountErrors.UnknownCharacter: return "That character no longer exists.";
             case AccountErrors.CharacterInUse: return "That character is still in the world. Please try again in a minute.";
+            case AccountErrors.GuildStorageNotEmpty: return "That character is the last of its guild. Empty the guild storage first.";
             case AccountErrors.Unavailable: return "The server is busy. Please try again.";
             default: return "The server could not use that. Please try again.";
         }
