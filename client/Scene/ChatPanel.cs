@@ -9,9 +9,9 @@ namespace Game.Client.Scene;
 /// <summary>
 /// Chat on the phone HUD (T-901, ARCHITECTURE §7.4 and "Chat"). Two parts:
 /// <list type="bullet">
-/// <item><b>The strip</b>, at the top of the HUD's centre column (between the bars and the buttons on the right, above the target frame): the Chat button and the last two lines beside
-/// it, in what is left of the column's width. The lines take no touches, so the world under them is still the world's; the strip is one button tall and shows only while playing. The
-/// bottom of a 640x360 dp phone at the larger UI scales has no row to spare for it (the layout check found that), and the top edge covers the least of the play area.</item>
+/// <item><b>The strip</b>: the Chat button beside the quest tracker in the left column (it adds no row), and the last two lines in the flash line's place at the bottom while no flash or
+/// announcement shows (as T-806's announcements share it). The lines take no touches, so the world under them is still the world's. A 640x360 dp phone at the larger UI scales has no row
+/// to spare anywhere else: the layout check found a strip above the flash line covering the left column, and one at the top of the centre column pushing it off the screen.</item>
 /// <item><b>The panel</b>, opened by the button, at the <b>top</b> of the safe area: the input row first (the channel switch, a whisper target field, the text field and Send), then the log.
 /// The on-screen keyboard (Godot's virtual keyboard on Android and iOS) comes up from the bottom when the text field takes focus, so the panel is cut to what is left above it, every frame
 /// the keyboard's height changes: the field being typed in is never under the keyboard.</item>
@@ -24,6 +24,7 @@ public sealed class ChatPanel
 {
     private const double PanelMaxWidthDp = 680;
     private const double LogFontDp = 13;
+    private const double SideColumnDp = 150;   // the HUD's wider side column (the left one: bars, tracker and the Chat button)
     private const int StripLines = 2;
 
     private readonly ClientSession _session;
@@ -31,10 +32,10 @@ public sealed class ChatPanel
     private readonly Action _tap;
     private readonly ChatBook _chat;
 
-    // the strip
-    private readonly HBoxContainer _strip = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
-    private readonly Button _open = new() { Text = UiText.Chat };
+    // the strip: the button and the last lines, in two places of the HUD
+    private readonly Button _open = new() { Text = UiText.Chat, Visible = false, SizeFlagsVertical = Control.SizeFlags.ShrinkBegin };
     private readonly RichTextLabel _recent = Log();
+    private bool _flashShown;
 
     // the panel
     private readonly Control _area = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
@@ -47,7 +48,7 @@ public sealed class ChatPanel
     private readonly LineEdit _text = new() { PlaceholderText = UiText.ChatHint, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
     private readonly Button _send = new() { Text = UiText.ChatSend };
     private readonly Button _close = new() { Text = UiText.Close };
-    private readonly HBoxContainer _actions = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+    private readonly HBoxContainer _actions = new() { MouseFilter = Control.MouseFilterEnum.Ignore };   // the selected line's actions, then Close
     private readonly Label _selected = new() { ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
     private readonly Button _whisper = new() { Text = UiText.ChatReply };
     private readonly Button _report = new() { Text = UiText.ChatReport };
@@ -64,21 +65,25 @@ public sealed class ChatPanel
     private float _keyboard = -1;   // the keyboard's height in canvas units last laid out for
     private bool _samples;
 
-    /// <summary>Builds the strip at the top of <paramref name="column"/> (the HUD's centre column) and the panel (closed) into <paramref name="safe"/>.</summary>
-    public ChatPanel(Control safe, VBoxContainer column, ClientSession session, List<Control> interactive, Action tap)
+    /// <summary>
+    /// Builds the Chat button into <paramref name="buttonRow"/> (beside the quest tracker), the last lines into <paramref name="bottom"/> just before <paramref name="before"/> (the flash
+    /// line), and the panel (closed) into <paramref name="safe"/>.
+    /// </summary>
+    public ChatPanel(Control safe, Container buttonRow, VBoxContainer bottom, Control before, ClientSession session, List<Control> interactive, Action tap)
     {
         _session = session;
         _chat = session.Chat;
         _interactive = interactive;
         _tap = tap;
 
-        _strip.AddChild(_open);
-        _strip.AddChild(_recent);
+        buttonRow.AddChild(_open);
+        buttonRow.MoveChild(_open, 0);   // at the left edge, away from the centred hotbar
         _recent.MouseFilter = Control.MouseFilterEnum.Ignore;   // the world's taps go through the lines
         _recent.ScrollFollowing = true;
-        _recent.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        column.AddChild(_strip);
-        column.MoveChild(_strip, 0);
+        _recent.ScrollActive = false;
+        _recent.Visible = false;
+        bottom.AddChild(_recent);
+        bottom.MoveChild(_recent, before.GetIndex());
         _open.Pressed += () => { _tap(); SetOpen(!Open); };
 
         safe.AddChild(_area);
@@ -89,12 +94,13 @@ public sealed class ChatPanel
         _inputRow.AddChild(_to);
         _inputRow.AddChild(_text);
         _inputRow.AddChild(_send);
-        _inputRow.AddChild(_close);
         _box.AddChild(_inputRow);
         _actions.AddChild(_selected);
         _actions.AddChild(_whisper);
         _actions.AddChild(_report);
         _actions.AddChild(_block);
+        _actions.AddChild(_close);   // the second row: with the keyboard up only the input row has to stay above it (the keyboard's own key hides it)
+        SetActions(false);
         _box.AddChild(_actions);
         _box.AddChild(_log);
         _log.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
@@ -171,8 +177,23 @@ public sealed class ChatPanel
     /// <summary>The strip's lines as drawn.</summary>
     public string StripText => _recent.GetParsedText();
 
+    /// <summary>The HUD says whether the flash line (or an announcement) shows now: the last lines take its place only while it does not.</summary>
+    public bool FlashShown
+    {
+        get => _flashShown;
+        set
+        {
+            _flashShown = value;
+            UpdateRecent();
+        }
+    }
+
     /// <summary>Where the panel and its parts are now (for the scripted run's layout line).</summary>
-    public string Layout => $"panel {_panel.GetGlobalRect()}, input {_inputRow.GetGlobalRect()}, text {_text.GetGlobalRect()}, log {_log.GetGlobalRect()}, strip {_strip.GetGlobalRect()}";
+    public string Layout => $"panel {_panel.GetGlobalRect()}, input {_inputRow.GetGlobalRect()}, text {_text.GetGlobalRect()}, log {_log.GetGlobalRect()}, lines {_recent.GetGlobalRect()}";
+
+    /// <summary>Every part of the open panel with its minimum size (for the scripted run's layout line).</summary>
+    public string Sizes => string.Join(", ", new Control[] { _panel, _box, _inputRow, _channel, _to, _text, _send, _actions, _selected, _whisper, _report, _block, _close, _log }
+        .Select(c => $"{c.GetType().Name}{(c as Button)?.Text}{c.GetCombinedMinimumSize()}"));
 
     /// <summary>The panel's rectangle and the text field's (canvas units), for the layout check's keyboard rule.</summary>
     public (Rect2 Panel, Rect2 Field) Rects => (_panel.GetGlobalRect(), _text.GetGlobalRect());
@@ -180,7 +201,7 @@ public sealed class ChatPanel
     /// <summary>The share of the screen's height the layout check pretends the keyboard takes; null: ask the engine.</summary>
     public float? SimulatedKeyboard { get; set; }
 
-    /// <summary>The strip's Chat button and its lines (for the overlap checks).</summary>
+    /// <summary>The Chat button and the last lines (for the overlap checks).</summary>
     public IEnumerable<Control> StripControls => [_open, _recent];
 
     /// <summary>
@@ -191,26 +212,32 @@ public sealed class ChatPanel
     {
         var found = new List<string>();
         if (!Open) return found;
-        foreach (var control in new Control[] { _text, _send, _channel, _close })
+        foreach (var control in new Control[] { _text, _send, _channel })
             if (control.IsVisibleInTree() && control.GetGlobalRect().End.Y > keyboardTop + 0.6f)
                 found.Add($"{control.GetType().Name}\"{(control as Button)?.Text}\" ends at {control.GetGlobalRect().End.Y:0} under the keyboard's top {keyboardTop:0}");
         return found;
     }
 
-    /// <summary>The longest lines in the strip only (the HUD's own samples).</summary>
-    public void ShowStripSamples()
+    /// <summary>The longest lines in the strip only (the HUD's own samples): with <paramref name="lines"/>, in the flash line's place (the HUD hides the flash for that check).</summary>
+    public void ShowStripSamples(bool lines)
     {
         var name = new string('W', Game.Shared.Accounts.CharacterNameRules.LongestAllowed);
-        var lines = new List<ChatEntry>
+        var samples = new List<ChatEntry>
         {
             new(1, ChatChannels.Whisper, 1, name, new string('W', 40) + " " + new string('m', 40), name, false),
             new(2, ChatChannels.Map, 1, name, new string('W', 40) + " " + new string('m', 40), null, false),
         };
-        _strip.Visible = true;
+        _open.Visible = true;
         _open.Text = UiText.ChatUnread;
-        Draw(_recent, lines, 0, meta: false);
+        Draw(_recent, samples, 0, meta: false);
+        _stripSamples = lines;
+        _recent.Visible = lines;
         _shownVersion = _chat.Version;
     }
+
+    private bool _stripSamples;
+
+    private void UpdateRecent() => _recent.Visible = (_open.Visible && !_flashShown && _chat.Lines.Count > 0) || _stripSamples;
 
     /// <summary>Opens or closes the panel; opening marks the log read.</summary>
     public void SetOpen(bool open)
@@ -234,7 +261,7 @@ public sealed class ChatPanel
     {
         var lines = _chat.Lines;
         _selectedEntry = index >= 0 && index < lines.Count && lines[index] is { Mine: false, Line: > 0 } e ? e : null;
-        _actions.Visible = _selectedEntry is not null;
+        SetActions(_selectedEntry is not null);
         if (_selectedEntry is { } entry)
         {
             _selected.Text = UiText.ChatSpeaker(entry.Channel, entry.Name, entry.To);
@@ -270,18 +297,20 @@ public sealed class ChatPanel
             log.AddThemeConstantOverride("line_separation", 0);
         }
         _open.CustomMinimumSize = new Vector2(target, target);
-        _recent.CustomMinimumSize = new Vector2(0, target);   // whatever the column leaves: never wider than it
-        _strip.AddThemeConstantOverride("separation", Mathf.RoundToInt(dp(6)));
+        // Two rows of the log's font, between the HUD's side columns (centred, as the flash text is): a long line shows its end.
+        _recent.CustomMinimumSize = new Vector2(Mathf.Max(dp(48), safeSize.X - 2 * (dp(SideColumnDp) + dp(16))), Mathf.Ceil(font * 1.35f * StripLines));
+        _recent.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
         var gap = Mathf.RoundToInt(dp(6));
         _panelStyle.SetContentMarginAll(dp(8));
         _panelStyle.SetCornerRadiusAll(Mathf.RoundToInt(dp(6)));
         _box.AddThemeConstantOverride("separation", gap);
         _inputRow.AddThemeConstantOverride("separation", gap);
         _actions.AddThemeConstantOverride("separation", gap);
-        _channel.CustomMinimumSize = new Vector2(dp(96), target);
-        _to.CustomMinimumSize = new Vector2(dp(120), target);
-        _text.CustomMinimumSize = new Vector2(dp(120), target);
-        foreach (var button in new[] { _send, _close, _whisper, _report, _block }) button.CustomMinimumSize = new Vector2(dp(88), target);
+        // Narrow enough for the smallest phone at the largest scale: channel, name, text and Send in one row (334 dp at scale 1: it fits a 640x360 dp phone with a notch at scale 1.5), the actions and Close in another.
+        _channel.CustomMinimumSize = new Vector2(dp(80), target);
+        _to.CustomMinimumSize = new Vector2(dp(80), target);
+        _text.CustomMinimumSize = new Vector2(dp(80), target);
+        foreach (var button in new[] { _send, _close, _whisper, _report, _block }) button.CustomMinimumSize = new Vector2(dp(76), target);
         _keyboard = -1;
         _shownVersion = -1;
         Place();
@@ -291,8 +320,9 @@ public sealed class ChatPanel
     public void Refresh(ConnectionPhase phase)
     {
         var online = phase == ConnectionPhase.Online;
-        _strip.Visible = online || _samples;
+        _open.Visible = online || _samples || _stripSamples;
         if (!online && !_samples && Open) SetOpen(false);
+        if (!_stripSamples) UpdateRecent();
         if (Open) Place();
         if (_shownVersion == _chat.Version && !_samples) return;
         _shownVersion = _chat.Version;
@@ -313,7 +343,7 @@ public sealed class ChatPanel
     {
         _samples = true;
         _area.Visible = true;
-        _strip.Visible = true;
+        _open.Visible = true;
         _channel.Text = UiText.ChatChannel(ChatChannels.Whisper);
         _to.Visible = true;
         _to.Text = longName;
@@ -325,7 +355,7 @@ public sealed class ChatPanel
         Draw(_log, samples, 0, meta: true);
         Draw(_recent, samples, samples.Count - StripLines, meta: false);
         _selectedEntry = samples[0];
-        _actions.Visible = true;
+        SetActions(true);
         _selected.Text = UiText.LongestChatSpeaker;
         _keyboard = -1;
         Place();
@@ -335,10 +365,16 @@ public sealed class ChatPanel
     public void ClearSamples()
     {
         _samples = false;
+        _stripSamples = false;
         SimulatedKeyboard = null;
         SetOpen(false);
         Select(-1);
         _shownVersion = -1;
+    }
+
+    private void SetActions(bool shown)
+    {
+        _selected.Visible = _whisper.Visible = _report.Visible = _block.Visible = shown;
     }
 
     private void Send()
@@ -359,10 +395,11 @@ public sealed class ChatPanel
         var height = Mathf.Max(least, Mathf.Min(_safeSize.Y * 2 / 3f, free));
         _area.Position = new Vector2((_safeSize.X - width) / 2, margin);
         _area.Size = new Vector2(width, height);
+        // Minimums first: a size set below the old minimum would be held at it (a larger screen laid out before this one).
+        _log.CustomMinimumSize = new Vector2(0, Mathf.Max(_dp(30), height - 2 * _target - 3 * _dp(6) - 2 * _dp(8) - 1));
+        _panel.CustomMinimumSize = new Vector2(width, height);
         _panel.Position = Vector2.Zero;
         _panel.Size = new Vector2(width, height);
-        _panel.CustomMinimumSize = new Vector2(width, height);
-        _log.CustomMinimumSize = new Vector2(0, Mathf.Max(_dp(30), height - 2 * _target - 3 * _dp(6) - 2 * _dp(8) - 1));
     }
 
     private static void Draw(RichTextLabel label, IReadOnlyList<ChatEntry> lines, int from, bool meta)

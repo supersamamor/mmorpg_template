@@ -91,6 +91,7 @@ public sealed class Hud
         Visible = false, Alignment = HorizontalAlignment.Left, AutowrapMode = TextServer.AutowrapMode.Off, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
         SizeFlagsHorizontal = Control.SizeFlags.ShrinkBegin,
     };
+    private readonly HBoxContainer _trackerRow = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private int _questVersion = -1;
     // The autopilot indicator (T-605): in the centre column under the target frame, so no other part of the top row can cover it and it covers none. It shows only while a run is
     // on or paused: what it does and the quest, or why it waits and what to do about it. A touch target; a tap stops the run. Trimmed to the column like the tracker.
@@ -183,7 +184,8 @@ public sealed class Hud
         _left.AddChild(_spBar);
         _left.AddChild(_expBar);
         _left.AddChild(_statusRow);
-        _left.AddChild(_tracker);
+        _left.AddChild(_trackerRow);   // T-901: the Chat button beside the tracker, so it takes no row of its own
+        _trackerRow.AddChild(_tracker);
         _tracker.Pressed += () => { Tap(); _questPanel?.SetOpen(!_questPanel.Open); };
 
         _banner.Visible = false;
@@ -275,7 +277,7 @@ public sealed class Hud
             _bag!.ShowWardrobe = () => _wardrobe.SetOpen(true);
         }
         if (session is not null && bundle is not null) _questPanel = new QuestPanel(_safe, session, bundle, _interactive, Tap);
-        if (session is not null) _chatPanel = new ChatPanel(_safe, _center, session, _interactive, Tap);
+        if (session is not null) _chatPanel = new ChatPanel(_safe, _trackerRow, _bottom, _flash, session, _interactive, Tap);
         if (session is not null)
         {
             _statsPanel = new StatsPanel(_safe, session, _interactive, Tap);
@@ -385,12 +387,20 @@ public sealed class Hud
         _tracker.Visible = true;
         _autopilot.Text = UiText.AutopilotPausedTitle + "\n" + UiText.AutopilotPause(AutopilotPauses.NeedsEquip, longName + " of the Far Northern Reaches");
         _autopilot.Visible = true;
-        _chatPanel?.ShowStripSamples();   // T-901: the strip with its longest lines, above the flash line
+        if (SampleChatLines)   // T-901: the last chat lines in the flash line's place, which they take only while no flash or announcement shows
+        {
+            SetText(_flash, string.Empty);
+            SetText(_announcement, string.Empty);
+        }
+        _chatPanel?.ShowStripSamples(SampleChatLines);
         ShowInfo(longName, UiText.EntityKind(EntityKinds.Item, true), new Vector2((float)_metrics.CanvasWidth, (float)_metrics.CanvasHeight));
     }
 
     /// <summary>For the layout check (T-806): <see cref="ShowSamples"/> shows the longest announcement in place of the longest flash line.</summary>
     public bool SampleAnnouncement { get; set; }
+
+    /// <summary>For the layout check (T-901): <see cref="ShowSamples"/> shows the longest chat lines in place of the flash line.</summary>
+    public bool SampleChatLines { get; set; }
 
     /// <summary>Draws everything again from the model on the next <see cref="Refresh"/>.</summary>
     public void ForceRefresh()
@@ -668,7 +678,11 @@ public sealed class Hud
         _questPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _chatPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _window.Size.Y > 0 ? (float)(metrics.CanvasHeight / _window.Size.Y) : 1f,
             (float)metrics.CanvasHeight);
-        _tracker.CustomMinimumSize = new Vector2(Dp(LeftColumnDp), buttonHeight);
+        // The tracker shares its row with the Chat button (T-901): together they are the left column's width.
+        _trackerRow.AddThemeConstantOverride("separation", Mathf.RoundToInt(Dp(4)));
+        // The tracker takes what the button leaves (at least a touch target), so the row is never wider than the column and the column never wider than before.
+        _tracker.CustomMinimumSize = new Vector2(_chatPanel is null ? Dp(LeftColumnDp) : buttonHeight, buttonHeight);
+        _tracker.SizeFlagsHorizontal = _chatPanel is null ? Control.SizeFlags.ShrinkBegin : Control.SizeFlags.ExpandFill;
         // Compact, and never wider than the centre column (a wider minimum would push the right column off the safe area).
         var column = (float)safe.Width - 4 * margin - Dp(LeftColumnDp) - Dp(RightColumnDp);
         _autopilot.CustomMinimumSize = new Vector2(Mathf.Clamp(column, 0, Dp(AutopilotMaxWidthDp)), buttonHeight);
@@ -801,6 +815,7 @@ public sealed class Hud
             _tracker.Text = _session.Quests.TrackerText(_bundle);
         }
         _questPanel?.Refresh();
+        if (_chatPanel is not null && !SampleChatLines) _chatPanel.FlashShown = _flash.Visible || _announcement.Visible;
         _chatPanel?.Refresh(connection.Phase);
         RefreshAutopilot();
     }
@@ -1004,7 +1019,13 @@ public sealed class Hud
         {
             if (!mine.IsVisibleInTree()) continue;
             var rect = mine.GetGlobalRect().Grow(-0.6f);
-            foreach (var control in _slots.Cast<Control>().Concat([_skillsButton, _bagButton, _logout, _uiSize, _soundButton, _flash, _announcement, _levels, _hpText, _spText, _statusRow, _tracker, _targetFrame, _autopilot, _connection, _banner]))
+            // The Chat button sits in the tracker's row, so it is held to the tracker's rule: the other buttons, the read-outs and the target frame, not the full-width flash and
+            // announcement boxes (their text is centred). The last lines take the flash line's place, and are held to its rule: no button, the tracker, the read-outs, the autopilot;
+            // the centre column's texts (target frame, banner) may meet them on a 360 dp phone at scale 1.5, as the longest flash line (three rows there, the lines two) meets them.
+            IEnumerable<Control> others = mine is Button
+                ? [_skillsButton, _bagButton, _logout, _uiSize, _soundButton, _levels, _hpText, _spText, _statusRow, _tracker, _targetFrame, _autopilot, _connection, _banner]
+                : [_skillsButton, _bagButton, _logout, _uiSize, _soundButton, _levels, _hpText, _spText, _statusRow, _tracker, _autopilot, _connection];
+            foreach (var control in _slots.Cast<Control>().Concat(others))
                 if (control.IsVisibleInTree() && rect.Intersects(control.GetGlobalRect()))
                     found.Add($"{mine.GetType().Name} covers {control.GetType().Name}\"{(control as Button)?.Text ?? (control as Label)?.Text}\" {Describe(control.GetGlobalRect())}");
         }

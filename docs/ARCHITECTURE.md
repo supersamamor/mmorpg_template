@@ -802,11 +802,13 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
 - **Budgets (§9).** The HUD is about 40 nodes and adds about 24 draw calls (windowed measurement, T-211 report); the frame cap is 30 fps and the HUD does work only when
   a version counter changes, plus one size comparison per frame and one comparison while no finger is down.
 
-- **Chat** (T-901, §10 "Chat"): the strip sits at the top of the centre column, above the target frame (one button tall, only while playing; the log gets what width is left). The bottom of a
-  640x360 dp phone at UI scale 1.25 and 1.5 has no row to spare: a strip there covered the left column's read-outs in the layout check. The panel opens at the top of the safe area
-  so the on-screen keyboard, which comes up from the bottom, never covers the field being typed in: each frame the keyboard's height changes, the panel is cut to what is left
-  (`DisplayServer.VirtualKeyboardGetHeight`). The layout check runs the strip in every "playing" combination (it must lie over no other part of the HUD) and the open panel with its
-  longest lines with and without a keyboard taking 60% of the screen's height (the field, Send, the switch and Close must stay above it).
+- **Chat** (T-901, §10 "Chat"): the Chat button sits beside the quest tracker in the left column (the two share the column's width, so it adds no row), and the last two lines take the
+  flash line's place at the bottom while no flash or announcement shows (as T-806's announcements share it; they take no touches). A 640x360 dp phone at UI scale 1.25 and 1.5 has no row to
+  spare: the layout check found a strip above the flash line covering the left column's read-outs, and one at the top of the centre column pushing it off the screen. The panel opens at the
+  top of the safe area so the on-screen keyboard, which comes up from the bottom, never covers the field being typed in: each frame the keyboard's height changes, the panel is cut to what
+  is left (`DisplayServer.VirtualKeyboardGetHeight`). The layout check runs the button in every "playing" combination, the last lines in the flash line's place ("chat lines shown"), and the
+  open panel with its longest lines with and without a keyboard taking 60% of the screen's height (the field, Send, the switch and Close must stay above it); nothing of it may lie over
+  another part of the HUD.
 
 ### 7.5 Characters & equipment
 Modular 3D characters. Each body type has one shared rig. Equipment is either:
@@ -1446,7 +1448,7 @@ still well inside 150k. Not run on a phone (ADR-002 row 112).
   - **Settings**: `ChatOptions`, server configuration (`--chat-<name>` or `GAME_CHAT_<NAME>`): `max-length` 120, `marks-per-letter` 3, `lines-per-minute` 20, `burst` 5, `block-limit` 100,
     `report-window-seconds` 600, `reportable-lines-per-player` 200, `recent-lines-max` 20,000, `closed-report-days` 30. The server refuses to start when `max-length` cannot fit the gateway's
     `max-message-bytes` (a code unit may take six bytes escaped).
-  - **The panel** (§7.4): a strip at the top of the HUD's centre column (the Chat button and the last two lines, which take no touches) and, opened by it, a panel at the top of the safe area with the input
+  - **The panel** (§7.4): the Chat button beside the quest tracker, the last two lines in the flash line's place while no flash or announcement shows (they take no touches), and, opened by the button, a panel at the top of the safe area with the input
     first and the log below, cut to what the on-screen keyboard leaves. The log is one `RichTextLabel` without BBCode: names (the server's, a colour per channel) and texts go in with
     `AddText`, so nothing a player typed can colour, style or move a name. A tap on a name gives Whisper, Report and Block (or Unblock).
 - **Client resume flow** (for T-206):

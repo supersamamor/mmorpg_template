@@ -18,6 +18,8 @@ public sealed class UiRuns
 {
     private const string LongName = "Extraordinarily Long Monster Name";
 
+    private bool _chatSizesShown;
+
     private readonly Main _main;
     private readonly string? _screenshot;
 
@@ -45,6 +47,9 @@ public sealed class UiRuns
         Hud.SampleAnnouncement = true;   // T-806: the longest announcement, where the flash line is while it shows
         await LayoutMatrixAsync("announcement shown");
         Hud.SampleAnnouncement = false;
+        Hud.SampleChatLines = true;   // T-901: the last chat lines, where the flash line is while none shows
+        await LayoutMatrixAsync("chat lines shown");
+        Hud.SampleChatLines = false;
         await PanelsLayoutAsync();
         Hud.SetScale(originalScale, false);
         Hud.ForceRefresh();
@@ -297,6 +302,11 @@ public sealed class UiRuns
                     await FramesAsync(combinations == 0 ? 6 : 3);
                     combinations++;
                     foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: {problem}");
+                    if (failures.Count > 0 && Hud.Chat is { Open: true } open && !_chatSizesShown)
+                    {
+                        _chatSizesShown = true;
+                        Print($"layout: chat panel parts at {screen.Name}, scale {scale}: {open.Sizes}");
+                    }
                     // The quest tracker, long and one-line, must lie over no other HUD button or the target frame (T-406, T-408): a failure, not a note.
                     foreach (var name in Hud.TrackerOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the long quest tracker covers {name}");
                     // The autopilot indicator (T-605), paused with its longest line, must lie over nothing; the plain running one is shorter and trimmed the same way.
