@@ -52,6 +52,16 @@ public sealed class GuildBook
     /// <summary>The last news or refusal, as words.</summary>
     public string? Notice { get; private set; }
 
+    /// <summary>The guild's storage as last sent (T-905), or null before it was opened.</summary>
+    public GuildStorageMessage? Storage { get; private set; }
+
+    /// <summary>The storage as it is now (the answer to opening it and to every move that landed).</summary>
+    public void Apply(GuildStorageMessage storage)
+    {
+        Storage = storage;
+        Version++;
+    }
+
     /// <summary>May this character's rank do <paramref name="permission"/>? (Only for what the panel shows.)</summary>
     public bool May(string permission) => InGuild && GuildRules.Has(State.Ranks, OwnRank, permission);
 
@@ -72,6 +82,7 @@ public sealed class GuildBook
         if (guild.Guild is null)
         {
             SeenNotice = string.Empty;
+            Storage = null;   // T-905: out of the guild, no storage
             return null;
         }
         if (guild.Notice.Length == 0 || guild.Notice == SeenNotice)
@@ -130,6 +141,7 @@ public sealed class GuildBook
     public void Clear()
     {
         State = GuildMessage.None;
+        Storage = null;
         Invite = null;
         Notice = null;
         SeenNotice = string.Empty;

@@ -36,6 +36,7 @@ public sealed class GuildPanel
     private readonly TextureRect _emblem = new() { ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered, MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly Label _title = new() { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis };
     private readonly Button _leave = new() { Text = UiText.GuildLeave };
+    private readonly Button _storage = new() { Text = UiText.GuildStorage };   // T-905
     private readonly Button _close = new() { Text = UiText.Close };
     private readonly ScrollContainer _scroll = new() { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
     private readonly VBoxContainer _list = new() { MouseFilter = Control.MouseFilterEnum.Ignore, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
@@ -86,6 +87,7 @@ public sealed class GuildPanel
         _panel.AddChild(_box);
         _head.AddChild(_emblem);
         _head.AddChild(_title);
+        _head.AddChild(_storage);
         _head.AddChild(_leave);
         _head.AddChild(_close);
         _box.AddChild(_head);
@@ -123,6 +125,7 @@ public sealed class GuildPanel
 
         _close.Pressed += () => { _tap(); SetOpen(false); };
         _leave.Pressed += () => { _tap(); _session.LeaveGuild(); };
+        _storage.Pressed += () => { _tap(); OpenStorage?.Invoke(); };
         _found.Pressed += () => { _tap(); FoundTyped(); };
         _invite.Pressed += () => { _tap(); InviteTyped(); };
         _name.TextSubmitted += _ => { if (_guild.InGuild) InviteTyped(); else FoundTyped(); };
@@ -135,8 +138,14 @@ public sealed class GuildPanel
         _noticeSave.Pressed += () => { _tap(); _session.WriteGuildNotice(_noticeField.Text); _noticeField.ReleaseFocus(); };
         _accept.Pressed += () => { _tap(); _session.AnswerGuild(true); };
         _decline.Pressed += () => { _tap(); _session.AnswerGuild(false); };
-        foreach (var control in new Control[] { _panel, _close, _leave, _name, _found, _invite, _inviteTapped, _noticeField, _noticeSave, _prompt, _accept, _decline }) _interactive.Add(control);
+        foreach (var control in new Control[] { _panel, _close, _leave, _storage, _name, _found, _invite, _inviteTapped, _noticeField, _noticeSave, _prompt, _accept, _decline }) _interactive.Add(control);
     }
+
+    /// <summary>Opens the guild storage window (T-905; the HUD's).</summary>
+    public Action? OpenStorage { get; set; }
+
+    /// <summary>Storage (T-905).</summary>
+    public Button StorageButton => _storage;
 
     /// <summary>Finds an emblem's texture by asset key (set once the theme is loaded).</summary>
     public Func<string, Texture2D?>? IconLoader { get; set; }
@@ -212,7 +221,7 @@ public sealed class GuildPanel
             style.SetCornerRadiusAll(Mathf.RoundToInt(dp(6)));
         }
         foreach (var box in new BoxContainer[] { _box, _head, _list, _picker, _noticeRow, _bottom, _promptRow }) box.AddThemeConstantOverride("separation", gap);
-        foreach (var button in new[] { _close, _leave, _found, _invite, _noticeSave, _accept, _decline }) button.CustomMinimumSize = new Vector2(dp(72), target);
+        foreach (var button in new[] { _close, _leave, _storage, _found, _invite, _noticeSave, _accept, _decline }) button.CustomMinimumSize = new Vector2(dp(72), target);
         foreach (var button in _emblemButtons) button.CustomMinimumSize = new Vector2(target, target);
         _inviteTapped.CustomMinimumSize = new Vector2(dp(96), target);
         _name.CustomMinimumSize = new Vector2(dp(96), target);
@@ -313,7 +322,7 @@ public sealed class GuildPanel
         _emblem.Visible = inGuild;
         _emblem.Texture = inGuild ? Icon(state.Emblem) : null;
         _title.Text = inGuild ? UiText.GuildTitle(state.Name, state.Members.Count, state.Members.Count(m => m.Online)) : UiText.Guild;
-        _leave.Visible = inGuild;
+        _leave.Visible = _storage.Visible = inGuild;
         _empty.Visible = _picker.Visible = !inGuild;
         _found.Visible = !inGuild;
         _name.PlaceholderText = inGuild ? UiText.GuildInviteHint : UiText.GuildNameHint;
