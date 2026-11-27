@@ -116,7 +116,10 @@ public static class TestCombat
         var tables = sample.Drops.All.ToDictionary(d => d.Id, StringComparer.Ordinal);
         foreach (var d in drops ?? []) tables[d.Id] = d;
         return new CombatContent(CombatRules.Compile(sample.Formulas, sample.Elements, balance.Combat), catalog, balance, tables,
-            new ContentProgression(sample), respawns);
+            new ContentProgression(sample), respawns)
+        {
+            PartyExp = Game.Shared.Party.PartyExpRule.Of(sample.Formulas, balance),   // T-902: the sample's party_exp
+        };
     }
 }
 
@@ -137,7 +140,7 @@ public sealed class CombatRig
         bool ai = false, ulong seed = 1, AiBalanceDef? aiBalance = null, int bucketSize = 4, int viewRadius = 1,
         Func<ITickSystem, ITickSystem>? wrap = null, bool aoi = false, IReadOnlyDictionary<string, (string MapId, GridCell Cell)>? respawns = null,
         int maxVisible = int.MaxValue, int capHysteresis = 0, CapReservations reservations = default, Game.Shared.Effects.EffectLibrary? effects = null,
-        MapGrid[]? moreMaps = null)
+        MapGrid[]? moreMaps = null, Game.Server.World.Party.PartyRoster? parties = null)
     {
         _mapId = grid.MapId;
         Catalog = effects is null ? TestMonsters.Catalog(monsters.ToArray()) : new MonsterCatalog(monsters.ToArray(), TestMonsters.Catalog().CreateStats, effects);
@@ -148,7 +151,8 @@ public sealed class CombatRig
             .Add(() => wrap(new MovementSystem(TestGrids.Roomy)))
             .Add(() => wrap(new MonsterSpawnerSystem(Catalog, Content.Balance.Death.CorpseMs)));
         if (ai) pipeline.Add(() => wrap(new MonsterAiSystem(Catalog, timings, bucketSize, viewRadius)));
-        pipeline.Add(() => wrap(new CombatSystem(Content, Progressions)));
+        pipeline.Add(() => wrap(new CombatSystem(Content, Progressions, null, parties)));
+        if (parties is not null) pipeline.Add(() => new Game.Server.World.Party.PartySystem(parties, Content.Balance.Party, 1));   // T-902
         if (aoi) pipeline.Add(() => new AoiSystem(bucketSize, viewRadius, maxVisible, capHysteresis, reservations));
         World = new GameWorld([grid, .. moreMaps ?? []], pipeline, seed, new ManualClock(), Log);
         Instance.Events.SubscribeAll(e => Events.Add((Instance.TickNumber, e)));

@@ -289,7 +289,8 @@ Any reason other than `finished` ends the services the dialogue opened too.
 `QuestProgressed`, `QuestAbandoned`, `QuestRefused`, `QuestItemsRequested`, `QuestItemsResolved`, `QuestRewardsRequested`, `QuestRewarded`, `QuestMarkersChanged`,
 `AutopilotChanged`, `AutopilotRefused`,
 `OutfitGranted`, `WardrobeChanged`, `OutfitRefused`,
-`AdminActionApplied` (on the admin event bus, not an instance's: T-804)
+`AdminActionApplied` (on the admin event bus, not an instance's: T-804),
+`PartyKillCredit` (T-902: party members alive, on the instance and within `party.kill_credit_range` of a kill, who had no kill credit of their own; the quest system counts their `kill` objectives)
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -386,13 +387,17 @@ The reward type is also `currency`. Per character, kept and saved with the bag (
 Caster: `base_level`, `job_level`, all primary & derived stat ids, `weapon_atk`, `refine`
 Target: `t_` prefix (e.g. `t_def`, `t_vit`, `t_level`)
 Skill: `level` (skill level)
+Party EXP share only (T-902, `formulas.yaml` `party_exp`, and nothing else in it): `exp` (the party's part of a kill's base or job EXP), `share_count` (how many members share it),
+`level_spread` (the highest base level of those members minus the lowest).
 Balance-only: `stat_value` (current value of the stat being raised) is valid only in `balance.yaml` `progression.stat_point_cost`; `progression.stat_points_per_base_level` may use only `base_level`, `progression.skill_points_per_job_level` only `job_level`.
 Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`, `set_outfit`, `chat`, `block`, `unblock`, `report`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`, `announcement`, `chat_line`, `chat_refused`, `chat_state`, `chat_reported`, `pong`, `bye`
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`, `set_outfit`, `chat`, `block`, `unblock`, `report`, `party_invite`, `party_answer`, `party_leave`, `party_kick`, `party_lead`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`, `announcement`, `chat_line`, `chat_refused`, `chat_state`, `chat_reported`, `party`, `party_members`, `party_invited`, `party_notice`, `party_refused`, `pong`, `bye`
+Party (T-902): client → server `party_invite`, `party_answer`, `party_leave`, `party_kick`, `party_lead`; server → client `party`, `party_members`, `party_invited`, `party_notice`,
+`party_refused`. Only to the members: `party`, `party_members`; only to the invited: `party_invited`; own only: `party_refused`.
 Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`; and (T-901) `chat_refused`, `chat_state`, `chat_reported`. A `chat_line` goes to everyone the line reaches, its sender included.
 
 ## Bye reasons
@@ -465,7 +470,8 @@ A request that came in through support (T-806, `support_requests`): `deletion` (
 The `kind` of an `announcement` (T-806): `staff` (staff's words in `text`, at most 80 characters), `maintenance` (every game here ends, saved, in `in` seconds).
 
 ## Chat channels
-Where a chat line goes (T-901, ARCHITECTURE §10 "Chat"): `map` (every playing character on the sender's map instance), `whisper` (one playing character, named by the sender), `system` (the server's own
+Where a chat line goes (T-901, ARCHITECTURE §10 "Chat"): `map` (every playing character on the sender's map instance), `whisper` (one playing character, named by the sender), `party` (T-902: the
+members of the sender's party who play now; registered by the party service through the seam), `system` (the server's own
 lines: no player sends on it; the client lists staff's announcements under it). A channel whose members something else supplies (a party, T-902; a guild, T-904) is one more term here and
 one `IChannelMembers` registered with the chat service; chat does not change.
 
@@ -481,6 +487,22 @@ account), `unknown_character`, `already_blocked`, `not_blocked`, `block_limit`, 
 ## Chat terms
 (T-901.) **Line**: what one player said once, cleaned by the server, with a number the server gives it (`line`). **Block**: an account no longer hears a character (`chat_blocks`). **Report**:
 a player's report of a line it received; the server stores its own copy of the line (`chat_reports`). **Recent lines**: the lines kept in server memory for a while so they can be reported.
+
+## Party reasons
+The `reason` of a `party_refused` (T-902, ARCHITECTURE §6.9): `not_online` (nobody of that name plays now, a tapped player is not on the inviter's map, or the invited blocks the inviter: the
+same answer, so a block does not show; for `party_lead`, the member is away), `invalid_target` (oneself), `full` (`party.max_members`), `already_in_party`, `invite_pending` (the invited has an
+invite it has not answered), `not_leader` (only the leader invites, kicks and hands over), `not_in_party`, `no_invite` (nothing to answer: none came, it expired, or its inviter left),
+`rate_limited` (with `retry_after`).
+
+## Party notices
+The `notice` of a `party_notice` (T-902): `invite_sent`, `declined`, `expired`, `joined`, `left` (by itself, or at the end of its grace period), `kicked`, `leader` (a new leader),
+`disbanded` (one member was left, so the party ended).
+
+## Party terms
+(T-902.) **Party**: up to `party.max_members` characters that share kills and a chat channel; it lives in one server process's memory and is never stored. **Leader**: the member who invites,
+kicks and hands over; when it leaves, the earliest-joined member who plays now. **Invite**: one pending question to one character, ending after `party.invite_timeout_ms`. **Away**: a member in
+its disconnect grace period; still a member until the grace period ends. **Sharing a kill**: the members alive, on the kill's map instance and within `party.exp_range` of the death cell, whose
+base levels differ by at most `party.exp_level_gap`. **Members' state**: the others' HP and SP (whole percent), map and cell, sent to members only.
 
 ## Admin terms
 (T-804, ARCHITECTURE §12.) **Admin API**: the server's private HTTP listener for staff tooling, on its own port. **Service credential**: the secret that proves a request comes from the panel.

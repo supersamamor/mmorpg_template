@@ -20,7 +20,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
 {
     /// <summary>Usage text.</summary>
     public const string Usage =
-        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--save-interval <seconds>] [--save-shutdown-wait <seconds>] [--account-erase-days <days>] [--net-<name> <value> ...] [--admin-<name> <value> ...] [--chat-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
+        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--save-interval <seconds>] [--save-shutdown-wait <seconds>] [--account-erase-days <days>] [--net-<name> <value> ...] [--admin-<name> <value> ...] [--chat-<name> <value> ...] [--party-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
 
     /// <summary>The environment name that enables development mode (plain ws:// on loopback, the dev login).</summary>
     public const string DevelopmentName = "Development";
@@ -57,6 +57,9 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
     /// <summary>The <c>--chat-</c> options and their values, in order, for <see cref="Game.Server.Chat.ChatOptions.Parse"/> (T-901).</summary>
     public IReadOnlyList<string> ChatArgs { get; init; } = NoArgs;
 
+    /// <summary>The <c>--party-</c> options and their values, in order, for <see cref="Game.Server.Party.PartyOptions.Parse"/> (T-902).</summary>
+    public IReadOnlyList<string> PartyArgs { get; init; } = NoArgs;
+
     /// <summary>The environment name in effect: <see cref="Environment"/>, else <paramref name="environmentVariable"/>, else <c>Production</c>.</summary>
     public string EnvironmentName(string? environmentVariable) =>
         Environment ?? (string.IsNullOrWhiteSpace(environmentVariable) ? "Production" : environmentVariable);
@@ -77,6 +80,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         var net = new List<string>();
         var admin = new List<string>();
         var chat = new List<string>();
+        var party = new List<string>();
         error = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -112,6 +116,10 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                         chat.Add(arg);
                         chat.Add(Value());
                         break;
+                    case var _ when arg.StartsWith(Game.Server.Party.PartyOptions.ArgPrefix, StringComparison.Ordinal):
+                        party.Add(arg);
+                        party.Add(Value());
+                        break;
                     default:
                         if (arg.StartsWith("--", StringComparison.Ordinal) || content is not null) throw new FormatException($"unexpected argument '{arg}'");
                         content = arg;
@@ -135,6 +143,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
             NetArgs = net.Count == 0 ? NoArgs : net,
             AdminArgs = admin.Count == 0 ? NoArgs : admin,
             ChatArgs = chat.Count == 0 ? NoArgs : chat,
+            PartyArgs = party.Count == 0 ? NoArgs : party,
         };
     }
 
@@ -162,7 +171,8 @@ public static class ServerPipeline
     /// swing. The quest system (T-602) comes after the inventory: it reacts to the previous tick's events (kills, uses, talks, bag changes) and its turn-ins go to the
     /// inventory and combat as events, applied on their next tick. The outfit system (T-708) only says what
     /// others see, so its place does not matter. The autopilot (T-604) comes after all of them: it looks at what this tick made of
-    /// the world and queues intents, which the systems get in the next tick like a player's. The admin system (T-804) runs the steps of admin commands
+    /// the world and queues intents, which the systems get in the next tick like a player's. The party system (T-902) reports its members' state and turns a kill into party kill credit
+    /// (an event, which the quest system counts on its next tick), so its place does not matter either; it follows the quests. The admin system (T-804) runs the steps of admin commands
     /// after every game system, so a step sees this tick's world and what it changes is in this tick's view messages. The AOI does
     /// its work in phase 5 (outbound), after every system, so its place in the list only orders its intents; it is last.
     /// </summary>
@@ -170,7 +180,8 @@ public static class ServerPipeline
     /// them from elsewhere too (the gateway's own <c>exp</c> and <c>inventory</c> messages). <paramref name="clock"/> times item cooldowns. With a <paramref name="keeper"/> (T-702, over the
     /// same stores) saved characters are copied for their saves in phase 5, after the AOI.</remarks>
     public static SystemPipeline Create(ContentDatabase content, IPlayerProgressionStore? progressions = null, IInventoryStore? inventories = null,
-        Game.Shared.Time.IClock? clock = null, ISavePointStore? savePoints = null, CharacterKeeper? keeper = null)
+        Game.Shared.Time.IClock? clock = null, ISavePointStore? savePoints = null, CharacterKeeper? keeper = null, Game.Server.World.Party.PartyRoster? parties = null,
+        int partyStatusTicks = 10)
     {
         var balance = content.Balance;
         var monsters = MonsterCatalog.From(content);
@@ -180,6 +191,7 @@ public static class ServerPipeline
         var combat = CombatContent.From(content, monsters);   // and the combat, death and loot numbers
         var items = InventoryContent.From(content);            // and the inventory numbers and item modifiers
         progressions ??= new InMemoryProgressionStore();
+        parties ??= new Game.Server.World.Party.PartyRoster();   // T-902: the party service writes it; without one nobody is ever in a party
         inventories ??= new InMemoryInventoryStore();
         clock ??= new SystemClock();
         savePoints ??= new InMemorySavePointStore();
@@ -193,9 +205,10 @@ public static class ServerPipeline
             .Add(() => new MonsterSpawnerSystem(monsters, balance.Death.CorpseMs))
             .Add(() => MonsterAiSystem.Create(monsters, balance))
             .Add(() => new DialogueSystem(dialogue, savePoints, progressions, inventories))
-            .Add(() => new CombatSystem(combat, progressions, savePoints))
+            .Add(() => new CombatSystem(combat, progressions, savePoints, parties))
             .Add(() => new InventorySystem(items, inventories, clock, progressions, shops))
             .Add(() => new QuestSystem(quests, progressions, inventories))
+            .Add(() => new Game.Server.World.Party.PartySystem(parties, balance.Party, partyStatusTicks))
             .Add(() => new OutfitSystem(outfits, progressions))
             .Add(() => new AutopilotSystem(autopilot, progressions, clock))
             .Add(() => new Game.Server.World.Admin.AdminSystem())

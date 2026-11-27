@@ -7,6 +7,7 @@ using Game.Server.Admin;
 using Game.Server.Chat;
 using Game.Server.Hosting;
 using Game.Server.Net;
+using Game.Server.Party;
 using Game.Server.Persistence;
 using Game.Server.World;
 using Game.Server.World.Combat;
@@ -22,6 +23,7 @@ if (options is null)
     Console.Error.WriteLine(GatewayOptions.Usage);
     Console.Error.WriteLine(AdminOptions.Usage);
     Console.Error.WriteLine(ChatOptions.Usage);
+    Console.Error.WriteLine(PartyOptions.Usage);
     return 2;
 }
 
@@ -51,6 +53,14 @@ if (chatOptions is null)
     return 2;
 }
 
+var partyOptions = PartyOptions.Parse(options.PartyArgs, Environment.GetEnvironmentVariable, out var partyError);   // T-902
+if (partyOptions is null)
+{
+    Console.Error.WriteLine(partyError);
+    Console.Error.WriteLine(PartyOptions.Usage);
+    return 2;
+}
+
 var log = new CountingLog(new ConsoleLog()); // the admin API's status reports its counts
 var startedAt = DateTime.UtcNow;
 log.Info($"Environment: {environmentName}{(development ? " (development: ws:// on loopback, dev login enabled)" : "")}");
@@ -74,7 +84,8 @@ catch (DatabaseException e)
 }
 if (options.Migrate) return 0;
 
-var netProblems = netOptions.Problems().Concat(chatOptions.Problems(netOptions.MaxMessageBytes).Select(p => "chat: " + p)).ToList();
+var netProblems = netOptions.Problems().Concat(chatOptions.Problems(netOptions.MaxMessageBytes).Select(p => "chat: " + p))
+    .Concat(partyOptions.Problems().Select(p => "party: " + p)).ToList();
 if (netProblems.Count > 0)
 {
     foreach (var problem in netProblems) log.Error("Gateway: " + problem);
@@ -125,7 +136,8 @@ if (database is not null)
 var inventories = new InMemoryInventoryStore(saves is null ? null : saves.NextItemId); // the inventory writes it; the gateway reads it for each player's own inventory messages
 var savePoints = new InMemorySavePointStore();
 var keeper = saves is null ? null : new CharacterKeeper(saves, progressions, inventories, savePoints, clock, TimeProvider.System);
-var pipeline = ServerPipeline.Create(content, progressions, inventories, clock, savePoints, keeper); // more systems plug in in ServerPipeline: spawns (T-301), combat, ...
+var parties = new Game.Server.World.Party.PartyRoster();   // T-902: the party service writes who is in which party; combat and every instance's party system read it
+var pipeline = ServerPipeline.Create(content, progressions, inventories, clock, savePoints, keeper, parties, partyOptions.StatusIntervalTicks); // more systems plug in in ServerPipeline: spawns (T-301), combat, ...
 var world = new GameWorld(content.Grids.Values, pipeline, seed, clock, log) { Keeper = keeper };
 var runners = world.Instances.Select(i => new InstanceRunner(i, clock, log, !options.LegacyTimer)).ToList();
 var contentHash = ClientBundleExporter.Hash(content); // the display bundle's hash: a client packed with another one must update (ARCHITECTURE §5.4)
@@ -145,6 +157,11 @@ if (accounts is not null && checks is not null) accounts.BanOf = checks.BanOfAsy
 var chatStore = database is null ? null : new PostgresChatStore(database);
 await using var chat = new ChatService(chatOptions, gateway, chatStore, checks is null ? null : checks.SpeakAsync, TimeProvider.System, log, chatStore);
 gateway.Chat = chat;
+// T-902: parties, in this process's memory only; the party channel goes through chat's seam.
+await using var party = new PartyService(content.Balance.Party, partyOptions, parties, new GatewayPartyDirectory(gateway, chat), TimeProvider.System, log);
+chat.Register(Game.Shared.Vocabulary.ChatChannels.Party, party);
+gateway.Party = party;
+party.Start();
 GatewayHost host;
 try
 {

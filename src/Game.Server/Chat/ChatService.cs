@@ -249,8 +249,8 @@ public sealed class ChatService : IAsyncDisposable
             Recent.Keep(new SaidLine(line.Line, channel, speaker.AccountId, speaker.CharacterId, text, _time.GetUtcNow().UtcDateTime), reached);
     }
 
-    /// <summary>True when <paramref name="listener"/>'s account blocks <paramref name="speaker"/>'s character.</summary>
-    private bool Blocks(ChatPeer listener, ChatPeer speaker) =>
+    /// <summary>True when <paramref name="listener"/>'s account blocks <paramref name="speaker"/>'s character. Any thread; reads only the lists in memory (T-902: a party invite asks it too).</summary>
+    public bool Blocks(ChatPeer listener, ChatPeer speaker) =>
         speaker.CharacterId is { } character && listener.AccountId is { } account && _blocks.TryGetValue(account, out var list) && list.Has(character);
 
     // ---- blocks ----------------------------------------------------------------------------------------------------------------------------

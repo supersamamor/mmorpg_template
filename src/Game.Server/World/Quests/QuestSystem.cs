@@ -125,6 +125,7 @@ public sealed class QuestSystem : ITickSystem
         var events = _instance.Events;
         events.Subscribe<QuestStartRequested>(e => _events.Add(e));
         events.Subscribe<MonsterKilled>(e => _events.Add(e));
+        events.Subscribe<Party.PartyKillCredit>(e => _events.Add(e));   // T-902: a party member's kill nearby
         events.Subscribe<ItemUsed>(e => _events.Add(e));
         events.Subscribe<ItemEquipped>(e => _events.Add(e));
         events.Subscribe<NpcTalked>(e => _events.Add(e));
@@ -160,6 +161,9 @@ public sealed class QuestSystem : ITickSystem
             case QuestStartRequested start: Start(start.Player, start.QuestId); break;
             case MonsterKilled killed:
                 for (var i = 0; i < killed.Credited.Count; i++) Count(killed.Credited[i], p => _rules.OnKill(p, killed.MonsterId));
+                break;
+            case Party.PartyKillCredit shared:
+                for (var i = 0; i < shared.Members.Count; i++) Count(shared.Members[i], p => _rules.OnKill(p, shared.MonsterId));
                 break;
             case ItemUsed used: Count(used.Player, p => _rules.OnUse(p, used.ItemId)); break;
             case ItemEquipped equipped: Count(equipped.Player, p => _rules.OnEquip(p, equipped.ItemId)); break;

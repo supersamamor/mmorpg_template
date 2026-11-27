@@ -34,10 +34,10 @@ public sealed class QuestRig
     private readonly InventoryContent _items = InventoryContent.From(TestGrids.SampleContent);
     private readonly Game.Server.World.Monsters.MonsterCatalog _monsters = Game.Server.World.Monsters.MonsterCatalog.From(TestGrids.SampleContent);
 
-    public QuestRig()
+    public QuestRig(Game.Server.World.Party.PartyRoster? parties = null)
     {
         var content = TestGrids.SampleContent;
-        World = new GameWorld(content.Grids.Values, ServerPipeline.Create(content, Progressions, Inventories, Clock), 602, Clock, Log);
+        World = new GameWorld(content.Grids.Values, ServerPipeline.Create(content, Progressions, Inventories, Clock, parties: parties, partyStatusTicks: 1), 602, Clock, Log);
         foreach (var instance in World.Instances) instance.Events.SubscribeAll(e => Events.Add((instance.TickNumber, e)));
     }
 

@@ -190,3 +190,15 @@ characters:
   name_letters: [a-z, A-Z]
   # Allowed between two letters only (never first, last or doubled): "Anna-Lee", "O'Dell".
   name_separators: ["-", "'"]
+party:
+  # Five to a party: four others fit the party panel of the smallest phone, and a full party (140% EXP, formulas.yaml party_exp) is still a small group on the sample maps.
+  max_members: 5
+  # Thirty seconds to answer an invite: long enough to finish a fight, short enough that an unanswered one does not hang about.
+  invite_timeout_ms: 30000
+  # Members alive, on the map instance and within 12 cells of the death cell share the EXP: what every player is sure to see (aoi.view_radius x aoi.bucket_size),
+  # so who shares is who could see the fight.
+  exp_range: 12
+  # The same reach for a party member's kill counting toward one's kill objectives.
+  kill_credit_range: 12
+  # Members more than 15 base levels apart do not share: a high-level friend cannot carry a new character up by standing near it. Their damage dealers split by damage.
+  exp_level_gap: 15

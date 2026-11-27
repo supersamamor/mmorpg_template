@@ -51,10 +51,10 @@ public sealed class ChatBook
     /// <summary>A line or a system line has come since the log was last read (<see cref="MarkRead"/>).</summary>
     public bool Unread { get; private set; }
 
-    /// <summary>Switches between map and whisper.</summary>
+    /// <summary>Switches between map, whisper and (T-902) party.</summary>
     public void SetChannel(string channel)
     {
-        if (channel != ChatChannels.Map && channel != ChatChannels.Whisper) return;
+        if (channel != ChatChannels.Map && channel != ChatChannels.Whisper && channel != ChatChannels.Party) return;
         Channel = channel;
         Version++;
     }

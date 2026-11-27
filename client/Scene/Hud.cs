@@ -82,6 +82,7 @@ public sealed class Hud
     private ShopPanel? _shopPanel;
     private QuestPanel? _questPanel;
     private ChatPanel? _chatPanel;   // T-901: the strip above the flash line, and the panel at the top
+    private PartyPanel? _partyPanel;   // T-902: opened from the chat panel; the invite prompt and the marks of members off the screen
     private WardrobePanel? _wardrobe;   // T-708: opened from the bag, as the stats are from the skills: the phone HUD has no room for another button
     // The quest tracker (T-602): under the bars on the left, the tracked quest's name and counters; a tap opens the quest log. With no active quest it is the
     // "Quests" button, so the log needs no button of its own on a full phone HUD. Each line is trimmed to the column with an ellipsis instead of wrapping (T-406): a long
@@ -277,7 +278,11 @@ public sealed class Hud
             _bag!.ShowWardrobe = () => _wardrobe.SetOpen(true);
         }
         if (session is not null && bundle is not null) _questPanel = new QuestPanel(_safe, session, bundle, _interactive, Tap);
-        if (session is not null) _chatPanel = new ChatPanel(_safe, _trackerRow, _bottom, _flash, session, _interactive, Tap);
+        if (session is not null) _partyPanel = new PartyPanel(_safe, session, bundle, _interactive, Tap);
+        if (session is not null) _chatPanel = new ChatPanel(_safe, _trackerRow, _bottom, _flash, session, _interactive, Tap)
+        {
+            OpenParty = () => { _chatPanel?.SetOpen(false); _partyPanel?.SetOpen(true); },   // T-902
+        };
         if (session is not null)
         {
             _statsPanel = new StatsPanel(_safe, session, _interactive, Tap);
@@ -401,6 +406,20 @@ public sealed class Hud
 
     /// <summary>For the layout check (T-901): <see cref="ShowSamples"/> shows the longest chat lines in place of the flash line.</summary>
     public bool SampleChatLines { get; set; }
+
+    private long _tappedShown;
+
+    /// <summary>The party panel (T-902), or null without a session.</summary>
+    public PartyPanel? Party => _partyPanel;
+
+    /// <summary>
+    /// The marks of party members off the screen (T-902): after the camera moved, every frame. <paramref name="groundAt"/> gives the ground's height at a point.
+    /// </summary>
+    public void UpdatePartyMarks(Camera3D camera, Func<double, double, float> groundAt)
+    {
+        if (_partyPanel is null || _session is null) return;
+        _partyPanel.UpdateMarks(camera, _session.Connection.Phase == ConnectionPhase.Online ? _session.World.MapId : null, _safe.GlobalPosition, groundAt);
+    }
 
     /// <summary>Draws everything again from the model on the next <see cref="Refresh"/>.</summary>
     public void ForceRefresh()
@@ -676,6 +695,7 @@ public sealed class Hud
         _dialoguePanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _questPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
+        _partyPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
         _chatPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _window.Size.Y > 0 ? (float)(metrics.CanvasHeight / _window.Size.Y) : 1f,
             (float)metrics.CanvasHeight);
         // The tracker shares its row with the Chat button (T-901): together they are the left column's width.
@@ -767,6 +787,7 @@ public sealed class Hud
                 _skillPanel?.SetOpen(false);
                 _statsPanel?.SetOpen(false);
                 _wardrobe?.SetOpen(false);
+                _partyPanel?.SetOpen(false);
             }
         }
         if (_uiVersion != ui.Version)
@@ -817,6 +838,9 @@ public sealed class Hud
         _questPanel?.Refresh();
         if (_chatPanel is not null && !SampleChatLines) _chatPanel.FlashShown = _flash.Visible || _announcement.Visible;
         _chatPanel?.Refresh(connection.Phase);
+        if (_session.Party.Tapped != 0 && _partyPanel is { Open: false } && _tappedShown != _session.Party.Tapped) _partyPanel.SetOpen(true);   // T-902: a player was tapped
+        _tappedShown = _session.Party.Tapped;
+        _partyPanel?.Refresh(connection.Phase);
         RefreshAutopilot();
     }
 

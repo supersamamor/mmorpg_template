@@ -51,6 +51,10 @@
     "crit_chance": {
       "type": "string",
       "description": "Critical probability 0–1 for physical attacks."
+    },
+    "party_exp": {
+      "type": "string",
+      "description": "The party EXP share (T-902): the EXP the members who share a kill split evenly, from the party's part of it. Variables: exp, share_count, level_spread only (PartyShare). Applied to base and job EXP alike, floored, never below 0. Absent, it is exp: no bonus."
     }
   },
   "additionalProperties": false,

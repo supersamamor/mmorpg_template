@@ -32,5 +32,12 @@ namespace Game.Shared.Definitions
         /// <summary>Critical probability 0–1 for physical attacks.</summary>
         [Formula]
         public string CritChance { get; init; } = string.Empty;
+
+        /// <summary>
+        /// The party EXP share (T-902): the EXP the members who share a kill split evenly, from the party's part of it. Variables: <c>exp</c>, <c>share_count</c>, <c>level_spread</c> only
+        /// (<see cref="FormulaSymbols.PartyShare"/>). Applied to base and job EXP alike, floored, never below 0. Absent, it is <c>exp</c>: no bonus.
+        /// </summary>
+        [Formula]
+        public string PartyExp { get; init; } = "exp";
     }
 }

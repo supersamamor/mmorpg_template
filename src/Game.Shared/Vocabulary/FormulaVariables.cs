@@ -26,6 +26,18 @@ namespace Game.Shared.Vocabulary
         /// </summary>
         public const string StatValue = "stat_value";
 
+        /// <summary><c>exp</c>: the party's part of a kill's base or job EXP (T-902). Only valid in <c>party_exp</c>, so it is not in <see cref="All"/>.</summary>
+        public const string Exp = "exp";
+
+        /// <summary><c>share_count</c>: how many members share the kill (T-902). Only valid in <c>party_exp</c>.</summary>
+        public const string ShareCount = "share_count";
+
+        /// <summary><c>level_spread</c>: the highest base level of those members minus the lowest (T-902). Only valid in <c>party_exp</c>.</summary>
+        public const string LevelSpread = "level_spread";
+
+        /// <summary>The party EXP share's variables (T-902).</summary>
+        public static readonly VocabularySet PartyShare = new VocabularySet(Exp, ShareCount, LevelSpread);
+
         /// <summary><c>t_</c>: prefix that turns a caster variable into the target's (<c>t_def</c>, <c>t_vit</c>).</summary>
         public const string TargetPrefix = "t_";
 

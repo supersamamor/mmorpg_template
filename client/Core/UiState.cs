@@ -131,6 +131,9 @@ public sealed class UiState
     /// <summary>An <c>autopilot</c> message ended a run (T-605): the flash line says why, so a stop is never a surprise.</summary>
     public void OnAutopilotEnded(string? reason, double now) => SetFlash(UiText.AutopilotEnded(reason), now);
 
+    /// <summary>A party notice or refusal, as words (T-902).</summary>
+    public void OnParty(string words, double now) => SetFlash(words, now);
+
     /// <summary>A new outfit is in the wardrobe (T-708).</summary>
     public void OnOutfitGained(string outfitId, double now) => SetFlash(UiText.OutfitGained(_bundle.NameOf(outfitId)), now);
 

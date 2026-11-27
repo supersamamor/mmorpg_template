@@ -264,6 +264,9 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>AdminActionApplied</c>: staff changed something through the admin API (T-804); raised on the admin event bus after the change is made and audited.</summary>
         public const string AdminActionApplied = "AdminActionApplied";
 
+        /// <summary><c>PartyKillCredit</c> (T-902): party members near a kill get kill credit for it (the quest system counts their <c>kill</c> objectives).</summary>
+        public const string PartyKillCredit = "PartyKillCredit";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -352,6 +355,7 @@ namespace Game.Shared.Vocabulary
             OutfitGranted,
             WardrobeChanged,
             OutfitRefused,
-            AdminActionApplied);
+            AdminActionApplied,
+            PartyKillCredit);
     }
 }

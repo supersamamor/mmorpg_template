@@ -161,6 +161,7 @@ public partial class Main : Node3D
         _fx!.Update(Clocks.View(), _map!.Ground);
         if (world.Own is { } own) _camera!.Follow((float)own.X, (float)own.Z);
         _hud!.Refresh();
+        _hud.UpdatePartyMarks(_camera!.Camera, (x, z) => _map!.Ground.At(x, z));   // T-902
         _audio!.Update(Clocks.View());
         _input!.Tick();
 

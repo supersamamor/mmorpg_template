@@ -582,7 +582,7 @@ One system, `Game.Server/World/Combat` (`combat`), after the monster AI. Numbers
   `death.respawn_hp_percent` of max HP at the respawn point of the map it died on (the map's `respawn` cell, else the first warp arriving on it, else the `new_character` start); on death it loses
   `death.exp_penalty_percent` of its level's requirement, never more than its EXP (`ProgressionRules.LoseBaseExp`: no level loss).
 - **Kill credit** (T-602): when a monster dies combat raises `MonsterKilled` with every player that has a damage share in it and is still on the map, in first-hit order: the
-  same players who share its EXP. Quests count `kill` objectives from it; a party rule is T-902.
+  same players who share its EXP. Quests count `kill` objectives from it; party members near the kill get credit through `PartyKillCredit` (T-902, §6.9).
 - **EXP.** Per monster, the HP each player took since its last full-HP moment. On death the players still on the map share `base_exp` /
   `job_exp` in proportion (largest remainder; ties to the first hitter; the shares add up exactly) through `ProgressionRules`, which raise
   `ExpGained` and `PlayerProgressed` (`LevelUp` / `JobLevelUp`); the sheet takes the new levels and job bonuses. Progression is kept per
@@ -657,6 +657,36 @@ derived stat `weight_limit` (`formulas.yaml`).
   (`quest`) and `QuestItemsResolved`; a refusal changes nothing and the quest waits (§6.4).
 - **Starting items** are data: `new_character.start_items` (`item_id`, `quantity`, `equipped`), validated at load. A new character gets them when the
   inventory first sees it; today the Bone Dirk (worn) and three Healing Draughts.
+
+### 6.9 Party (T-902)
+`Game.Server/Party` (`PartyService`, off the tick) and `Game.Server/World/Party` (`PartyRoster`, `PartySystem`, `PartyKillCredit`); the client's `PartyBook` and `PartyPanel`. Numbers from
+`balance.yaml` `party` (game rules) and `formulas.yaml` `party_exp`; the invite rate and the state interval are server configuration (`PartyOptions`, `--party-<name>` or `GAME_PARTY_<NAME>`:
+`invites-per-minute` 6, `invite-burst` 4, `status-interval-ms` 1000).
+- **Where a party lives.** In the memory of one server process, never in the database: nothing about a person is stored (STORE_COMPLIANCE unchanged), and a restart ends every party. Its members are
+  characters this process's gateway holds, so all are on this process: v1 runs one game process per world (§3), so a member on another process cannot happen; an invite finds only characters playing
+  here, and a member who leaves the world (logout, end of the grace period, a staff kick) leaves the party. Cross-process parties are out of scope (a later task would move the roster behind a shared store).
+- **Rules.** One party per character; `party.max_members` (5) including the leader. Only the leader invites, kicks and hands over. **Invite** by name (as names compare, T-701) or by tapping a player on
+  the same map (`target`): rate-limited per account (a dev login per entity), then refused `not_online` (also when the invited **blocks** the inviter through T-901's blocks: the same answer), `invalid_target`,
+  `not_leader`, `full`, `already_in_party`, `invite_pending`. The invited gets `party_invited` and answers with `party_answer`; it expires after `party.invite_timeout_ms` (30 s) and both are told
+  (`expired`). An accept joins the inviter's party, or makes one the inviter leads; it is checked again then (`full`, `already_in_party`, `no_invite`).
+  **Leader leaving**: the earliest-joined member who plays now leads, else the earliest-joined (the order is the join order, shown in the panel). **A party of one ends** (`disbanded`).
+- **Disconnects.** A member in its grace period (§10) stays a member, shown `away` to the others, and gets its party and any invite again with its next `welcome`: a phone that drops on a lift comes
+  back to its party. When the grace period ends it leaves like a `party_leave`. The party service looks at who the gateway still holds on each pulse (`status-interval-ms`), so a member leaves at most
+  a second after the world let it go. It cannot be made leader while away.
+- **EXP share** (combat, §6.7, reading the roster). With nobody of the kill's damage dealers in a party, the split is exactly the old one (golden tests). Otherwise the monster's EXP is first split
+  by damage between **shares**, by the same `ExpSplit`: each player in no party is one share, each party one share with its members' damage added up, in first-hit order. A player's share is its
+  own. A party's share goes to the members who **share the kill**: alive, on the kill's map instance and within `party.exp_range` (12, Chebyshev) of the death cell, in party order. They split
+  `party_exp` of it evenly (the odd points to the first in party order): `floor(exp * (100 + (share_count - 1) * 10) / 100)`, so one member alone gets exactly its part, two 110%, a full party
+  140%. **Level gap**: when the base levels of those members differ by more than `party.exp_level_gap` (15), or none of them may share (all dead or far), the party's damage dealers split its
+  share by damage as without a party. Base and job EXP the same way, through the same expression (one rule to learn; the job tables already scale per job). Kill credit for loot priority is unchanged.
+- **Quest kill credit** (hard rule 7): the instance's `PartySystem` turns `MonsterKilled` into `PartyKillCredit` for the party members of credited players who are alive, on the instance and within
+  `party.kill_credit_range` (12) of the death cell and had no credit of their own; the quest system counts their `kill` objectives from it (a tick later). Quests never call the party, the party never calls quests.
+- **Members' state.** Each instance's `PartySystem` reports its party members every `status-interval-ms` (map, cell, HP and SP as whole percent, rounded up so a living member never shows 0, dead) to the
+  roster; the party service sends each member the others' (`party_members`), only when they changed, and only to members. Whole percent is all a bar needs and costs a byte or two each: a party
+  of five moving all the time is about 1 KB a second in all, nothing when it stands still. The area of interest is untouched: members out of view stay out of the world view; the client shows
+  them by these cells only. (The AOI's `VisibleCap.AlwaysVisible` hook for party members is not used yet: ADR-002 row 427.)
+- **Party chat**: the party service is the `party` channel's `IChannelMembers` (T-901's seam): the members who play now hear a line, with the mute, rate, text, blocks and reports of every channel.
+- **No client authority**: the client sends intents (`party_*`, a tap's entity id) and shows what the server sends; who is in range, who gets EXP and who killed what are the server's.
 
 ## 7. Client
 
@@ -809,6 +839,12 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   is left (`DisplayServer.VirtualKeyboardGetHeight`). The layout check runs the button in every "playing" combination, the last lines in the flash line's place ("chat lines shown"), and the
   open panel with its longest lines with and without a keyboard taking 60% of the screen's height (the field, Send, the switch and Close must stay above it); nothing of it may lie over
   another part of the HUD.
+- **Party** (T-902, §6.9; `PartyPanel`): the panel opens from the chat panel's **Party** button (the HUD's columns have no button to spare on a 640x360 dp phone at 1.5, as the wardrobe opens
+  from the bag): the members in party order with the leader's mark, where each is (here, a map's name, fallen, away) and HP and SP bars, Lead and Kick for the leader, a name field with Invite, the
+  invite of a player tapped in the world beside it (a tap on another player opens the panel and sends nothing), and Leave in the heading. The **invite prompt** (who asks, seconds left, Join and No) comes up by itself at
+  the top of the safe area. Members on this map who are off the screen get a **mark at the screen's edge**, an arrow and the name, pushed in from the edge toward them: no minimap, as no corner of
+  the phone HUD is free at the largest scale and a minimap would draw the map a second time every frame; an arrow says which way, which is what a party needs. The layout check runs a full party of
+  the longest names with the leader's buttons on every row, the prompt over it and four marks, at every screen, notch and scale.
 
 ### 7.5 Characters & equipment
 Modular 3D characters. Each body type has one shared rig. Equipment is either:
@@ -1329,6 +1365,11 @@ A headless run of the same (no draw calls or triangles without a renderer) gave 
   | `block` | C→S | `name`: that character's lines no longer reach this account; answered by `chat_state` or `chat_refused` (T-901) |
   | `unblock` | C→S | `name` (T-901) |
   | `report` | C→S | `line` (a `chat_line`'s number this client received): the server stores its own copy of the line; answered by `chat_reported` or `chat_refused` (T-901) |
+  | `party_invite` | C→S | `name` (a character's name) or `target` (a player's entity id on this map), exactly one: answered by `party_notice` `invite_sent` or `party_refused` (T-902, §6.9) |
+  | `party_answer` | C→S | `accept` (true or false): the invite this character has |
+  | `party_leave` | C→S | (none): leave the party |
+  | `party_kick` | C→S | `target` (a member's entity id), leader only |
+  | `party_lead` | C→S | `target` (a member who plays now), leader only |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
@@ -1356,6 +1397,11 @@ A headless run of the same (no draw calls or triangles without a renderer) gave 
   | `chat_refused` | S→C (own) | `intent` (`chat`, `block`, `unblock`, `report`), `reason` (a "Chat reasons" term), `retry_after` (seconds: `muted`, `rate_limited`), `channel`, `to`, `line` (T-901) |
   | `chat_state` | S→C (own) | `max_length` (the longest line, UTF-16 code units), `blocked` (the names this account blocks). After every `welcome` and every block change; it replaces what the client had (T-901) |
   | `chat_reported` | S→C (own) | `line`: the report is stored (T-901) |
+  | `party` | S→C (members) | `party` (its number), `leader` (entity id), `members` (`[{"id":42,"name":"Ada"},...]`, party order); in no party `{"type":"party","members":[]}`. After every change and every `welcome` (T-902) |
+  | `party_members` | S→C (members) | `status` (`[{"id":43,"hp":80,"sp":100,"map":"map.x","cell":[3,4]},...]`: whole percent; `dead` and `away` only when true, `away` alone in its grace period): the other members, at most every `status-interval-ms` and only on change |
+  | `party_invited` | S→C (the invited) | `from` (entity id), `name`, `expires_in` (seconds) |
+  | `party_notice` | S→C | `notice` (a "Party notices" term), `name` (whom it is about) |
+  | `party_refused` | S→C (own) | `intent` (a `party_*` type), `reason` (a "Party reasons" term), `retry_after` (`rate_limited`), `name` (the name an invite named) |
   | `pong` | S→C | `seq` |
   | `bye` | S→C (last) | `reason` (VOCABULARY "Bye reasons"), followed by the close frame |
 

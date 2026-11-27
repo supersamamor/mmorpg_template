@@ -26,6 +26,9 @@ namespace Game.Shared.Formulas
         /// <summary>Only <c>stat_value</c>: the stat point cost formula.</summary>
         public static readonly FormulaSymbols StatValueOnly = new FormulaSymbols(new VocabularySet(FormulaVariables.StatValue));
 
+        /// <summary>Only <c>exp</c>, <c>share_count</c> and <c>level_spread</c>: the party EXP share (T-902, <c>formulas.yaml</c> <c>party_exp</c>).</summary>
+        public static readonly FormulaSymbols PartyShare = new FormulaSymbols(FormulaVariables.PartyShare);
+
         /// <summary>Creates a symbol table; slot <c>i</c> is <c>variables.Ordered[i]</c>.</summary>
         /// <param name="variables">Allowed variable names.</param>
         public FormulaSymbols(VocabularySet variables)

@@ -88,6 +88,22 @@ public sealed class BalanceRule : IValidationRule
         StartItems(context, balance.NewCharacter);
         Characters(context, balance.Characters);
         Autopilot(context, balance);
+        Party(context, balance.Party);
+    }
+
+    /// <summary>A party has room for two, an invite waits, and the ranges and the level gap are not negative (T-902).</summary>
+    private static void Party(ValidationContext context, PartyBalanceDef p)
+    {
+        if (p.MaxMembers < 2)
+            Range(context, "party.max_members", "must be at least 2.");
+        if (p.InviteTimeoutMs <= 0)
+            Range(context, "party.invite_timeout_ms", "must be above 0.");
+        if (p.ExpRange < 0)
+            Range(context, "party.exp_range", "must not be negative.");
+        if (p.KillCreditRange < 0)
+            Range(context, "party.kill_credit_range", "must not be negative.");
+        if (p.ExpLevelGap < 0)
+            Range(context, "party.exp_level_gap", "must not be negative.");
     }
 
     /// <summary>The autopilot's limits and timings are usable, and one walk of a journey fits a path search (T-604).</summary>

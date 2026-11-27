@@ -47,6 +47,7 @@ public sealed class AutoRun
         Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-autopilot") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 || Array.IndexOf(args, "--e2e-appearance") >= 0 || Array.IndexOf(args, "--e2e-appearance-watch") >= 0 ||
         Array.IndexOf(args, "--e2e-wardrobe") >= 0 || Array.IndexOf(args, "--e2e-wardrobe-watch") >= 0 || Array.IndexOf(args, "--e2e-kick") >= 0 || Array.IndexOf(args, "--e2e-moderation") >= 0 || Array.IndexOf(args, "--e2e-textured") >= 0 ||
         Array.IndexOf(args, "--e2e-chat") >= 0 || Array.IndexOf(args, "--e2e-chat-listen") >= 0 ||
+        Array.IndexOf(args, "--e2e-party") >= 0 || Array.IndexOf(args, "--e2e-party-join") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -86,6 +87,8 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-saving") >= 0) await SavingRunAsync();
             else if (Array.IndexOf(_args, "--e2e-kick") >= 0) await KickRunAsync();
             else if (Array.IndexOf(_args, "--e2e-moderation") >= 0) await ModerationRunAsync();
+            else if (PartyRuns.Args(_args, "--e2e-party-join") is { } join) await new PartyRuns(_main, _monster ?? string.Empty).AllyAsync(join.Name, join.Base, join.Job);   // T-902
+            else if (PartyRuns.Args(_args, "--e2e-party") is { } lead) await new PartyRuns(_main, _monster ?? throw new InvalidOperationException("the party run needs --e2e-monster")).LeaderAsync(lead.Name, lead.Base, lead.Job);
             else if (Value("--e2e-chat-listen") is { } speaker) await new ChatRuns(_main, () => ShotAsync()).ListenerAsync(speaker);   // T-901
             else if (Array.IndexOf(_args, "--e2e-chat") >= 0) await new ChatRuns(_main, () => ShotAsync()).SpeakerAsync();
             else if (Value("--e2e-appearance-watch") is { } looks) await new LookRuns(_main, ShotAsync).WatcherAsync(looks);

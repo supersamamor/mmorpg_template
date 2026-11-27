@@ -105,6 +105,14 @@ public sealed class UiRuns
         await LayoutMatrixAsync("chat open");
         Check(Hud.Blocks(chat.SendButton.GetGlobalRect().GetCenter()), "a touch on the chat panel never reaches the world");
         chat.ClearSamples();
+        // T-902: the party panel with a full party of the longest names and the leader's buttons on every row, the invite prompt over it, and four marks at the screen's edges.
+        var party = Hud.Party!;
+        party.ShowSamples();
+        await FramesAsync(3);
+        await LayoutMatrixAsync("party panel, invite prompt and marks");
+        Check(Hud.Blocks(party.LeaveButton.GetGlobalRect().GetCenter()), "a touch on the party panel never reaches the world");
+        Check(Hud.Blocks(party.AcceptButton.GetGlobalRect().GetCenter()), "a touch on the invite prompt never reaches the world");
+        party.ClearSamples();
         var wardrobe = Hud.Wardrobe!;   // T-708: five slots of the longest names, the switch and the line under them
         wardrobe.ShowSamples(LongName);
         await FramesAsync(3);

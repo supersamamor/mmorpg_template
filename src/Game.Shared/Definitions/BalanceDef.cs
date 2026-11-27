@@ -60,6 +60,36 @@ namespace Game.Shared.Definitions
 
         /// <summary>Quest autopilot (T-604, ARCHITECTURE §6.4.2).</summary>
         public AutopilotBalanceDef Autopilot { get; init; } = new AutopilotBalanceDef();
+
+        /// <summary>Parties (T-902, ARCHITECTURE §6.9).</summary>
+        public PartyBalanceDef Party { get; init; } = new PartyBalanceDef();
+    }
+
+    /// <summary>
+    /// Parties (T-902): the <c>party</c> section of <c>balance.yaml</c>. The game rules a player meets: how many may share, how long an invite waits, who shares a kill. How the EXP is
+    /// split is <c>formulas.yaml</c> <c>party_exp</c>; how often invites may be sent and members' bars refresh is server configuration (<c>--party-</c>).
+    /// </summary>
+    public sealed record PartyBalanceDef
+    {
+        /// <summary>Most members of one party, the leader included. At least 2.</summary>
+        public int MaxMembers { get; init; } = 5;
+
+        /// <summary>How long an invite waits for an answer, in milliseconds; then it expires and the inviter is told. Above 0.</summary>
+        public int InviteTimeoutMs { get; init; } = 30_000;
+
+        /// <summary>
+        /// A member shares a monster's EXP when it is alive, on the map instance of the kill and at most this many cells (Chebyshev) from the death cell. 0 or more.
+        /// </summary>
+        public int ExpRange { get; init; } = 12;
+
+        /// <summary>A member's <c>kill</c> quest objectives count a party member's kill when it is alive, on the map instance and at most this many cells from the death cell. 0 or more.</summary>
+        public int KillCreditRange { get; init; } = 12;
+
+        /// <summary>
+        /// The level-gap rule: when the base levels of the members who would share differ by more than this, the party does not share that kill: its damage dealers split their part by
+        /// damage, as without a party. 0 or more.
+        /// </summary>
+        public int ExpLevelGap { get; init; } = 15;
     }
 
     /// <summary>Character slots and names (T-701): the <c>characters</c> section of <c>balance.yaml</c>. Whether a name is free is decided by the database.</summary>

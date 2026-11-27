@@ -220,6 +220,9 @@ public sealed class Gateway : IChatDirectory
     /// <summary>Chat (T-901): set once, before sessions arrive; null when the server has none (then chat messages are ignored).</summary>
     public ChatService? Chat { get; set; }
 
+    /// <summary>Parties (T-902): set once, before sessions arrive; null when the server has none (then party messages are ignored).</summary>
+    public Game.Server.Party.PartyService? Party { get; set; }
+
     /// <summary>Where players' <c>exp</c> messages come from, or null when the gateway sends none (tests without combat).</summary>
     public OwnProgress? Progress { get; }
 
@@ -364,6 +367,7 @@ public sealed class Gateway : IChatDirectory
                     token = Tokens.Issue(link.Character); // the replaced session's token stops working
                     session.OnResumed(link.Character, link.DisplayName, map, token);
                     PostChatState(session, link.AccountId);   // T-901
+                    Party?.Welcomed(link.Character);           // T-902: its party and invite again
                     Enqueue(new StopAutopilot(link.Character, AutopilotStops.Disconnected));   // T-604: the new session has not asked for it
                     Enqueue(new AttachView(link.Character, session));
                     Enqueue(new RequestSnapshot(link.Character));
@@ -586,6 +590,7 @@ public sealed class Gateway : IChatDirectory
                     // (grace: detach) or a warp arrival (re-attach) cannot queue its view change between these.
                     session.OnResumed(id, link.DisplayName, map, token);
                     PostChatState(session, link.AccountId);   // T-901
+                    Party?.Welcomed(id);                       // T-902: its party and invite again
                     Enqueue(new StopAutopilot(id, AutopilotStops.Disconnected));   // T-604: a resume never plays on (a dropped session's run ended with its grace period's start)
                     Enqueue(new AttachView(id, session));
                     Enqueue(new RequestSnapshot(id));
