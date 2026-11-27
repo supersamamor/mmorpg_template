@@ -147,7 +147,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-902 | Party: invite, leave, leader, members' HP and place, EXP share formula, quest kill credit via the event bus, party chat through T-901's seam | Claude Code | Opus 5.5 | [T-902](../tasks/prompts/T-902.md) | T-901 | Review | Restricted `content/formulas.yaml` (new party expressions only) and `Net/**` scopes in the prompt's header |
 | T-903 | Player trade: ask, two-step lock and confirm, atomic swap on the tick, both saves land together, dupe-safe (rule 10) | Claude Code | Opus 5.5 | [T-903](../tasks/prompts/T-903.md) | T-702, T-902 | Review | Restricted `Net/**` and, only if T-702's save links cannot do it, `Persistence/**` scopes in the prompt's header |
 | T-904 | Guilds: found, invite, ranks with permissions, notice, guild chat through T-901's seam, emblem from the theme's set, erased with the account | Claude Code | Opus 5.5 | [T-904](../tasks/prompts/T-904.md) | T-901, T-902, T-703 | Review | Restricted `Persistence/**` (one migration) and `Net/**` scopes in the prompt's header |
-| T-905 | Guild storage: deposit and withdraw by rank, atomic with the character's save, move log, dupe-safe (rule 10) | Claude Code | Opus 5.5 | [T-905](../tasks/prompts/T-905.md) | T-903, T-904 | Ready | Restricted `Persistence/**` (one migration) and `Net/**` scopes in the prompt's header |
+| T-905 | Guild storage: deposit and withdraw by rank, atomic with the character's save, move log, dupe-safe (rule 10) | Claude Code | Opus 5.5 | [T-905](../tasks/prompts/T-905.md) | T-903, T-904 | In Progress | Restricted `Persistence/**` (one migration) and `Net/**` scopes in the prompt's header |
 
 ## Backlog (prompts written when the previous phase is Done)
 

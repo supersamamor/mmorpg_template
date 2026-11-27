@@ -106,6 +106,25 @@ namespace Game.Shared.Definitions
 
         /// <summary>The emblems a founder chooses from: asset keys of the theme (rule 3), at least one. Never uploaded.</summary>
         public IReadOnlyList<string> Emblems { get; init; } = Empty.List<string>();
+
+        /// <summary>The guild's shared storage (T-905).</summary>
+        public GuildStorageDef Storage { get; init; } = new GuildStorageDef();
+    }
+
+    /// <summary>A guild's shared storage (T-905, ARCHITECTURE §6.11): how many entries and how much currency it holds, and how long its log keeps a move.</summary>
+    public sealed record GuildStorageDef
+    {
+        /// <summary>Most entries the storage holds (moves under way count). At least 1, at most 500.</summary>
+        public int Size { get; init; } = 50;
+
+        /// <summary>Most currency the storage holds (deposits under way count). At least 0.</summary>
+        public long MaxCurrency { get; init; } = 1_000_000_000;
+
+        /// <summary>Days a move stays in the log. At least 1.</summary>
+        public int LogDays { get; init; } = 30;
+
+        /// <summary>Most log lines one storage message carries, newest first. At least 1, at most 200.</summary>
+        public int LogShown { get; init; } = 50;
     }
 
     /// <summary>What founding a guild costs (T-904): currency, units of one item, or both; taken in the same transaction that makes the guild.</summary>
