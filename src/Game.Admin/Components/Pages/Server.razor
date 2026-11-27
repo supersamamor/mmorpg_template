@@ -1,0 +1,56 @@
+@page "/server"
+@inherits PanelPage
+
+<PageTitle>Server · Staff panel</PageTitle>
+<h1>Server</h1>
+<p>Announcements and maintenance reach this server process only.</p>
+
+<FailureBox Failure="_status?.Failure" />
+@if (_status?.Value is { } status)
+{
+    <dl class="facts">
+        <dt>Players online</dt><dd>@status.PlayersOnline</dd>
+        <dt>Maintenance</dt><dd data-fact="maintenance">@(status.Maintenance is not { } m ? "unknown" : m.On ? "on" : "off")</dd>
+        @if (status.Maintenance is { On: true } on)
+        {
+            <dt>Since</dt><dd>@(on.Since ?? "—")</dd>
+            <dt>Games end at</dt><dd>@(on.GamesEndAt ?? "they have ended")</dd>
+        }
+    </dl>
+}
+<FailureBox Failure="_commands?.Failure" />
+@if (_commands is not null && _me is not null)
+{
+    <h2>Announce</h2>
+    <p>Up to @AnnouncementKinds.MaxTextLength characters on one line; the form counts them as you type.</p>
+    <p class="actions"><ActionLink List="_commands" Me="_me" Action="@AdminActions.Announce" Text="Write an announcement" /></p>
+
+    <h2>Maintenance</h2>
+    @* Without the status, both are offered: the server refuses what does not fit. *@
+    var maintenance = _status?.Value?.Maintenance;
+    <p class="actions">
+        @if (maintenance is not { On: true })
+        {
+            <ActionLink List="_commands" Me="_me" Action="@AdminActions.StartMaintenance" />
+        }
+        @if (maintenance is not { On: false })
+        {
+            <ActionLink List="_commands" Me="_me" Action="@AdminActions.EndMaintenance" />
+        }
+    </p>
+    <p class="small">You see the commands your role (@_me.Role) may run.</p>
+}
+
+@code {
+    private Staff? _me;
+    private ApiResult<AdminStatusAnswer>? _status;
+    private ApiResult<CommandListAnswer>? _commands;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _me = await StaffAsync();
+        if (_me is null) return;
+        _status = await Api.GetStatusAsync(_me);
+        _commands = await Api.GetCommandsAsync(_me);
+    }
+}

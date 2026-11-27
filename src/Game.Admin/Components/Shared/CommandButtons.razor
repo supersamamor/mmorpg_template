@@ -6,7 +6,7 @@
     }
     else if (List.Value is { } list)
     {
-        @foreach (var command in list.Commands)
+        @foreach (var command in list.Commands.Where(c => Show?.Invoke(c.Action) ?? true))
         {
             <span class="command">
                 @if (!AdminApiClient.IsActionName(command.Action))
@@ -38,7 +38,7 @@
     /// <summary>Only these commands (those that fit the page), or all.</summary>
     [Parameter] public Func<string, bool>? Show { get; set; }
 
-    private static string Label(string action) => action == AdminActions.Kick ? "Kick" : action;
+    private static string Label(string action) => CommandForms.Label(action);
 
     private string Href(string action) =>
         "/commands/" + action + (Target.Count == 0 ? "" : "?" + string.Join('&', Target.Select(t => t.Name + "=" + Uri.EscapeDataString(t.Value))));

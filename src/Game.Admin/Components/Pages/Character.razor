@@ -21,8 +21,16 @@
 
     <h2>Commands</h2>
     <p class="small">Kick is for the account: it ends all of its sign-ins and whichever of its characters is playing.</p>
-    <CommandButtons List="_commands" Me="_me" Target="@Target(character)" />
+    <CommandButtons List="_commands" Me="_me" Target="@Target(character)" Show="OwnRow" />
     <p><a href="/audit?target=@character.Id">Audit rows about this character</a> · <a href="/audit?target=@character.AccountId">about its account</a></p>
+    <p><a href="/accounts/@character.AccountId">Ban, mute and support requests are on the account's page.</a></p>
+
+    <h2>Fixes</h2>
+    <p class="actions">
+        <ActionLink List="_commands" Me="_me" Action="@AdminActions.GiveItem" Query="Target(character)" />
+        <ActionLink List="_commands" Me="_me" Action="@AdminActions.ChangeCurrency" Text="Give or take currency" Query="Target(character)" />
+        <ActionLink List="_commands" Me="_me" Action="@AdminActions.Unstick" Query="Target(character)" />
+    </p>
 
     <h2>Saved state</h2>
     @if (detail.State is not { } state)
@@ -54,13 +62,15 @@
         {
             <div class="scroll">
                 <table>
-                    <thead><tr><th>Item</th><th>Quantity</th><th>Worn in</th><th>Refine</th><th>Cards</th><th>Set aside</th><th>Instance</th></tr></thead>
+                    <thead><tr><th>Item</th><th>Quantity</th><th>Worn in</th><th>Refine</th><th>Cards</th><th>Set aside</th><th>Instance</th><th>Fix</th></tr></thead>
                     <tbody>
                         @foreach (var item in state.Items)
                         {
                             <tr>
                                 <td>@Names.Describe(item.ItemId)</td><td>@item.Quantity</td><td>@(item.Slot ?? "—")</td><td>@item.Refine</td>
                                 <td>@(item.Cards.Count == 0 ? "—" : string.Join(", ", item.Cards.Select(Names.Describe)))</td><td>@(item.Aside ?? "—")</td><td>@item.Id</td>
+                                <td><ActionLink List="_commands" Me="_me" Action="@AdminActions.RemoveItem" Text="Remove"
+                                    Query="@([..Target(character), (AdminCommandFields.EntryId, item.Id.ToString())])" /></td>
                             </tr>
                         }
                     </tbody>
@@ -83,23 +93,55 @@
         <h3>Set aside (content that is gone)</h3>
         <JsonView Value="state.SetAside" />
     }
+
+    <h2>Changes staff made</h2>
+    <p class="small">Items, currency and place, newest first. A change to a character that is playing appears once its save has landed.</p>
+    <FailureBox Failure="_changes?.Failure" />
+    @if (_changes?.Value is { } changes)
+    {
+        @if (changes.Items.Count == 0)
+        {
+            <p>None.</p>
+        }
+        else
+        {
+            <AuditTable Rows="changes.Items" />
+        }
+        <p class="pages">
+            @if (ChangesBefore is not null)
+            {
+                <a href="/characters/@Id">Newest changes</a>
+            }
+            @if (changes.Next is { } next)
+            {
+                <a href="@Paging.Link($"/characters/{Id}", ("changes_before", next))" rel="next">Older changes</a>
+            }
+        </p>
+    }
 }
 
 @code {
     [Parameter] public Guid Id { get; set; }
 
+    [SupplyParameterFromQuery(Name = "changes_before")] public string? ChangesBefore { get; set; }
+
     private Staff? _me;
     private ApiResult<CharacterDetailAnswer>? _character;
     private ApiResult<CommandListAnswer>? _commands;
+    private ApiResult<AuditPageAnswer>? _changes;
 
     protected override async Task OnParametersSetAsync()
     {
         _me = await StaffAsync();
         if (_me is null) return;
         _character = await Api.GetCharacterAsync(_me, Id);
-        if (_character.Value is not null) _commands = await Api.GetCommandsAsync(_me);
+        if (_character.Value is null) return;
+        _commands = await Api.GetCommandsAsync(_me);
+        _changes = await Api.GetStaffChangesAsync(_me, Id, Clean(ChangesBefore));
     }
 
+    private static bool OwnRow(string action) => action == AdminActions.Kick || !CommandForms.Known.ContainsKey(action);
+
     private static IReadOnlyList<(string, string)> Target(CharacterAnswer character) =>
-        [(AdminCommandFields.AccountId, character.AccountId.ToString()), ("character_id", character.Id.ToString())];
+        [(AdminCommandFields.AccountId, character.AccountId.ToString()), (AdminCommandFields.CharacterId, character.Id.ToString())];
 }

@@ -1,0 +1,70 @@
+@* One field of a command with a page of its own. *@
+@inject ContentNames Names
+
+@if (Spec.Input == FieldInput.Item && Names.ItemIds.Count > 0)
+{
+    <label>@Spec.Label
+        <select name="@Spec.Name" required>
+            <option value="">pick an item</option>
+            @foreach (var id in Names.ItemIds)
+            {
+                <option value="@id" selected="@(id == Value)">@Names.Describe(id)</option>
+            }
+        </select>
+    </label>
+}
+else if (Spec.Input == FieldInput.Entry && Entries is { Count: > 0 })
+{
+    <label>@Spec.Label
+        <select name="@Spec.Name" required>
+            <option value="">pick an entry of the saved state</option>
+            @foreach (var entry in Entries)
+            {
+                <option value="@entry.Id" selected="@(entry.Id.ToString() == Value)">@Describe(entry)</option>
+            }
+        </select>
+    </label>
+}
+else if (Spec.Input == FieldInput.RequestKind)
+{
+    <label>@Spec.Label
+        <select name="@Spec.Name" required>
+            <option value="">pick a kind</option>
+            @foreach (var kind in SupportRequestKinds.All.Ordered)
+            {
+                <option value="@kind" selected="@(kind == Value)">@kind</option>
+            }
+        </select>
+    </label>
+}
+else if (Spec.Input == FieldInput.Line)
+{
+    <label>@Spec.Label
+        <input name="@Spec.Name" value="@Value" maxlength="@Spec.Max" size="@Spec.Max" autocomplete="off" data-count="@(Spec.Name)-count" required />
+    </label>
+    <p class="small" aria-live="polite"><output id="@(Spec.Name)-count">@Value.Length</output> of @Spec.Max characters</p>
+}
+else if (Spec.Input == FieldInput.Id)
+{
+    <label>@Spec.Label <input name="@Spec.Name" value="@Value" size="38" maxlength="36" required /></label>
+}
+else
+{
+    <label>@Spec.Label <input name="@Spec.Name" value="@Value" inputmode="numeric" maxlength="20" required="@(!Spec.Optional)" /></label>
+}
+@if (Spec.Help.Length > 0)
+{
+    <p class="small">@Spec.Help</p>
+}
+
+@code {
+    [Parameter, EditorRequired] public FieldSpec Spec { get; set; } = default!;
+
+    [Parameter] public string Value { get; set; } = string.Empty;
+
+    /// <summary>The entries of the character's saved state, for the entry picker.</summary>
+    [Parameter] public IReadOnlyList<ItemAnswer>? Entries { get; set; }
+
+    private string Describe(ItemAnswer entry) =>
+        $"{entry.Id}: {Names.Describe(entry.ItemId)} × {entry.Quantity}{(entry.Slot is null ? "" : $", worn in {entry.Slot}")}{(entry.Aside is null ? "" : ", set aside")}";
+}

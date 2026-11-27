@@ -1,0 +1,39 @@
+@* Audit rows as a table: the audit log, and the staff changes of a character. *@
+<div class="scroll">
+    <table>
+        <thead><tr><th>#</th><th>When</th><th>Staff</th><th>Action</th><th>Target</th><th>Reason</th><th>Before</th><th>After</th><th>Request</th></tr></thead>
+        <tbody>
+            @foreach (var row in Rows)
+            {
+                <tr>
+                    <td>@row.Id</td><td>@PanelPage.Time(row.At)</td>
+                    <td>@row.StaffName<br /><span class="small"><code>@row.StaffId</code> · @row.StaffRole</span></td>
+                    <td>@row.Action</td>
+                    <td>@row.TargetKind<br />
+                        @if (TargetLink(row) is { } link)
+                        {
+                            <a href="@link"><code>@row.TargetId</code></a>
+                        }
+                        else
+                        {
+                            <code>@row.TargetId</code>
+                        }
+                    </td>
+                    <td class="reason">@row.Reason</td>
+                    <td><JsonView Value="row.Before" /></td><td><JsonView Value="row.After" /></td>
+                    <td><code>@row.RequestId</code></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<AuditAnswer> Rows { get; set; } = [];
+
+    private static string? TargetLink(AuditAnswer row) =>
+        !Guid.TryParse(row.TargetId, out var id) ? null
+        : row.TargetKind == AdminTargetKinds.Account ? $"/accounts/{id}"
+        : row.TargetKind == AdminTargetKinds.Character ? $"/characters/{id}"
+        : null;
+}

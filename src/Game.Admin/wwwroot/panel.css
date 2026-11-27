@@ -43,6 +43,8 @@ button:disabled { cursor: not-allowed; opacity: .45; border-color: var(--line); 
 .failure p, .outcome p { margin: .2rem 0; }
 .outcome.done, .outcome.accepted { background: var(--good-bg); border-color: var(--good-line); }
 .actions, .pages { display: flex; gap: 1rem; align-items: center; }
+article.report { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 0 1rem; margin-bottom: 1rem; max-width: 60rem; }
+blockquote.line { margin: 0; border-left: 4px solid var(--line); padding: .4rem .8rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .development { margin-top: 2rem; border-top: 1px solid var(--line); }
 #components-reconnect-modal { display: none; position: fixed; inset: auto 1rem 1rem 1rem; background: var(--bad-bg); border: 1px solid var(--bad-line); padding: .5rem 1rem; }
 #components-reconnect-modal.components-reconnect-show, #components-reconnect-modal.components-reconnect-retrying, #components-reconnect-modal.components-reconnect-failed,

@@ -84,6 +84,21 @@ public sealed class AdminApiClient(HttpClient http, PanelCredential credential, 
         ReadAsync<AuditPageAnswer>(staff, AdminPaths.Audit + Query(("target", target), ("staff", staffId), ("action", action), ("from", from), ("to", to), ("before", before)),
             a => a.Items is not null, cancel);
 
+    /// <summary>An account's bans, mutes and support requests.</summary>
+    public Task<ApiResult<ModerationAnswer>> GetModerationAsync(Staff staff, Guid account, CancellationToken cancel = default) =>
+        ReadAsync<ModerationAnswer>(staff, $"{AdminPaths.Accounts}/{account:D}{AdminPaths.ModerationSuffix}",
+            a => a.Bans is not null && a.Mutes is not null && a.Requests is not null, cancel);
+
+    /// <summary>A page of the item, currency and place changes staff made to a character.</summary>
+    public Task<ApiResult<AuditPageAnswer>> GetStaffChangesAsync(Staff staff, Guid character, string? before, CancellationToken cancel = default) =>
+        ReadAsync<AuditPageAnswer>(staff, $"{AdminPaths.Characters}/{character:D}{AdminPaths.StaffChangesSuffix}" + Query(("before", before)), a => a.Items is not null, cancel);
+
+    /// <summary>A page of players' reports of chat lines with one status, newest first.</summary>
+    public Task<ApiResult<PageAnswer<ChatReportAnswer>>> FindChatReportsAsync(Staff staff, string status, string? before, int limit, CancellationToken cancel = default) =>
+        ReadAsync<PageAnswer<ChatReportAnswer>>(staff,
+            AdminPaths.ChatReports + Query(("status", status), ("before", before), ("limit", limit.ToString(System.Globalization.CultureInfo.InvariantCulture))),
+            a => a.Items is not null, cancel);
+
     /// <summary>True when <paramref name="action"/> can be part of a command's path: <c>a-z 0-9 _</c>.</summary>
     public static bool IsActionName(string? action) => action is { Length: > 0 and <= 64 } && action.All(c => c is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '_');
 

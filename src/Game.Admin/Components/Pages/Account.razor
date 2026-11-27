@@ -8,6 +8,7 @@
 @if (_account?.Value is { } detail && _me is not null && _commands is not null)
 {
     var account = detail.Account;
+    IReadOnlyList<(string, string)> target = [(AdminCommandFields.AccountId, account.Id.ToString())];
     <dl class="facts">
         <dt>Username</dt><dd>@account.Username</dd>
         <dt>Account id</dt><dd><code>@account.Id</code></dd>
@@ -16,11 +17,91 @@
         <dt>Sign-ins</dt><dd>@account.Sessions</dd>
         <dt>Online</dt><dd>@(account.Online ? "yes" : "no")</dd>
         <dt>Deletion due</dt><dd>@Time(account.EraseAfter)</dd>
+        @if (_moderation?.Value is { } standing)
+        {
+            <dt>Banned</dt><dd data-fact="banned">@(standing.Banned ? "yes" : "no")</dd>
+            <dt>Muted</dt><dd data-fact="muted">@(standing.Muted ? "yes" : "no")</dd>
+        }
     </dl>
 
     <h2>Commands</h2>
-    <CommandButtons List="_commands" Me="_me" Target="@([(AdminCommandFields.AccountId, account.Id.ToString())])" />
+    <CommandButtons List="_commands" Me="_me" Target="@target" Show="OwnRow" />
     <p><a href="/audit?target=@account.Id">Audit rows about this account</a></p>
+
+    <FailureBox Failure="_moderation?.Failure" />
+    @* Without the moderation read, both sides are offered: the server refuses what does not fit. *@
+    var moderation = _moderation?.Value;
+    <h2>Bans</h2>
+    <p class="actions">
+        @if (moderation is not { Banned: true })
+        {
+            <ActionLink List="_commands" Me="_me" Action="@AdminActions.Ban" Query="target" />
+        }
+        @if (moderation is not { Banned: false })
+        {
+            <ActionLink List="_commands" Me="_me" Action="@AdminActions.Unban" Query="target" />
+        }
+    </p>
+    @if (moderation is not null)
+    {
+        <SanctionTable Rows="moderation.Bans" />
+    }
+
+    <h2>Mutes</h2>
+    <p class="actions">
+        @if (moderation is not { Muted: true })
+        {
+            <ActionLink List="_commands" Me="_me" Action="@AdminActions.Mute" Query="target" />
+        }
+        @if (moderation is not { Muted: false })
+        {
+            <ActionLink List="_commands" Me="_me" Action="@AdminActions.Unmute" Query="target" />
+        }
+    </p>
+    @if (moderation is not null)
+    {
+        <SanctionTable Rows="moderation.Mutes" />
+    }
+
+    <h2>Support requests</h2>
+    <p class="actions">
+        @foreach (var kind in SupportRequestKinds.All.Ordered)
+        {
+            <ActionLink List="_commands" Me="_me" Action="@AdminActions.OpenRequest" Text="@($"Open {(kind == SupportRequestKinds.Export ? "an export" : "a deletion")} request")"
+                Query="@([..target, (AdminCommandFields.Kind, kind)])" />
+        }
+    </p>
+    @if (moderation is not null)
+    {
+        @if (moderation.Requests.Count == 0)
+        {
+            <p>None.</p>
+        }
+        else
+        {
+            <div class="scroll">
+                <table>
+                    <thead><tr><th>#</th><th>Kind</th><th>Status</th><th>Opened</th><th>Closed</th><th>Actions</th></tr></thead>
+                    <tbody>
+                        @foreach (var request in moderation.Requests)
+                        {
+                            IReadOnlyList<(string, string)> about = [(AdminCommandFields.RequestId, request.Id.ToString()), ..target];
+                            <tr data-request="@request.Id">
+                                <td>@request.Id</td><td>@request.Kind</td><td>@request.Status</td><td>@Time(request.OpenedAt)</td><td>@Time(request.ClosedAt)</td>
+                                <td>
+                                    @if (request.Status == SupportRequestStatuses.Open)
+                                    {
+                                        <ActionLink List="_commands" Me="_me" Action="@AdminActions.CompleteRequest" Text="Complete" Query="about" />
+                                        <ActionLink List="_commands" Me="_me" Action="@AdminActions.CancelRequest" Text="Cancel" Query="about" />
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    }
 
     <h2>Characters</h2>
     @if (detail.Characters.Count == 0)
@@ -52,12 +133,18 @@
     private Staff? _me;
     private ApiResult<AccountDetailAnswer>? _account;
     private ApiResult<CommandListAnswer>? _commands;
+    private ApiResult<ModerationAnswer>? _moderation;
 
     protected override async Task OnParametersSetAsync()
     {
         _me = await StaffAsync();
         if (_me is null) return;
         _account = await Api.GetAccountAsync(_me, Id);
-        if (_account.Value is not null) _commands = await Api.GetCommandsAsync(_me);
+        if (_account.Value is null) return;
+        _commands = await Api.GetCommandsAsync(_me);
+        _moderation = await Api.GetModerationAsync(_me, Id);
     }
+
+    // Kick, and whatever the panel has no page for; the other commands with a page stand beside what they are about.
+    private static bool OwnRow(string action) => action == AdminActions.Kick || !CommandForms.Known.ContainsKey(action);
 }

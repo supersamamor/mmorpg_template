@@ -1,6 +1,7 @@
 # Staff panel (`Game.Admin`, T-805)
 
-The web panel staff use: server status, accounts and characters, a character's saved state, the audit log and the commands their role allows. It is a separate ASP.NET Core
+The web panel staff use: server status, accounts and characters, a character's saved state, the audit log, pages for moderation, support, the server and chat reports (T-809)
+and the commands their role allows. It is a separate ASP.NET Core
 Blazor Server app (`src/Game.Admin`) that does everything through the server's admin API ([ADMIN_API.md](ADMIN_API.md)). It references `Game.Shared` and `Game.Content`
 only, never `Game.Server`; it has no database connection and no game rule.
 
@@ -155,30 +156,55 @@ there too.
 
 | Role | May |
 |------|-----|
-| `support` | Every page; `kick` |
-| `gm` | What `support` may, and the commands the server gives `gm` |
-| `admin` | Everything |
+| `support` | Every page; kick, mute and unmute, the support requests, close a chat report |
+| `gm` | What `support` may, and ban and unban, item, currency and unstick fixes, announce |
+| `admin` | Everything, maintenance too |
 
-Which command needs which role is the **server's** table (`GET /admin/v1/commands`). The panel greys out a command above the signed-in role (and one whose lowest role it does
-not know), and the **server checks every command anyway**: its refusal is shown.
+Which command needs which role is the **server's** table (`GET /admin/v1/commands`), and the **server checks every command anyway**: its refusal is shown in words. A button
+on a page about a target (an account, a character, the server, a chat report) is **shown only** to a role that may run it. The command lists (the Commands page, and each
+target's "Commands" row with Kick and anything the panel has no page for) grey out what is above the signed-in role, and a lowest role the panel does not know.
 
-| Page | Shows |
-|------|-------|
-| Status | Players, connections, content hash, error counts, each map instance's tick times, saving. Asks again every `StatusRefreshSeconds` over the page's live connection. Warns when the panel's content differs from the server's |
-| Accounts, Characters | Search by name prefix or id, a page at a time; one account with its characters; one character's saved state (items, skills, quests, outfits, what was set aside), with names from content |
-| Audit log | Search by target, staff, action and time (UTC); older pages |
-| Commands | What the server offers. **Kick** from an account or character page: a required reason, then a confirmation that shows exactly what will be sent |
+| Page | Shows | Actions beside it (lowest role as the server ships) |
+|------|-------|----------------------------------------------------|
+| Status | Players, connections, content hash, error counts, each map instance's tick times, saving. Asks again every `StatusRefreshSeconds` over the page's live connection. Warns when the panel's content differs from the server's | |
+| Accounts | Search by name prefix or id, a page at a time | |
+| An account | The account, whether it is banned or muted now, its bans, mutes and support requests, its characters | Kick (`support`); Ban or Unban (`gm`), whichever fits; Mute or Unmute (`support`); open a deletion or export request, and Complete or Cancel an open one (`support`) |
+| Characters | Search by name prefix or id | |
+| A character | Its saved state (items, skills, quests, outfits, what was set aside) with names from content, and the item, currency and place changes staff made to it, a page at a time | Give item, give or take currency, unstick (`gm`); Remove beside each saved item entry (`gm`) |
+| Server | Players online, maintenance (on or off, since when, when games end) | Announce (`gm`); start or end maintenance (`admin`), whichever fits |
+| Chat reports | Open reports first, then closed, six of each a page: the reported line, channel, when said and when reported, sender and reporter by name, linked to their character and account | Close (`support`, open ones), Mute sender (`support`), Ban sender (`gm`) |
+| Audit log | Search by target, staff, action and time (UTC); older pages | |
+| Commands | What the server offers | Every command |
+
+If the account's bans and mutes, or the server's status, cannot be read, the page says why and offers both sides (Ban and Unban, say): the server refuses what does not fit.
+
+**One road for every change.** A button opens that command's page: its own fields (an item is picked from the panel's content; an entry to remove from the character's saved
+state; an announcement counts its characters as you type, up to 80), a required reason, then a confirmation that says who and what it is about and shows the exact JSON. A link
+fills in only ids, the entry, request or report number and the request's kind: never a reason, a text or an amount.
 
 **A command is sent once.** The panel retries nothing that writes. The confirmation works once, for five minutes: a reload or a double press sends nothing. If no answer comes back
-(timeout, broken connection), the page says the command **may** have been applied and gives the request id to look for in the audit log.
+(timeout, broken connection), the page says the command **may** have been applied and gives the request id to look for in the audit log. An item or currency fix to a character
+that is playing may answer `accepted` with `saving: pending` and no audit row yet: the row is written with the character's next save.
 
-**Commands without a page.** A command the panel has no page for (added to the server later) gets a general form: up to eight named fields, each text, whole number or true/false,
-and the reason. It is safe in that it decides nothing: the confirmation shows the exact JSON, and the server checks the role, each field and the reason, and audits it. It
-cannot send lists or nested objects, and it explains nothing about the fields, so give a command staff use often a page of its own: its id fields in `CommandForms.Known`, and a
-test.
+**The data export** (Complete on an export request). The server's answer holds everything stored about the account; the result page offers it as a JSON file to download,
+never shows it as text, and the panel **keeps no copy** (no file, no memory, no log; the page is `no-store`). Save it on that page: leaving or reloading it loses the download,
+and the request is closed, so to get it again open a new export request. There is no separate download request: the audit row is the server's own for `complete_request`, which
+says who made the export and when, not whether the file was saved. The panel reads answers up to 8 MiB; a larger export arrives as "the panel does not know whether..." and
+cannot be downloaded here (call the admin API directly, [ADMIN_API.md](ADMIN_API.md)). The download is a `data:` address in that one page; the file on the staff member's
+computer is personal data: send it only to the account's owner, then delete it.
 
-**Reasons hold no personal data.** The warning beside every reason box says so: reasons are kept in the audit log, which nothing can change, also after an account is erased
-([STORE_COMPLIANCE.md](STORE_COMPLIANCE.md) §6). Tell staff in your own rules too.
+**Chat reports** show a line a player reported. **It is personal data**: never copy it, or part of it, into a reason or an announcement; the page and the forms opened from it
+say so. The panel never puts it into a field, an address or a log. Names are read from the server each time the page is opened and kept nowhere. Each name is a request
+against the credential's rate limit (§6), which all staff share; when a name cannot be read the page shows ids.
+
+**Commands without a page.** Every command the server has today has a page. One added to the server later gets a general form: up to eight named fields, each text, whole number
+or true/false, and the reason. It is safe in that it decides nothing: the confirmation shows the exact JSON, and the server checks the role, each field and the reason, and audits
+it. It cannot send lists or nested objects, and it explains nothing about the fields, so give a command staff use often a page of its own: its fields in `CommandForms.Known`, a
+button (`ActionLink`) beside what it is about, and a test. The form's checks are only what a field needs to be sent as typed and the limits `Game.Shared` states.
+
+**Reasons hold no personal data.** The warning beside every reason box says to describe what happened and never to write a name, an e-mail address or anything else about a person,
+or what someone said in chat: reasons are kept in the audit log, which nothing can change, also after an account is erased ([STORE_COMPLIANCE.md](STORE_COMPLIANCE.md) §6).
+The same goes for an announcement's text, which is in its audit row. The panel cannot check this: tell staff in your own rules too.
 
 ## 5. Security notes for a fork
 
@@ -193,7 +219,8 @@ allowlist of its own. The sign-in is a second wall, not a reason to expose the p
 **What the panel does**
 - HTTPS only outside Development, with HSTS. Cookies are `__Host-`, `Secure`, `HttpOnly` (session `SameSite=Lax` for the provider's way back, antiforgery `Strict`).
   Antiforgery tokens on every post.
-- A content security policy of `default-src 'none'` with this origin only: no inline script or style, no third-party script, style or font, no framing. Pages are `no-store`,
+- A content security policy of `default-src 'none'` with this origin only: no inline script or style, no third-party script, style or font, no framing. The scripts are Blazor's and
+  `wwwroot/panel.js`, which only counts typed characters. Pages are `no-store`,
   `Referrer-Policy: no-referrer`.
 - Every address needs a sign-in except the sign-in, its callback, the error page, the not-found answer and the static files. Requests naming a host not in the list get a 400.
 - The staff id and role come from the sign-in cookie alone. Nothing the browser sends (field, header, query) can set them.
