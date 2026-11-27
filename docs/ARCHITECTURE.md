@@ -725,7 +725,7 @@ derived stat `weight_limit` (`formulas.yaml`).
 `Game.Server/Guild` (`GuildService`, `GuildOptions`, `IGuildStore`; off the tick), `Game.Server/Persistence/PostgresGuildStore` (`guilds`, `guild_ranks`, `guild_members`, migration
 `20261127125839_Guilds`), `Game.Server/World/Guild/GuildFoundingPayment` (the cost, on the tick, taken by the inventory system), the pure `Game.Shared/Guild/GuildRules`; the client's `GuildBook`
 and `GuildPanel`. Rules from `balance.yaml` `guild` (name lengths and separators, `found_cost`, `max_members` 30, `max_ranks` 6, `rank_name_max_length` 16, `invite_timeout_ms` 30 s,
-`default_ranks`, `emblems`); server configuration `--guild-notice-length` 200, `--guild-intents-per-minute` 20, `--guild-intent-burst` 6, `--guild-pulse-ms` 1000, `--guild-refresh-ms` 5000,
+`default_ranks`, `emblems`); server configuration `--guild-notice-length` 120, `--guild-intents-per-minute` 20, `--guild-intent-burst` 6, `--guild-pulse-ms` 1000, `--guild-refresh-ms` 5000,
 `--guild-payment-wait-ms` 10000 (or `GAME_GUILD_<NAME>`). A server without a database (development's dev login) has no guilds.
 - **The database decides.** Every change is one transaction that locks the guild's row (`FOR UPDATE`), reads its ranks and members, and runs `GuildRules` on what it read: two officers on two
   server processes acting at once are run one after the other, and the second sees the first's change (tested on two connection pools). Whatever adds a member row takes the character's row

@@ -257,7 +257,7 @@ public sealed class GuildPanel
         var ranks = new[] { new GuildRankRecord(rank, []), new GuildRankRecord(rank, []), new GuildRankRecord(rank, []), new GuildRankRecord(rank, []) };
         var members = new List<GuildMemberRecord> { new(1, name, 0, 99, true) };
         for (var i = 2; i <= 8; i++) members.Add(new GuildMemberRecord(i, name, 2, 99, i % 2 == 0));
-        Draw(new GuildMessage(1, UiText.LongestGuildNameSample, _emblems.Count > 0 ? _emblems[0] : "", new string('W', 200), 1, ranks, members), tapped: true, leaderView: true);
+        Draw(new GuildMessage(1, UiText.LongestGuildNameSample, _emblems.Count > 0 ? _emblems[0] : "", new string('W', 120), 1, ranks, members), tapped: true, leaderView: true);
         _prompt.Visible = true;
         _promptText.Text = UiText.GuildInvited(name, UiText.LongestGuildNameSample, 30);
         Place();

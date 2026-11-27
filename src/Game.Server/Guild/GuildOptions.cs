@@ -17,7 +17,7 @@ public sealed record GuildOptions
     public const string EnvPrefix = "GAME_GUILD_";
 
     /// <summary>The longest notice, in characters after cleaning: a few lines on the guild panel of the smallest phone.</summary>
-    public int NoticeLength { get; init; } = 200;
+    public int NoticeLength { get; init; } = 120;
 
     /// <summary>Guild intents an account gets back per minute (the bucket's refill): every one reads the database, so a flood is cut off early.</summary>
     public double IntentsPerMinute { get; init; } = 20;
@@ -76,7 +76,7 @@ public sealed record GuildOptions
     public IReadOnlyList<string> Problems(int maxMessageBytes)
     {
         var problems = new List<string>();
-        if (NoticeLength < 1 || NoticeLength * 4 + 256 > maxMessageBytes) problems.Add("notice-length must be above 0 and fit a message (--max-message-bytes)");
+        if (NoticeLength < 1 || NoticeLength * 6 + 64 > maxMessageBytes) problems.Add($"notice-length must be above 0 and fit a client message (a code unit may take 6 bytes on the wire): at most {(maxMessageBytes - 64) / 6} for --max-message-bytes {maxMessageBytes}");
         if (!(IntentsPerMinute > 0) || IntentBurst < 1) problems.Add("intents-per-minute and intent-burst must be above 0");
         if (PulseMs < 100 || RefreshMs < PulseMs) problems.Add("pulse-ms must be at least 100 and refresh-ms at least pulse-ms");
         if (PaymentWaitMs < 1_000) problems.Add("payment-wait-ms must be at least 1000");
