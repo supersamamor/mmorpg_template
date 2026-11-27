@@ -1,0 +1,114 @@
+@page "/chat-reports"
+@inherits PanelPage
+
+<PageTitle>Chat reports · Staff panel</PageTitle>
+<h1>Chat reports</h1>
+<ChatLineWarning />
+
+<FailureBox Failure="_commands?.Failure" />
+@if (_namesFailure is not null)
+{
+    <p class="warning">Some names could not be read, so ids are shown: @_namesFailure.Words</p>
+}
+
+@foreach (var section in _sections)
+{
+    <h2>@(section.Status == ChatReportStatuses.Open ? "Open" : "Closed")</h2>
+    <FailureBox Failure="section.Page.Failure" />
+    @if (section.Page.Value is { } page)
+    {
+        @if (page.Items.Count == 0)
+        {
+            <p>No @section.Status report@(section.Before is null ? "" : " on this page").</p>
+        }
+        @foreach (var report in page.Items)
+        {
+            <article class="report" data-report="@report.Id">
+                <h3>Report @report.Id</h3>
+                <blockquote class="line" data-line>@report.Text</blockquote>
+                <dl class="facts">
+                    <dt>Channel</dt><dd>@report.Channel</dd>
+                    <dt>Said</dt><dd>@Time(report.SaidAt)</dd>
+                    <dt>Reported</dt><dd>@Time(report.ReportedAt)</dd>
+                    <dt>Sender</dt>
+                    <dd data-sender><a href="/characters/@report.SenderCharacterId">@NameOf(report.SenderCharacterId)</a> · <a href="/accounts/@report.SenderAccountId">their account</a></dd>
+                    <dt>Reporter</dt>
+                    <dd data-reporter><a href="/characters/@report.ReporterCharacterId">@NameOf(report.ReporterCharacterId)</a> · <a href="/accounts/@report.ReporterAccountId">their account</a></dd>
+                    @if (report.Status == ChatReportStatuses.Closed)
+                    {
+                        <dt>Closed</dt><dd>@Time(report.ClosedAt)@(report.ClosedAuditId is { } audit ? $", audit row {audit}" : "")</dd>
+                    }
+                </dl>
+                @if (_commands is not null && _me is not null)
+                {
+                    <p class="actions">
+                        @if (report.Status == ChatReportStatuses.Open)
+                        {
+                            <ActionLink List="_commands" Me="_me" Action="@AdminActions.CloseReport" Text="Close"
+                                Query="@([(AdminCommandFields.ReportId, report.Id.ToString()), ("from", "reports")])" />
+                        }
+                        <ActionLink List="_commands" Me="_me" Action="@AdminActions.Mute" Text="Mute sender" Query="Sender(report)" />
+                        <ActionLink List="_commands" Me="_me" Action="@AdminActions.Ban" Text="Ban sender" Query="Sender(report)" />
+                    </p>
+                }
+            </article>
+        }
+        <p class="pages">
+            @if (section.Before is not null)
+            {
+                <a href="@PageLink(section.Status, null)">Newest @section.Status</a>
+            }
+            @if (page.Next is { } next)
+            {
+                <a href="@PageLink(section.Status, next)" rel="next">Older @section.Status</a>
+            }
+        </p>
+    }
+}
+
+@code {
+    // Each report needs up to two name reads, and every read counts against the one rate limit all staff share (bursts of 30): small pages stay inside it.
+    private const int PageSize = 6;
+
+    [SupplyParameterFromQuery(Name = "open_before")] public string? OpenBefore { get; set; }
+    [SupplyParameterFromQuery(Name = "closed_before")] public string? ClosedBefore { get; set; }
+
+    private Staff? _me;
+    private ApiResult<CommandListAnswer>? _commands;
+    private List<(string Status, string? Before, ApiResult<PageAnswer<ChatReportAnswer>> Page)> _sections = [];
+    private readonly Dictionary<Guid, string> _names = [];
+    private ApiFailure? _namesFailure;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _me = await StaffAsync();
+        if (_me is null) return;
+        _commands = await Api.GetCommandsAsync(_me);
+        _sections = [];
+        // Open ones first: what waits for staff.
+        foreach (var (status, before) in new[] { (ChatReportStatuses.Open, Clean(OpenBefore)), (ChatReportStatuses.Closed, Clean(ClosedBefore)) })
+            _sections.Add((status, before, await Api.FindChatReportsAsync(_me, status, before, PageSize)));
+        // Names are read for this page only and kept nowhere.
+        var characters = _sections.SelectMany(s => s.Page.Value?.Items ?? []).SelectMany(r => new[] { r.SenderCharacterId, r.ReporterCharacterId }).Distinct().ToList();
+        foreach (var id in characters)
+        {
+            var found = await Api.GetCharacterAsync(_me, id);
+            if (found.Value is { } detail)
+            {
+                _names[id] = detail.Character.Name;
+                continue;
+            }
+            if (found.Failure!.Term == AdminErrors.UnknownTarget) continue;
+            _namesFailure = found.Failure;
+            break; // asking on would only be refused again
+        }
+    }
+
+    private string NameOf(Guid character) => _names.GetValueOrDefault(character) ?? character.ToString();
+
+    private static IReadOnlyList<(string, string)> Sender(ChatReportAnswer report) => [(AdminCommandFields.AccountId, report.SenderAccountId.ToString()), ("from", "reports")];
+
+    private string PageLink(string status, string? before) => Paging.Link("/chat-reports",
+        ("open_before", status == ChatReportStatuses.Open ? before : Clean(OpenBefore)),
+        ("closed_before", status == ChatReportStatuses.Closed ? before : Clean(ClosedBefore)));
+}

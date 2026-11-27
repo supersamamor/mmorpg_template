@@ -1,0 +1,20 @@
+@* The way to one command's page from the page about its target. Shown only when the server lists the command and the role reaches it; the server checks the role anyway. *@
+@if (List.Value?.Commands.FirstOrDefault(c => c.Action == Action) is { } info && Me.Reaches(info.LowestRole))
+{
+    <a class="button" data-command="@Action" href="@Href">@(Text ?? CommandForms.Label(Action))</a>
+}
+
+@code {
+    [Parameter, EditorRequired] public ApiResult<CommandListAnswer> List { get; set; } = default!;
+
+    [Parameter, EditorRequired] public Staff Me { get; set; } = default!;
+
+    [Parameter, EditorRequired] public string Action { get; set; } = default!;
+
+    /// <summary>The command page's query: ids only.</summary>
+    [Parameter] public IReadOnlyList<(string Name, string Value)> Query { get; set; } = [];
+
+    [Parameter] public string? Text { get; set; }
+
+    private string Href => Paging.Link("/commands/" + Action, Query.Select(q => (q.Name, (string?)q.Value)).ToArray());
+}

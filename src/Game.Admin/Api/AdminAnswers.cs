@@ -41,3 +41,21 @@ public sealed record CommandInfo(string Action, string LowestRole);
 
 /// <summary><c>GET /admin/v1/commands</c>.</summary>
 public sealed record CommandListAnswer(IReadOnlyList<CommandInfo> Commands, string ReadRole, IReadOnlyList<string> Roles);
+
+/// <summary>One ban or mute (<c>/accounts/{id}/moderation</c>). <see cref="Until"/> null: no end.</summary>
+public sealed record SanctionAnswer(long Id, string Kind, DateTime From, DateTime? Until, bool InForce, long? AuditId, DateTime? LiftedAt, long? LiftedAuditId);
+
+/// <summary>One entry of the support queue.</summary>
+public sealed record SupportRequestAnswer(long Id, Guid AccountId, string Kind, string Status, DateTime OpenedAt, long? OpenedAuditId, DateTime? ClosedAt, long? ClosedAuditId);
+
+/// <summary>An account's bans, mutes and support requests, newest first.</summary>
+public sealed record ModerationAnswer(Guid AccountId, bool Banned, bool Muted, IReadOnlyList<SanctionAnswer> Bans, IReadOnlyList<SanctionAnswer> Mutes,
+    IReadOnlyList<SupportRequestAnswer> Requests);
+
+/// <summary>A player's report of a chat line. <see cref="Text"/> is what was said: personal data, shown to staff and put nowhere else.</summary>
+public sealed record ChatReportAnswer(long Id, DateTime ReportedAt, Guid ReporterAccountId, Guid ReporterCharacterId, Guid SenderAccountId, Guid SenderCharacterId, string Channel,
+    string Text, DateTime SaidAt, string Status, DateTime? ClosedAt, long? ClosedAuditId)
+{
+    /// <summary>Never the line: a report written to a log by mistake does not carry it.</summary>
+    public override string ToString() => $"ChatReportAnswer {{ Id = {Id}, Status = {Status} }}";
+}

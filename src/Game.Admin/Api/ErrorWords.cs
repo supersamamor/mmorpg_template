@@ -30,7 +30,7 @@ public static class ErrorWords
         [AdminErrors.Forbidden] = "Your role is not allowed to do this.",
         [AdminErrors.ReasonRequired] = "A reason is required: 1 to 500 characters.",
         [AdminErrors.NotFound] = "The server has no such endpoint or command. The panel and the server may be different versions.",
-        [AdminErrors.UnknownTarget] = "There is no such account or character (it may have been erased).",
+        [AdminErrors.UnknownTarget] = "There is no such account, character, support request or chat report (it may have been erased).",
         [AdminErrors.RateLimited] = "Too many requests to the server. Wait a moment.",
         [AdminErrors.Timeout] = "The game world did not answer in time. Nothing was changed.",
         [AdminErrors.Unavailable] = "The server's database could not answer now. Nothing was changed.",

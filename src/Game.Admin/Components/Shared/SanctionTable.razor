@@ -1,0 +1,27 @@
+@* An account's bans or mutes, newest first. *@
+@if (Rows.Count == 0)
+{
+    <p>None.</p>
+}
+else
+{
+    <div class="scroll">
+        <table>
+            <thead><tr><th>#</th><th>From</th><th>Until</th><th>In force</th><th>Lifted</th><th>Audit rows</th></tr></thead>
+            <tbody>
+                @foreach (var sanction in Rows)
+                {
+                    <tr>
+                        <td>@sanction.Id</td><td>@PanelPage.Time(sanction.From)</td><td>@(sanction.Until is null ? "no end" : PanelPage.Time(sanction.Until))</td>
+                        <td>@(sanction.InForce ? "yes" : "no")</td><td>@PanelPage.Time(sanction.LiftedAt)</td>
+                        <td>@(sanction.AuditId?.ToString() ?? "—")@(sanction.LiftedAuditId is { } lifted ? $", lifted by {lifted}" : "")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<SanctionAnswer> Rows { get; set; } = [];
+}

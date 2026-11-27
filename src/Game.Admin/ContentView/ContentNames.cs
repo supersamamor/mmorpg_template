@@ -13,12 +13,16 @@ public sealed class ContentNames
 {
     private readonly IReadOnlyDictionary<string, string> _names;
 
-    private ContentNames(IReadOnlyDictionary<string, string> names, string? hash, string? problem)
+    private ContentNames(IReadOnlyDictionary<string, string> names, IReadOnlyList<string> items, string? hash, string? problem)
     {
+        ItemIds = items;
         _names = names;
         Hash = hash;
         Problem = problem;
     }
+
+    /// <summary>The content's item ids, by name then id, for the item picker; empty without content.</summary>
+    public IReadOnlyList<string> ItemIds { get; }
 
     /// <summary>The loaded content's display-bundle hash, as the server's status reports its own; null when unknown.</summary>
     public string? Hash { get; }
@@ -27,7 +31,7 @@ public sealed class ContentNames
     public string? Problem { get; }
 
     /// <summary>No names: every id is shown as it is.</summary>
-    public static ContentNames None(string problem) => new(new Dictionary<string, string>(), null, problem);
+    public static ContentNames None(string problem) => new(new Dictionary<string, string>(), [], null, problem);
 
     /// <summary>The names of <paramref name="content"/>.</summary>
     public static ContentNames Of(ContentDatabase content)
@@ -55,7 +59,9 @@ public sealed class ContentNames
         {
             // content that does not make a bundle still has names
         }
-        return new ContentNames(names, hash, null);
+        var items = content.Items.All.Select(d => d.Id).OrderBy(id => names.GetValueOrDefault(id, id), StringComparer.OrdinalIgnoreCase)
+            .ThenBy(id => id, StringComparer.Ordinal).ToList();
+        return new ContentNames(names, items, hash, null);
     }
 
     /// <summary>

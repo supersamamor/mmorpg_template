@@ -148,7 +148,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-903 | Player trade: ask, two-step lock and confirm, atomic swap on the tick, both saves land together, dupe-safe (rule 10) | Claude Code | Opus 5.5 | [T-903](../tasks/prompts/T-903.md) | T-702, T-902 | Review | Restricted `Net/**` and, only if T-702's save links cannot do it, `Persistence/**` scopes in the prompt's header |
 | T-904 | Guilds: found, invite, ranks with permissions, notice, guild chat through T-901's seam, emblem from the theme's set, erased with the account | Claude Code | Opus 5.5 | [T-904](../tasks/prompts/T-904.md) | T-901, T-902, T-703 | Review | Restricted `Persistence/**` (one migration) and `Net/**` scopes in the prompt's header |
 | T-905 | Guild storage: deposit and withdraw by rank, atomic with the character's save, move log, dupe-safe (rule 10) | Claude Code | Opus 5.5 | [T-905](../tasks/prompts/T-905.md) | T-903, T-904 | Ready | Restricted `Persistence/**` (one migration) and `Net/**` scopes in the prompt's header |
-| T-809 | Staff panel pages for moderation, support, server and chat reports (ADR-002 rows 387 (1), 412 (1)) | Claude Code | Sonnet 5.5 | [T-809](../tasks/prompts/T-809.md) | T-805, T-806, T-901 | Ready | Built beside T-905; `src/Game.Admin` only |
+| T-809 | Staff panel pages for moderation, support, server and chat reports (ADR-002 rows 387 (1), 412 (1)) | Claude Code | Sonnet 5.5 | [T-809](../tasks/prompts/T-809.md) | T-805, T-806, T-901 | Review | Built beside T-905; `src/Game.Admin` only |
 
 ## Backlog (prompts written when the previous phase is Done)
 

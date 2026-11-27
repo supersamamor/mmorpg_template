@@ -3,9 +3,10 @@
 @inject CommandTickets Tickets
 @inject ILogger<Game.Admin.Components.Pages.Command> Log
 
-@* One command: its form, then a confirmation that shows exactly what will be sent, then what came of it. One form element, whatever the step: a post must find it. *@
+@* One command: its form, then a confirmation that shows exactly what will be sent, then what came of it. One form element, whatever the step: a post must find it.
+   Every write of the panel goes through this page, so the rules hold for each: a reason, the exact JSON confirmed, a one-time ticket, no retry. *@
 
-<PageTitle>@CommandName · Staff panel</PageTitle>
+<PageTitle>@Title · Staff panel</PageTitle>
 <h1>@Title</h1>
 
 <FailureBox Failure="_commands?.Failure" />
@@ -21,7 +22,7 @@
         @if (_result.Answer is { } answer)
         {
             <div class="outcome @answer.Outcome" role="status">
-                <p data-outcome="@answer.Outcome"><strong>@OutcomeWords(answer.Outcome)</strong></p>
+                <p data-outcome="@answer.Outcome"><strong>@OutcomeWords(answer)</strong></p>
                 @if (answer.Error is { } error)
                 {
                     <p>@ErrorWords.For(error)</p>
@@ -31,13 +32,21 @@
                 @if (answer.Result is { Count: > 0 } values)
                 {
                     <dl class="facts">
-                        @foreach (var value in values)
+                        @foreach (var value in values.Where(v => v.Key != ExportKey))
                         {
                             <dt>@value.Key</dt><dd>@value.Value?.ToString()</dd>
                         }
                     </dl>
                 }
             </div>
+            @if (ExportLink(answer) is { } export)
+            {
+                <div class="warning">
+                    <p><strong>This is everything stored about the account: personal data.</strong> Save it now, send it only to the account's owner, then delete your copy.</p>
+                    <p>The panel keeps no copy: once you leave this page it is gone from here. To get it again, open a new export request.</p>
+                    <p><a class="button" data-export href="@export" download="@ExportName(answer)">Download the export (JSON)</a></p>
+                </div>
+            }
         }
         else
         {
@@ -47,18 +56,18 @@
                 <p class="warning">@ErrorWords.MayHaveHappened</p>
             }
         }
-        <p><a href="/audit">Open the audit log</a></p>
+        <p class="actions"><a href="@Back">@BackWords</a> <a href="/audit">Open the audit log</a></p>
     }
     else if (_ticket is not null && _me is not null && _info is not null)
     {
         <h2>Confirm</h2>
-        @if (_targetAccount is not null)
+        @foreach (var line in _context)
         {
-            <p>Account <strong>@_targetAccount.Username</strong> (<code>@_targetAccount.Id</code>), @(_targetAccount.Online ? "playing now" : "not playing").</p>
+            <p data-context>@line</p>
         }
-        @if (CommandName == AdminActions.Kick)
+        @if (Effect() is { } effect)
         {
-            <p>Kick ends every sign-in of the account and its game. The player has to sign in again.</p>
+            <p>@effect</p>
         }
         <p>This will be sent to the server, once:</p>
         <pre data-confirm>@_json</pre>
@@ -84,9 +93,13 @@
             }
             @if (_known is not null)
             {
-                @foreach (var field in _fields)
+                @if (FromReports)
                 {
-                    <label>@field.Name <input name="@field.Name" value="@field.Value" size="38" maxlength="36" required /></label>
+                    <ChatLineWarning />
+                }
+                @foreach (var spec in _known)
+                {
+                    <CommandInput Spec="spec" Value="@ValueOf(spec.Name)" Entries="_entries" />
                 }
             }
             else
@@ -126,26 +139,60 @@
 
     [CascadingParameter] private HttpContext? Http { get; set; }
 
+    private const string ExportKey = "export";
+
+    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
+
     private Staff? _me;
     private ApiResult<CommandListAnswer>? _commands;
     private CommandInfo? _info;
-    private IReadOnlyList<string>? _known;
+    private IReadOnlyList<FieldSpec>? _known;
     private List<CommandField> _fields = [];
     private string _reason = string.Empty;
     private string? _problem;
     private string? _ticket;
     private string? _json;
-    private AccountAnswer? _targetAccount;
+    private readonly List<string> _context = [];
+    private IReadOnlyList<ItemAnswer>? _entries;
     private CommandResult? _result;
 
-    private string Title => CommandName == AdminActions.Kick ? "Kick" : "Command: " + CommandName;
+    private string Title => _known is not null ? CommandForms.Label(CommandName) : "Command: " + CommandName;
+
+    private bool FromReports => Http?.Request.Query["from"].ToString() == "reports";
+
+    private bool ServerCommand => CommandName is AdminActions.Announce or AdminActions.StartMaintenance or AdminActions.EndMaintenance;
 
     private string Back =>
-        QueryId("character_id") is { } character ? $"/characters/{character}"
+        FromReports ? "/chat-reports"
+        : ServerCommand ? "/server"
+        : QueryId(AdminCommandFields.CharacterId) is { } character ? $"/characters/{character}"
         : QueryId(AdminCommandFields.AccountId) is { } account ? $"/accounts/{account}"
         : "/commands";
 
+    private string BackWords =>
+        Back == "/chat-reports" ? "Back to the chat reports"
+        : Back == "/server" ? "Back to the server page"
+        : Back.StartsWith("/characters/", StringComparison.Ordinal) ? "Back to the character"
+        : Back.StartsWith("/accounts/", StringComparison.Ordinal) ? "Back to the account"
+        : "Back to the commands";
+
     private string? QueryId(string name) => Guid.TryParseExact(Http?.Request.Query[name].ToString(), "D", out var id) ? id.ToString() : null;
+
+    // What a link may fill in: ids, numbers that name something and the kind of a request. Never free text, so nothing from an address reaches a reason or an announcement.
+    private string Prefill(FieldSpec spec)
+    {
+        var value = Http?.Request.Query[spec.Name].ToString() ?? string.Empty;
+        return spec.Input switch
+        {
+            FieldInput.Id => QueryId(spec.Name) ?? string.Empty,
+            FieldInput.Item or FieldInput.Line => string.Empty,
+            FieldInput.RequestKind => SupportRequestKinds.All.Contains(value) ? value : string.Empty,
+            _ => spec.Name is AdminCommandFields.EntryId or AdminCommandFields.RequestId or AdminCommandFields.ReportId
+                && long.TryParse(value, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out _) ? value : string.Empty,
+        };
+    }
+
+    private string ValueOf(string name) => _fields.FirstOrDefault(f => f.Name == name)?.Value ?? string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -154,10 +201,14 @@
         _commands = await Api.GetCommandsAsync(_me);
         _info = AdminApiClient.IsActionName(CommandName) ? _commands.Value?.Commands.FirstOrDefault(c => c.Action == CommandName) : null;
         CommandForms.Known.TryGetValue(CommandName, out _known);
-        var ids = new[] { AdminCommandFields.AccountId, "character_id" };
+        var ids = new[] { AdminCommandFields.AccountId, AdminCommandFields.CharacterId };
         if (_known is not null)
         {
-            _fields = _known.Select(name => new CommandField(name, CommandForms.Text, QueryId(name) ?? string.Empty)).ToList();
+            _fields = _known.Select(spec => new CommandField(spec.Name, CommandForms.Text, Prefill(spec))).ToList();
+            // The entries to pick from: the character's saved state. Without it (or on the confirming post) the number is typed.
+            var confirming = Http is { Request.HasFormContentType: true } && Http.Request.Form["step"].ToString() == "confirm";
+            if (!confirming && _known.Any(spec => spec.Input == FieldInput.Entry) && Guid.TryParse(QueryId(AdminCommandFields.CharacterId), out var character))
+                _entries = (await Api.GetCharacterAsync(_me, character)).Value?.State?.Items;
         }
         else
         {
@@ -184,13 +235,14 @@
             }
             // Not tied to the browser: a staff member who leaves the page does not cut a command off half way.
             _result = await Api.RunCommandAsync(_me, CommandName, pending.Json);
+            // The outcome and ids only: never the body, the reason or the result (an export is in one).
             Log.LogInformation("Staff {StaffId} ({Role}) ran '{Action}': {Outcome} {Error} (request {RequestId}, audit row {AuditId})", _me.Id, _me.Role, CommandName,
                 _result.Answer?.Outcome ?? "no answer", _result.Answer?.Error ?? _result.Failure?.Term, _result.RequestId, _result.Answer?.AuditId);
             return;
         }
         if (_info is null) return;
         _fields = _known is not null
-            ? _known.Select(name => new CommandField(name, CommandForms.Text, form[name].ToString())).ToList()
+            ? _known.Select(spec => new CommandField(spec.Name, CommandForms.Text, form[spec.Name].ToString())).ToList()
             : Enumerable.Range(0, CommandForms.MaxFields)
                 .Select(i => new CommandField(form[$"field_name_{i}"].ToString(), form[$"field_kind_{i}"].ToString() is { Length: > 0 } kind ? kind : CommandForms.Text,
                     form[$"field_value_{i}"].ToString()))
@@ -202,22 +254,80 @@
             _problem = body.Problem;
             return;
         }
-        if (CommandName == AdminActions.Kick && Guid.TryParse(_fields[0].Value.Trim(), out var account))
-        {
-            var found = await Api.GetAccountAsync(_me, account);
-            if (found.Value is null)
-            {
-                _problem = found.Failure!.Words;
-                return;
-            }
-            _targetAccount = found.Value.Account;
-        }
+        if (_known is not null && !await DescribeTargetsAsync(_me)) return;
         _json = body.Json;
         _ticket = Tickets.Issue(_me.SessionId, CommandName, body.Json);
     }
 
-    private static string OutcomeWords(string outcome) =>
-        outcome == AdminOutcomes.Done ? "Done: the change is made and in the audit log."
-        : outcome == AdminOutcomes.Accepted ? "Accepted: it is in the audit log, and the world applies it on a coming tick."
+    // Who and what the confirmation is about, read from the server now. A target that cannot be read stops here: staff confirm only what they can see.
+    private async Task<bool> DescribeTargetsAsync(Staff me)
+    {
+        if (Guid.TryParse(ValueOf(AdminCommandFields.AccountId).Trim(), out var accountId))
+        {
+            var found = await Api.GetAccountAsync(me, accountId);
+            if (found.Value is not { } detail) return Fail(found.Failure!);
+            _context.Add($"Account {detail.Account.Username} ({detail.Account.Id}), {(detail.Account.Online ? "playing now" : "not playing")}.");
+        }
+        if (Guid.TryParse(ValueOf(AdminCommandFields.CharacterId).Trim(), out var characterId))
+        {
+            var found = await Api.GetCharacterAsync(me, characterId);
+            if (found.Value is not { } detail) return Fail(found.Failure!);
+            _context.Add($"Character {detail.Character.Name} ({detail.Character.Id}), {(detail.Character.Online ? "playing now" : "not playing")}.");
+            if (CommandName == AdminActions.RemoveItem && detail.State?.Items.FirstOrDefault(i => i.Id.ToString() == ValueOf(AdminCommandFields.EntryId).Trim()) is { } entry)
+                _context.Add($"Entry {entry.Id}: {Names.Describe(entry.ItemId)}, quantity {entry.Quantity} at the last save.");
+        }
+        if (CommandName == AdminActions.GiveItem) _context.Add("Item: " + Names.Describe(ValueOf(AdminCommandFields.ItemId).Trim()) + ".");
+        // A support request has no read of its own: it is described when the link said whose it is. What it says comes from the server, not from the address.
+        if (CommandName is AdminActions.CompleteRequest or AdminActions.CancelRequest && Guid.TryParse(QueryId(AdminCommandFields.AccountId), out var owner))
+        {
+            var moderation = await Api.GetModerationAsync(me, owner);
+            if (moderation.Value?.Requests.FirstOrDefault(r => r.Id.ToString() == ValueOf(AdminCommandFields.RequestId).Trim()) is { } request)
+            {
+                var account = await Api.GetAccountAsync(me, owner);
+                _context.Add($"Request {request.Id}: {request.Kind}, {request.Status}, for account {account.Value?.Account.Username ?? owner.ToString()}.");
+            }
+        }
+        return true;
+
+        bool Fail(ApiFailure failure)
+        {
+            _problem = failure.Words;
+            return false;
+        }
+    }
+
+    private string? Effect() => CommandName switch
+    {
+        AdminActions.Kick => "Kick ends every sign-in of the account and its game. The player has to sign in again.",
+        AdminActions.Ban => (ValueOf(AdminCommandFields.Minutes).Trim().Length == 0 ? "This ban has no end. " : "") +
+            "A ban ends every sign-in and the game at once; the account cannot sign in while it lasts. The player does not see your reason.",
+        AdminActions.Mute => "A muted account cannot send chat while the mute lasts.",
+        AdminActions.RemoveItem => "A worn item comes off first.",
+        AdminActions.Unstick => "The character moves to its save point.",
+        AdminActions.Announce => "Everyone playing on this server sees the text at once. It cannot be taken back.",
+        AdminActions.StartMaintenance => "No new sign-in from now. Those playing are warned, and when the warning is over every game on this server ends, saved.",
+        AdminActions.EndMaintenance => "Sign-ins open again.",
+        AdminActions.CompleteRequest =>
+            "A deletion request: every sign-in and game of the account ends, and it is erased after the server's wait. An export request: the answer is the account's data, offered once as a download.",
+        AdminActions.CancelRequest => "The request is closed without being handled.",
+        AdminActions.CloseReport => "The report leaves the open list. Closing it does nothing to the sender: mute and ban are commands of their own.",
+        _ => null,
+    };
+
+    // The export goes from the server's answer into this one page (not cached) and nowhere else: no file, no memory kept, no log.
+    private string? ExportLink(AdminCommandAnswer answer) =>
+        CommandName == AdminActions.CompleteRequest && answer.Outcome == AdminOutcomes.Done
+        && answer.Result is { } result && result.TryGetValue(ExportKey, out var value) && value is JsonElement { ValueKind: JsonValueKind.Object } export
+            ? "data:application/json;charset=utf-8;base64," + Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(export, Indented))
+            : null;
+
+    // Named by its audit row: no username in a file name.
+    private static string ExportName(AdminCommandAnswer answer) => $"account-export-{answer.AuditId}.json";
+
+    private static string OutcomeWords(AdminCommandAnswer answer) =>
+        answer.Outcome == AdminOutcomes.Done ? "Done: the change is made and in the audit log."
+        : answer.Outcome == AdminOutcomes.Accepted
+            ? answer.AuditId is null ? "Accepted: the world is applying it. Its audit row is written with the character's next save."
+                : "Accepted: it is in the audit log, and the world applies it on a coming tick."
         : "The server refused: nothing was changed.";
 }

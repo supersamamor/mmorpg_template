@@ -62,7 +62,8 @@ public class PanelPageTests
     private static string[] AllPages =>
     [
         "/", "/status", "/accounts", "/accounts?name=ad", $"/accounts/{AccountId}", "/characters", $"/characters?account={AccountId}", $"/characters/{CharacterId}", "/audit",
-        $"/audit?target={AccountId}&staff=oidc%7Ckim&action=kick", "/commands", $"/commands/kick?account_id={AccountId}", $"/commands/test_gm?account_id={AccountId}", "/signin",
+        $"/audit?target={AccountId}&staff=oidc%7Ckim&action=kick", "/commands", $"/commands/kick?account_id={AccountId}", $"/commands/test_gm?account_id={AccountId}", "/signin", "/server", "/chat-reports",
+        $"/commands/ban?account_id={AccountId}", "/commands/announce",
     ];
 
     [Theory]
@@ -332,7 +333,7 @@ public class PanelPageTests
         await using var s = server;
         await using var p = panel;
         using var b = browser;
-        foreach (var path in new[] { "/", "/accounts", $"/accounts/{AccountId}", "/characters", $"/characters/{CharacterId}", "/audit", "/commands", "/commands/kick" })
+        foreach (var path in new[] { "/", "/accounts", $"/accounts/{AccountId}", "/characters", $"/characters/{CharacterId}", "/audit", "/commands", "/commands/kick", "/server", "/chat-reports" })
         {
             var page = await browser.GetAsync(path);
             page.Status.ShouldBe(200, path);
@@ -362,7 +363,8 @@ public class PanelPageTests
             if (path == "/nothing-here") continue;
             foreach (Match script in Regex.Matches(page.Html, "<script\\b([^>]*)>(.*?)</script>", RegexOptions.Singleline))
             {
-                script.Groups[1].Value.ShouldContain("src=\"_framework/", customMessage: path);
+                // Blazor's script and the panel's own character counter (T-809): both from this origin, none inline.
+                Regex.IsMatch(script.Groups[1].Value, "src=\"(_framework/|panel[^\"/]*[.]js\")").ShouldBeTrue(path);
                 script.Groups[2].Value.Trim().ShouldBeEmpty(path);
             }
             page.Html.ShouldNotContain("<style", Case.Insensitive, path);
