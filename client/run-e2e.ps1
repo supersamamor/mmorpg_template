@@ -662,7 +662,8 @@ function Invoke-Scenario([string] $Name) {
                     param($marker)
                     if ($marker -like "guild-second:*") {
                         Write-Host "[run-e2e] starting the member"
-                        $holder.Second = Start-GodotClient @("--e2e-guild-join", $marker.Substring(13), "--server", "ws://127.0.0.1:$Port/ws", "--name", "e2e-member") -EngineArgs $engineArgs -Headless
+                        # T-905: the member sells at the meadow's merchant (content/npcs/) for the coins it deposits.
+                        $holder.Second = Start-GodotClient @("--e2e-guild-join", $marker.Substring(13), "--e2e-guild-ids", "npc.merchant", "--server", "ws://127.0.0.1:$Port/ws", "--name", "e2e-member") -EngineArgs $engineArgs -Headless
                     }
                 }
                 if (-not $holder.Second) { Write-Host "[run-e2e] the founder never asked for the member"; return 1 }
@@ -671,6 +672,9 @@ function Invoke-Scenario([string] $Name) {
                 $lines = @(Select-String -Path $server.Log -Pattern "\[guild\] guild \d+ (founded|disbanded)")
                 Write-Host "[run-e2e] guild log lines: $(@($lines | ForEach-Object { ($_.Line -split '\[guild\] ')[1] }) -join '; ')"
                 if ($lines.Count -ne 2) { Write-Host "[run-e2e] expected a founding and a disbanding on the server log, found $($lines.Count)"; return 1 }
+                $moves = @(Select-String -Path $server.Log -Pattern "\[guild\] storage (deposit|withdraw) by .* landed")
+                Write-Host "[run-e2e] guild storage moves on the server log: $($moves.Count)"
+                if ($moves.Count -ne 4) { Write-Host "[run-e2e] expected two deposits and two withdrawals to land, found $($moves.Count)"; return 1 }
                 if (Select-String -Path $server.Log -Pattern "e2esaid" -Quiet) { Write-Host "[run-e2e] A PLAYER'S LINE IS IN THE SERVER LOG"; return 1 }
                 if (Select-String -Path $server.Log -Pattern "\[guild\].*(failed|could not)" -Quiet) { Write-Host "[run-e2e] the guild service logged a failure"; return 1 }
                 return $result.Code

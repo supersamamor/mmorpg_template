@@ -126,6 +126,17 @@ public sealed class UiRuns
         await LayoutMatrixAsync("guild founding with the emblem picker");
         Check(guild.EmblemButtons.Count > 0 && Hud.Blocks(guild.EmblemButtons[^1].GetGlobalRect().GetCenter()), "the emblem picker shows and takes its touches");
         guild.ClearSamples();
+        // T-905: the guild storage window full (the size's entries of the longest lines, the largest currency) with the quantity picker, then its log of the longest lines.
+        var storage = Hud.GuildStorage!;
+        storage.ShowSamples(log: false);
+        await FramesAsync(3);
+        await LayoutMatrixAsync("guild storage with the quantity picker");
+        Check(Hud.Blocks(storage.MoveButton.GetGlobalRect().GetCenter()), "a touch on the storage window never reaches the world");
+        storage.ShowSamples(log: true);
+        await FramesAsync(3);
+        await LayoutMatrixAsync("guild storage log");
+        Check(Hud.Blocks(storage.TakeCoinsButton.GetGlobalRect().GetCenter()), "the coins row shows and takes its touches");
+        storage.ClearSamples();
         // T-903: the trade window with both offers full of the longest lines, the longest name and state, the currency field and the footer, the ask prompt over it; then the bag's
         // list of what can be offered with the quantity picker in the columns' place.
         var trade = Hud.Trade!;

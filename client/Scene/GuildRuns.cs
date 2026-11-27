@@ -2,8 +2,10 @@ using System.Diagnostics;
 using Game.Client.Core;
 using Game.Client.Core.Accounts;
 using Game.Client.Core.Net;
+using Game.Client.Core.World;
 using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
+using Game.Shared.World;
 using Godot;
 
 namespace Game.Client.Scene;
@@ -16,26 +18,50 @@ namespace Game.Client.Scene;
 /// <item><c>--e2e-guild-join &lt;founder&gt;</c> (the member): enters, says a map line, joins through the invite prompt, answers on the guild channel, sees the notice and its new rank,
 /// then leaves through the panel.</item>
 /// </list>
+/// T-905 adds the storage: the member (its rank may deposit, not take out) sells a draught at the merchant (<c>--e2e-guild-ids &lt;merchant npc&gt;</c>), puts the first stack of its bag and the
+/// coins into the storage through the window, is refused when it tries to take one out, and tells the founder on the guild channel; the founder takes both out through the window and
+/// reads both moves in the log.
 /// What is said carries the word <c>e2esaid</c>, which the script looks for in the server's log: it must not be there.
 /// </summary>
 public sealed class GuildRuns
 {
     private const string Said = ChatRuns.Said;
     private const string Notice = "e2esaid meet at the well";
+    private const string Stored = Said + " stored";
 
     private readonly Main _main;
     private readonly Func<Task> _shot;
+    private readonly string? _merchantNpc;
 
-    /// <summary>Prepares the runs.</summary>
-    public GuildRuns(Main main, Func<Task> shot)
+    /// <summary>Prepares the runs; <paramref name="merchantNpc"/> (the member's) is the script's content id of the merchant.</summary>
+    public GuildRuns(Main main, Func<Task> shot, string? merchantNpc = null)
     {
         _main = main;
         _shot = shot;
+        _merchantNpc = merchantNpc;
     }
 
     private ClientSession Session => _main.Session!;
 
     private GuildPanel Panel => _main.Hud!.Guild!;
+
+    private GuildStoragePanel Storage => _main.Hud!.GuildStorage!;
+
+    private async Task OpenGuildPanelAsync()
+    {
+        Press(_main.Hud!.Chat!.OpenButton);
+        await FramesAsync(2);
+        Press(_main.Hud!.Chat!.GuildButton);
+        await FramesAsync(2);
+    }
+
+    private async Task OpenStorageAsync()
+    {
+        if (!Panel.Open) await OpenGuildPanelAsync();
+        Press(Panel.StorageButton);
+        await UntilAsync(() => Storage.Open && Session.Guild.Storage is not null, 15, "the storage window with the storage");
+        await FramesAsync(2);
+    }
 
     /// <summary>The founder.</summary>
     public async Task FounderAsync()
@@ -70,6 +96,31 @@ public sealed class GuildRuns
         Check(Session.Say(Said + " guild hello"), "the guild line went out");
         await UntilAsync(() => Session.Chat.Lines.Any(l => l.Channel == ChatChannels.Guild && l.Name == member && l.Text == Said + " guild back"), 30, "the member's guild line");
         Print("guild: talked on the guild channel");
+
+        // T-905: the member has put a stack and coins in; the leader takes both out and reads the log.
+        await UntilAsync(() => Session.Chat.Lines.Any(l => l.Channel == ChatChannels.Guild && l.Name == member && l.Text == Stored), 90, "the member's deposits");
+        await OpenStorageAsync();
+        await UntilAsync(() => Session.Guild.Storage is { Entries.Count: 1, Currency: > 0 }, 15, "the stack and the coins in the storage");
+        var stored = Session.Guild.Storage!;
+        var entry = stored.Entries[0];
+        var coins = stored.Currency;
+        var carried = Session.Inventory.Currency;
+        Check(Storage.LogTab.IsVisibleInTree() && !Storage.EntryButtons[0].Disabled, "the leader may take out and read the log");
+        Press(Storage.EntryButtons[0]);
+        await FramesAsync(2);
+        if (Storage.MoveButton.IsVisibleInTree()) Press(Storage.MoveButton);
+        await UntilAsync(() => Session.Guild.Storage is { Entries.Count: 0 } && Session.Inventory.Find(entry.Id) is { } got && got.Quantity == entry.Quantity, 20, "the stack taken out, its id kept");
+        Storage.AmountField.Text = coins.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Press(Storage.TakeCoinsButton);
+        await UntilAsync(() => Session.Guild.Storage is { Currency: 0 } && Session.Inventory.Currency == carried + coins, 20, "the coins taken out");
+        Press(Storage.LogTab);
+        await FramesAsync(2);
+        Check(Storage.Text.Contains(member + " put") && Storage.Text.Contains(name + " took"), "the log shows the member's deposits and the leader's withdrawals: " + Storage.Text);
+        Check(Session.Guild.Storage!.Log!.Count == 4, "four moves in the log: " + Session.Guild.Storage!.Log!.Count);
+        Print($"guild: took out {entry.Item} x{entry.Quantity} and {coins} coins; the log has the four moves");
+        Press(Storage.CloseButton);
+        await FramesAsync(2);
+        await OpenGuildPanelAsync();
 
         Panel.NoticeField.Text = Notice;
         Press(Panel.NoticeSaveButton);
@@ -113,7 +164,33 @@ public sealed class GuildRuns
         Session.Chat.SetChannel(ChatChannels.Guild);
         Check(Session.Say(Said + " guild back"), "the guild line back went out");
 
-        await UntilAsync(() => Session.Guild.State.Notice == Notice, 30, "the notice");
+        // T-905: coins from the merchant, then a stack and the coins into the storage; taking out is refused at this rank.
+        await SellAsync();
+        var coins = Session.Inventory.Currency;
+        await OpenStorageAsync();
+        Check(!Storage.LogTab.IsVisibleInTree(), "a member's rank cannot read the log");
+        Press(Storage.BagTab);
+        await FramesAsync(2);
+        Check(Storage.EntryButtons.Count > 0, "the bag lists what may go in");
+        Press(Storage.EntryButtons[0]);
+        await FramesAsync(2);
+        if (Storage.MoveButton.IsVisibleInTree()) Press(Storage.MoveButton);
+        await UntilAsync(() => Session.Guild.Storage is { Entries.Count: 1 }, 20, "the stack in the storage");
+        await FramesAsync(2);
+        Storage.AmountField.Text = coins.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        Press(Storage.PutCoinsButton);
+        await UntilAsync(() => Session.Guild.Storage is { Currency: > 0 } && Session.Inventory.Currency == 0, 20, "the coins in the storage");
+        Press(Storage.StorageTab);
+        await FramesAsync(2);
+        Check(Storage.EntryButtons.Count == 1 && Storage.EntryButtons[0].Disabled && !Storage.TakeCoinsButton.IsVisibleInTree(), "a member's rank sees no Take");
+        Session.WithdrawFromGuild(Session.Guild.Storage!.Entries[0].Id, 1);   // as a modified client would
+        await UntilAsync(() => Session.Guild.Notice == UiText.GuildRefused(GuildReasons.NotAllowed, null, null), 15, "the withdrawal refused");
+        Print($"guild: the member put {Session.Guild.Storage!.Entries[0].Item} and {coins} coins in; taking out was refused: not_allowed");
+        Press(Storage.CloseButton);
+        Session.Chat.SetChannel(ChatChannels.Guild);
+        Check(Session.Say(Stored), "the stored line went out");
+
+        await UntilAsync(() => Session.Guild.State.Notice == Notice, 90, "the notice");
         await UntilAsync(() => Session.Guild.OwnRank == 1, 30, "the promotion");
         Print("guild: the member sees the notice and its new rank " + Session.Guild.State.Ranks[1].Name);
         Press(_main.Hud!.Chat!.OpenButton);
@@ -124,6 +201,23 @@ public sealed class GuildRuns
         Press(Panel.LeaveButton);
         await UntilAsync(() => !Session.Guild.InGuild, 15, "out of the guild");
         await LeaveAsync();
+    }
+
+    /// <summary>A start stack's unit sold at the merchant (in view at the map's start): coins to deposit.</summary>
+    private async Task SellAsync()
+    {
+        if (_merchantNpc is null) throw new InvalidOperationException("the member needs --e2e-guild-ids <merchant npc>");
+        EntityView? merchant = null;
+        await UntilAsync(() => (merchant = Session.World.Entities.FirstOrDefault(e => e.Kind == EntityKinds.Npc && e.DisplayKey == _merchantNpc)) is not null, 20, "the merchant");
+        Session.TapNpc(merchant!.Id);
+        await UntilAsync(() => Session.Dialogue.Open && Session.Dialogue.Choices.Any(c => c.Text.Contains("wares", StringComparison.Ordinal)), 20, "the merchant's greeting");
+        Session.ChooseDialogue(Session.Dialogue.Choices.First(c => c.Text.Contains("wares", StringComparison.Ordinal)).Index);
+        await SecondsAsync(1);
+        var stack = Session.Inventory.Entries.First(e => e.Slot is null && e.Quantity > 1);
+        Session.ShopSell(stack.Id, 1);
+        await UntilAsync(() => Session.Inventory.Currency > 0, 10, "the sale");
+        Session.CloseDialogue();
+        await SecondsAsync(1);
     }
 
     private static string Tag() => new(System.Security.Cryptography.RandomNumberGenerator.GetItems<char>("abcdefghijklmnopqrstuvwxyz", 10));
