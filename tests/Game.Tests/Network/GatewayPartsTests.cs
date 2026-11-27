@@ -207,8 +207,9 @@ public class GatewayPartsTests
         MessageTypes.All.Ordered.ShouldBe(["hello", "move", "stop", "attack", "stop_attack", "respawn", "ping", "logout",
             "pick_up", "use_item", "equip", "unequip", "drop_item", "insert_card", "refine", "use_skill", "learn_skill", "change_job", "raise_stat", "talk", "dialogue_choice", "dialogue_close", "abandon_quest", "shop_buy", "shop_sell", "start_autopilot", "stop_autopilot", "set_outfit", "chat", "block", "unblock", "report",
             "party_invite", "party_answer", "party_leave", "party_kick", "party_lead",
+            "trade_ask", "trade_answer", "trade_offer", "trade_currency", "trade_lock", "trade_unlock", "trade_confirm", "trade_cancel",
             "welcome", "snapshot", "delta", "rejected", "attack_stopped", "exp", "level_up", "you_died", "respawned", "inventory", "inventory_changed",
-            "refine_result", "skills", "stats", "cooldown", "dialogue", "dialogue_ended", "service_opened", "shop", "quest_log", "quest", "autopilot", "wardrobe", "announcement", "chat_line", "chat_refused", "chat_state", "chat_reported", "party", "party_members", "party_invited", "party_notice", "party_refused", "pong", "bye"]);
+            "refine_result", "skills", "stats", "cooldown", "dialogue", "dialogue_ended", "service_opened", "shop", "quest_log", "quest", "autopilot", "wardrobe", "announcement", "chat_line", "chat_refused", "chat_state", "chat_reported", "party", "party_members", "party_invited", "party_notice", "party_refused", "trade_asked", "trade", "trade_notice", "trade_closed", "trade_refused", "pong", "bye"]);
         ByeReasons.All.Ordered.ShouldBe(["timeout", "bad_version", "malformed", "unknown_type", "oversize", "before_hello", "duplicate_hello",
             "rate_limit", "login_refused", "server_full", "too_slow", "shutdown", "server_error", "update_required", "logout", "replaced", "resume_failed",
             "load_failed", "save_pending", "save_lost", "session_ended", "kicked", "banned", "maintenance"]);

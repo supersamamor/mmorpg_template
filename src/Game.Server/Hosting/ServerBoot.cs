@@ -60,6 +60,9 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
     /// <summary>The <c>--party-</c> options and their values, in order, for <see cref="Game.Server.Party.PartyOptions.Parse"/> (T-902).</summary>
     public IReadOnlyList<string> PartyArgs { get; init; } = NoArgs;
 
+    /// <summary>The <c>--trade-</c> options and their values, in order, for <see cref="Game.Server.Trade.TradeOptions.Parse"/> (T-903).</summary>
+    public IReadOnlyList<string> TradeArgs { get; init; } = NoArgs;
+
     /// <summary>The environment name in effect: <see cref="Environment"/>, else <paramref name="environmentVariable"/>, else <c>Production</c>.</summary>
     public string EnvironmentName(string? environmentVariable) =>
         Environment ?? (string.IsNullOrWhiteSpace(environmentVariable) ? "Production" : environmentVariable);
@@ -81,6 +84,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         var admin = new List<string>();
         var chat = new List<string>();
         var party = new List<string>();
+        var trade = new List<string>();
         error = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -120,6 +124,10 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                         party.Add(arg);
                         party.Add(Value());
                         break;
+                    case var _ when arg.StartsWith(Game.Server.Trade.TradeOptions.ArgPrefix, StringComparison.Ordinal):
+                        trade.Add(arg);
+                        trade.Add(Value());
+                        break;
                     default:
                         if (arg.StartsWith("--", StringComparison.Ordinal) || content is not null) throw new FormatException($"unexpected argument '{arg}'");
                         content = arg;
@@ -144,6 +152,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
             AdminArgs = admin.Count == 0 ? NoArgs : admin,
             ChatArgs = chat.Count == 0 ? NoArgs : chat,
             PartyArgs = party.Count == 0 ? NoArgs : party,
+            TradeArgs = trade.Count == 0 ? NoArgs : trade,
         };
     }
 
@@ -168,7 +177,8 @@ public static class ServerPipeline
     /// previous tick (events are dispatched in phase 4, so this tick's arrive for the next one) and this tick's player attacks against the
     /// positions movement just produced, and a death it causes is seen by the spawner and the AI in phase 4 of the same tick. The dialogue system (NPCs and their talk) runs after the AI and before combat, and the inventory comes
     /// after combat: a drop combat makes this tick is added in phase 3 and can be picked up from the next, and a weapon put on counts from the next
-    /// swing. The quest system (T-602) comes after the inventory: it reacts to the previous tick's events (kills, uses, talks, bag changes) and its turn-ins go to the
+    /// swing. The trade system (T-903) follows the inventory: it reads the bags the inventory just changed, and the swap it asks for is the inventory's, on its next tick, before
+    /// that tick's intents. The quest system (T-602) comes after the inventory: it reacts to the previous tick's events (kills, uses, talks, bag changes) and its turn-ins go to the
     /// inventory and combat as events, applied on their next tick. The outfit system (T-708) only says what
     /// others see, so its place does not matter. The autopilot (T-604) comes after all of them: it looks at what this tick made of
     /// the world and queues intents, which the systems get in the next tick like a player's. The party system (T-902) reports its members' state and turns a kill into party kill credit
@@ -207,6 +217,7 @@ public static class ServerPipeline
             .Add(() => new DialogueSystem(dialogue, savePoints, progressions, inventories))
             .Add(() => new CombatSystem(combat, progressions, savePoints, parties))
             .Add(() => new InventorySystem(items, inventories, clock, progressions, shops))
+            .Add(() => new Game.Server.World.Trade.TradeSystem(balance.Trade, items.Rules, inventories))
             .Add(() => new QuestSystem(quests, progressions, inventories))
             .Add(() => new Game.Server.World.Party.PartySystem(parties, balance.Party, partyStatusTicks))
             .Add(() => new OutfitSystem(outfits, progressions))

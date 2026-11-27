@@ -202,3 +202,10 @@ party:
   kill_credit_range: 12
   # Members more than 15 base levels apart do not share: a high-level friend cannot carry a new character up by standing near it. Their damage dealers split by damage.
   exp_level_gap: 15
+trade:
+  # Four cells: close enough that a trade is between two who stand together, far enough that a step aside does not end it.
+  range: 4
+  # Twenty seconds to answer an ask: a trade is asked for face to face, so an answer comes quickly or not at all.
+  ask_timeout_ms: 20000
+  # Ten entries a side: fits one column of the trade window on the smallest phone; a bigger hand-over is two trades.
+  max_entries: 10

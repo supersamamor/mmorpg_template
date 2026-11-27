@@ -222,6 +222,45 @@ namespace Game.Shared.Protocol
         /// <summary><c>party_refused</c> (T-902, server to client, own only): a party intent refused, with a "Party reasons" term.</summary>
         public const string PartyRefused = "party_refused";
 
+        /// <summary><c>trade_ask</c> (T-903, client to server): ask a player in view to trade.</summary>
+        public const string TradeAsk = "trade_ask";
+
+        /// <summary><c>trade_answer</c> (T-903, client to server): accept or decline the ask.</summary>
+        public const string TradeAnswer = "trade_answer";
+
+        /// <summary><c>trade_offer</c> (T-903, client to server): put units of a carried entry in the offer (0 takes it out).</summary>
+        public const string TradeOffer = "trade_offer";
+
+        /// <summary><c>trade_currency</c> (T-903, client to server): the currency in the offer.</summary>
+        public const string TradeCurrency = "trade_currency";
+
+        /// <summary><c>trade_lock</c> (T-903, client to server): lock this side's offer.</summary>
+        public const string TradeLock = "trade_lock";
+
+        /// <summary><c>trade_unlock</c> (T-903, client to server): unlock both offers.</summary>
+        public const string TradeUnlock = "trade_unlock";
+
+        /// <summary><c>trade_confirm</c> (T-903, client to server): confirm the two locked offers of a version.</summary>
+        public const string TradeConfirm = "trade_confirm";
+
+        /// <summary><c>trade_cancel</c> (T-903, client to server): end the ask or the trade; nothing moves.</summary>
+        public const string TradeCancel = "trade_cancel";
+
+        /// <summary><c>trade_asked</c> (T-903, server to client, the asked only): who asks, and for how long.</summary>
+        public const string TradeAsked = "trade_asked";
+
+        /// <summary><c>trade</c> (T-903, server to client, the two only): both offers as the server holds them, after every change.</summary>
+        public const string Trade = "trade";
+
+        /// <summary><c>trade_notice</c> (T-903, server to client): a "Trade notices" term about an ask.</summary>
+        public const string TradeNotice = "trade_notice";
+
+        /// <summary><c>trade_closed</c> (T-903, server to client, the two only): the trade ended, with a "Trade ends" term.</summary>
+        public const string TradeClosed = "trade_closed";
+
+        /// <summary><c>trade_refused</c> (T-903, server to client, own only): a trade intent refused, with a "Trade reasons" term.</summary>
+        public const string TradeRefused = "trade_refused";
+
         /// <summary><c>announcement</c> (server → client, T-806): staff's words, or a coming maintenance, for everyone playing on this server.</summary>
         public const string Announcement = "announcement";
 
@@ -229,10 +268,10 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot, SetOutfit, Chat, Block, Unblock, Report, PartyInvite, PartyAnswer, PartyLeave, PartyKick, PartyLead);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot, SetOutfit, Chat, Block, Unblock, Report, PartyInvite, PartyAnswer, PartyLeave, PartyKick, PartyLead, TradeAsk, TradeAnswer, TradeOffer, TradeCurrency, TradeLock, TradeUnlock, TradeConfirm, TradeCancel);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Announcement, ChatLine, ChatRefused, ChatState, ChatReported, Party, PartyMembers, PartyInvited, PartyNotice, PartyRefused, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Announcement, ChatLine, ChatRefused, ChatState, ChatReported, Party, PartyMembers, PartyInvited, PartyNotice, PartyRefused, TradeAsked, Trade, TradeNotice, TradeClosed, TradeRefused, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);

@@ -61,6 +61,12 @@ namespace Game.Shared.Definitions
         /// <summary>Maximum units per inventory stack. Default 1 (not stackable).</summary>
         public int MaxStack { get; init; } = 1;
 
+        /// <summary>
+        /// Whether players may trade it to each other (T-903). Default true; <c>false</c> keeps it with the character that has it (a quest proof, a reward bound to its earner).
+        /// Nothing else reads it: it may still be dropped, sold or used as its other fields allow.
+        /// </summary>
+        public bool Tradeable { get; init; } = true;
+
         /// <summary>UI icon (<c>icon.*</c>).</summary>
         public string? IconAssetKey { get; init; }
 

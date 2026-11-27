@@ -208,6 +208,17 @@ public sealed class Gateway : IChatDirectory
             events.Subscribe<OutfitGranted>(e => PostWardrobe(instance.MapId, e.Player));
             events.Subscribe<WardrobeChanged>(e => PostWardrobe(instance.MapId, e.Player));
             events.Subscribe<OutfitRefused>(e => Owner(e.Player)?.Post(new RejectedMessage(MessageTypes.SetOutfit, e.Reason, null, Slot: e.Slot, Item: e.Outfit)));
+            // Trade (T-903): the ask to the asked, news about it, both offers to both sides after every change, how it ended, and a refused trade intent.
+            events.Subscribe<Game.Server.World.Trade.TradeAsked>(e =>
+                Owner(e.To)?.Post(new TradeAskedMessage(e.From.Value, NameOf(e.From), Math.Max(1, (e.ExpiresInMs + 999) / 1000))));
+            events.Subscribe<Game.Server.World.Trade.TradeNoticed>(e => Owner(e.Player)?.Post(new TradeNoticeMessage(e.Notice, NameOf(e.Other))));
+            events.Subscribe<Game.Server.World.Trade.TradeChanged>(e =>
+            {
+                Owner(e.A.Player)?.Post(new TradeMessage(e.B.Player.Value, NameOf(e.B.Player), e.Version, TradeSide(e.A), TradeSide(e.B)));
+                Owner(e.B.Player)?.Post(new TradeMessage(e.A.Player.Value, NameOf(e.A.Player), e.Version, TradeSide(e.B), TradeSide(e.A)));
+            });
+            events.Subscribe<Game.Server.World.Trade.TradeClosed>(e => Owner(e.Player)?.Post(new TradeClosedMessage(e.Reason, NameOf(e.Partner), e.Own)));
+            events.Subscribe<Game.Server.World.Trade.TradeRefused>(e => Owner(e.Player)?.Post(new TradeRefusedMessage(e.Intent, e.Reason)));
             events.Subscribe<QuestRewarded>(e =>
             {
                 PostExp(e.Player);
@@ -219,6 +230,9 @@ public sealed class Gateway : IChatDirectory
 
     /// <summary>Chat (T-901): set once, before sessions arrive; null when the server has none (then chat messages are ignored).</summary>
     public ChatService? Chat { get; set; }
+
+    /// <summary>The trade ask gate (T-903): set once, before sessions arrive; null asks go to the tick with no rate limit or block check (tests).</summary>
+    public Game.Server.Trade.TradeGate? Trade { get; set; }
 
     /// <summary>Parties (T-902): set once, before sessions arrive; null when the server has none (then party messages are ignored).</summary>
     public Game.Server.Party.PartyService? Party { get; set; }
@@ -368,6 +382,7 @@ public sealed class Gateway : IChatDirectory
                     session.OnResumed(link.Character, link.DisplayName, map, token);
                     PostChatState(session, link.AccountId);   // T-901
                     Party?.Welcomed(link.Character);           // T-902: its party and invite again
+                    Enqueue(new Game.Server.World.Trade.TradeCancel(link.Character, Game.Shared.Vocabulary.TradeEnds.Disconnected));   // T-903: two clients never share a trade
                     Enqueue(new StopAutopilot(link.Character, AutopilotStops.Disconnected));   // T-604: the new session has not asked for it
                     Enqueue(new AttachView(link.Character, session));
                     Enqueue(new RequestSnapshot(link.Character));
@@ -591,6 +606,7 @@ public sealed class Gateway : IChatDirectory
                     session.OnResumed(id, link.DisplayName, map, token);
                     PostChatState(session, link.AccountId);   // T-901
                     Party?.Welcomed(id);                       // T-902: its party and invite again
+                    Enqueue(new Game.Server.World.Trade.TradeCancel(id, Game.Shared.Vocabulary.TradeEnds.Disconnected));   // T-903: a resume never finds a trade under way
                     Enqueue(new StopAutopilot(id, AutopilotStops.Disconnected));   // T-604: a resume never plays on (a dropped session's run ended with its grace period's start)
                     Enqueue(new AttachView(id, session));
                     Enqueue(new RequestSnapshot(id));
@@ -680,6 +696,7 @@ public sealed class Gateway : IChatDirectory
         Enqueue(new StopMove(link.Character));
         Enqueue(new StopAttack(link.Character));   // a dropped player does not farm on: stopped means stopped (it can still be attacked)
         Enqueue(new StopAutopilot(link.Character, AutopilotStops.Disconnected));   // T-604: nothing plays on without its player
+        Enqueue(new Game.Server.World.Trade.TradeCancel(link.Character, Game.Shared.Vocabulary.TradeEnds.Disconnected));   // T-903: its ask and trade end; nothing moves
         Enqueue(new AttachView(link.Character, null));
         Log.Info($"[net] '{link.DisplayName}' ({link.Character}) waits {Options.GracePeriodMs} ms for a resume.");
     }
@@ -759,6 +776,22 @@ public sealed class Gateway : IChatDirectory
     IReadOnlyCollection<Guid> IChatDirectory.PlayingAccounts() => PlayingAccounts();
 
     private void OnMoveRejected(MoveRejected e) => Owner(e.Entity)?.Post(new RejectedMessage(MessageTypes.Move, e.Reason, e.Target));
+
+    /// <summary>The character name of a character the gateway holds (T-903's messages name the other side), or an empty string.</summary>
+    private string NameOf(EntityId character) => _links.TryGetValue(character, out var link) ? link.DisplayName ?? string.Empty : string.Empty;
+
+    /// <summary>One side of a trade as its owner and its partner see it (T-903): every offered entry with its cards and refine level, the currency, the flags.</summary>
+    private static TradeSideRecord TradeSide(Game.Server.World.Trade.TradeSideView side)
+    {
+        var lines = side.Offer.Lines;
+        var items = new TradeItemRecord[lines.Count];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var entry = lines[i].Entry;
+            items[i] = new TradeItemRecord(entry.Id, entry.ItemId, lines[i].Quantity, entry.Cards.Count > 0 ? entry.Cards : null, entry.Refine);
+        }
+        return new TradeSideRecord(items, side.Offer.Currency, side.Locked, side.Confirmed);
+    }
 
     /// <summary>The session playing <paramref name="character"/> right now, or null (not a player, or in its grace period).</summary>
     private ClientSession? Owner(EntityId character) => _links.TryGetValue(character, out var link) ? link.Session : null;

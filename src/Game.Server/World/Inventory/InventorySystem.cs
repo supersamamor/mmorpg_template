@@ -60,6 +60,8 @@ public sealed class InventorySystem : ITickSystem
     private List<DialogueItemsRequested> _dialogueItemsRunning = new();
     private List<QuestItemsRequested> _questItems = new();          // a quest step's turn-in, applied next tick (T-602)
     private List<QuestItemsRequested> _questItemsRunning = new();
+    private readonly List<Trade.TradeSwapRequested> _swaps = new();   // trades both sides confirmed last tick (T-903)
+    private readonly InventoryDelta _otherDelta = new();
     private readonly InventoryDelta _delta = new();
     private readonly FormulaContext _equipContext = new();
     private MapInstance? _instance;
@@ -105,6 +107,7 @@ public sealed class InventorySystem : ITickSystem
         _nowMs = context.SimTimeMs;
 
         AnnounceShops(context);
+        RunSwaps(context);
         var intents = context.Intents;
         for (var i = 0; i < intents.Count; i++)
         {
@@ -156,6 +159,7 @@ public sealed class InventorySystem : ITickSystem
         events.Subscribe<MoveRejected>(OnMoveRejected);
         events.Subscribe<DialogueItemsRequested>(e => _dialogueItems.Add(e));
         events.Subscribe<QuestItemsRequested>(e => _questItems.Add(e));
+        events.Subscribe<Trade.TradeSwapRequested>(e => _swaps.Add(e));
         events.Subscribe<ServiceOpened>(e =>
         {
             if (e.ShopId is not null && string.Equals(e.Service, ServiceIds.Shop, StringComparison.Ordinal)) _shopOpenings.Add(e);
@@ -525,6 +529,65 @@ public sealed class InventorySystem : ITickSystem
         if (_progressions is not null && bag.SettledTurnIns.Count > 0 && _progressions.TryGet(player, out var state))
             bag.SettledTurnIns.RemoveWhere(paid => !state.ActiveQuests.Values.Any(q => q.Token == paid));
         bag.SettledTurnIns.Add(token);
+    }
+
+    // ---- trade (T-903) -------------------------------------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// The swaps both sides of a trade confirmed last tick, before any intent of this tick, each in one step for both characters (hard rule 10): <see cref="TradeRules.TrySwap"/> checks
+    /// again that each side carries exactly what it offered and that the receiving side has room, weight and currency to spare, then moves all of it or nothing. A side that left or
+    /// whose save was lost meanwhile refuses it (<c>left</c>). Done: each side gets one <c>traded</c> change; their saves are linked both ways (T-702), so they land in one
+    /// transaction or not at all; <see cref="Trade.ItemsTraded"/> says what moved. Every request is answered with <see cref="Trade.TradeSwapResolved"/>.
+    /// </summary>
+    private void RunSwaps(TickContext context)
+    {
+        if (_swaps.Count == 0) return;
+        foreach (var swap in _swaps)
+        {
+            if (!_holders.TryGetValue(swap.A.Value, out var a) || !_holders.TryGetValue(swap.B.Value, out var b) || a.Entity.Save is { IsLost: true } || b.Entity.Save is { IsLost: true })
+            {
+                context.Publish(new Trade.TradeSwapResolved(swap.Trade, TradeEnds.Left, _holders.ContainsKey(swap.A.Value) ? TradeSide.B : TradeSide.A));
+                continue;
+            }
+            SyncLimit(null, a, publish: false);
+            SyncLimit(null, b, publish: false);
+            var (toB, toA) = (new long[swap.FromA.Lines.Count], new long[swap.FromB.Lines.Count]);
+            var reason = TradeRules.TrySwap(_rules, a.State, swap.FromA, a.State.WeightLimit, b.State, swap.FromB, b.State.WeightLimit, _newId, _delta, _otherDelta, out var side, toB, toA);
+            if (reason is not null)
+            {
+                _delta.Clear();
+                _otherDelta.Clear();
+                context.Publish(new Trade.TradeSwapResolved(swap.Trade, reason, side));
+                continue;
+            }
+            // T-702: each gave something away and got something in this tick: its next save waits for the other's, or takes it along (one transaction).
+            if (a.Entity.Save is { } ta && b.Entity.Save is { } tb)
+            {
+                var (fromA, fromB) = (ta.PutDown(), tb.PutDown());
+                tb.DependOn(fromA);
+                ta.DependOn(fromB);
+            }
+            var movedA = Moved(swap.FromA, toB);
+            var movedB = Moved(swap.FromB, toA);
+            Changed(context, a, InventoryChanges.Traded, null);   // takes _delta (A's changes)
+            _delta.Upserted.AddRange(_otherDelta.Upserted);
+            _delta.Removed.AddRange(_otherDelta.Removed);
+            _otherDelta.Clear();
+            Changed(context, b, InventoryChanges.Traded, null);
+            context.Publish(new Trade.ItemsTraded(swap.Trade, a.Entity.Id, b.Entity.Id, a.Entity.Save?.CharacterId, b.Entity.Save?.CharacterId,
+                movedA, swap.FromA.Currency, movedB, swap.FromB.Currency, _clock.NowMilliseconds));
+            context.Publish(new Trade.TradeSwapResolved(swap.Trade, null, TradeSide.None));
+        }
+        _swaps.Clear();
+    }
+
+    /// <summary>What of <paramref name="offer"/> moved, and the entry id each line has on the receiving side (<paramref name="ids"/>, from <see cref="TradeRules.TrySwap"/>).</summary>
+    private static List<Trade.TradedEntry> Moved(TradeOffer offer, long[] ids)
+    {
+        var moved = new List<Trade.TradedEntry>(offer.Lines.Count);
+        for (var i = 0; i < offer.Lines.Count; i++)
+            moved.Add(new Trade.TradedEntry(offer.Lines[i].Entry.Id, ids[i], offer.Lines[i].Entry.ItemId, offer.Lines[i].Quantity));
+        return moved;
     }
 
     // ---- shops (T-603) -------------------------------------------------------------------------------------------------------------------

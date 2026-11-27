@@ -319,6 +319,7 @@ public sealed class DisplayBundle
             CardSlots = entry.TryGetProperty("card_slots", out var sockets) && sockets.ValueKind == JsonValueKind.Number ? Math.Max(0, sockets.GetInt32()) : 0,
             Refinable = entry.TryGetProperty("refinable", out var refinable) && refinable.ValueKind == JsonValueKind.True,
             ConfirmUse = entry.TryGetProperty("confirm_use", out var confirmUse) && confirmUse.ValueKind == JsonValueKind.True,
+            Tradeable = !(entry.TryGetProperty("untradeable", out var untradeable) && untradeable.ValueKind == JsonValueKind.True),
             Description = OptionalText(entry, "description"),
         };
     }
@@ -453,6 +454,9 @@ public sealed record ItemDisplay(string Id, string Name, string Kind, string? Ic
 
     /// <summary>Using it asks for confirmation first (a stat or skill reset, T-503).</summary>
     public bool ConfirmUse { get; init; }
+
+    /// <summary>The trade window may offer it (T-903: content can mark an item as not tradeable). A hint only: the server decides.</summary>
+    public bool Tradeable { get; init; } = true;
 
     /// <summary>Display text, or null.</summary>
     public string? Description { get; init; }

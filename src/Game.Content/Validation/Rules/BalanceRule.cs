@@ -89,6 +89,18 @@ public sealed class BalanceRule : IValidationRule
         Characters(context, balance.Characters);
         Autopilot(context, balance);
         Party(context, balance.Party);
+        Trade(context, balance.Trade);
+    }
+
+    /// <summary>Two may stand apart and still trade, an ask waits, and a side may offer something (T-903).</summary>
+    private static void Trade(ValidationContext context, TradeBalanceDef t)
+    {
+        if (t.Range < 1)
+            Range(context, "trade.range", "must be at least 1.");
+        if (t.AskTimeoutMs <= 0)
+            Range(context, "trade.ask_timeout_ms", "must be above 0.");
+        if (t.MaxEntries < 1)
+            Range(context, "trade.max_entries", "must be at least 1.");
     }
 
     /// <summary>A party has room for two, an invite waits, and the ranges and the level gap are not negative (T-902).</summary>

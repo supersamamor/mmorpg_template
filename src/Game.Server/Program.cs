@@ -24,6 +24,7 @@ if (options is null)
     Console.Error.WriteLine(AdminOptions.Usage);
     Console.Error.WriteLine(ChatOptions.Usage);
     Console.Error.WriteLine(PartyOptions.Usage);
+    Console.Error.WriteLine(Game.Server.Trade.TradeOptions.Usage);
     return 2;
 }
 
@@ -61,6 +62,14 @@ if (partyOptions is null)
     return 2;
 }
 
+var tradeOptions = Game.Server.Trade.TradeOptions.Parse(options.TradeArgs, Environment.GetEnvironmentVariable, out var tradeError);   // T-903
+if (tradeOptions is null)
+{
+    Console.Error.WriteLine(tradeError);
+    Console.Error.WriteLine(Game.Server.Trade.TradeOptions.Usage);
+    return 2;
+}
+
 var log = new CountingLog(new ConsoleLog()); // the admin API's status reports its counts
 var startedAt = DateTime.UtcNow;
 log.Info($"Environment: {environmentName}{(development ? " (development: ws:// on loopback, dev login enabled)" : "")}");
@@ -85,7 +94,7 @@ catch (DatabaseException e)
 if (options.Migrate) return 0;
 
 var netProblems = netOptions.Problems().Concat(chatOptions.Problems(netOptions.MaxMessageBytes).Select(p => "chat: " + p))
-    .Concat(partyOptions.Problems().Select(p => "party: " + p)).ToList();
+    .Concat(partyOptions.Problems().Select(p => "party: " + p)).Concat(tradeOptions.Problems().Select(p => "trade: " + p)).ToList();
 if (netProblems.Count > 0)
 {
     foreach (var problem in netProblems) log.Error("Gateway: " + problem);
@@ -162,6 +171,8 @@ await using var party = new PartyService(content.Balance.Party, partyOptions, pa
 chat.Register(Game.Shared.Vocabulary.ChatChannels.Party, party);
 gateway.Party = party;
 party.Start();
+// T-903: trade asks are rate-limited per account and blocked like chat before the tick decides the rest; the trades themselves live on the tick.
+gateway.Trade = new Game.Server.Trade.TradeGate(tradeOptions, new GatewayPartyDirectory(gateway, chat), i => gateway.Enqueue(i), TimeProvider.System);
 GatewayHost host;
 try
 {

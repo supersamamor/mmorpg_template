@@ -290,7 +290,10 @@ Any reason other than `finished` ends the services the dialogue opened too.
 `AutopilotChanged`, `AutopilotRefused`,
 `OutfitGranted`, `WardrobeChanged`, `OutfitRefused`,
 `AdminActionApplied` (on the admin event bus, not an instance's: T-804),
-`PartyKillCredit` (T-902: party members alive, on the instance and within `party.kill_credit_range` of a kill, who had no kill credit of their own; the quest system counts their `kill` objectives)
+`PartyKillCredit` (T-902: party members alive, on the instance and within `party.kill_credit_range` of a kill, who had no kill credit of their own; the quest system counts their `kill` objectives),
+`TradeAsked`, `TradeNoticed`, `TradeChanged`, `TradeRefused`, `TradeClosed` (T-903: the trade system's news for the two players), `TradeSwapRequested` (both confirmed the same offers; the
+inventory swaps them on its next tick), `TradeSwapResolved` (the inventory's answer: done, or a "Trade ends" term and nothing moved), `ItemsTraded` (two players swapped their offers: each
+entry id given and received, the units, the currency and both permanent character ids; for quests, logs and dupe audits)
 
 ## Area of interest
 **Observer**: an entity with a view sink (`Entity.View`); it is sent what it can see. **AOI bucket**: a square of
@@ -354,7 +357,7 @@ In `inventory` and `inventory_changed` (`load`).
 In `inventory_changed` `cause`: `picked_up`, `used`, `equipped`, `unequipped`, `dropped`, `weight` (only the weight limit or state changed),
 `card_inserted`, `refined` (any refine attempt: the material is used up whatever the result), `exchanged` (a dialogue's `take_item` / `give_item` actions, T-601),
 `quest` (a quest step's turn-in: its consumed items taken and its item and currency rewards given, one transaction, T-602),
-`shop_buy` (items bought; the currency went down in the same change, T-603), `shop_sell` (items sold; the currency went up, T-603), `staff` (staff gave or took items or currency through the admin API, T-806).
+`shop_buy` (items bought; the currency went down in the same change, T-603), `shop_sell` (items sold; the currency went up, T-603), `staff` (staff gave or took items or currency through the admin API, T-806), `traded` (a trade swapped both offers: items and currency in one change on each side, T-903).
 
 ## Refine failures
 What a failed refine does, per step of `refine.yaml` (`failure`): `keep` (the level stays), `down` (one level down, not below 0), `break` (the item is gone, with its cards).
@@ -394,10 +397,12 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`, `set_outfit`, `chat`, `block`, `unblock`, `report`, `party_invite`, `party_answer`, `party_leave`, `party_kick`, `party_lead`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`, `announcement`, `chat_line`, `chat_refused`, `chat_state`, `chat_reported`, `party`, `party_members`, `party_invited`, `party_notice`, `party_refused`, `pong`, `bye`
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`, `set_outfit`, `chat`, `block`, `unblock`, `report`, `party_invite`, `party_answer`, `party_leave`, `party_kick`, `party_lead`, `trade_ask`, `trade_answer`, `trade_offer`, `trade_currency`, `trade_lock`, `trade_unlock`, `trade_confirm`, `trade_cancel`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`, `announcement`, `chat_line`, `chat_refused`, `chat_state`, `chat_reported`, `party`, `party_members`, `party_invited`, `party_notice`, `party_refused`, `trade_asked`, `trade`, `trade_notice`, `trade_closed`, `trade_refused`, `pong`, `bye`
 Party (T-902): client → server `party_invite`, `party_answer`, `party_leave`, `party_kick`, `party_lead`; server → client `party`, `party_members`, `party_invited`, `party_notice`,
 `party_refused`. Only to the members: `party`, `party_members`; only to the invited: `party_invited`; own only: `party_refused`.
+Trade (T-903): client → server `trade_ask`, `trade_answer`, `trade_offer`, `trade_currency`, `trade_lock`, `trade_unlock`, `trade_confirm`, `trade_cancel`; server → client `trade_asked`,
+`trade`, `trade_notice`, `trade_closed`, `trade_refused`. Only to the two sides: `trade`, `trade_closed`; only to the asked: `trade_asked`; own only: `trade_notice`, `trade_refused`.
 Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`; and (T-901) `chat_refused`, `chat_state`, `chat_reported`. A `chat_line` goes to everyone the line reaches, its sender included.
 
 ## Bye reasons
@@ -503,6 +508,27 @@ The `notice` of a `party_notice` (T-902): `invite_sent`, `declined`, `expired`, 
 kicks and hands over; when it leaves, the earliest-joined member who plays now. **Invite**: one pending question to one character, ending after `party.invite_timeout_ms`. **Away**: a member in
 its disconnect grace period; still a member until the grace period ends. **Sharing a kill**: the members alive, on the kill's map instance and within `party.exp_range` of the death cell, whose
 base levels differ by at most `party.exp_level_gap`. **Members' state**: the others' HP and SP (whole percent), map and cell, sent to members only.
+
+## Trade reasons
+The `reason` of a `trade_refused` (T-903, ARCHITECTURE §6.10); nothing changed: `not_online` (the asked character does not play now or is not on the asker's map instance, or its account
+blocks the asker: the same answer, so a block does not show), `invalid_target` (oneself, or not a player), `busy` (in a trade, or with an ask under way), `too_far` (more than `trade.range`
+cells apart), `dead`, `ask_pending` (the asker already waits for an answer), `no_ask` (nothing to answer), `rate_limited` (with `retry_after`), `not_trading`, `not_tradeable` (the item's
+`tradeable: false`), `item_gone`, `item_equipped`, `invalid_quantity` (units or currency below 0 or above what is carried), `offer_full` (`trade.max_entries`), `not_locked` (a confirm before
+both locked), `stale` (a confirm of a version the trade is no longer at), `swapping` (both confirmed: the swap is under way), `cannot_trade` (a saved character and a development login).
+
+## Trade notices
+The `notice` of a `trade_notice` (T-903): `ask_sent` (to the asker), `declined` (to the asker), `expired` (no answer in time, the asker withdrew or went away; to both).
+
+## Trade ends
+The `reason` of a `trade_closed` (T-903); only `done` moved anything: `done`, `cancelled`, `too_far`, `dead`, `left_map` (a warp), `disconnected` (the connection dropped, or another session
+took the character over), `left` (left the world: logout, server stop, staff), and at the swap, about the side `own` names: `too_heavy`, `inventory_full`, `currency_full`, `offer_changed` (it
+no longer carried exactly what it offered).
+
+## Trade terms
+(T-903.) **Ask**: one pending question from one player to another on the same map instance, ending after `trade.ask_timeout_ms`. **Offer**: one side's entries (whole, or part of a stack;
+at most `trade.max_entries`) and currency, each entry kept exactly as it was offered. **Lock**: a side says its offer is final; any change to either offer unlocks both. **Version**: the
+trade's change counter; a **confirm** names the version whose two locked offers it accepts. **Swap**: when both confirmed the same version, the inventory moves both offers in one step, all or
+nothing; whole entries keep their ids, a part of a stack becomes a new entry. **Tradeable**: an item field (default true); `false` keeps it with its owner.
 
 ## Admin terms
 (T-804, ARCHITECTURE §12.) **Admin API**: the server's private HTTP listener for staff tooling, on its own port. **Service credential**: the secret that proves a request comes from the panel.

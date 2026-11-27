@@ -496,6 +496,35 @@ public sealed class ClientSession : IViewSink, IChatSink
                 // T-902: decided at once, in memory, off the tick; ignored before the welcome and on a server without parties
                 if (_gateway.Party is { } party && State == SessionState.Joined && _gateway.ChatPeerOf(this) is { } member) party.Handle(member, message);
                 break;
+            // T-903: intents only; the trade system decides on the tick. An ask goes through the gate (rate limit, blocks) first.
+            case TradeAskMessage ask:
+                if (Entity is { } asker && State == SessionState.Joined)
+                {
+                    if (_gateway.Trade is null) _gateway.Enqueue(new Game.Server.World.Trade.TradeAsk(asker, new EntityId(ask.Target)));
+                    else if (_gateway.ChatPeerOf(this) is { } peer) _gateway.Trade.Ask(peer, ask.Target);
+                }
+                break;
+            case TradeAnswerMessage answer:
+                if (Entity is { } answerer) _gateway.Enqueue(new Game.Server.World.Trade.TradeAnswer(answerer, answer.Accept));
+                break;
+            case TradeOfferMessage offer:
+                if (Entity is { } offerer) _gateway.Enqueue(new Game.Server.World.Trade.TradeOfferItem(offerer, offer.Entry, offer.Quantity));
+                break;
+            case TradeCurrencyMessage coins:
+                if (Entity is { } payer) _gateway.Enqueue(new Game.Server.World.Trade.TradeOfferCurrency(payer, coins.Currency));
+                break;
+            case TradeLockMessage:
+                if (Entity is { } locker) _gateway.Enqueue(new Game.Server.World.Trade.TradeLock(locker, true));
+                break;
+            case TradeUnlockMessage:
+                if (Entity is { } unlocker) _gateway.Enqueue(new Game.Server.World.Trade.TradeLock(unlocker, false));
+                break;
+            case TradeConfirmMessage confirm:
+                if (Entity is { } confirmer) _gateway.Enqueue(new Game.Server.World.Trade.TradeConfirm(confirmer, confirm.Version));
+                break;
+            case TradeCancelMessage:
+                if (Entity is { } canceller) _gateway.Enqueue(new Game.Server.World.Trade.TradeCancel(canceller, Game.Shared.Vocabulary.TradeEnds.Cancelled));
+                break;
         }
         return null;
     }
