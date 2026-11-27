@@ -234,6 +234,9 @@ public sealed class Gateway : IChatDirectory
     /// <summary>The trade ask gate (T-903): set once, before sessions arrive; null asks go to the tick with no rate limit or block check (tests).</summary>
     public Game.Server.Trade.TradeGate? Trade { get; set; }
 
+    /// <summary>Guilds (T-904): set once, before sessions arrive; null when the server has none (no database: then guild messages are ignored).</summary>
+    public Game.Server.Guild.GuildService? Guild { get; set; }
+
     /// <summary>Parties (T-902): set once, before sessions arrive; null when the server has none (then party messages are ignored).</summary>
     public Game.Server.Party.PartyService? Party { get; set; }
 
@@ -382,6 +385,7 @@ public sealed class Gateway : IChatDirectory
                     session.OnResumed(link.Character, link.DisplayName, map, token);
                     PostChatState(session, link.AccountId);   // T-901
                     Party?.Welcomed(link.Character);           // T-902: its party and invite again
+                    Guild?.Welcomed(link.Character);           // T-904: its guild and invite again
                     Enqueue(new Game.Server.World.Trade.TradeCancel(link.Character, Game.Shared.Vocabulary.TradeEnds.Disconnected));   // T-903: two clients never share a trade
                     Enqueue(new StopAutopilot(link.Character, AutopilotStops.Disconnected));   // T-604: the new session has not asked for it
                     Enqueue(new AttachView(link.Character, session));
@@ -565,6 +569,7 @@ public sealed class Gateway : IChatDirectory
             }
             session.OnJoinedOnTick(entity, token);
             PostChatState(session, login.AccountId);   // T-901: right after its welcome
+            if (login.CharacterId is not null) Guild?.Welcomed(entity.Id);   // T-904: its guild, with the notice (read in the background)
         }, entered?.Ticket);
         Log.Info($"[net] {session.Peer} joined as '{session.DisplayName}' ({id} on {map})");
         return id;
@@ -606,6 +611,7 @@ public sealed class Gateway : IChatDirectory
                     session.OnResumed(id, link.DisplayName, map, token);
                     PostChatState(session, link.AccountId);   // T-901
                     Party?.Welcomed(id);                       // T-902: its party and invite again
+                    Guild?.Welcomed(id);                       // T-904: its guild and invite again
                     Enqueue(new Game.Server.World.Trade.TradeCancel(id, Game.Shared.Vocabulary.TradeEnds.Disconnected));   // T-903: a resume never finds a trade under way
                     Enqueue(new StopAutopilot(id, AutopilotStops.Disconnected));   // T-604: a resume never plays on (a dropped session's run ended with its grace period's start)
                     Enqueue(new AttachView(id, session));

@@ -129,6 +129,13 @@ public sealed class PostgresCharacterStore(GameDatabase database) : ICharacterSt
             foreach (var note in save.StaffNotes)
             {
                 if (note.Version <= stored[save.CharacterId] || note.Version > save.Version) continue;
+                if (note.FoundsGuild is { } guild)
+                {
+                    // T-904: the founding cost is out of this save, so the reserved guild is founded in the same transaction (PostgresGuildStore.ReserveAsync made it).
+                    await PostgresGuildStore.FoundAsync(db, guild, save.CharacterId, cancellation).ConfigureAwait(false);
+                    continue;
+                }
+                if (note.Audit is null) continue;
                 var id = await PostgresAdminStore.WriteAuditAsync(db, note.Audit, cancellation).ConfigureAwait(false);
                 foreach (var (item, itemId, quantity) in note.Made)
                     db.AdminItems.Add(new AdminItemRow { ItemInstanceId = item, ItemId = itemId, Quantity = quantity, CreatedAt = note.Audit.At, AuditId = id });

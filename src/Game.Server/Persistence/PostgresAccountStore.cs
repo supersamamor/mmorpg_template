@@ -125,6 +125,8 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
         await db.ChatReports.Where(r => r.ReporterAccountId == account || r.SenderAccountId == account || characters.Contains(r.ReporterCharacterId) || characters.Contains(r.SenderCharacterId))
             .ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.ChatBlocks.Where(b => b.AccountId == account || characters.Contains(b.BlockedCharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        // T-904: its characters leave their guilds (a leader hands over by the same rule as leaving; a guild left empty goes, its name free).
+        foreach (var character in characters) await PostgresGuildStore.RemoveCharacterAsync(db, character, Game.Shared.Vocabulary.GuildNews.Left, cancellation).ConfigureAwait(false);
         await db.Items.Where(i => characters.Contains(i.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.Outfits.Where(o => characters.Contains(o.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.CharacterStates.Where(s => characters.Contains(s.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
@@ -179,6 +181,7 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
         if (holder is { } run && await PostgresCharacterStore.IsAliveAsync(db, run, cancellation).ConfigureAwait(false)) return DeleteCharacterOutcome.InUse;
         row.DeletedAt = now;
         await db.SaveChangesAsync(cancellation).ConfigureAwait(false);
+        await PostgresGuildStore.RemoveCharacterAsync(db, character, Game.Shared.Vocabulary.GuildNews.Left, cancellation).ConfigureAwait(false);   // T-904: a deleted character leaves its guild
         await transaction.CommitAsync(cancellation).ConfigureAwait(false);
         return DeleteCharacterOutcome.Deleted;
     });

@@ -110,13 +110,15 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
         db.Database.HasPendingModelChanges().ShouldBeFalse("the model changed without a migration");
         var tables = await db.Database.SqlQuery<string>($"SELECT table_name AS \"Value\" FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name").ToListAsync();
         tables.ShouldBe(["__EFMigrationsHistory", "account_deletions", "account_sanctions", "account_sessions", "accounts", "admin_audit", "admin_items", "admin_staff", "character_items", "character_outfits",
-            "character_states", "characters", "chat_blocks", "chat_reports", "server_runs", "support_requests"]);
+            "character_states", "characters", "chat_blocks", "chat_reports", "guild_members", "guild_ranks", "guilds", "server_runs", "support_requests"]);
         var indexes = await db.Database.SqlQuery<string>($"SELECT indexname AS \"Value\" FROM pg_indexes WHERE schemaname = 'public' AND indexdef LIKE 'CREATE UNIQUE%'").ToListAsync();
         indexes.ShouldContain(GameDb.UsernameIndex);
         indexes.ShouldContain(GameDb.CharacterNameIndex);
         indexes.ShouldContain(GameDb.CharacterSlotIndex);
         indexes.ShouldContain(GameDb.ItemKey);
         indexes.ShouldContain(GameDb.ItemSlotIndex);
+        indexes.ShouldContain(GameDb.GuildNameIndex);   // T-904
+        indexes.ShouldContain(GameDb.GuildMemberIndex);
     }
 
     [DatabaseFact]

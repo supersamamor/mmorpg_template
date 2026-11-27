@@ -357,7 +357,7 @@ In `inventory` and `inventory_changed` (`load`).
 In `inventory_changed` `cause`: `picked_up`, `used`, `equipped`, `unequipped`, `dropped`, `weight` (only the weight limit or state changed),
 `card_inserted`, `refined` (any refine attempt: the material is used up whatever the result), `exchanged` (a dialogue's `take_item` / `give_item` actions, T-601),
 `quest` (a quest step's turn-in: its consumed items taken and its item and currency rewards given, one transaction, T-602),
-`shop_buy` (items bought; the currency went down in the same change, T-603), `shop_sell` (items sold; the currency went up, T-603), `staff` (staff gave or took items or currency through the admin API, T-806), `traded` (a trade swapped both offers: items and currency in one change on each side, T-903).
+`shop_buy` (items bought; the currency went down in the same change, T-603), `shop_sell` (items sold; the currency went up, T-603), `staff` (staff gave or took items or currency through the admin API, T-806), `traded` (a trade swapped both offers: items and currency in one change on each side, T-903), `guild_founded` (founding a guild took its cost, `guild.found_cost`; the guild and the change land in one transaction, T-904).
 
 ## Refine failures
 What a failed refine does, per step of `refine.yaml` (`failure`): `keep` (the level stays), `down` (one level down, not below 0), `break` (the item is gone, with its cards).
@@ -397,12 +397,15 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`, `set_outfit`, `chat`, `block`, `unblock`, `report`, `party_invite`, `party_answer`, `party_leave`, `party_kick`, `party_lead`, `trade_ask`, `trade_answer`, `trade_offer`, `trade_currency`, `trade_lock`, `trade_unlock`, `trade_confirm`, `trade_cancel`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`, `announcement`, `chat_line`, `chat_refused`, `chat_state`, `chat_reported`, `party`, `party_members`, `party_invited`, `party_notice`, `party_refused`, `trade_asked`, `trade`, `trade_notice`, `trade_closed`, `trade_refused`, `pong`, `bye`
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`, `set_outfit`, `chat`, `block`, `unblock`, `report`, `party_invite`, `party_answer`, `party_leave`, `party_kick`, `party_lead`, `trade_ask`, `trade_answer`, `trade_offer`, `trade_currency`, `trade_lock`, `trade_unlock`, `trade_confirm`, `trade_cancel`, `guild_found`, `guild_invite`, `guild_answer`, `guild_leave`, `guild_kick`, `guild_rank`, `guild_ranks`, `guild_lead`, `guild_notice`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`, `announcement`, `chat_line`, `chat_refused`, `chat_state`, `chat_reported`, `party`, `party_members`, `party_invited`, `party_notice`, `party_refused`, `trade_asked`, `trade`, `trade_notice`, `trade_closed`, `trade_refused`, `guild`, `guild_invited`, `guild_news`, `guild_refused`, `guild_tags`, `pong`, `bye`
 Party (T-902): client → server `party_invite`, `party_answer`, `party_leave`, `party_kick`, `party_lead`; server → client `party`, `party_members`, `party_invited`, `party_notice`,
 `party_refused`. Only to the members: `party`, `party_members`; only to the invited: `party_invited`; own only: `party_refused`.
 Trade (T-903): client → server `trade_ask`, `trade_answer`, `trade_offer`, `trade_currency`, `trade_lock`, `trade_unlock`, `trade_confirm`, `trade_cancel`; server → client `trade_asked`,
 `trade`, `trade_notice`, `trade_closed`, `trade_refused`. Only to the two sides: `trade`, `trade_closed`; only to the asked: `trade_asked`; own only: `trade_notice`, `trade_refused`.
+Guild (T-904): client → server `guild_found`, `guild_invite`, `guild_answer`, `guild_leave`, `guild_kick`, `guild_rank`, `guild_ranks`, `guild_lead`, `guild_notice`; server → client `guild`,
+`guild_invited`, `guild_news`, `guild_refused`, `guild_tags`. Only to the members: `guild`; only to the invited: `guild_invited`; own only: `guild_refused`; to every player on the map:
+`guild_tags`.
 Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`; and (T-901) `chat_refused`, `chat_state`, `chat_reported`. A `chat_line` goes to everyone the line reaches, its sender included.
 
 ## Bye reasons
@@ -476,7 +479,8 @@ The `kind` of an `announcement` (T-806): `staff` (staff's words in `text`, at mo
 
 ## Chat channels
 Where a chat line goes (T-901, ARCHITECTURE §10 "Chat"): `map` (every playing character on the sender's map instance), `whisper` (one playing character, named by the sender), `party` (T-902: the
-members of the sender's party who play now; registered by the party service through the seam), `system` (the server's own
+members of the sender's party who play now; registered by the party service through the seam), `guild` (T-904: the members of the sender's guild who play on this server process; registered by
+the guild service through the seam), `system` (the server's own
 lines: no player sends on it; the client lists staff's announcements under it). A channel whose members something else supplies (a party, T-902; a guild, T-904) is one more term here and
 one `IChannelMembers` registered with the chat service; chat does not change.
 
@@ -529,6 +533,31 @@ no longer carried exactly what it offered).
 at most `trade.max_entries`) and currency, each entry kept exactly as it was offered. **Lock**: a side says its offer is final; any change to either offer unlocks both. **Version**: the
 trade's change counter; a **confirm** names the version whose two locked offers it accepts. **Swap**: when both confirmed the same version, the inventory moves both offers in one step, all or
 nothing; whole entries keep their ids, a part of a stack becomes a new entry. **Tradeable**: an item field (default true); `false` keeps it with its owner.
+
+## Guild permissions
+What a guild rank may do (T-904, ARCHITECTURE §6.11): `invite` (invite characters), `kick` (take out a member of a lower rank), `edit_notice` (write the notice), `set_rank` (give a member of
+a lower rank another rank, also below one's own). The leader's rank holds every one; naming and ordering the ranks (`guild_ranks`) and handing the leader rank over (`guild_lead`) are the
+leader's alone. Nobody acts on a member of the same or a higher rank.
+
+## Guild reasons
+The `reason` of a `guild_refused` (T-904): `not_online` (nobody of that name plays on this server process, a tapped player is not on the inviter's map, or the invited blocks the inviter: the same
+answer, as for a party), `invalid_target` (oneself, or not a member), `invalid_name` (the naming rules), `name_taken` (letter case does not count), `invalid_emblem` (not one of `guild.emblems`),
+`already_in_guild` (one guild per character), `not_in_guild`, `invite_pending`, `no_invite` (nothing to answer: none came, it expired, or the inviter may no longer invite), `full`
+(`guild.max_members`), `not_allowed` (the rank lacks the permission, or the act is the leader's), `rank_too_high` (the member's rank, or the rank asked for, is the actor's own or above),
+`invalid_ranks` (a rank list the rules refuse), `too_long` (the notice, `--guild-notice-length`), `cannot_afford` (the founding cost), `busy` (a founding of this character is under way),
+`rate_limited` (with `retry_after`), `unavailable` (a dev login, or a database that does not answer).
+
+## Guild news
+The `news` of a `guild_news` (T-904): `invite_sent`, `declined`, `expired`, `founded`, `joined`, `left`, `kicked`, `rank` (a member has another rank), `leader` (a new leader), `ranks` (the
+leader renamed or reordered the ranks), `notice` (the notice changed), `disbanded` (the last member left).
+
+## Guild terms
+(T-904.) **Guild**: a named group of characters stored in the database (`guilds`), with an **emblem** (an asset key of the theme, `guild.emblems`; never uploaded), a **notice** (one text,
+cleaned like a chat line, at most `--guild-notice-length`), ranks and members; it holds on every server process that shares the database. **Rank**: a place from 0 (the **leader**'s) down,
+with a name and "Guild permissions"; a new member joins at the last. **Member number**: a member's id in the protocol (`member`), never the character's permanent id. **Founding**: the name is
+reserved, the tick takes `guild.found_cost` and the founder's next save founds the guild in the same transaction (a **reservation** whose save never lands is dropped). **Successor**: when the
+leader goes, the member of the highest rank, the earliest to join among equals; with nobody left the guild is **disbanded** and its name is free. **Tag**: a guild member's emblem shown where its
+name shows (`guild_tags`). **Online**: playing on this server process (v1).
 
 ## Admin terms
 (T-804, ARCHITECTURE §12.) **Admin API**: the server's private HTTP listener for staff tooling, on its own port. **Service credential**: the secret that proves a request comes from the panel.

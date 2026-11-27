@@ -38,7 +38,8 @@ public class ClientBundleTests
             [new ClientGender("male", "Male", "model.b", [new ClientAppearanceOption("face.a", "Calm", "model.f")], [new ClientAppearanceOption("hair.a", "Crop", "model.h")], "face.a", "hair.a")],
             [new ClientColorOption("skin.a", "Fair", "#F6D9C4")], "skin.a", [new ClientColorOption("haircolor.a", "Raven", "#1E1B1D")], "haircolor.a", "job.a"),
         new ClientRefine(1, [new ClientRefineLevel(1, 90, "item.m", 2, "break")]), "crowns",
-        [new ClientOutfit("outfit.a", "Cloak", null, "icon.o", ["cloth"], [new ClientOutfitPiece("body", "model.o", "male"), new ClientOutfitPiece("head", "model.p", null)])]);
+        [new ClientOutfit("outfit.a", "Cloak", null, "icon.o", ["cloth"], [new ClientOutfitPiece("body", "model.o", "male"), new ClientOutfitPiece("head", "model.p", null)])],
+        ["icon.emblem.a", "icon.emblem.b"]);
 
     private static readonly string FixtureBody =
         """
@@ -57,6 +58,7 @@ public class ClientBundleTests
         "warps":[{"cell":[1,0],"map":"map.b","target":[0,0]}],"npcs":[{"npc":"npc.a","cell":[0,0],"facing":"s"}],
         "zones":[{"kind":"safe","area":[0,0,2,1]}]}],
         "outfits":[{"id":"outfit.a","name":"Cloak","icon":"icon.o","takes_colors":["cloth"],"pieces":[{"slot":"body","model":"model.o","gender":"male"},{"slot":"head","model":"model.p"}]}],
+        "guild_emblems":["icon.emblem.a","icon.emblem.b"],
         "appearance":{"genders":[{"gender":"male","name":"Male","body":"model.b","faces":[{"id":"face.a","name":"Calm","model":"model.f"}],"hairstyles":[{"id":"hair.a","name":"Crop","model":"model.h"}],"default_face":"face.a","default_hairstyle":"hair.a"}],
         "skin_tones":[{"id":"skin.a","name":"Fair","color":"#F6D9C4"}],"default_skin_tone":"skin.a","hair_colors":[{"id":"haircolor.a","name":"Raven","color":"#1E1B1D"}],"default_hair_color":"haircolor.a","start_job":"job.a"},
         "refine":{"max_level":1,"levels":[{"level":1,"success_percent":90,"material":"item.m","material_quantity":2,"failure":"break"}]}}
@@ -91,7 +93,7 @@ public class ClientBundleTests
         [
             "ClientAppearance: Genders,SkinTones,DefaultSkinToneId,HairColors,DefaultHairColorId,StartJobId",
             "ClientAppearanceOption: Id,Name,ModelAssetKey",
-            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Quests,Maps,Appearance,Refine,CurrencyName,Outfits",
+            "ClientBundle: FormatVersion,Elements,Stats,Items,Skills,Jobs,Statuses,Monsters,Npcs,Quests,Maps,Appearance,Refine,CurrencyName,Outfits,GuildEmblems",
             "ClientColorOption: Id,Name,Color",
             "ClientGender: Gender,Name,BodyModelAssetKey,Faces,Hairstyles,DefaultFaceId,DefaultHairstyleId",
             "ClientItem: Id,Name,Description,Kind,IconAssetKey,GroundAssetKey,Slots,WeaponType,VisualAssetKey,UseSfx,EquipSfx,CardSlots,Refinable,ConfirmUse,Tradeable",
@@ -249,7 +251,7 @@ public class ClientBundleTests
             drops: new Registry<DropTableDef>(Content.Drops.All.Select(d => d with { Entries = [new DropEntryDef { ItemId = "item.antidote", Chance = 0.123456 }] })),
             expTables: Registry<ExpTableDef>.Empty(),
             formulas: new FormulaSetDef { PhysicalDamage = secret },
-            balance: new BalanceDef { NewCharacter = new NewCharacterBalanceDef { StartJobId = Content.Balance.NewCharacter.StartJobId } }); // the start job is display data (T-706: the creation preview wears its look)
+            balance: new BalanceDef { NewCharacter = new NewCharacterBalanceDef { StartJobId = Content.Balance.NewCharacter.StartJobId }, Guild = Content.Balance.Guild with { MaxMembers = 2, FoundCost = new GuildCostDef { Currency = 424_242 } } }); // the start job is display data (T-706: the creation preview wears its look), and so are the guild emblems (T-904); the rest of the guild rules are not
 
         var after = Export(changed);
 

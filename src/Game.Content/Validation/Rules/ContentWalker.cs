@@ -249,5 +249,7 @@ internal static class ContentWalker
         foreach (var d in db.Dialogue.All)
             foreach (var (key, node) in d.Nodes)
                 yield return new(d.Id, $"nodes.{key}.portrait_asset_key", node.PortraitAssetKey, false);
+        var emblems = db.Balance.Guild.Emblems;   // T-904: the theme's guild emblems
+        for (var i = 0; i < emblems.Count; i++) yield return new("balance", $"guild.emblems[{i}]", emblems[i], true);
     }
 }

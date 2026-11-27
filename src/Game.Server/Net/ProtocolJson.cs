@@ -44,6 +44,11 @@ public static class ProtocolJson
             int? version = null, quantity = null, level = null, amount = null, index = null;
             long? seq = null, target = null, entry = null, card = null;
             long? currency = null;   // trade_currency (T-903)
+            string? emblem = null;   // guilds (T-904)
+            long? member = null;
+            int? rank = null;
+            Utf8JsonReader ranksAt = default;
+            bool hasRanks = false;
             GridCell? cell = null;
             // start_autopilot's lists (T-604): where they begin; they are read once the type is known, so in any other message they stay unknown fields, ignored whatever they hold
             Utf8JsonReader questsAt = default, skillsAt = default;
@@ -94,6 +99,14 @@ public static class ProtocolJson
                     case "text": text = String(ref reader); break;
                     case "line": line = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var ln) ? ln : throw Bad(); break;
                     case "currency": currency = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var cu) ? cu : throw Bad(); break;
+                    case "emblem": emblem = String(ref reader); break;
+                    case "member": member = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var mb) ? mb : throw Bad(); break;
+                    case "rank": rank = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var rk) ? rk : throw Bad(); break;
+                    case "ranks":
+                        ranksAt = reader;
+                        hasRanks = true;
+                        reader.Skip();
+                        break;
                     default: reader.Skip(); break;
                 }
             }
@@ -154,6 +167,16 @@ public static class ProtocolJson
                 MessageTypes.TradeUnlock => new TradeUnlockMessage(),
                 MessageTypes.TradeConfirm => version is { } seen ? new TradeConfirmMessage(seen) : null,
                 MessageTypes.TradeCancel => new TradeCancelMessage(),
+                // T-904: the shape only; the guild service and the database decide the rest
+                MessageTypes.GuildFound => name is { } title && emblem is { } badge ? new GuildFoundMessage(title, badge) : null,
+                MessageTypes.GuildInvite => (name is null) != (target is null) ? new GuildInviteMessage(name, target) : null,
+                MessageTypes.GuildAnswer => accept is { } joins ? new GuildAnswerMessage(joins) : null,
+                MessageTypes.GuildLeave => new GuildLeaveMessage(),
+                MessageTypes.GuildKick => member is { } kickedMember ? new GuildKickMessage(kickedMember) : null,
+                MessageTypes.GuildRank => member is { } ranked && rank is { } place ? new GuildRankMessage(ranked, place) : null,
+                MessageTypes.GuildRanks => hasRanks ? new GuildRanksMessage(ReadGuildRanks(ref ranksAt)) : null,
+                MessageTypes.GuildLead => member is { } newLeader ? new GuildLeadMessage(newLeader) : null,
+                MessageTypes.GuildNotice => text is { } noticeText ? new GuildNoticeMessage(noticeText) : null,
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -306,6 +329,33 @@ public static class ProtocolJson
                 break;
             case TradeConfirmMessage tradeConfirm:
                 w.WriteNumber("version", tradeConfirm.Version);
+                break;
+            case GuildFoundMessage guildFound:
+                w.WriteString("name", guildFound.Name);
+                w.WriteString("emblem", guildFound.Emblem);
+                break;
+            case GuildInviteMessage guildInvite:
+                if (guildInvite.Name is not null) w.WriteString("name", guildInvite.Name);
+                if (guildInvite.Target is { } guildInvited) w.WriteNumber("target", guildInvited);
+                break;
+            case GuildAnswerMessage guildAnswer:
+                w.WriteBoolean("accept", guildAnswer.Accept);
+                break;
+            case GuildKickMessage guildKick:
+                w.WriteNumber("member", guildKick.Member);
+                break;
+            case GuildRankMessage guildRank:
+                w.WriteNumber("member", guildRank.Member);
+                w.WriteNumber("rank", guildRank.Rank);
+                break;
+            case GuildRanksMessage guildRanks:
+                WriteGuildRanks(w, guildRanks.Ranks);
+                break;
+            case GuildLeadMessage guildLead:
+                w.WriteNumber("member", guildLead.Member);
+                break;
+            case GuildNoticeMessage guildNotice:
+                w.WriteString("text", guildNotice.Text);
                 break;
         }
         w.WriteEndObject();
@@ -657,6 +707,58 @@ public static class ProtocolJson
                 w.WriteString("reason", tradeRefused.Reason);
                 if (tradeRefused.RetryAfterSeconds is { } tradeWait) w.WriteNumber("retry_after", tradeWait);
                 break;
+            case GuildMessage guild:
+                if (guild.Guild is { } guildId)
+                {
+                    w.WriteStartObject("guild");
+                    w.WriteNumber("id", guildId);
+                    w.WriteString("name", guild.Name);
+                    w.WriteString("emblem", guild.Emblem);
+                    w.WriteString("notice", guild.Notice);
+                    w.WriteNumber("own", guild.Own);
+                    WriteGuildRanks(w, guild.Ranks);
+                    w.WriteStartArray("members");
+                    foreach (var m in guild.Members)
+                    {
+                        w.WriteStartObject();
+                        w.WriteNumber("member", m.Member);
+                        w.WriteString("name", m.Name);
+                        w.WriteNumber("rank", m.Rank);
+                        w.WriteNumber("level", m.Level);
+                        if (m.Online) w.WriteBoolean("online", true);
+                        w.WriteEndObject();
+                    }
+                    w.WriteEndArray();
+                    w.WriteEndObject();
+                }
+                break;
+            case GuildInvitedMessage guildInvited:
+                w.WriteString("name", guildInvited.Name);
+                w.WriteString("title", guildInvited.Title);
+                w.WriteString("emblem", guildInvited.Emblem);
+                w.WriteNumber("expires_in", guildInvited.ExpiresInSeconds);
+                break;
+            case GuildNewsMessage guildNews:
+                w.WriteString("news", guildNews.News);
+                if (guildNews.Name is not null) w.WriteString("name", guildNews.Name);
+                break;
+            case GuildRefusedMessage guildRefused:
+                w.WriteString("intent", guildRefused.Intent);
+                w.WriteString("reason", guildRefused.Reason);
+                if (guildRefused.RetryAfterSeconds is { } guildWait) w.WriteNumber("retry_after", guildWait);
+                if (guildRefused.Name is not null) w.WriteString("name", guildRefused.Name);
+                break;
+            case GuildTagsMessage guildTags:
+                w.WriteStartArray("tags");
+                foreach (var tag in guildTags.Tags)
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("entity", tag.Entity);
+                    w.WriteString("emblem", tag.Emblem);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+                break;
             case ByeMessage bye:
                 w.WriteString("reason", bye.Reason);
                 if (bye.RetryAfterSeconds is { } retry) w.WriteNumber("retry_after", retry);
@@ -820,6 +922,9 @@ public static class ProtocolJson
             string? notice = null;
             List<PartyMemberRecord>? partyMembers = null;
             List<PartyMemberStatusRecord>? partyStatus = null;
+            GuildMessage? guildState = null;   // guilds (T-904)
+            string? title = null, emblem = null, news = null;
+            List<GuildTagRecord>? tags = null;
             long? partner = null;   // trade (T-903)
             TradeSideRecord? mine = null, theirs = null;
             bool own = false;
@@ -929,6 +1034,11 @@ public static class ProtocolJson
                     case "members": partyMembers = ReadPartyMembers(ref reader); break;
                     case "status": partyStatus = ReadPartyStatus(ref reader); break;
                     case "partner": partner = reader.GetInt64(); break;
+                    case "guild": guildState = ReadGuild(ref reader); break;
+                    case "title": title = String(ref reader); break;
+                    case "emblem": emblem = String(ref reader); break;
+                    case "news": news = String(ref reader); break;
+                    case "tags": tags = ReadGuildTags(ref reader); break;
                     case "mine": mine = ReadTradeSide(ref reader); break;
                     case "theirs": theirs = ReadTradeSide(ref reader); break;
                     case "own": own = reader.GetBoolean(); break;
@@ -990,6 +1100,11 @@ public static class ProtocolJson
                 MessageTypes.TradeNotice => notice is null ? null : new TradeNoticeMessage(notice, name),
                 MessageTypes.TradeClosed => reason is null ? null : new TradeClosedMessage(reason, name, own),
                 MessageTypes.TradeRefused => intent is null || reason is null ? null : new TradeRefusedMessage(intent, reason, retryAfter),
+                MessageTypes.Guild => guildState ?? GuildMessage.None,
+                MessageTypes.GuildInvited => name is null || title is null || emblem is null || expiresIn is null ? null : new GuildInvitedMessage(name, title, emblem, expiresIn.Value),
+                MessageTypes.GuildNews => news is null ? null : new GuildNewsMessage(news, name),
+                MessageTypes.GuildRefused => intent is null || reason is null ? null : new GuildRefusedMessage(intent, reason, retryAfter, name),
+                MessageTypes.GuildTags => new GuildTagsMessage((IReadOnlyList<GuildTagRecord>?)tags ?? Array.Empty<GuildTagRecord>()),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason, retryAfter),
                 null => null,
                 _ => throw new UnknownTypeException(),
@@ -1373,6 +1488,126 @@ public static class ProtocolJson
                 }
             }
             list.Add(new ShopStockRecord(item ?? throw Bad(), price ?? throw Bad()));
+        }
+        return list;
+    }
+
+    /// <summary><c>"ranks":[{"name":"Officer","permissions":["invite"]},...]</c> (T-904).</summary>
+    private static void WriteGuildRanks(Utf8JsonWriter w, IReadOnlyList<GuildRankRecord> ranks)
+    {
+        w.WriteStartArray("ranks");
+        foreach (var r in ranks)
+        {
+            w.WriteStartObject();
+            w.WriteString("name", r.Name);
+            WriteStrings(w, "permissions", r.Permissions);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+    }
+
+    private static List<GuildRankRecord> ReadGuildRanks(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+        var list = new List<GuildRankRecord>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.StartObject)
+        {
+            string? name = null;
+            List<string>? permissions = null;
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var key = reader.GetString();
+                reader.Read();
+                switch (key)
+                {
+                    case "name": name = String(ref reader); break;
+                    case "permissions": permissions = ReadStrings(ref reader); break;
+                    default: reader.Skip(); break;
+                }
+            }
+            if (name is null) throw Bad();
+            list.Add(new GuildRankRecord(name, (IReadOnlyList<string>?)permissions ?? Array.Empty<string>()));
+        }
+        if (reader.TokenType != JsonTokenType.EndArray) throw Bad();
+        return list;
+    }
+
+    /// <summary>The <c>guild</c> object of a <c>guild</c> message (T-904); a JSON null reads as no guild.</summary>
+    private static GuildMessage ReadGuild(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType == JsonTokenType.Null) return GuildMessage.None;
+        if (reader.TokenType != JsonTokenType.StartObject) throw Bad();
+        long? id = null;
+        long own = 0;
+        string? name = null, emblem = null, notice = null;
+        List<GuildRankRecord>? ranks = null;
+        var members = new List<GuildMemberRecord>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var key = reader.GetString();
+            reader.Read();
+            switch (key)
+            {
+                case "id": id = reader.GetInt64(); break;
+                case "name": name = String(ref reader); break;
+                case "emblem": emblem = String(ref reader); break;
+                case "notice": notice = String(ref reader); break;
+                case "own": own = reader.GetInt64(); break;
+                case "ranks": ranks = ReadGuildRanks(ref reader); break;
+                case "members":
+                    if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+                    while (reader.Read() && reader.TokenType == JsonTokenType.StartObject)
+                    {
+                        long? number = null;
+                        string? who = null;
+                        int rank = 0, level = 0;
+                        var online = false;
+                        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+                        {
+                            var field = reader.GetString();
+                            reader.Read();
+                            switch (field)
+                            {
+                                case "member": number = reader.GetInt64(); break;
+                                case "name": who = String(ref reader); break;
+                                case "rank": rank = reader.GetInt32(); break;
+                                case "level": level = reader.GetInt32(); break;
+                                case "online": online = reader.GetBoolean(); break;
+                                default: reader.Skip(); break;
+                            }
+                        }
+                        if (number is null || who is null) throw Bad();
+                        members.Add(new GuildMemberRecord(number.Value, who, rank, level, online));
+                    }
+                    break;
+                default: reader.Skip(); break;
+            }
+        }
+        if (id is null || name is null || emblem is null) throw Bad();
+        return new GuildMessage(id, name, emblem, notice ?? string.Empty, own, (IReadOnlyList<GuildRankRecord>?)ranks ?? Array.Empty<GuildRankRecord>(), members);
+    }
+
+    private static List<GuildTagRecord> ReadGuildTags(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+        var list = new List<GuildTagRecord>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.StartObject)
+        {
+            long? entity = null;
+            string? emblem = null;
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var key = reader.GetString();
+                reader.Read();
+                switch (key)
+                {
+                    case "entity": entity = reader.GetInt64(); break;
+                    case "emblem": emblem = String(ref reader); break;
+                    default: reader.Skip(); break;
+                }
+            }
+            if (entity is null || emblem is null) throw Bad();
+            list.Add(new GuildTagRecord(entity.Value, emblem));
         }
         return list;
     }

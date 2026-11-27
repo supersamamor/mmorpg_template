@@ -261,6 +261,48 @@ namespace Game.Shared.Protocol
         /// <summary><c>trade_refused</c> (T-903, server to client, own only): a trade intent refused, with a "Trade reasons" term.</summary>
         public const string TradeRefused = "trade_refused";
 
+        /// <summary><c>guild_found</c> (T-904, client to server): found a guild with a name and an emblem.</summary>
+        public const string GuildFound = "guild_found";
+
+        /// <summary><c>guild_invite</c> (T-904, client to server): invite a character by name or by tapping it.</summary>
+        public const string GuildInvite = "guild_invite";
+
+        /// <summary><c>guild_answer</c> (T-904, client to server): accept or decline the invite.</summary>
+        public const string GuildAnswer = "guild_answer";
+
+        /// <summary><c>guild_leave</c> (T-904, client to server): leave the guild.</summary>
+        public const string GuildLeave = "guild_leave";
+
+        /// <summary><c>guild_kick</c> (T-904, client to server, <c>kick</c> permission): take a member of a lower rank out.</summary>
+        public const string GuildKick = "guild_kick";
+
+        /// <summary><c>guild_rank</c> (T-904, client to server, <c>set_rank</c> permission): give a member of a lower rank another rank below one's own.</summary>
+        public const string GuildRank = "guild_rank";
+
+        /// <summary><c>guild_ranks</c> (T-904, client to server, leader only): name and order the ranks below the leader, with their permissions.</summary>
+        public const string GuildRanks = "guild_ranks";
+
+        /// <summary><c>guild_lead</c> (T-904, client to server, leader only): hand the leader rank to a member.</summary>
+        public const string GuildLead = "guild_lead";
+
+        /// <summary><c>guild_notice</c> (T-904, client to server, <c>edit_notice</c> permission): write the guild's notice.</summary>
+        public const string GuildNotice = "guild_notice";
+
+        /// <summary><c>guild</c> (T-904, server to client, members only): the guild as it is now (ranks, members, notice, emblem), after every change, welcome and online change.</summary>
+        public const string Guild = "guild";
+
+        /// <summary><c>guild_invited</c> (T-904, server to client, the invited only): who invites, to which guild, and for how long.</summary>
+        public const string GuildInvited = "guild_invited";
+
+        /// <summary><c>guild_news</c> (T-904, server to client): a "Guild news" term, such as a member who joined.</summary>
+        public const string GuildNews = "guild_news";
+
+        /// <summary><c>guild_refused</c> (T-904, server to client, own only): a guild intent refused, with a "Guild reasons" term.</summary>
+        public const string GuildRefused = "guild_refused";
+
+        /// <summary><c>guild_tags</c> (T-904, server to client): the emblems of the guild members on this map instance, to show above their names.</summary>
+        public const string GuildTags = "guild_tags";
+
         /// <summary><c>announcement</c> (server → client, T-806): staff's words, or a coming maintenance, for everyone playing on this server.</summary>
         public const string Announcement = "announcement";
 
@@ -268,10 +310,10 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot, SetOutfit, Chat, Block, Unblock, Report, PartyInvite, PartyAnswer, PartyLeave, PartyKick, PartyLead, TradeAsk, TradeAnswer, TradeOffer, TradeCurrency, TradeLock, TradeUnlock, TradeConfirm, TradeCancel);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot, SetOutfit, Chat, Block, Unblock, Report, PartyInvite, PartyAnswer, PartyLeave, PartyKick, PartyLead, TradeAsk, TradeAnswer, TradeOffer, TradeCurrency, TradeLock, TradeUnlock, TradeConfirm, TradeCancel, GuildFound, GuildInvite, GuildAnswer, GuildLeave, GuildKick, GuildRank, GuildRanks, GuildLead, GuildNotice);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Announcement, ChatLine, ChatRefused, ChatState, ChatReported, Party, PartyMembers, PartyInvited, PartyNotice, PartyRefused, TradeAsked, Trade, TradeNotice, TradeClosed, TradeRefused, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Announcement, ChatLine, ChatRefused, ChatState, ChatReported, Party, PartyMembers, PartyInvited, PartyNotice, PartyRefused, TradeAsked, Trade, TradeNotice, TradeClosed, TradeRefused, Guild, GuildInvited, GuildNews, GuildRefused, GuildTags, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);

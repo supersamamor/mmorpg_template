@@ -66,6 +66,69 @@ namespace Game.Shared.Definitions
 
         /// <summary>Player trade (T-903, ARCHITECTURE §6.10).</summary>
         public TradeBalanceDef Trade { get; init; } = new TradeBalanceDef();
+
+        /// <summary>Guilds (T-904, ARCHITECTURE §6.11).</summary>
+        public GuildBalanceDef Guild { get; init; } = new GuildBalanceDef();
+    }
+
+    /// <summary>
+    /// Guilds (T-904): the <c>guild</c> section of <c>balance.yaml</c>. The rules a player meets: what a name may be, what founding costs, how many fit, how long an invite waits, the ranks a
+    /// new guild starts with, and which of the theme's asset keys are emblems. How long the notice may be and how often guild intents may come are server configuration (<c>--guild-</c>).
+    /// </summary>
+    public sealed record GuildBalanceDef
+    {
+        /// <summary>Shortest guild name, at least 1. The letters are those of character names (<c>characters.name_letters</c>).</summary>
+        public int NameMinLength { get; init; } = 3;
+
+        /// <summary>Longest guild name, at least <see cref="NameMinLength"/> and at most 32 (the database column).</summary>
+        public int NameMaxLength { get; init; } = 20;
+
+        /// <summary>Separators a guild name may use besides those of character names (<c>characters.name_separators</c>): single characters between two letters, such as a space.</summary>
+        public IReadOnlyList<string> NameSeparators { get; init; } = Empty.List<string>();
+
+        /// <summary>What founding costs, or null for nothing.</summary>
+        public GuildCostDef? FoundCost { get; init; }
+
+        /// <summary>Most members of one guild, the leader included. At least 2.</summary>
+        public int MaxMembers { get; init; } = 30;
+
+        /// <summary>Most ranks, the leader's included. At least 2 (the leader and one more).</summary>
+        public int MaxRanks { get; init; } = 6;
+
+        /// <summary>Longest rank name. At least 1, at most 32.</summary>
+        public int RankNameMaxLength { get; init; } = 16;
+
+        /// <summary>How long an invite waits for an answer, in milliseconds. Above 0.</summary>
+        public int InviteTimeoutMs { get; init; } = 30_000;
+
+        /// <summary>The ranks a new guild starts with, the leader's first; at least two, at most <see cref="MaxRanks"/>. New members join at the last.</summary>
+        public IReadOnlyList<GuildRankDef> DefaultRanks { get; init; } = Empty.List<GuildRankDef>();
+
+        /// <summary>The emblems a founder chooses from: asset keys of the theme (rule 3), at least one. Never uploaded.</summary>
+        public IReadOnlyList<string> Emblems { get; init; } = Empty.List<string>();
+    }
+
+    /// <summary>What founding a guild costs (T-904): currency, units of one item, or both; taken in the same transaction that makes the guild.</summary>
+    public sealed record GuildCostDef
+    {
+        /// <summary>Currency taken; 0 or more.</summary>
+        public long Currency { get; init; }
+
+        /// <summary>An item taken, or null.</summary>
+        public string? ItemId { get; init; }
+
+        /// <summary>Units of <see cref="ItemId"/> taken; at least 1 when it is set.</summary>
+        public int Quantity { get; init; } = 1;
+    }
+
+    /// <summary>One rank of a new guild (T-904): its name and its "Guild permissions" terms.</summary>
+    public sealed record GuildRankDef
+    {
+        /// <summary>The rank's name, as members see it.</summary>
+        public string Name { get; init; } = string.Empty;
+
+        /// <summary>What it may do ("Guild permissions"); the leader's holds all whatever it lists.</summary>
+        public IReadOnlyList<string> Permissions { get; init; } = Empty.List<string>();
     }
 
     /// <summary>

@@ -526,6 +526,102 @@
       },
       "additionalProperties": false,
       "description": "Player trade (T-903, ARCHITECTURE §6.10)."
+    },
+    "guild": {
+      "type": "object",
+      "properties": {
+        "name_min_length": {
+          "type": "integer",
+          "description": "Shortest guild name, at least 1. The letters are those of character names (characters.name_letters)."
+        },
+        "name_max_length": {
+          "type": "integer",
+          "description": "Longest guild name, at least NameMinLength and at most 32 (the database column)."
+        },
+        "name_separators": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Separators a guild name may use besides those of character names (characters.name_separators): single characters between two letters, such as a space."
+        },
+        "found_cost": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "currency": {
+              "type": "integer",
+              "description": "Currency taken; 0 or more."
+            },
+            "item_id": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "pattern": "^item\\.[a-z0-9_]+$",
+              "description": "An item taken, or null."
+            },
+            "quantity": {
+              "type": "integer",
+              "description": "Units of ItemId taken; at least 1 when it is set."
+            }
+          },
+          "additionalProperties": false,
+          "description": "What founding costs, or null for nothing."
+        },
+        "max_members": {
+          "type": "integer",
+          "description": "Most members of one guild, the leader included. At least 2."
+        },
+        "max_ranks": {
+          "type": "integer",
+          "description": "Most ranks, the leader's included. At least 2 (the leader and one more)."
+        },
+        "rank_name_max_length": {
+          "type": "integer",
+          "description": "Longest rank name. At least 1, at most 32."
+        },
+        "invite_timeout_ms": {
+          "type": "integer",
+          "description": "How long an invite waits for an answer, in milliseconds. Above 0."
+        },
+        "default_ranks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "The rank's name, as members see it."
+              },
+              "permissions": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "What it may do (\"Guild permissions\"); the leader's holds all whatever it lists."
+              }
+            },
+            "additionalProperties": false,
+            "description": "One rank of a new guild (T-904): its name and its \"Guild permissions\" terms.",
+            "required": [
+              "name"
+            ]
+          },
+          "description": "The ranks a new guild starts with, the leader's first; at least two, at most MaxRanks. New members join at the last."
+        },
+        "emblems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "The emblems a founder chooses from: asset keys of the theme (rule 3), at least one. Never uploaded."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Guilds (T-904, ARCHITECTURE §6.11)."
     }
   },
   "additionalProperties": false,

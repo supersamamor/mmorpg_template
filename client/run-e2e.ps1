@@ -43,13 +43,15 @@
 #   .\client\run-e2e.ps1 -Run party                       two dev-login characters form a party by name, talk on the party channel, share a slime's EXP by party_exp, and one leaves
 #   .\client\run-e2e.ps1 -Run trade                       two new accounts' characters trade a draught and currency for a tonic through the trade window; the server stops itself, the next
 #                                                         one has the swap; a second trade ends when one walks away, and nothing moved (T-903; needs PostgreSQL like account)
+#   .\client\run-e2e.ps1 -Run guild                       a new account's character founds a guild through the guild panel, invites a second (it accepts), they talk on the guild channel,
+#                                                         the leader writes the notice and promotes the second, which leaves; the last member disbands it (T-904; needs PostgreSQL like account)
 #   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, kick, moderation, textured, chat, bye, release (account,
 #                                                         saving, appearance, wardrobe, kick and moderation are skipped, and said so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -650,6 +652,29 @@ function Invoke-Scenario([string] $Name) {
                 Write-Host "[run-e2e] the server log holds no line a player wrote"
                 return $result.Code
             }
+            "guild" {
+                # T-904: a database like account. The founder asks for the member by a marker naming its character; the member says map lines until the invite comes.
+                $env:GAME_DB_CONNECTION = Get-E2EConnection
+                try { $server = Start-GameServer } finally { $env:GAME_DB_CONNECTION = $null }
+                $holder = @{ Second = $null }
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-guild" @()) -EngineArgs $engineArgs
+                $result = Wait-GodotClient $run 300 -OnMarker {
+                    param($marker)
+                    if ($marker -like "guild-second:*") {
+                        Write-Host "[run-e2e] starting the member"
+                        $holder.Second = Start-GodotClient @("--e2e-guild-join", $marker.Substring(13), "--server", "ws://127.0.0.1:$Port/ws", "--name", "e2e-member") -EngineArgs $engineArgs -Headless
+                    }
+                }
+                if (-not $holder.Second) { Write-Host "[run-e2e] the founder never asked for the member"; return 1 }
+                $second = Wait-GodotClient $holder.Second 120
+                if ($second.Code -ne 0) { Write-Host "[run-e2e] the member failed (exit code $($second.Code))"; return 1 }
+                $lines = @(Select-String -Path $server.Log -Pattern "\[guild\] guild \d+ (founded|disbanded)")
+                Write-Host "[run-e2e] guild log lines: $(@($lines | ForEach-Object { ($_.Line -split '\[guild\] ')[1] }) -join '; ')"
+                if ($lines.Count -ne 2) { Write-Host "[run-e2e] expected a founding and a disbanding on the server log, found $($lines.Count)"; return 1 }
+                if (Select-String -Path $server.Log -Pattern "e2esaid" -Quiet) { Write-Host "[run-e2e] A PLAYER'S LINE IS IN THE SERVER LOG"; return 1 }
+                if (Select-String -Path $server.Log -Pattern "\[guild\].*(failed|could not)" -Quiet) { Write-Host "[run-e2e] the guild service logged a failure"; return 1 }
+                return $result.Code
+            }
             "party" {
                 # T-902: two dev-login clients, no database. The expected EXP comes from content/: the Gel Slime's base and job EXP through formulas.yaml party_exp for a party of two,
                 # split evenly with the odd point to the leader (listed first). The script knows the formula's shape, so a changed party_exp stops it here instead of passing wrongly.
@@ -844,12 +869,12 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 # The account, saving and appearance runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.
 $skipped = @()
-$databaseRuns = @("account", "saving", "appearance", "wardrobe", "kick", "moderation", "chat", "trade")
+$databaseRuns = @("account", "saving", "appearance", "wardrobe", "kick", "moderation", "chat", "trade", "guild")
 if (@($runs | Where-Object { $databaseRuns -contains $_ }).Count -gt 0 -and -not $env:GAME_TEST_DB_CONNECTION) {
     if ($Run -ne "all") { throw "The $Run run needs a PostgreSQL server: set `$env:GAME_TEST_DB_CONNECTION." }
     $skipped = $databaseRuns

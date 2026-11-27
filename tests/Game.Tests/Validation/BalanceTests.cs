@@ -167,6 +167,38 @@ public class BalanceTests : IDisposable
         issue.Line.ShouldBeGreaterThan(0);
     }
 
+    [Theory]
+    [InlineData("  max_ranks: 6\n", "  max_ranks: 1\n", "guild.max_ranks")]
+    [InlineData("rank_name_max_length: 16", "rank_name_max_length: 40", "guild.rank_name_max_length")]
+    [InlineData("  name_max_length: 20\n", "  name_max_length: 33\n", "guild.name_min_length")]
+    [InlineData("  max_members: 30\n", "  max_members: 1\n", "guild.max_members")]
+    [InlineData("name_separators: [\" \"]", "name_separators: [\"--\"]", "guild.name_separators")]
+    public void Guild_numbers_out_of_range_are_errors(string from, string to, string path)
+    {
+        Edit(from, to);
+        var issue = Validate().Issues.First(i => i.Code == ValidationCodes.BalanceRange);
+        (issue.File, issue.Path).ShouldBe(("balance.yaml", path));
+        issue.Line.ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public void Guild_emblems_are_keys_of_the_theme_and_the_bundle_lists_them()
+    {
+        var content = Game.Tests.World.TestGrids.SampleContent;
+        content.Balance.Guild.Emblems.ShouldNotBeEmpty();
+        Game.Content.ClientExport.ClientBundleBuilder.Build(content).GuildEmblems.ShouldBe(content.Balance.Guild.Emblems);
+        Edit("emblems: [icon.emblem.oak,", "emblems: [icon.emblem.uploaded,");
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.AssetMissing);
+        issue.Path.ShouldBe("guild.emblems[0]");
+    }
+
+    [Fact]
+    public void A_guild_rank_permission_that_is_not_a_term_is_an_error()
+    {
+        Edit("      permissions: []", "      permissions: [ban]");
+        Validate().Issues.ShouldContain(i => i.Code == ValidationCodes.RefMissing && i.Path == "guild.default_ranks");
+    }
+
     [Fact]
     public void Items_are_tradeable_unless_content_says_not_and_the_bundle_says_which()
     {
@@ -220,9 +252,9 @@ public class BalanceTests : IDisposable
 
     [Theory]
     [InlineData("max_slots: 3", "max_slots: 0", "characters.max_slots")]
-    [InlineData("name_min_length: 3", "name_min_length: 0", "characters.name_min_length")]
-    [InlineData("name_max_length: 16", "name_max_length: 2", "characters.name_max_length")]
-    [InlineData("name_max_length: 16", "name_max_length: 33", "characters.name_max_length")]
+    [InlineData("part.\n  name_min_length: 3", "part.\n  name_min_length: 0", "characters.name_min_length")]   // the guild section has the same keys (T-904)
+    [InlineData("name_max_length: 16\n  # Latin", "name_max_length: 2\n  # Latin", "characters.name_max_length")]
+    [InlineData("name_max_length: 16\n  # Latin", "name_max_length: 33\n  # Latin", "characters.name_max_length")]
     [InlineData("name_letters: [a-z, A-Z]", "name_letters: []", "characters.name_letters")]
     [InlineData("name_letters: [a-z, A-Z]", "name_letters: [z-a]", "characters.name_letters")]
     [InlineData("name_letters: [a-z, A-Z]", "name_letters: [abc]", "characters.name_letters")]

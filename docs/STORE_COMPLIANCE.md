@@ -31,6 +31,8 @@ Store rules change. Everything marked "read" was read on **2026-11-25**; read th
 | Chat reports (T-901): a line a player reported, as the server sent it (the text, the channel, when it was said), who said it and who reported it (account and character ids), when, and whether staff closed it (and the audit row) | `chat_reports` | Moderation: staff read a report and decide (ARCHITECTURE §12.9). The only place a line a player wrote is stored | Closed: 30 days after it was closed (`--chat-closed-report-days`). Open: until staff close it. Either way, until either account is erased |
 | Chat lines (T-901) | Server **memory** only: every line for 10 minutes (`--chat-report-window-seconds`) so it can be reported; never written to disk or a log | Reports | 10 minutes, or a restart. The client keeps what is on screen in this session, in memory, and forgets it when the player signs out |
 | Trades (T-903): the two characters' permanent **ids**, the entry ids, items, quantities and currency that moved, and when | Server **logs** only (one `[trade]` line per swap); no table | Support and dupe audits | The log's own lifetime: **the fork decides** and says so in its policy (the template writes to standard output and keeps no log files). No name or anything else about the person is in the line |
+| Guilds (T-904): a guild's name, emblem (an asset key) and notice (text members wrote), its ranks (names and permissions), and its members: which character, at which rank, since when | `guilds`, `guild_ranks`, `guild_members` | The game: guilds, their ranks and notice | A member row: until the character leaves, is kicked, deleted or erased. The guild: until its last member goes (it is deleted, its name free). A notice is the guild's, not one player's: it stays while the guild does, whoever wrote it (it is not tied to an author) |
+| Guild chat lines (T-904) | As chat lines: server **memory** only, 10 minutes, so they can be reported | Reports | As chat lines |
 | IP address | Server **logs** only (sign-ins and connections), and in memory for the limits on guessing (`AccountGuard.cs`) | Security | The log's own lifetime: **the fork decides** and says so in its policy. The template writes to standard output and keeps no log files |
 | Preferences: sound volumes, UI size | On the device only (`user://preferences.json`) | Convenience | The app is removed |
 
@@ -78,7 +80,7 @@ only on a Mac.** On the Mac, open the generated `PrivacyInfo.xcprivacy` and comp
    or an e-mail address is enough. Somebody then checks that the request is the owner's and deletes the account. With no e-mail stored, the proof is the password: the simplest page tells people to install
    the app and delete there, and offers the form to those who cannot.
 3. **Support.** A player who forgot the password cannot delete in the app (there is no e-mail to reset it). Say in the policy how you check who somebody is.
-4. **Age rating.** The questionnaires ask about fantasy violence (yes, mild in the template), chat between players (**yes since T-901**: players talk on the map and in whispers, unfiltered; answer the
+4. **Age rating.** The questionnaires ask about fantasy violence (yes, mild in the template), chat between players (**yes since T-901**: players talk on the map, in whispers, and (T-902, T-904) on party and guild channels, and a guild has a notice its officers write, all unfiltered; answer the
    "users can interact / communicate" questions yes, and say what moderates it: the server's text rules, blocking, reporting a line to staff, staff mutes and bans; Apple's 1.2 (user-generated content)
    asks for exactly those, and for a way to contact you) and purchases (none until T-709). A theme for younger players may need chat off or limited: that is a fork's change. If your theme is made for children,
    other laws and store programmes apply: ask your lawyer first.
@@ -102,6 +104,10 @@ names and ids that are left. Data a service of somebody else holds must be delet
    A banned player cannot sign in to delete in the app: the support path is theirs.
 3b. **Chat** (T-901): erasing takes the account's blocks and the blocks of its characters by others, and every chat report it made or that names what it said (whoever made it). Lines in server
    memory go within 10 minutes anyway.
+3c. **Guilds** (T-904): erasing takes the account's characters out of their guilds in the same transaction: a leader hands over to the highest rank (the earliest to join among equals), and a guild
+   left empty is deleted with its ranks, its name free (`PostgresGuildStore.RemoveCharacterAsync`; the tests `Erasing_an_account_takes_its_characters_out_and_a_guild_left_empty_goes` and the
+   erasure test that reads every table). Deleting a character does the same. The **export** (T-806) holds the account's guild memberships: the guild's name, the rank's, when it joined
+   (`guild_memberships`); other members are not named.
 4. What others got from the player (traded items) stays theirs. The app cannot tell the player that it is done, since it has no way to reach them; signing in then answers as if the account had never been.
 
 **Audit rows** (T-804, ARCHITECTURE §12.3). Erasing an account leaves the audit rows about it: nothing may change or delete them (the table's triggers refuse it, the server's own role included), so a staff

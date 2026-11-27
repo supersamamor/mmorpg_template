@@ -209,3 +209,28 @@ trade:
   ask_timeout_ms: 20000
   # Ten entries a side: fits one column of the trade window on the smallest phone; a bigger hand-over is two trades.
   max_entries: 10
+guild:
+  # Guild names use the letters of character names (characters.name_letters) and their separators, plus a space: "Iron Oaks". Up to 20 fits the guild panel's title on the smallest phone.
+  name_min_length: 3
+  name_max_length: 20
+  name_separators: [" "]
+  # No founding cost on the sample maps: their new characters carry hardly any crowns. A fork sets one (currency, an item and its quantity, or both): it is taken in the same
+  # transaction that makes the guild.
+  # found_cost: { currency: 5000 }
+  # Thirty members: a guild panel of two screens on a phone, and a guild channel that stays readable.
+  max_members: 30
+  # The leader and up to five ranks below it; a rank name fits one line of the members list.
+  max_ranks: 6
+  rank_name_max_length: 16
+  # Thirty seconds to answer an invite, as for a party.
+  invite_timeout_ms: 30000
+  # A new guild's ranks, the leader's first; new members join at the last. Permissions are the "Guild permissions" terms (VOCABULARY.md).
+  default_ranks:
+    - name: Leader
+      permissions: [invite, kick, edit_notice, set_rank]
+    - name: Officer
+      permissions: [invite, kick, edit_notice, set_rank]
+    - name: Member
+      permissions: []
+  # The emblems a founder picks from: asset keys of the theme (themes/<theme>/asset-manifest.json), never uploaded.
+  emblems: [icon.emblem.oak, icon.emblem.star, icon.emblem.wave, icon.emblem.flame]

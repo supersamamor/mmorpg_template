@@ -185,6 +185,18 @@
   "icon.status.swift": {
     "file": "icons/status/swift.png"
   },
+  "icon.emblem.oak": {
+    "file": "icons/emblem/oak.png"
+  },
+  "icon.emblem.star": {
+    "file": "icons/emblem/star.png"
+  },
+  "icon.emblem.wave": {
+    "file": "icons/emblem/wave.png"
+  },
+  "icon.emblem.flame": {
+    "file": "icons/emblem/flame.png"
+  },
   "mat.outline": {
     "file": "render/outline.tres",
     "render": "outline"

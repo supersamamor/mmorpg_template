@@ -64,6 +64,7 @@ public static class ClientBundleWriter
             Array(w, "quests", bundle.Quests, Quest);
             Array(w, "maps", bundle.Maps, Map);
             Array(w, "outfits", bundle.Outfits ?? [], Outfit);
+            Strings(w, "guild_emblems", bundle.GuildEmblems ?? []);   // T-904
             Appearance(w, bundle.Appearance);
             Refine(w, bundle.Refine);
             w.WriteEndObject();

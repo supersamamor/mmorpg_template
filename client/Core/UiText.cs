@@ -175,6 +175,7 @@ public static class UiText
         ChatChannels.Map => "Map",
         ChatChannels.Whisper => "Whisper",
         ChatChannels.Party => "Party",
+        ChatChannels.Guild => "Guild",
         ChatChannels.System => "Server",
         _ => channel,
     };
@@ -292,6 +293,115 @@ public static class UiText
         PartyReasons.NoInvite => "That invite is no longer there.",
         PartyReasons.RateLimited => retryAfterSeconds is { } wait ? "Too many invites. Wait " + BanTimeSeconds(wait) + "." : "Too many invites.",
         _ => "The party is not available right now.",
+    };
+
+    // ---- guilds (T-904) ----
+
+    /// <summary>The chat panel's button that opens the guild panel, and the panel's heading when in none.</summary>
+    public const string Guild = "Guild";
+
+    /// <summary>The guild panel when in none.</summary>
+    public const string GuildNone = "No guild. Found one with a name and an emblem, or join one when invited.";
+
+    /// <summary>The name field's hint when founding.</summary>
+    public const string GuildNameHint = "Guild name";
+
+    /// <summary>Found, beside the name field.</summary>
+    public const string GuildFound = "Found";
+
+    /// <summary>The emblem picker's label.</summary>
+    public const string GuildEmblem = "Emblem:";
+
+    /// <summary>The invite field's hint.</summary>
+    public const string GuildInviteHint = "Name";
+
+    /// <summary>Invite, beside the name field.</summary>
+    public const string GuildInvite = "Invite";
+
+    /// <summary>Leave, in the heading.</summary>
+    public const string GuildLeave = "Leave";
+
+    /// <summary>A member row's Kick.</summary>
+    public const string GuildKick = "Kick";
+
+    /// <summary>A member row's Up (one rank higher, still below one's own).</summary>
+    public const string GuildPromote = "Up";
+
+    /// <summary>A member row's Down (one rank lower).</summary>
+    public const string GuildDemote = "Down";
+
+    /// <summary>A member row's Lead (the leader hands over).</summary>
+    public const string GuildLead = "Lead";
+
+    /// <summary>The notice field's hint.</summary>
+    public const string GuildNoticeHint = "Notice";
+
+    /// <summary>Save beside the notice field.</summary>
+    public const string GuildNoticeSave = "Save";
+
+    /// <summary>The invite prompt's Join.</summary>
+    public const string GuildAccept = "Join";
+
+    /// <summary>The invite prompt's No.</summary>
+    public const string GuildDecline = "No";
+
+    /// <summary>The guild panel's heading, e.g. <c>Iron Oaks (12 / 30)</c>.</summary>
+    public static string GuildTitle(string name, int members, int online) =>
+        name + " (" + online.ToString(CultureInfo.InvariantCulture) + " / " + members.ToString(CultureInfo.InvariantCulture) + " online)";
+
+    /// <summary>One member's line: name, rank, level and whether it is online (a dot), e.g. <c>● Ada · Officer · Lv 12</c>.</summary>
+    public static string GuildMemberLine(string name, string rank, int level, bool online, bool mine) =>
+        (online ? "● " : "○ ") + name + (mine ? " (you)" : string.Empty) + " · " + rank + " · Lv " + level.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>The invite prompt, e.g. <c>Ada invites you to Iron Oaks (28 s)</c>.</summary>
+    public static string GuildInvited(string name, string title, int secondsLeft) =>
+        name + " invites you to " + title + " (" + Math.Max(0, secondsLeft).ToString(CultureInfo.InvariantCulture) + " s)";
+
+    /// <summary>The notice shown once when it is new (at sign-in, and when it changed).</summary>
+    public static string GuildNoticeShown(string guild, string notice) => guild + ": " + notice;
+
+    /// <summary>The longest guild name the layout check shows.</summary>
+    public static readonly string LongestGuildNameSample = new string('W', 20);
+
+    /// <summary>The words of a "Guild news" term, e.g. <c>Bo joined the guild.</c></summary>
+    public static string GuildNews(string news, string? name) => news switch
+    {
+        Game.Shared.Vocabulary.GuildNews.InviteSent => "Guild invite sent to " + (name ?? "them") + ".",
+        Game.Shared.Vocabulary.GuildNews.Declined => (name ?? "They") + " said no.",
+        Game.Shared.Vocabulary.GuildNews.Expired => "The guild invite ran out.",
+        Game.Shared.Vocabulary.GuildNews.Founded => (name ?? "The guild") + " is founded.",
+        Game.Shared.Vocabulary.GuildNews.Joined => (name ?? "Someone") + " joined the guild.",
+        Game.Shared.Vocabulary.GuildNews.Left => (name ?? "Someone") + " left the guild.",
+        Game.Shared.Vocabulary.GuildNews.Kicked => (name ?? "Someone") + " was taken out of the guild.",
+        Game.Shared.Vocabulary.GuildNews.Rank => (name ?? "Someone") + " has a new rank.",
+        Game.Shared.Vocabulary.GuildNews.Leader => (name ?? "Someone") + " leads the guild now.",
+        Game.Shared.Vocabulary.GuildNews.Ranks => "The guild's ranks changed.",
+        Game.Shared.Vocabulary.GuildNews.Notice => "The guild notice changed.",
+        Game.Shared.Vocabulary.GuildNews.Disbanded => "The guild has ended.",
+        _ => "Something happened in the guild.",
+    };
+
+    /// <summary>The words of a "Guild reasons" term (a <c>guild_refused</c>).</summary>
+    public static string GuildRefused(string reason, long? retryAfterSeconds, string? name) => reason switch
+    {
+        GuildReasons.NotOnline => (name is { Length: > 0 } ? name : "That character") + " is not online.",
+        GuildReasons.InvalidTarget => "You cannot do that to them.",
+        GuildReasons.InvalidName => "That guild name is not allowed.",
+        GuildReasons.NameTaken => "A guild has that name already.",
+        GuildReasons.InvalidEmblem => "Pick one of the emblems.",
+        GuildReasons.AlreadyInGuild => (name is { Length: > 0 } ? name + " is" : "You are") + " in a guild already.",
+        GuildReasons.NotInGuild => "You are not in a guild.",
+        GuildReasons.InvitePending => (name is { Length: > 0 } ? name : "That character") + " has an invite to answer first.",
+        GuildReasons.NoInvite => "That invite is no longer there.",
+        GuildReasons.Full => "The guild is full.",
+        GuildReasons.NotAllowed => "Your rank cannot do that.",
+        GuildReasons.RankTooHigh => "Their rank is not below yours.",
+        GuildReasons.InvalidRanks => "Those ranks are not allowed.",
+        GuildReasons.TooLong => "The notice is too long.",
+        GuildReasons.CannotAfford => "You cannot pay for a guild.",
+        GuildReasons.Busy => "Your guild is being founded.",
+        GuildReasons.RateLimited => retryAfterSeconds is { } wait ? "Too fast. Wait " + BanTimeSeconds(wait) + "." : "Too fast.",
+        _ => "Guilds are not available right now.",
     };
 
     // ---- trade (T-903) ----

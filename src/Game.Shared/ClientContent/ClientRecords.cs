@@ -240,12 +240,13 @@ namespace Game.Shared.ClientContent
     /// <param name="Refine">The refine steps (chance, material, failure outcome); null is written as no levels.</param>
     /// <param name="CurrencyName">The currency's display name (<c>balance.yaml</c> <c>currency_name</c>, T-602): the bag shows the balance with it.</param>
     /// <param name="Outfits">Outfits, by id (T-708); null is written as none.</param>
+    /// <param name="GuildEmblems">The emblems a guild founder picks from (T-904, <c>balance.yaml</c> <c>guild.emblems</c>): asset keys of the theme, in content order; null is written as none.</param>
     public sealed record ClientBundle(
         int FormatVersion, IReadOnlyList<string> Elements, IReadOnlyList<string> Stats, IReadOnlyList<ClientItem> Items,
         IReadOnlyList<ClientSkill> Skills, IReadOnlyList<ClientJob> Jobs, IReadOnlyList<ClientStatus> Statuses,
         IReadOnlyList<ClientMonster> Monsters, IReadOnlyList<ClientNpc> Npcs,
         IReadOnlyList<ClientQuest> Quests, IReadOnlyList<ClientMap> Maps, ClientAppearance Appearance, ClientRefine? Refine = null, string CurrencyName = "",
-        IReadOnlyList<ClientOutfit>? Outfits = null)
+        IReadOnlyList<ClientOutfit>? Outfits = null, IReadOnlyList<string>? GuildEmblems = null)
     {
         /// <summary>
         /// The format this build writes and reads (7: the looks of jobs and the start job, T-706; 6: the currency's display name, T-602; 5: no dialogue graphs, they are server-run since T-601; 4: item card slots and

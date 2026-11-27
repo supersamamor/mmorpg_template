@@ -176,6 +176,14 @@ public sealed class PostgresModerationStore(GameDatabase database) : IModeration
             .OrderBy(b => b.CreatedAt).ToListAsync(cancellation).ConfigureAwait(false);
         var reportsMade = await db.ChatReports.AsNoTracking().Where(r => r.ReporterAccountId == account).OrderBy(r => r.Id).ToListAsync(cancellation).ConfigureAwait(false);
         var reportsAbout = await db.ChatReports.AsNoTracking().Where(r => r.SenderAccountId == account).OrderBy(r => r.Id).ToListAsync(cancellation).ConfigureAwait(false);
+        // T-904: its characters' guild memberships: the guild's name, the rank's, when it joined. Other members are not named.
+        var guilds = await (from m in db.GuildMembers.AsNoTracking()
+                            where ids.Contains(m.CharacterId)
+                            join g in db.Guilds on m.GuildId equals g.Id
+                            join r in db.GuildRanks on new { m.GuildId, Position = m.Rank } equals new { r.GuildId, r.Position } into ranks
+                            from r in ranks.DefaultIfEmpty()
+                            orderby m.JoinedAt
+                            select new { m.CharacterId, g.Name, RankName = r == null ? null : r.Name, m.Rank, m.JoinedAt, Founded = g.FoundedAt != null }).ToListAsync(cancellation).ConfigureAwait(false);
         var targets = ids.Select(i => i.ToString()).Append(account.ToString()).ToList();
         var audit = await db.Audit.AsNoTracking().Where(r => targets.Contains(r.TargetId)).OrderBy(r => r.Id)
             .Select(r => new { r.At, r.Action, r.TargetKind, r.TargetId, r.Before, r.After }).ToListAsync(cancellation).ConfigureAwait(false);
@@ -223,6 +231,11 @@ public sealed class PostgresModerationStore(GameDatabase database) : IModeration
             ["support_requests"] = new JsonArray(requests.Select(r => (JsonNode)new JsonObject
             {
                 ["id"] = r.Id, ["kind"] = r.Kind, ["status"] = r.Status, ["opened_at"] = r.OpenedAt, ["closed_at"] = r.ClosedAt,
+            }).ToArray()),
+            ["guild_memberships"] = new JsonArray(guilds.Select(g => (JsonNode)new JsonObject
+            {
+                ["character_id"] = g.CharacterId.ToString(), ["guild"] = g.Name, ["rank"] = g.RankName, ["leader"] = g.Rank == 0 ? true : null, ["joined_at"] = g.JoinedAt,
+                ["founding"] = g.Founded ? null : true,
             }).ToArray()),
             ["chat_blocks"] = new JsonArray(blocks.Select(b => (JsonNode)new JsonObject { ["character"] = b.Name, ["since"] = b.CreatedAt }).ToArray()),
             ["chat_reports_made"] = new JsonArray(reportsMade.Select(r => (JsonNode)new JsonObject

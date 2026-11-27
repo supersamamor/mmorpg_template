@@ -90,6 +90,64 @@ public sealed class BalanceRule : IValidationRule
         Autopilot(context, balance);
         Party(context, balance.Party);
         Trade(context, balance.Trade);
+        Guild(context, balance);
+    }
+
+    /// <summary>
+    /// Guilds (T-904): name lengths that the database column holds, separators of one character, a cost of a known item, room for two, a default rank list the rules accept (two at least,
+    /// names, permission terms), and at least one emblem, none twice (each a key of the theme: the asset-key rule checks that).
+    /// </summary>
+    private static void Guild(ValidationContext context, BalanceDef balance)
+    {
+        var g = balance.Guild;
+        if (g.NameMinLength < 1 || g.NameMaxLength < g.NameMinLength || g.NameMaxLength > CharacterNameRules.LongestAllowed)
+            Range(context, "guild.name_min_length", $"and name_max_length must be between 1 and {CharacterNameRules.LongestAllowed}, the shortest not above the longest.");
+        foreach (var s in g.NameSeparators)
+            if (s is null || s.Length != 1)
+                Range(context, "guild.name_separators", $"'{s}' is not one character.");
+        if (g.FoundCost is { } cost)
+        {
+            if (cost.Currency < 0) Range(context, "guild.found_cost.currency", "must not be negative.");
+            if (cost.ItemId is { } item)
+            {
+                if (!context.Database.Items.TryGet(item, out _))
+                    context.ErrorInFile(File, "guild.found_cost.item_id", ValidationCodes.RefMissing, $"balance.yaml guild.found_cost refers to unknown item '{item}'.");
+                if (cost.Quantity < 1) Range(context, "guild.found_cost.quantity", "must be at least 1.");
+            }
+        }
+        if (g.MaxMembers < 2) Range(context, "guild.max_members", "must be at least 2.");
+        if (g.MaxRanks < 2) Range(context, "guild.max_ranks", "must be at least 2.");
+        if (g.RankNameMaxLength < 1 || g.RankNameMaxLength > CharacterNameRules.LongestAllowed)
+            Range(context, "guild.rank_name_max_length", $"must be between 1 and {CharacterNameRules.LongestAllowed}.");
+        if (g.InviteTimeoutMs <= 0) Range(context, "guild.invite_timeout_ms", "must be above 0.");
+        if (g.DefaultRanks.Count < 2 || g.DefaultRanks.Count > g.MaxRanks)
+            Range(context, "guild.default_ranks", "needs the leader's rank and at least one more, and at most guild.max_ranks.");
+        foreach (var rank in g.DefaultRanks)
+        {
+            if (string.IsNullOrWhiteSpace(rank.Name) || rank.Name.Length > g.RankNameMaxLength)
+                Range(context, "guild.default_ranks", $"rank name '{rank.Name}' must be set and at most guild.rank_name_max_length long.");
+            foreach (var p in rank.Permissions)
+                if (!GuildPermissions.All.Contains(p))
+                    context.ErrorInFile(File, "guild.default_ranks", ValidationCodes.RefMissing, $"balance.yaml guild.default_ranks: '{p}' is not a guild permission ({string.Join(", ", GuildPermissions.All.Ordered)}).");
+        }
+        if (g.Emblems.Count == 0) Range(context, "guild.emblems", "needs at least one emblem asset key.");
+        if (g.Emblems.Distinct(StringComparer.Ordinal).Count() != g.Emblems.Count) Range(context, "guild.emblems", "lists an emblem twice.");
+        try
+        {
+            _ = new CharacterNameRules(balance.Characters);   // the characters' own rules are reported where they are
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+        try
+        {
+            _ = Game.Shared.Guild.GuildRules.NameRules(balance.Characters, g);
+        }
+        catch (ArgumentException e)
+        {
+            Range(context, "guild.name_separators", e.Message);
+        }
     }
 
     /// <summary>Two may stand apart and still trade, an ask waits, and a side may offer something (T-903).</summary>

@@ -170,6 +170,8 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
     which the primary key alone would not catch. T-903 and T-905 use the same two calls, on both sides for a trade: in the swap's tick each side's `PutDown`, then each `DependOn` the other's link,
     so each copy waits for the other's and `CharacterSaves` writes the two in one transaction (§6.10; no `Persistence/**` change was needed). The primary key is the second line: a save with an item that is another character's is
     refused whole and reported (`DUPLICATED ITEMS`).
+  - **A guild founding rides the save** (T-904, §6.11): the inventory system takes the cost on the tick and puts a `StaffNote.ForGuild` on the ticket (the road T-806's staff changes use); the first save
+    without the cost founds the reserved guild in its transaction (`UPDATE guilds SET founded_at`), so the cost and the guild land together or not at all, and a save that lands twice founds nothing twice.
   - **A lost character** (claimed elsewhere, deleted, or with a duplicated item) is not saved any more: its session gets `bye save_lost` and it leaves. Whoever holds something it gave away after its last landed
     save is lost with it (for them it is a crash), and what it put down can no longer be picked up.
   - **Loading.** Claimed and read in one transaction, which also re-checks that the character is not deleted (row 289; a held character cannot be deleted: both take the same row lock). Then `CharacterLoader`
@@ -719,6 +721,45 @@ derived stat `weight_limit` (`formulas.yaml`).
   "b_gave":[…],"b_currency":…}`: permanent ids only, never names or anything else about the people. How long logs are kept is the fork's (STORE_COMPLIANCE §2: the template keeps no log files).
 - **No client authority**: the client sends intents only; what is in an offer, who is in range and whether a swap happened come from the server.
 
+### 6.11 Guilds (T-904)
+`Game.Server/Guild` (`GuildService`, `GuildOptions`, `IGuildStore`; off the tick), `Game.Server/Persistence/PostgresGuildStore` (`guilds`, `guild_ranks`, `guild_members`, migration
+`20261127125839_Guilds`), `Game.Server/World/Guild/GuildFoundingPayment` (the cost, on the tick, taken by the inventory system), the pure `Game.Shared/Guild/GuildRules`; the client's `GuildBook`
+and `GuildPanel`. Rules from `balance.yaml` `guild` (name lengths and separators, `found_cost`, `max_members` 30, `max_ranks` 6, `rank_name_max_length` 16, `invite_timeout_ms` 30 s,
+`default_ranks`, `emblems`); server configuration `--guild-notice-length` 120, `--guild-intents-per-minute` 20, `--guild-intent-burst` 6, `--guild-pulse-ms` 1000, `--guild-refresh-ms` 5000,
+`--guild-payment-wait-ms` 10000 (or `GAME_GUILD_<NAME>`). A server without a database (development's dev login) has no guilds.
+- **The database decides.** Every change is one transaction that locks the guild's row (`FOR UPDATE`), reads its ranks and members, and runs `GuildRules` on what it read: two officers on two
+  server processes acting at once are run one after the other, and the second sees the first's change (tested on two connection pools). Whatever adds a member row takes the character's row
+  first (`FOR KEY SHARE`), as erasing and deleting take the character and then the guild, so the two never wait on each other in a circle. Every change raises the guild's `version`.
+- **Founding** (`guild_found`): the name by the character naming rules (their letters and separators, plus `guild.name_separators`, with the guild's own lengths), unique by its lower-case key;
+  an emblem of `guild.emblems`; one guild per character (a unique index on `guild_members.character_id`). The guild is first **reserved** (`founded_at` null: the name is held, nobody can join);
+  then the inventory system takes `guild.found_cost` on the tick (currency, carried units of an item, or nothing) and puts a note on the founder's save (§3, T-806's `StaffNote` road), so the
+  save that first lacks the cost also founds the guild, in **one transaction**. A cost refused, a tick that never starts it (`--guild-payment-wait-ms`, then nothing is taken) or a stay that ends
+  before the save lands drops the reservation; a reservation a crash left is dropped at the founder's next sign-in or founding.
+- **Invites** (`guild_invite` by name or by tapping a player on the same map, `guild_answer`): as for a party (§6.9): per-account rate limit, a block reads as `not_online`, one pending invite per
+  character, `guild.invite_timeout_ms`, held in this process's memory. The inviter needs `invite`; the accept checks again in the database that the inviter is still a member with `invite` and that
+  there is room. A new member joins at the last rank.
+- **Ranks.** Place 0 is the leader's; the leader names and orders the places below (`guild_ranks`, 1 to `max_ranks` - 1 of them, names cleaned like chat, permissions from "Guild permissions");
+  members keep their place, and those on a place the new list no longer has go to its last. `guild_rank` (`set_rank`) moves a member of a lower rank to a rank also below the actor's;
+  `guild_kick` (`kick`) takes out a member of a lower rank; nobody acts on the same or a higher rank. `guild_lead` (leader only) gives the leader rank to a member, and the old leader takes that
+  member's old rank.
+- **Leaving and the end.** `guild_leave`; a leader who leaves hands over to the **successor** (the highest rank, the earliest to join among equals); the last member leaving disbands the guild
+  (its rows go and its name is free). Erasing an account (T-703) and deleting a character take the character out by the same rule, in their own transactions.
+- **Notice** (`guild_notice`, `edit_notice`): cleaned by chat's text rules (format characters out, spaces folded; over `--guild-notice-length` refused `too_long`; empty clears it). It is in the
+  `guild` message; the client shows it once on the flash line at sign-in and when it changed.
+- **What members get.** `guild` after every change, at every welcome (sign-in, resume, takeover; read in the background) and when a member's online state changes here: the name, emblem,
+  notice, ranks, and members highest rank first with their **member number**, name, rank, base level as last saved and whether they play on this process. **No map or cell**: a guild can be
+  thirty people a member never met, and where someone stands is for a party (§6.9), which they choose to join for it.
+- **Other server processes** (v1). Guilds, ranks and every rule hold across processes (the database). What one process changes, another sees within `--guild-refresh-ms` (it reads the versions of
+  the guilds its players are in and reloads a changed one). **Online** means playing on this process: members on another one show offline here. **Guild chat** reaches the members on the
+  speaker's process only, as T-901's whispers do. A follow-up would relay both through the database (PostgreSQL `LISTEN`/`NOTIFY` on a `guild_events` channel: a line or a presence change is
+  published once and each process delivers it to its members) or a message bus once there is one.
+- **Guild chat**: the service is the `guild` channel's `IChannelMembers` (`ChatService.Register`): chat does the mute, rate limit, text rules, blocks and reports as on every channel.
+- **Emblems** (rule 3): asset keys (`icon.emblem.*`) the theme maps to files and `guild.emblems` lists, validated at load (each must be a key of the theme; at least one, none twice); the bundle
+  has them as `guild_emblems`; never uploaded. The placeholder theme has four plain ones from `tools/themegen`. Every pulse (`--guild-pulse-ms`), each player gets the emblems of the guild
+  members on its map instance when that list changed for it (`guild_tags`); the client shows the emblem beside a member's name in the target frame, and on the guild panel and its invite prompt.
+  (Characters have no name plates over their heads: the target frame is where a name shows in the world.)
+- **No client authority**: the client hides the buttons a rank cannot use; the server checks every act in its database.
+
 ## 7. Client
 
 **Shape** (T-206). `client/Core` is the pure part, with no Godot namespace, and is compiled into `Game.Tests` too: settings, bundle reader, protocol parsing, the
@@ -881,6 +922,12 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   place, with a quantity picker for stacks; what the other side gives), and a footer (currency field, Set, Lock or Unlock, Confirm). Both columns are the server's last `trade`; Confirm sends the
   version on the screen. How a trade ended goes on the flash line. The layout check runs both columns full of the longest lines with the longest name and the prompt, and the picker, at every
   screen, notch and scale. It redraws only when the trade's or the bag's version moves.
+- **Guild** (T-904, §6.11; `GuildPanel`): opened from the chat panel's **Guild** button beside Party. A heading (the emblem, the name, who is online, Leave, Close); a scroll list with the
+  notice (a field and Save for a rank with `edit_notice`) and the members highest rank first (online dot, name, rank, level; **Up**, **Down**, **Kick** and **Lead** only where this character's
+  rank may act on that member); a name field with Invite and the tapped player's invite for a rank with `invite`. In no guild: the name field with **Found** and the theme's emblems as toggle
+  buttons. The **invite prompt** (who, which guild with its emblem, seconds left, Join and No) at the top of the safe area. The chat switch goes map, whisper, party, guild while in them. The
+  target frame shows a guild member's emblem before its name (one texture, no extra draw call beyond the frame's). The layout check runs the panel with the longest names, rank names and notice,
+  every button on every row and the prompt, and the founding form with the picker, at every screen, notch and scale.
 
 ### 7.5 Characters & equipment
 Modular 3D characters. Each body type has one shared rig. Equipment is either:
@@ -1413,6 +1460,15 @@ A headless run of the same (no draw calls or triangles without a renderer) gave 
   | `trade_lock` / `trade_unlock` | C→S | (none): lock this side's offer / unlock both |
   | `trade_confirm` | C→S | `version` (of the `trade` message whose offers the player saw); `stale` when they changed since |
   | `trade_cancel` | C→S | (none): end this character's ask or trade |
+  | `guild_found` | C→S | `name`, `emblem` (a `guild_emblems` key): answered by `guild` and `guild_news` `founded`, or `guild_refused` (T-904, §6.11) |
+  | `guild_invite` | C→S | `name` or `target` (a player's entity id on this map), exactly one: answered by `guild_news` `invite_sent` or `guild_refused` |
+  | `guild_answer` | C→S | `accept`: the invite this character has |
+  | `guild_leave` | C→S | (none) |
+  | `guild_kick` | C→S | `member` (a member number) |
+  | `guild_rank` | C→S | `member`, `rank` (a rank place, 1 or more) |
+  | `guild_ranks` | C→S | `ranks` (`[{"name":"Officer","permissions":["invite"]},...]`, the places below the leader's), leader only |
+  | `guild_lead` | C→S | `member`, leader only |
+  | `guild_notice` | C→S | `text` (empty clears it) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
@@ -1450,6 +1506,11 @@ A headless run of the same (no draw calls or triangles without a renderer) gave 
   | `trade_notice` | S→C (own) | `notice` (a "Trade notices" term), `name` (the other character) |
   | `trade_closed` | S→C (the two) | `reason` (a "Trade ends" term), `name` (the other side), `own` (true when this side caused it); after the swap's `inventory_changed` |
   | `trade_refused` | S→C (own) | `intent` (a `trade_*` type), `reason` (a "Trade reasons" term), `retry_after` (`rate_limited`) |
+  | `guild` | S→C (members) | `guild`: `{"id","name","emblem","notice","own" (this character's member number),"ranks":[{"name","permissions"}],"members":[{"member","name","rank","level","online"}]}` (`online` only when true); no `guild` field when in none. After every change, welcome and online change (T-904) |
+  | `guild_invited` | S→C (the invited) | `name` (the inviter), `title` (the guild), `emblem`, `expires_in` (seconds) |
+  | `guild_news` | S→C | `news` (a "Guild news" term), `name` (whom it is about) |
+  | `guild_refused` | S→C (own) | `intent` (a `guild_*` type), `reason` (a "Guild reasons" term), `retry_after` (`rate_limited`), `name` (an invited character, or the name taken) |
+  | `guild_tags` | S→C | `tags` (`[{"entity":42,"emblem":"icon.emblem.oak"}]`: the guild members on this map instance), when the list changes for this player |
   | `pong` | S→C | `seq` |
   | `bye` | S→C (last) | `reason` (VOCABULARY "Bye reasons"), followed by the close frame |
 

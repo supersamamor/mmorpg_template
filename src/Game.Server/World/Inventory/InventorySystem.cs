@@ -40,7 +40,7 @@ namespace Game.Server.World.Inventory;
 public sealed class InventorySystem : ITickSystem
 {
     private static readonly IReadOnlyCollection<Type> Owned =
-        [typeof(PickUp), typeof(UseItem), typeof(Equip), typeof(Unequip), typeof(DropItem), typeof(InsertCard), typeof(RefineItem), typeof(ShopBuy), typeof(ShopSell), typeof(Admin.StaffItemChange)];
+        [typeof(PickUp), typeof(UseItem), typeof(Equip), typeof(Unequip), typeof(DropItem), typeof(InsertCard), typeof(RefineItem), typeof(ShopBuy), typeof(ShopSell), typeof(Admin.StaffItemChange), typeof(Guild.GuildFoundingPayment)];
     private static readonly int WeightLimitStat = StatIndex.IndexOf(DerivedStats.WeightLimit);
     private const int PickupGraceTicks = 3;   // a pick-up whose walk never started within this many ticks has no way there
 
@@ -114,6 +114,7 @@ public sealed class InventorySystem : ITickSystem
             if (!_instance!.TryGetEntity(intents[i].Entity, out var entity) || !_holders.TryGetValue(entity.Id.Value, out var holder))
             {
                 if (intents[i] is Admin.StaffItemChange lost && lost.TryStart()) lost.Complete(Admin.AdminStepResult.Refused(AdminErrors.UnknownTarget));   // T-806: say so at once
+                if (intents[i] is Guild.GuildFoundingPayment gone && gone.TryStart()) gone.Refuse(GuildReasons.Unavailable);   // T-904
                 continue;
             }
             switch (intents[i])
@@ -128,6 +129,7 @@ public sealed class InventorySystem : ITickSystem
                 case RefineItem refine: TryRefine(context, holder, refine.EntryId); break;
                 case ShopBuy buy: BuyFromShop(context, holder, buy.ItemId, buy.Quantity); break;
                 case ShopSell sell: SellToShop(context, holder, sell.EntryId, sell.Quantity); break;
+                case Guild.GuildFoundingPayment pay: PayFounding(context, holder, pay); break;
             }
         }
         UnequipForNewJob(context);
@@ -766,6 +768,42 @@ public sealed class InventorySystem : ITickSystem
             staff.Fail(e);
             throw;
         }
+    }
+
+    /// <summary>
+    /// T-904: takes a guild's founding cost (currency, carried units of an item: worn pieces do not count), all or nothing, and puts the founding note on the save, so the guild and the cost
+    /// land in one transaction. A character that is not saved (a dev login) cannot found: there is no guild without the database.
+    /// </summary>
+    private void PayFounding(TickContext context, Holder holder, Guild.GuildFoundingPayment pay)
+    {
+        if (!pay.TryStart()) return;   // the guild service gave up waiting: change nothing
+        if (holder.Entity.Save is not { } ticket)
+        {
+            pay.Refuse(GuildReasons.Unavailable);
+            return;
+        }
+        var state = holder.State;
+        var cost = pay.Cost;
+        var currency = cost?.Currency ?? 0;
+        if (currency > state.Currency)
+        {
+            pay.Refuse(GuildReasons.CannotAfford);
+            return;
+        }
+        _delta.Clear();
+        if (cost?.ItemId is { } item)
+        {
+            if (_rules.TryExchange(state, [new KeyValuePair<string, int>(item, cost.Quantity)], [], int.MaxValue, _newId, _delta) is not null)
+            {
+                pay.Refuse(GuildReasons.CannotAfford);
+                return;
+            }
+        }
+        state.Currency -= currency;
+        if (currency > 0 || cost?.ItemId is not null) Changed(context, holder, InventoryChanges.GuildFounded, cost?.ItemId);
+        var note = Saving.StaffNote.ForGuild(pay.Guild);
+        ticket.Note(note);
+        pay.Paid(note);
     }
 
     private static long Carried(InventoryState state, string itemId)
