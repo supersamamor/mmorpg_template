@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net.WebSockets;
+using Game.Server.Chat;
 using Game.Server.World;
 using Game.Server.World.Aoi;
 using Game.Server.World.Autopilot;
@@ -38,7 +39,7 @@ public enum SessionState
 /// join initializer run on the tick thread of the instance the character is on; <see cref="Sweep"/> runs on the gateway's sweeper. Shared
 /// fields are volatile or interlocked, and everything those threads hand to the send loop goes through the thread-safe queue.
 /// </remarks>
-public sealed class ClientSession : IViewSink
+public sealed class ClientSession : IViewSink, IChatSink
 {
     private readonly Gateway _gateway;
     private readonly WebSocket _socket;
@@ -62,6 +63,7 @@ public sealed class ClientSession : IViewSink
     private bool _autopilotTold;             // tick thread: the autopilot's status went out with this session's first snapshot (T-604)
     private string? _sessionKey;
     private volatile bool _unacknowledged;   // resumed, and the client has not spoken since: the redeemed token still works
+    private Task _chat = Task.CompletedTask;  // T-901: the last chat message's handling; the next waits for it, so a player's lines keep their order (receive loop only)
 
     internal ClientSession(Gateway gateway, WebSocket socket, string peer, long nowMs)
     {
@@ -206,6 +208,13 @@ public sealed class ClientSession : IViewSink
         _unacknowledged = true;
         Post(new WelcomeMessage(ProtocolVersion.Current, id.Value, mapId, TickRate.Hz, _gateway.ContentHash, token));
         Interlocked.CompareExchange(ref _state, (int)SessionState.Joined, (int)SessionState.AwaitingHello);
+    }
+
+    /// <summary>A chat line or answer (T-901), serialized once by chat for everyone it goes to; queued like a control message.</summary>
+    void IChatSink.Post(ServerMessage message, byte[] bytes)
+    {
+        if (Closing) return;
+        if (!Queue.PostControl(bytes)) Bye(ByeReasons.TooSlow);
     }
 
     /// <summary>Queues a control message (welcome, rejected, pong); a hopelessly full queue ends the session.</summary>
@@ -480,8 +489,30 @@ public sealed class ClientSession : IViewSink
             case ChangeJobMessage job:
                 if (Entity is { } changer) _gateway.Enqueue(new ChangeJob(changer, job.Job));
                 break;
+            case ChatMessage or BlockMessage or UnblockMessage or ReportMessage:
+                Chat(message);
+                break;
         }
         return null;
+    }
+
+    /// <summary>
+    /// A chat message (T-901): handed to the chat service after this session's previous one, so lines keep their order; the receive loop goes on meanwhile (the mute check may read the
+    /// database). Ignored before the welcome and on a server without chat.
+    /// </summary>
+    private void Chat(ClientMessage message)
+    {
+        if (_gateway.Chat is not { } chat || State != SessionState.Joined) return;
+        var token = _abort.Token;
+        var previous = _chat;
+        _chat = RunAsync();
+
+        async Task RunAsync()
+        {
+            await previous.ConfigureAwait(false);
+            if (Closing || _gateway.ChatPeerOf(this) is not { } speaker) return;   // the session ended or its character left meanwhile
+            await chat.HandleAsync(speaker, message, token).ConfigureAwait(false);   // never throws for what the client sent
+        }
     }
 
     /// <summary>
@@ -554,6 +585,9 @@ public sealed class ClientSession : IViewSink
         }
         if (Closing) return; // timed out, or the server is stopping
         DisplayName = login.DisplayName;
+        // T-901: the account's block list is read now, off the tick and before its character can hear a line; while it plays, chat reads nothing per line.
+        if (login.AccountId is { } chatAccount && _gateway.Chat is { } chat) await chat.LoadBlocksAsync(chatAccount, stop).ConfigureAwait(false);
+        if (Closing) return;
         if (_gateway.ClaimAccount(this, login)) return;
         if (Closing) return;   // its account session ended while the login was pending (T-710)
         // T-702: a saved character is loaded before anything of it enters the world. Whatever goes wrong refuses the login and changes nothing.

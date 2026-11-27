@@ -38,6 +38,8 @@ public static class ProtocolJson
             var reader = new Utf8JsonReader(utf8, new JsonReaderOptions { MaxDepth = MaxClientDepth });
             if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject) return Fail<ClientMessage>(ByeReasons.Malformed);
             string? type = null, name = null, content = null, resume = null, session = null, character = null, slot = null, skill = null, job = null, stat = null, quest = null, itemId = null, outfit = null;
+            string? channel = null, to = null, text = null;   // chat (T-901)
+            long? line = null;
             bool? hidden = null;
             int? version = null, quantity = null, level = null, amount = null, index = null;
             long? seq = null, target = null, entry = null, card = null;
@@ -85,6 +87,10 @@ public static class ProtocolJson
                     case "index": index = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var ix) ? ix : throw Bad(); break;
                     case "level": level = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var lv) ? lv : throw Bad(); break;
                     case "quantity": quantity = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var q) ? q : throw Bad(); break;
+                    case "channel": channel = String(ref reader); break;
+                    case "to": to = String(ref reader); break;
+                    case "text": text = String(ref reader); break;
+                    case "line": line = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var ln) ? ln : throw Bad(); break;
                     default: reader.Skip(); break;
                 }
             }
@@ -125,6 +131,11 @@ public static class ProtocolJson
                 MessageTypes.StopAutopilot => new StopAutopilotMessage(),
                 // exactly one of slot (with an outfit, or nothing) and hidden
                 MessageTypes.SetOutfit => (slot is null) != (hidden is null) && (outfit is null || slot is not null) ? new SetOutfitMessage(slot, outfit, hidden) : null,
+                // T-901: the shape only; the chat service decides about the channel, the name and the text
+                MessageTypes.Chat => channel is { } said && text is { } words ? new ChatMessage(said, to, words) : null,
+                MessageTypes.Block => name is { } blocked ? new BlockMessage(blocked) : null,
+                MessageTypes.Unblock => name is { } unblocked ? new UnblockMessage(unblocked) : null,
+                MessageTypes.Report => line is { } reported ? new ReportMessage(reported) : null,
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -234,6 +245,20 @@ public static class ProtocolJson
             case StartAutopilotMessage start:
                 WriteStrings(w, "quests", start.Quests);
                 WriteLevels(w, "skills", start.Skills);
+                break;
+            case ChatMessage chat:
+                w.WriteString("channel", chat.Channel);
+                if (chat.To is not null) w.WriteString("to", chat.To);
+                w.WriteString("text", chat.Text);
+                break;
+            case BlockMessage block:
+                w.WriteString("name", block.Name);
+                break;
+            case UnblockMessage unblock:
+                w.WriteString("name", unblock.Name);
+                break;
+            case ReportMessage report:
+                w.WriteNumber("line", report.Line);
                 break;
         }
         w.WriteEndObject();
@@ -489,6 +514,29 @@ public static class ProtocolJson
                 if (announcement.Text is { } said) w.WriteString("text", said);
                 if (announcement.InSeconds is { } inSeconds) w.WriteNumber("in", inSeconds);
                 break;
+            case ChatLineMessage chatLine:
+                w.WriteNumber("line", chatLine.Line);
+                w.WriteString("channel", chatLine.Channel);
+                w.WriteNumber("from", chatLine.From);
+                w.WriteString("name", chatLine.Name);
+                if (chatLine.To is not null) w.WriteString("to", chatLine.To);
+                w.WriteString("text", chatLine.Text);
+                break;
+            case ChatRefusedMessage chatRefused:
+                w.WriteString("intent", chatRefused.Intent);
+                w.WriteString("reason", chatRefused.Reason);
+                if (chatRefused.RetryAfterSeconds is { } wait) w.WriteNumber("retry_after", wait);
+                if (chatRefused.Channel is not null) w.WriteString("channel", chatRefused.Channel);
+                if (chatRefused.To is not null) w.WriteString("to", chatRefused.To);
+                if (chatRefused.Line is { } refusedLine) w.WriteNumber("line", refusedLine);
+                break;
+            case ChatStateMessage chatState:
+                w.WriteNumber("max_length", chatState.MaxLength);
+                WriteStrings(w, "blocked", chatState.Blocked);
+                break;
+            case ChatReportedMessage reported:
+                w.WriteNumber("line", reported.Line);
+                break;
             case ByeMessage bye:
                 w.WriteString("reason", bye.Reason);
                 if (bye.RetryAfterSeconds is { } retry) w.WriteNumber("retry_after", retry);
@@ -575,6 +623,10 @@ public static class ProtocolJson
             bool hidden = false;
             string? kind = null;
             long? inSeconds = null, retryAfter = null;
+            string? channel = null, name = null, to = null;   // chat (T-901)
+            long? line = null, from = null;
+            int maxLength = 0;
+            List<string>? blocked = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var key = reader.GetString();
@@ -667,6 +719,13 @@ public static class ProtocolJson
                     case "kind": kind = String(ref reader); break;
                     case "in": inSeconds = reader.GetInt64(); break;
                     case "retry_after": retryAfter = reader.GetInt64(); break;
+                    case "channel": channel = String(ref reader); break;
+                    case "name": name = String(ref reader); break;
+                    case "to": to = String(ref reader); break;
+                    case "line": line = reader.GetInt64(); break;
+                    case "from": from = reader.GetInt64(); break;
+                    case "max_length": maxLength = reader.GetInt32(); break;
+                    case "blocked": blocked = ReadStrings(ref reader); break;
                     case "hidden": hidden = reader.GetBoolean(); break;
                     case "removed":
                         if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
@@ -710,6 +769,11 @@ public static class ProtocolJson
                 MessageTypes.Wardrobe => new WardrobeMessage((IReadOnlyList<string>?)owned ?? Array.Empty<string>(), (IReadOnlyList<ShownOutfit>?)chosen ?? Array.Empty<ShownOutfit>(), hidden),
                 MessageTypes.Pong => new PongMessage(seq),
                 MessageTypes.Announcement => kind is null ? null : new AnnouncementMessage(kind, text, inSeconds),
+                MessageTypes.ChatLine => line is null || channel is null || from is null || name is null || text is null ? null
+                    : new ChatLineMessage(line.Value, channel, from.Value, name, text, to),
+                MessageTypes.ChatRefused => intent is null || reason is null ? null : new ChatRefusedMessage(intent, reason, retryAfter, channel, to, line),
+                MessageTypes.ChatState => new ChatStateMessage(maxLength, (IReadOnlyList<string>?)blocked ?? Array.Empty<string>()),
+                MessageTypes.ChatReported => line is null ? null : new ChatReportedMessage(line.Value),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason, retryAfter),
                 null => null,
                 _ => throw new UnknownTypeException(),

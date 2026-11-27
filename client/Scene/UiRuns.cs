@@ -18,6 +18,8 @@ public sealed class UiRuns
 {
     private const string LongName = "Extraordinarily Long Monster Name";
 
+    private bool _chatSizesShown;
+
     private readonly Main _main;
     private readonly string? _screenshot;
 
@@ -45,6 +47,9 @@ public sealed class UiRuns
         Hud.SampleAnnouncement = true;   // T-806: the longest announcement, where the flash line is while it shows
         await LayoutMatrixAsync("announcement shown");
         Hud.SampleAnnouncement = false;
+        Hud.SampleChatLines = true;   // T-901: the last chat lines, where the flash line is while none shows
+        await LayoutMatrixAsync("chat lines shown");
+        Hud.SampleChatLines = false;
         await PanelsLayoutAsync();
         Hud.SetScale(originalScale, false);
         Hud.ForceRefresh();
@@ -89,6 +94,17 @@ public sealed class UiRuns
         await FramesAsync(3);
         await LayoutMatrixAsync("quest log open");
         quests.ClearSamples();
+        // T-901: the chat panel with its longest lines and the line actions, with the on-screen keyboard up (a landscape phone keyboard takes about half the height or more;
+        // 0.6 is the worst case planned for), and without it.
+        var chat = Hud.Chat!;
+        chat.ShowSamples(LongName);
+        chat.SimulatedKeyboard = 0.6f;
+        await FramesAsync(3);
+        await LayoutMatrixAsync("chat open, keyboard up");
+        chat.SimulatedKeyboard = null;
+        await LayoutMatrixAsync("chat open");
+        Check(Hud.Blocks(chat.SendButton.GetGlobalRect().GetCenter()), "a touch on the chat panel never reaches the world");
+        chat.ClearSamples();
         var wardrobe = Hud.Wardrobe!;   // T-708: five slots of the longest names, the switch and the line under them
         wardrobe.ShowSamples(LongName);
         await FramesAsync(3);
@@ -286,10 +302,20 @@ public sealed class UiRuns
                     await FramesAsync(combinations == 0 ? 6 : 3);
                     combinations++;
                     foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: {problem}");
+                    if (failures.Count > 0 && Hud.Chat is { Open: true } open && !_chatSizesShown)
+                    {
+                        _chatSizesShown = true;
+                        Print($"layout: chat panel parts at {screen.Name}, scale {scale}: {open.Sizes}");
+                    }
                     // The quest tracker, long and one-line, must lie over no other HUD button or the target frame (T-406, T-408): a failure, not a note.
                     foreach (var name in Hud.TrackerOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the long quest tracker covers {name}");
                     // The autopilot indicator (T-605), paused with its longest line, must lie over nothing; the plain running one is shorter and trimmed the same way.
                     foreach (var name in Hud.AutopilotOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the autopilot indicator covers {name}");
+                    // T-901: the chat strip lies over no other part of the HUD, and with the keyboard up the open panel's field and buttons stay above it.
+                    foreach (var name in Hud.ChatStripOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the chat strip: {name}");
+                    if (Hud.Chat is { Open: true, SimulatedKeyboard: { } share } chat)
+                        foreach (var problem in chat.KeyboardProblems((float)(metrics.CanvasHeight * (1 - share))))
+                            failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: with the keyboard up, {problem}");
                     var longText = Hud.Tracker.Text;
                     Hud.Tracker.Text = UiText.QuestsButton;
                     await FramesAsync(2);

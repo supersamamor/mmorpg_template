@@ -99,6 +99,9 @@ public sealed class ClientSession
     /// <summary>The player's own outfits and what shows of them (T-708).</summary>
     public WardrobeBook Wardrobe { get; }
 
+    /// <summary>The chat of this session (T-901): in memory only, emptied at every new login and back on the login screen.</summary>
+    public Game.Client.Core.Chat.ChatBook Chat { get; } = new Game.Client.Core.Chat.ChatBook();
+
     private readonly List<string> _gainedOutfits = new();
 
     /// <summary>Server messages applied so far (for measuring).</summary>
@@ -132,6 +135,7 @@ public sealed class ClientSession
         Skills.Reset();
         Stats.Reset();
         Wardrobe.Reset();
+        Chat.Clear();
         Numbers.Clear();
         Connection.Login(name, wallNow);
         RunCommands();
@@ -144,7 +148,11 @@ public sealed class ClientSession
     {
         if (Connection.Version == _noticeVersion) return;
         _noticeVersion = Connection.Version;
-        if (Connection.Phase is ConnectionPhase.LoginScreen or ConnectionPhase.Stopped) Autopilot.Reset();   // a run belongs to the session that ended
+        if (Connection.Phase is ConnectionPhase.LoginScreen or ConnectionPhase.Stopped)
+        {
+            Autopilot.Reset();   // a run belongs to the session that ended
+            Chat.Clear();        // T-901: no chat outlives its session on the device
+        }
         if (_characterId is not null && Connection.Phase == ConnectionPhase.LoginScreen) Accounts.Refresh();
     }
 
@@ -397,6 +405,7 @@ public sealed class ClientSession
             case WelcomeMessage welcome:
                 Connection.OnWelcome(welcome, wallNow);
                 World.ApplyWelcome(welcome);
+                Chat.OwnId = welcome.Id;
                 break;
             case ExpMessage exp:
                 World.ApplyExp(exp);
@@ -480,6 +489,23 @@ public sealed class ClientSession
                 break;
             case AnnouncementMessage announcement:
                 Ui.OnAnnouncement(announcement, viewNow);   // T-806
+                Chat.Announcement(Ui.Announcement);   // T-901: the log keeps it under "Server" after the banner is gone
+                AnnouncementReceived?.Invoke(announcement);
+                break;
+            case ChatLineMessage chatLine:
+                Chat.Apply(chatLine);
+                ChatLineReceived?.Invoke(chatLine);
+                break;
+            case ChatStateMessage chatState:
+                Chat.Apply(chatState);
+                break;
+            case ChatRefusedMessage chatRefused:
+                Chat.Apply(chatRefused);
+                ChatRefusedReceived?.Invoke(chatRefused);
+                break;
+            case ChatReportedMessage chatReported:
+                Chat.Apply(chatReported);
+                ChatReportedReceived?.Invoke(chatReported);
                 break;
             case ByeMessage bye:
                 Connection.OnBye(bye.Reason, wallNow, bye.RetryAfterSeconds);
@@ -520,6 +546,54 @@ public sealed class ClientSession
     }
 
     private void Send(ClientMessage message) => _socket.Send(ProtocolJson.ToBytes(message));
+
+    // ---- chat (T-901): intents only; a line shows when the server sends it back ----
+
+    /// <summary>Raised for every chat line the server sends (for the scripted run).</summary>
+    public event Action<ChatLineMessage>? ChatLineReceived;
+
+    /// <summary>Raised for every chat refusal (for the scripted run).</summary>
+    public event Action<ChatRefusedMessage>? ChatRefusedReceived;
+
+    /// <summary>Raised when a report is stored (for the scripted run).</summary>
+    public event Action<ChatReportedMessage>? ChatReportedReceived;
+
+    /// <summary>Raised for every announcement (for the scripted run).</summary>
+    public event Action<AnnouncementMessage>? AnnouncementReceived;
+
+    /// <summary>
+    /// Sends what the player typed on the chosen channel, or puts the reason it cannot go into the log (nothing typed, too long, no whisper target). True when it went to the server. Nothing
+    /// is shown until the server sends the line back.
+    /// </summary>
+    public bool Say(string typed)
+    {
+        if (Connection.Phase != ConnectionPhase.Online) return false;
+        if (Chat.Outgoing(typed, out var why) is not { } text)
+        {
+            if (why is not null) Chat.Note(why);
+            return false;
+        }
+        Send(new ChatMessage(Chat.Channel, Chat.Channel == Game.Shared.Vocabulary.ChatChannels.Whisper ? Chat.WhisperTo : null, text));
+        return true;
+    }
+
+    /// <summary>Blocks a character by name.</summary>
+    public void Block(string name)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && name.Length > 0) Send(new BlockMessage(name));
+    }
+
+    /// <summary>Takes a block back.</summary>
+    public void Unblock(string name)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && name.Length > 0) Send(new UnblockMessage(name));
+    }
+
+    /// <summary>Reports a line this client received, by its number: the server keeps what was said.</summary>
+    public void Report(long line)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && line > 0) Send(new ReportMessage(line));
+    }
 
     /// <summary>Binds the skill bar's slots to <see cref="PressSkill"/>.</summary>
     private sealed class SkillActivator(ClientSession session) : IHotbarActivator

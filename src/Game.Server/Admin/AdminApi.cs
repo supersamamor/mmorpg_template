@@ -18,7 +18,7 @@ namespace Game.Server.Admin;
 /// JSON, <c>no-store</c>, with the request id; nothing outside <see cref="AdminPaths.Root"/> is served.
 /// </summary>
 public sealed class AdminApi(AdminOptions options, ServiceCredential credential, AdminRateLimit limits, AdminCommands commands, IAdminStore store, AdminStatusSource status,
-    Gateway gateway, IServerLog log, IModerationStore? moderation = null, MaintenanceClock? maintenance = null)
+    Gateway gateway, IServerLog log, IModerationStore? moderation = null, MaintenanceClock? maintenance = null, Chat.IChatReportStore? chatReports = null)
 {
     /// <summary>The default page size.</summary>
     public const int DefaultPageSize = 25;
@@ -172,6 +172,16 @@ public sealed class AdminApi(AdminOptions options, ServiceCredential credential,
                     await WriteAsync(context, StatusCodes.Status200OK, new { items = page.Items.Select(RequestJson), next = page.Next }).ConfigureAwait(false);
                     return;
                 }
+                case "/chat-reports":
+                {
+                    // T-901: what a player reported, with what was said (the server's copy) and the ids of who said it and who reported it.
+                    if (chatReports is null) throw new StoreUnavailableException("no chat report store");
+                    var state = Text(query, "status");
+                    if (state is not null && !ChatReportStatuses.All.Contains(state)) throw new BadQuery();
+                    var page = await chatReports.FindReportsAsync(state, Id(query, "account"), Number(query, "before"), Limit(query), cancel).ConfigureAwait(false);
+                    await WriteAsync(context, StatusCodes.Status200OK, new { items = page.Items.Select(ReportJson), next = page.Next }).ConfigureAwait(false);
+                    return;
+                }
                 case "/audit":
                 {
                     var action = Text(query, "action");
@@ -270,6 +280,12 @@ public sealed class AdminApi(AdminOptions options, ServiceCredential credential,
     private static object RequestJson(SupportRequest r) => new
     {
         id = r.Id, account_id = r.AccountId, kind = r.Kind, status = r.Status, opened_at = r.OpenedAt, opened_audit_id = r.OpenedAuditId, closed_at = r.ClosedAt, closed_audit_id = r.ClosedAuditId,
+    };
+
+    private static object ReportJson(Chat.ChatReport r) => new
+    {
+        id = r.Id, reported_at = r.ReportedAt, reporter_account_id = r.ReporterAccountId, reporter_character_id = r.ReporterCharacterId, sender_account_id = r.SenderAccountId,
+        sender_character_id = r.SenderCharacterId, channel = r.Channel, text = r.Text, said_at = r.SaidAt, status = r.Status, closed_at = r.ClosedAt, closed_audit_id = r.ClosedAuditId,
     };
 
     private static object AuditJson(AuditRecord r) => new

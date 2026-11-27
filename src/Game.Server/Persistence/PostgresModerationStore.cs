@@ -171,6 +171,11 @@ public sealed class PostgresModerationStore(GameDatabase database) : IModeration
         var deletion = await db.AccountDeletions.AsNoTracking().SingleOrDefaultAsync(d => d.AccountId == account, cancellation).ConfigureAwait(false);
         var sanctions = await db.Sanctions.AsNoTracking().Where(s => s.AccountId == account).OrderBy(s => s.Id).ToListAsync(cancellation).ConfigureAwait(false);
         var requests = await db.SupportRequests.AsNoTracking().Where(r => r.AccountId == account).OrderBy(r => r.Id).ToListAsync(cancellation).ConfigureAwait(false);
+        // T-901: whom it blocks (by name, as the player sees them), and its chat reports: those it made, and those about what it said (the line is its own words). Who reported it is not said.
+        var blocks = await db.ChatBlocks.AsNoTracking().Where(b => b.AccountId == account).Join(db.Characters, b => b.BlockedCharacterId, c => c.Id, (b, c) => new { c.Name, b.CreatedAt })
+            .OrderBy(b => b.CreatedAt).ToListAsync(cancellation).ConfigureAwait(false);
+        var reportsMade = await db.ChatReports.AsNoTracking().Where(r => r.ReporterAccountId == account).OrderBy(r => r.Id).ToListAsync(cancellation).ConfigureAwait(false);
+        var reportsAbout = await db.ChatReports.AsNoTracking().Where(r => r.SenderAccountId == account).OrderBy(r => r.Id).ToListAsync(cancellation).ConfigureAwait(false);
         var targets = ids.Select(i => i.ToString()).Append(account.ToString()).ToList();
         var audit = await db.Audit.AsNoTracking().Where(r => targets.Contains(r.TargetId)).OrderBy(r => r.Id)
             .Select(r => new { r.At, r.Action, r.TargetKind, r.TargetId, r.Before, r.After }).ToListAsync(cancellation).ConfigureAwait(false);
@@ -218,6 +223,17 @@ public sealed class PostgresModerationStore(GameDatabase database) : IModeration
             ["support_requests"] = new JsonArray(requests.Select(r => (JsonNode)new JsonObject
             {
                 ["id"] = r.Id, ["kind"] = r.Kind, ["status"] = r.Status, ["opened_at"] = r.OpenedAt, ["closed_at"] = r.ClosedAt,
+            }).ToArray()),
+            ["chat_blocks"] = new JsonArray(blocks.Select(b => (JsonNode)new JsonObject { ["character"] = b.Name, ["since"] = b.CreatedAt }).ToArray()),
+            ["chat_reports_made"] = new JsonArray(reportsMade.Select(r => (JsonNode)new JsonObject
+            {
+                ["id"] = r.Id, ["reported_at"] = r.ReportedAt, ["by_character_id"] = r.ReporterCharacterId.ToString(), ["channel"] = r.Channel, ["text"] = r.Text, ["said_at"] = r.SaidAt,
+                ["status"] = r.Status,
+            }).ToArray()),
+            ["chat_reports_about"] = new JsonArray(reportsAbout.Select(r => (JsonNode)new JsonObject
+            {
+                ["id"] = r.Id, ["reported_at"] = r.ReportedAt, ["character_id"] = r.SenderCharacterId.ToString(), ["channel"] = r.Channel, ["text"] = r.Text, ["said_at"] = r.SaidAt,
+                ["status"] = r.Status,
             }).ToArray()),
             // What staff did to the account and its characters: the action, when, and the ids and numbers changed. Who did it, and their reason, are staff's records, not the player's data.
             ["staff_actions"] = new JsonArray(audit.Select(r => (JsonNode)new JsonObject

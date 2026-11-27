@@ -33,10 +33,17 @@ public sealed class ModerationChecks(IModerationStore store, TimeProvider time)
     /// True when the account may speak now: no mute in force. When the database cannot answer it says false (a moderation check fails closed: a muted player must not get through a database
     /// outage), and the caller tells the player to try again.
     /// </summary>
-    public async ValueTask<bool> MaySpeakAsync(Guid account, CancellationToken cancellation)
+    public async ValueTask<bool> MaySpeakAsync(Guid account, CancellationToken cancellation) => (await SpeakAsync(account, cancellation).ConfigureAwait(false)).May;
+
+    /// <summary>
+    /// The same answer with what chat tells the player (T-901): until when the mute holds, or that the database could not say. Same cache: a burst of lines costs one read per
+    /// <see cref="CacheMs"/>.
+    /// </summary>
+    public async ValueTask<SpeakAnswer> SpeakAsync(Guid account, CancellationToken cancellation)
     {
         var now = time.GetUtcNow().UtcDateTime;
-        if (_mutes.TryGetValue(account, out var known) && (now - known.Checked).TotalMilliseconds < CacheMs) return known.MutedUntil is not { } u || u <= now;
+        if (_mutes.TryGetValue(account, out var known) && (now - known.Checked).TotalMilliseconds < CacheMs)
+            return known.MutedUntil is { } u && u > now ? new SpeakAnswer(false, u, false) : new SpeakAnswer(true, null, false);
         Sanction? mute;
         try
         {
@@ -44,16 +51,19 @@ public sealed class ModerationChecks(IModerationStore store, TimeProvider time)
         }
         catch (StoreUnavailableException)
         {
-            return false;
+            return new SpeakAnswer(false, null, true);
         }
         if (_mutes.Count >= MaxCached) _mutes.Clear();
         _mutes[account] = (mute?.Until, now);
-        return mute is null;
+        return mute is null ? new SpeakAnswer(true, null, false) : new SpeakAnswer(false, mute.Until, false);
     }
 
     /// <summary>Forgets what is cached for the account (its mute changed here).</summary>
     public void Forget(Guid account) => _mutes.TryRemove(account, out _);
 }
+
+/// <summary>What <see cref="ModerationChecks.SpeakAsync"/> answers (T-901): may the account speak; if muted, until when; or the database could not say (then it may not).</summary>
+public readonly record struct SpeakAnswer(bool May, DateTime? MutedUntil, bool Unavailable);
 
 /// <summary>
 /// The ban watch (T-806): every <see cref="IntervalMs"/>, asks the database which accounts playing on this server are banned, and ends their games (<c>bye banned</c>, the character leaves

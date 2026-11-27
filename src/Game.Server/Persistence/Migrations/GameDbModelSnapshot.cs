@@ -520,6 +520,107 @@ namespace Game.Server.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Game.Server.Persistence.ChatBlockRow", b =>
+                {
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<Guid>("BlockedCharacterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("blocked_character_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.HasKey("AccountId", "BlockedCharacterId");
+
+                    b.HasIndex("BlockedCharacterId")
+                        .HasDatabaseName("ix_chat_blocks_blocked");
+
+                    b.ToTable("chat_blocks", (string)null);
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.ChatReportRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Channel")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("channel");
+
+                    b.Property<DateTime?>("ClosedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closed_at");
+
+                    b.Property<long?>("ClosedAuditId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("closed_audit_id");
+
+                    b.Property<DateTime>("ReportedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reported_at");
+
+                    b.Property<Guid>("ReporterAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reporter_account_id");
+
+                    b.Property<Guid>("ReporterCharacterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reporter_character_id");
+
+                    b.Property<DateTime>("SaidAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("said_at");
+
+                    b.Property<Guid>("SenderAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sender_account_id");
+
+                    b.Property<Guid>("SenderCharacterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sender_character_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReporterAccountId")
+                        .HasDatabaseName("ix_chat_reports_reporter");
+
+                    b.HasIndex("ReporterCharacterId");
+
+                    b.HasIndex("SenderAccountId")
+                        .HasDatabaseName("ix_chat_reports_sender");
+
+                    b.HasIndex("SenderCharacterId");
+
+                    b.HasIndex("Status", "Id")
+                        .HasDatabaseName("ix_chat_reports_status");
+
+                    b.ToTable("chat_reports", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_chat_reports_status", "status IN ('open', 'closed') AND (status = 'open') = (closed_at IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("Game.Server.Persistence.ItemRow", b =>
                 {
                     b.Property<long>("Id")
@@ -739,6 +840,48 @@ namespace Game.Server.Persistence.Migrations
                         .WithMany()
                         .HasForeignKey("HeldBy")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.ChatBlockRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.AccountRow", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Game.Server.Persistence.CharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("BlockedCharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.ChatReportRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.AccountRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReporterAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Game.Server.Persistence.CharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("ReporterCharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Game.Server.Persistence.AccountRow", null)
+                        .WithMany()
+                        .HasForeignKey("SenderAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Game.Server.Persistence.CharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("SenderCharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Game.Server.Persistence.ItemRow", b =>

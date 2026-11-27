@@ -67,6 +67,12 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
     /// <summary>Items staff made (T-806): <c>source = admin</c>.</summary>
     public DbSet<AdminItemRow> AdminItems => Set<AdminItemRow>();
 
+    /// <summary>Who blocks whom in chat (T-901).</summary>
+    public DbSet<ChatBlockRow> ChatBlocks => Set<ChatBlockRow>();
+
+    /// <summary>Players' reports of chat lines (T-901).</summary>
+    public DbSet<ChatReportRow> ChatReports => Set<ChatReportRow>();
+
     /// <summary>The trigger function that refuses changing or deleting audit rows.</summary>
     public const string AuditGuard = "admin_audit_append_only";
 
@@ -275,6 +281,41 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
             e.Property(i => i.Quantity).HasColumnName("quantity");
             e.Property(i => i.CreatedAt).HasColumnName("created_at");
             e.Property(i => i.AuditId).HasColumnName("audit_id");
+        });
+        model.Entity<ChatBlockRow>(e =>
+        {
+            e.ToTable("chat_blocks");
+            e.HasKey(b => new { b.AccountId, b.BlockedCharacterId });
+            e.Property(b => b.AccountId).HasColumnName("account_id");
+            e.Property(b => b.BlockedCharacterId).HasColumnName("blocked_character_id");
+            e.Property(b => b.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(b => b.BlockedCharacterId).HasDatabaseName("ix_chat_blocks_blocked");
+            e.HasOne<AccountRow>().WithMany().HasForeignKey(b => b.AccountId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<CharacterRow>().WithMany().HasForeignKey(b => b.BlockedCharacterId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<ChatReportRow>(e =>
+        {
+            e.ToTable("chat_reports", t => t.HasCheckConstraint("ck_chat_reports_status", "status IN ('open', 'closed') AND (status = 'open') = (closed_at IS NULL)"));
+            e.HasKey(r => r.Id);
+            e.Property(r => r.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(r => r.ReportedAt).HasColumnName("reported_at");
+            e.Property(r => r.ReporterAccountId).HasColumnName("reporter_account_id");
+            e.Property(r => r.ReporterCharacterId).HasColumnName("reporter_character_id");
+            e.Property(r => r.SenderAccountId).HasColumnName("sender_account_id");
+            e.Property(r => r.SenderCharacterId).HasColumnName("sender_character_id");
+            e.Property(r => r.Channel).HasColumnName("channel").HasMaxLength(32);
+            e.Property(r => r.Text).HasColumnName("text");   // no fixed width: the longest line is server configuration
+            e.Property(r => r.SaidAt).HasColumnName("said_at");
+            e.Property(r => r.Status).HasColumnName("status").HasMaxLength(16);
+            e.Property(r => r.ClosedAt).HasColumnName("closed_at");
+            e.Property(r => r.ClosedAuditId).HasColumnName("closed_audit_id");
+            e.HasIndex(r => new { r.Status, r.Id }).HasDatabaseName("ix_chat_reports_status");
+            e.HasIndex(r => r.ReporterAccountId).HasDatabaseName("ix_chat_reports_reporter");
+            e.HasIndex(r => r.SenderAccountId).HasDatabaseName("ix_chat_reports_sender");
+            e.HasOne<AccountRow>().WithMany().HasForeignKey(r => r.ReporterAccountId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<AccountRow>().WithMany().HasForeignKey(r => r.SenderAccountId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<CharacterRow>().WithMany().HasForeignKey(r => r.ReporterCharacterId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<CharacterRow>().WithMany().HasForeignKey(r => r.SenderCharacterId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

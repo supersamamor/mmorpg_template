@@ -38,13 +38,15 @@
 #   .\client\run-e2e.ps1 -Run textured                  the textured test theme (tools/themegen --textured, generated before the import, never committed): characters whose parts share
 #                                                         one atlas are one textured surface, dressed and in outfits too; a hairstyle with another image is a second one; job models
 #                                                         load only when a character needs one (T-711)
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, kick, moderation, textured, bye, release (account,
+#   .\client\run-e2e.ps1 -Run chat                        two accounts' characters on one map talk and whisper through the chat panel; the second reports a line and blocks the first;
+#                                                         the script reads and closes the report and mutes the first through the admin API, whose next line is refused (T-901). Needs PostgreSQL like account
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, kick, moderation, textured, chat, bye, release (account,
 #                                                         saving, appearance, wardrobe, kick and moderation are skipped, and said so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -582,6 +584,69 @@ function Invoke-Scenario([string] $Name) {
                 if (Select-String -Path $server.Log -Pattern ([regex]::Escape($credential)) -Quiet) { Write-Host "[run-e2e] THE CREDENTIAL IS IN THE SERVER LOG"; return 1 }
                 return $result.Code
             }
+            "chat" {
+                # T-901: a database like account and the admin API like moderation. The speaker asks for the listener by a marker naming its character; once both have talked,
+                # whispered, reported and blocked, the speaker asks the script to announce (the listener's signal), read and close the report, and mute the speaker.
+                $env:GAME_DB_CONNECTION = Get-E2EConnection
+                $adminPort = $Port + 1
+                $bytes = New-Object byte[] 32
+                [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+                $credential = [Convert]::ToBase64String($bytes)
+                $env:GAME_ADMIN_CREDENTIAL = $credential
+                try { $server = Start-GameServer -Extra @("--admin-port", "$adminPort") } finally { $env:GAME_DB_CONNECTION = $null; $env:GAME_ADMIN_CREDENTIAL = $null }
+                $deadline = (Get-Date).AddSeconds(10)
+                while (-not (Select-String -Path $server.Log -Pattern "Admin API listening" -Quiet)) {
+                    if ((Get-Date) -gt $deadline) { Get-Content $server.Log | Select-Object -Last 20; throw "The admin API did not start." }
+                    Start-Sleep -Milliseconds 100
+                }
+                $admin = "http://127.0.0.1:$adminPort/admin/v1"
+                $support = @{ "Authorization" = "Bearer $credential"; "X-Staff-Id" = "e2e-support"; "X-Staff-Name" = "E2E%20Support"; "X-Staff-Role" = "support" }
+                $gm = $support.Clone(); $gm["X-Staff-Id"] = "e2e-gm"; $gm["X-Staff-Role"] = "gm"
+                $holder = @{ Second = $null; Account = $null; Report = $null; Closed = $null; Muted = $null }
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-chat" @()) -EngineArgs $engineArgs
+                $result = Wait-GodotClient $run 360 -OnMarker {
+                    param($marker)
+                    try {
+                        if ($marker -like "chat-second:*") {
+                            Write-Host "[run-e2e] starting the listener"
+                            $holder.Second = Start-GodotClient @("--e2e-chat-listen", $marker.Substring(12), "--server", "ws://127.0.0.1:$Port/ws", "--name", "e2e-listener") -EngineArgs $engineArgs -Headless
+                        }
+                        elseif ($marker -like "chat-sync:*") {
+                            $body = @{ text = "E2E chat check"; reason = "e2e: the chat run's signal" } | ConvertTo-Json
+                            $null = Invoke-RestMethod -Method Post -Uri "$admin/commands/announce" -Headers $gm -ContentType "application/json" -Body $body
+                            $holder.Account = @((Invoke-RestMethod -Uri "$admin/accounts?name=$($marker.Substring(10))" -Headers $support).items)[0].id
+                            $reports = @((Invoke-RestMethod -Uri "$admin/chat-reports?status=open&account=$($holder.Account)" -Headers $support).items)
+                            $holder.Report = $reports | Where-Object { $_.sender_account_id -eq $holder.Account } | Select-Object -First 1
+                            if ($holder.Report) {
+                                Write-Host "[run-e2e] report $($holder.Report.id): channel $($holder.Report.channel), sender $($holder.Report.sender_character_id), reporter $($holder.Report.reporter_character_id)"
+                                $body = @{ report_id = $holder.Report.id; reason = "e2e: looked at, nothing more to do" } | ConvertTo-Json
+                                $holder.Closed = Invoke-RestMethod -Method Post -Uri "$admin/commands/close_report" -Headers $support -ContentType "application/json" -Body $body
+                                Write-Host "[run-e2e] closed the report: outcome $($holder.Closed.outcome), audit row $($holder.Closed.audit_id)"
+                            }
+                            $body = @{ account_id = $holder.Account; minutes = 5; reason = "e2e: the chat run" } | ConvertTo-Json
+                            $holder.Muted = Invoke-RestMethod -Method Post -Uri "$admin/commands/mute" -Headers $support -ContentType "application/json" -Body $body
+                            Write-Host "[run-e2e] muted the speaker for 5 minutes: outcome $($holder.Muted.outcome), audit row $($holder.Muted.audit_id)"
+                        }
+                    } catch { Write-Host "[run-e2e] the admin API call failed: $($_.Exception.Message)" }
+                }
+                if (-not $holder.Second) { Write-Host "[run-e2e] the speaker never asked for the listener"; return 1 }
+                $second = Wait-GodotClient $holder.Second 120
+                if ($second.Code -ne 0) { Write-Host "[run-e2e] the listener failed (exit code $($second.Code))"; return 1 }
+                if (-not $holder.Report) { Write-Host "[run-e2e] no open report of the speaker's line"; return 1 }
+                if ($holder.Report.text -ne "e2esaid hi there" -or $holder.Report.channel -ne "map") { Write-Host "[run-e2e] the report holds the wrong line"; return 1 }
+                if (-not $holder.Closed -or $holder.Closed.outcome -ne "done" -or -not $holder.Muted -or $holder.Muted.outcome -ne "done") { Write-Host "[run-e2e] closing the report or muting failed"; return 1 }
+                $open = @((Invoke-RestMethod -Uri "$admin/chat-reports?status=open&account=$($holder.Account)" -Headers $support).items)
+                if ($open.Count -ne 0) { Write-Host "[run-e2e] the report is still open"; return 1 }
+                $rows = @((Invoke-RestMethod -Uri "$admin/audit?target=$($holder.Report.id)" -Headers $support).items) + @((Invoke-RestMethod -Uri "$admin/audit?target=$($holder.Account)" -Headers $support).items)
+                $actions = @($rows | ForEach-Object { $_.action } | Sort-Object)
+                if (($actions -join ",") -ne "close_report,mute") { Write-Host "[run-e2e] the audit rows are wrong: $($actions -join ', ')"; return 1 }
+                if (@($rows | Where-Object { ($_.before | ConvertTo-Json -Compress) + ($_.after | ConvertTo-Json -Compress) -match "e2esaid" }).Count -gt 0) { Write-Host "[run-e2e] a line is in an audit row"; return 1 }
+                Write-Host "[run-e2e] audit rows: $(@($rows | Sort-Object id | ForEach-Object { "$($_.id) $($_.action) by $($_.staff_id)" }) -join '; ')"
+                if (Select-String -Path $server.Log -Pattern "e2esaid" -Quiet) { Write-Host "[run-e2e] A PLAYER'S LINE IS IN THE SERVER LOG"; return 1 }
+                if (Select-String -Path $server.Log -Pattern ([regex]::Escape($credential)) -Quiet) { Write-Host "[run-e2e] THE CREDENTIAL IS IN THE SERVER LOG"; return 1 }
+                Write-Host "[run-e2e] the server log holds no line a player wrote"
+                return $result.Code
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -708,12 +773,12 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 # The account, saving and appearance runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.
 $skipped = @()
-$databaseRuns = @("account", "saving", "appearance", "wardrobe", "kick", "moderation")
+$databaseRuns = @("account", "saving", "appearance", "wardrobe", "kick", "moderation", "chat")
 if (@($runs | Where-Object { $databaseRuns -contains $_ }).Count -gt 0 -and -not $env:GAME_TEST_DB_CONNECTION) {
     if ($Run -ne "all") { throw "The $Run run needs a PostgreSQL server: set `$env:GAME_TEST_DB_CONNECTION." }
     $skipped = $databaseRuns

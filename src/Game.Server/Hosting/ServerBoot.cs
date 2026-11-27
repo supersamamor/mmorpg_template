@@ -20,7 +20,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
 {
     /// <summary>Usage text.</summary>
     public const string Usage =
-        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--save-interval <seconds>] [--save-shutdown-wait <seconds>] [--account-erase-days <days>] [--net-<name> <value> ...] [--admin-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
+        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--save-interval <seconds>] [--save-shutdown-wait <seconds>] [--account-erase-days <days>] [--net-<name> <value> ...] [--admin-<name> <value> ...] [--chat-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
 
     /// <summary>The environment name that enables development mode (plain ws:// on loopback, the dev login).</summary>
     public const string DevelopmentName = "Development";
@@ -54,6 +54,9 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
     /// <summary>The <c>--admin-</c> options and their values, in order, for <see cref="Game.Server.Admin.AdminOptions.Parse"/> (T-804).</summary>
     public IReadOnlyList<string> AdminArgs { get; init; } = NoArgs;
 
+    /// <summary>The <c>--chat-</c> options and their values, in order, for <see cref="Game.Server.Chat.ChatOptions.Parse"/> (T-901).</summary>
+    public IReadOnlyList<string> ChatArgs { get; init; } = NoArgs;
+
     /// <summary>The environment name in effect: <see cref="Environment"/>, else <paramref name="environmentVariable"/>, else <c>Production</c>.</summary>
     public string EnvironmentName(string? environmentVariable) =>
         Environment ?? (string.IsNullOrWhiteSpace(environmentVariable) ? "Production" : environmentVariable);
@@ -73,6 +76,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         var eraseDays = 14;
         var net = new List<string>();
         var admin = new List<string>();
+        var chat = new List<string>();
         error = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -104,6 +108,10 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                         admin.Add(arg);
                         admin.Add(Value());
                         break;
+                    case var _ when arg.StartsWith(Game.Server.Chat.ChatOptions.ArgPrefix, StringComparison.Ordinal):
+                        chat.Add(arg);
+                        chat.Add(Value());
+                        break;
                     default:
                         if (arg.StartsWith("--", StringComparison.Ordinal) || content is not null) throw new FormatException($"unexpected argument '{arg}'");
                         content = arg;
@@ -126,6 +134,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
             AccountEraseDays = eraseDays,
             NetArgs = net.Count == 0 ? NoArgs : net,
             AdminArgs = admin.Count == 0 ? NoArgs : admin,
+            ChatArgs = chat.Count == 0 ? NoArgs : chat,
         };
     }
 

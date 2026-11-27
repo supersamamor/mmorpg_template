@@ -34,6 +34,9 @@ namespace Game.Shared.Protocol
 
         /// <summary>After <c>/characters/{id}</c> (T-806): <c>GET</c> the item, currency and place changes staff made to it (its audit rows).</summary>
         public const string StaffChangesSuffix = "/staff-changes";
+
+        /// <summary><c>GET</c> <c>?status=&amp;account=&amp;before=&amp;limit=</c> (T-901): players' reports of chat lines, newest first, with what was said.</summary>
+        public const string ChatReports = Root + "/chat-reports";
     }
 
     /// <summary>The headers of an admin request.</summary>
@@ -102,6 +105,9 @@ namespace Game.Shared.Protocol
 
         /// <summary>A support request's number (T-806).</summary>
         public const string RequestId = "request_id";
+
+        /// <summary>A chat report's number (T-901).</summary>
+        public const string ReportId = "report_id";
     }
 
     /// <summary>The body of <c>POST /admin/v1/commands/kick</c>.</summary>

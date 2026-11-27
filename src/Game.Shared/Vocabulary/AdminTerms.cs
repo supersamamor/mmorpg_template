@@ -84,9 +84,12 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>cancel_request</c> (T-806): closes a queued request without handling it.</summary>
         public const string CancelRequest = "cancel_request";
 
+        /// <summary><c>close_report</c> (T-901): staff handled a player's report of a chat line; it leaves the open list.</summary>
+        public const string CloseReport = "close_report";
+
         /// <summary>Every action.</summary>
         public static readonly VocabularySet All = new VocabularySet(Kick, Ban, Unban, Mute, Unmute, GiveItem, RemoveItem, ChangeCurrency, Unstick, Announce, StartMaintenance,
-            EndMaintenance, OpenRequest, CompleteRequest, CancelRequest);
+            EndMaintenance, OpenRequest, CompleteRequest, CancelRequest, CloseReport);
     }
 
     /// <summary>What an admin command or an audit row is about (VOCABULARY.md "Admin target kinds").</summary>
@@ -104,8 +107,11 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>server</c> (T-806): the server process itself (announcements, maintenance); the target id is <c>server</c>.</summary>
         public const string Server = "server";
 
+        /// <summary><c>chat_report</c> (T-901): the target id is a chat report's number.</summary>
+        public const string ChatReport = "chat_report";
+
         /// <summary>Every kind.</summary>
-        public static readonly VocabularySet All = new VocabularySet(Account, Character, Request, Server);
+        public static readonly VocabularySet All = new VocabularySet(Account, Character, Request, Server, ChatReport);
     }
 
     /// <summary>Why the admin API refused a request or a command: the <c>error</c> of its answer (VOCABULARY.md "Admin errors").</summary>
@@ -189,11 +195,14 @@ namespace Game.Shared.Vocabulary
         /// <summary>The account waits to be erased already (T-806): its deletion is under way.</summary>
         public const string AccountDeleting = "account_deleting";
 
+        /// <summary>The chat report is closed already (T-901).</summary>
+        public const string ReportClosed = "report_closed";
+
         /// <summary>Every admin error.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             InvalidRequest, Unauthorized, InvalidStaff, UnknownRole, Forbidden, ReasonRequired, NotFound, UnknownTarget, RateLimited, Timeout, Unavailable,
             AlreadyBanned, NotBanned, AlreadyMuted, NotMuted, CharacterBusy, NeverSaved, UnknownItem, ItemGone, NotEnough, InventoryFull, CurrencyLimit, MaintenanceOn, MaintenanceOff,
-            RequestClosed, AccountDeleting);
+            RequestClosed, AccountDeleting, ReportClosed);
     }
 
     /// <summary>Kinds of support request (VOCABULARY.md "Support request kinds", T-806).</summary>

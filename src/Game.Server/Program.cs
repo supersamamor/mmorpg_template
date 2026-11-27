@@ -4,6 +4,7 @@ using Game.Content.Loading;
 using Game.Content.Validation;
 using Game.Server.Accounts;
 using Game.Server.Admin;
+using Game.Server.Chat;
 using Game.Server.Hosting;
 using Game.Server.Net;
 using Game.Server.Persistence;
@@ -20,6 +21,7 @@ if (options is null)
     Console.Error.WriteLine(ServerOptions.Usage);
     Console.Error.WriteLine(GatewayOptions.Usage);
     Console.Error.WriteLine(AdminOptions.Usage);
+    Console.Error.WriteLine(ChatOptions.Usage);
     return 2;
 }
 
@@ -38,6 +40,14 @@ if (adminOptions is null)
 {
     Console.Error.WriteLine(adminError);
     Console.Error.WriteLine(AdminOptions.Usage);
+    return 2;
+}
+
+var chatOptions = ChatOptions.Parse(options.ChatArgs, Environment.GetEnvironmentVariable, out var chatError);   // T-901
+if (chatOptions is null)
+{
+    Console.Error.WriteLine(chatError);
+    Console.Error.WriteLine(ChatOptions.Usage);
     return 2;
 }
 
@@ -64,7 +74,7 @@ catch (DatabaseException e)
 }
 if (options.Migrate) return 0;
 
-var netProblems = netOptions.Problems();
+var netProblems = netOptions.Problems().Concat(chatOptions.Problems(netOptions.MaxMessageBytes).Select(p => "chat: " + p)).ToList();
 if (netProblems.Count > 0)
 {
     foreach (var problem in netProblems) log.Error("Gateway: " + problem);
@@ -131,6 +141,10 @@ var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, 
 var moderation = database is null ? null : new PostgresModerationStore(database);
 var checks = moderation is null ? null : new ModerationChecks(moderation, TimeProvider.System);
 if (accounts is not null && checks is not null) accounts.BanOf = checks.BanOfAsync;
+// T-901: chat. Its block lists and reports are in the database; without one nobody has an account, so nobody can be muted, block or report.
+var chatStore = database is null ? null : new PostgresChatStore(database);
+await using var chat = new ChatService(chatOptions, gateway, chatStore, checks is null ? null : checks.SpeakAsync, TimeProvider.System, log, chatStore);
+gateway.Chat = chat;
 GatewayHost host;
 try
 {
@@ -153,11 +167,11 @@ if (adminOptions.Enabled)
         var adminEvents = new AdminEvents(log);
         var road = new AdminRoad(world, gateway, adminStore, adminOptions, TimeProvider.System)
         {
-            Moderation = moderation, Checks = checks, NextItemId = saves is null ? null : saves.NextItemId, Content = content, EraseWait = TimeSpan.FromDays(options.AccountEraseDays),
+            Moderation = moderation, Checks = checks, ChatReports = chatStore, NextItemId = saves is null ? null : saves.NextItemId, Content = content, EraseWait = TimeSpan.FromDays(options.AccountEraseDays),
         };
         var commands = new AdminCommands(AdminCommandTable.AllCommands(), road, adminEvents, log);
         var api = new AdminApi(adminOptions, new ServiceCredential(Environment.GetEnvironmentVariable(adminOptions.CredentialEnv)!), new AdminRateLimit(adminOptions, TimeProvider.System),
-            commands, adminStore, new AdminStatusSource(world, gateway, saves, log, contentHash, startedAt), gateway, log, moderation, road.Maintenance);
+            commands, adminStore, new AdminStatusSource(world, gateway, saves, log, contentHash, startedAt), gateway, log, moderation, road.Maintenance, chatStore);
         adminHost = await AdminHost.StartAsync(adminOptions, host.Endpoint.Port, api);
     }
     catch (Exception e) when (e is InvalidOperationException or IOException)
@@ -183,6 +197,7 @@ log.Info($"Starting {runners.Count} map instance(s) at {TickRate.Hz} Hz, seed {s
          string.Join(", ", world.Instances.Select(i => $"{i.MapId} {i.Grid.Width}x{i.Grid.Height}")));
 foreach (var runner in runners) runner.Start();
 gateway.Start();
+chat.Start();
 await using var eraser = database is null ? null : AccountEraser.Start(new PostgresAccountStore(database), TimeProvider.System, log); // T-703
 await using var banWatch = moderation is null ? null : BanWatch.Start(moderation, gateway, TimeProvider.System, log); // T-806: bans made through another process end games here too
 log.Info($"Gateway listening on {host.Endpoint}{(accounts is null ? "" : " (account endpoints on the same port)")}");
