@@ -24,6 +24,8 @@ dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; }
 dl.json { display: grid; grid-template-columns: max-content 1fr; gap: 0 .7rem; margin: 0; }
 ul.json { margin: 0; padding-left: 1.1rem; }
+/* In a table, a value breaks between words: with "anywhere" the column may shrink to one letter (the audit log's before and after). A wide table scrolls. */
+table dl.json dd { overflow-wrap: break-word; }
 .empty, .small { color: var(--muted); }
 .small { font-size: .87em; }
 label { display: inline-flex; flex-direction: column; gap: .2rem; margin: 0 .8rem .6rem 0; }
