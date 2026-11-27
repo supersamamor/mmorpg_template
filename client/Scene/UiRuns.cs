@@ -113,6 +113,19 @@ public sealed class UiRuns
         Check(Hud.Blocks(party.LeaveButton.GetGlobalRect().GetCenter()), "a touch on the party panel never reaches the world");
         Check(Hud.Blocks(party.AcceptButton.GetGlobalRect().GetCenter()), "a touch on the invite prompt never reaches the world");
         party.ClearSamples();
+        // T-904: the guild panel with the longest guild, rank and member names, a notice of the longest length, the leader's buttons on every row and the invite prompt over it;
+        // then the founding form with the emblem picker.
+        var guild = Hud.Guild!;
+        guild.ShowSamples();
+        await FramesAsync(3);
+        await LayoutMatrixAsync("guild panel and invite prompt");
+        Check(Hud.Blocks(guild.LeaveButton.GetGlobalRect().GetCenter()), "a touch on the guild panel never reaches the world");
+        Check(Hud.Blocks(guild.AcceptButton.GetGlobalRect().GetCenter()), "a touch on the guild invite prompt never reaches the world");
+        guild.ShowFoundingSample();
+        await FramesAsync(3);
+        await LayoutMatrixAsync("guild founding with the emblem picker");
+        Check(guild.EmblemButtons.Count > 0 && Hud.Blocks(guild.EmblemButtons[^1].GetGlobalRect().GetCenter()), "the emblem picker shows and takes its touches");
+        guild.ClearSamples();
         // T-903: the trade window with both offers full of the longest lines, the longest name and state, the currency field and the footer, the ask prompt over it; then the bag's
         // list of what can be offered with the quantity picker in the columns' place.
         var trade = Hud.Trade!;
