@@ -192,6 +192,36 @@ namespace Game.Shared.Protocol
         /// <summary><c>chat_reported</c> (T-901, server to client, own only): the report of a line is stored.</summary>
         public const string ChatReported = "chat_reported";
 
+        /// <summary><c>party_invite</c> (T-902, client to server): invite a character by name or by tapping it.</summary>
+        public const string PartyInvite = "party_invite";
+
+        /// <summary><c>party_answer</c> (T-902, client to server): accept or decline the invite.</summary>
+        public const string PartyAnswer = "party_answer";
+
+        /// <summary><c>party_leave</c> (T-902, client to server): leave the party.</summary>
+        public const string PartyLeave = "party_leave";
+
+        /// <summary><c>party_kick</c> (T-902, client to server, leader only): take a member out.</summary>
+        public const string PartyKick = "party_kick";
+
+        /// <summary><c>party_lead</c> (T-902, client to server, leader only): hand the leader to a member.</summary>
+        public const string PartyLead = "party_lead";
+
+        /// <summary><c>party</c> (T-902, server to client, own only): the party's members and leader, after every change and welcome.</summary>
+        public const string Party = "party";
+
+        /// <summary><c>party_members</c> (T-902, server to client, members only): the other members' HP, SP, map and cell, on change at a set rate.</summary>
+        public const string PartyMembers = "party_members";
+
+        /// <summary><c>party_invited</c> (T-902, server to client, the invited only): who invites, and for how long.</summary>
+        public const string PartyInvited = "party_invited";
+
+        /// <summary><c>party_notice</c> (T-902, server to client): a "Party notices" term, such as a declined invite.</summary>
+        public const string PartyNotice = "party_notice";
+
+        /// <summary><c>party_refused</c> (T-902, server to client, own only): a party intent refused, with a "Party reasons" term.</summary>
+        public const string PartyRefused = "party_refused";
+
         /// <summary><c>announcement</c> (server → client, T-806): staff's words, or a coming maintenance, for everyone playing on this server.</summary>
         public const string Announcement = "announcement";
 
@@ -199,10 +229,10 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot, SetOutfit, Chat, Block, Unblock, Report);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot, SetOutfit, Chat, Block, Unblock, Report, PartyInvite, PartyAnswer, PartyLeave, PartyKick, PartyLead);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Announcement, ChatLine, ChatRefused, ChatState, ChatReported, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Announcement, ChatLine, ChatRefused, ChatState, ChatReported, Party, PartyMembers, PartyInvited, PartyNotice, PartyRefused, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);

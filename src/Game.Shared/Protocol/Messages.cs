@@ -336,6 +336,49 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.Report;
     }
 
+    /// <summary>
+    /// <c>party_invite</c> (T-902): invite a character to this character's party (or to a new one, led by this character). By name, <c>{"type":"party_invite","name":"Bo"}</c>, or by
+    /// tapping a player in view, <c>{"type":"party_invite","target":43}</c>: exactly one of the two. An intent: a refusal comes back as <see cref="PartyRefusedMessage"/>.
+    /// </summary>
+    /// <param name="Name">The character's name, as typed.</param>
+    /// <param name="Target">The entity id of a player on this map.</param>
+    public sealed record PartyInviteMessage(string? Name, long? Target) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.PartyInvite;
+    }
+
+    /// <summary><c>party_answer</c> (T-902): <c>{"type":"party_answer","accept":true}</c>. Answers the invite this character has (<see cref="PartyInvitedMessage"/>).</summary>
+    /// <param name="Accept">True joins the inviter's party; false declines.</param>
+    public sealed record PartyAnswerMessage(bool Accept) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.PartyAnswer;
+    }
+
+    /// <summary><c>party_leave</c> (T-902): <c>{"type":"party_leave"}</c>. Leaves the party.</summary>
+    public sealed record PartyLeaveMessage : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.PartyLeave;
+    }
+
+    /// <summary><c>party_kick</c> (T-902, leader only): <c>{"type":"party_kick","target":43}</c>. Takes a member out of the party.</summary>
+    /// <param name="Target">The member's entity id (<see cref="PartyMemberRecord.Id"/>).</param>
+    public sealed record PartyKickMessage(long Target) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.PartyKick;
+    }
+
+    /// <summary><c>party_lead</c> (T-902, leader only): <c>{"type":"party_lead","target":43}</c>. Hands the leader to a member.</summary>
+    /// <param name="Target">The member's entity id.</param>
+    public sealed record PartyLeadMessage(long Target) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.PartyLead;
+    }
+
     /// <summary>A message the server sends. <see cref="Type"/> is its <see cref="MessageTypes"/> name.</summary>
     public abstract record ServerMessage
     {
@@ -957,6 +1000,69 @@ namespace Game.Shared.Protocol
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.ChatReported;
+    }
+
+    /// <summary>One member of a party in <see cref="PartyMessage"/> (T-902): its entity id and character name.</summary>
+    public sealed record PartyMemberRecord(long Id, string Name);
+
+    /// <summary>
+    /// One member's state in <see cref="PartyMembersMessage"/> (T-902): HP and SP in whole percent (a living member never shows 0), its map and cell, whether it is dead, and
+    /// <see cref="Away"/> when it is in its disconnect grace period (then only the id is meaningful).
+    /// </summary>
+    public sealed record PartyMemberStatusRecord(long Id, int Hp, int Sp, string? Map, GridCell? Cell, bool Dead, bool Away);
+
+    /// <summary>
+    /// <c>party</c> (T-902, own only): the party as it is now, after every change and every welcome:
+    /// <c>{"type":"party","party":3,"leader":42,"members":[{"id":42,"name":"Ada"},{"id":43,"name":"Bo"}]}</c>, members in party order. Not in a party: <c>{"type":"party","members":[]}</c>.
+    /// </summary>
+    /// <param name="Party">The party's number on this server, or null when in none.</param>
+    /// <param name="Leader">The leader's entity id (0 when in none).</param>
+    /// <param name="Members">The members, this character included; empty when in none.</param>
+    public sealed record PartyMessage(long? Party, long Leader, IReadOnlyList<PartyMemberRecord> Members) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Party;
+    }
+
+    /// <summary>
+    /// <c>party_members</c> (T-902, members only): how the other members are, at most once per <c>--party-status-interval-ms</c> and only when it changed:
+    /// <c>{"type":"party_members","status":[{"id":43,"hp":80,"sp":100,"map":"map.meadow","cell":[3,4]}]}</c>; <c>"dead":true</c> and <c>"away":true</c> only when true.
+    /// </summary>
+    /// <param name="Status">One entry per other member with a known state.</param>
+    public sealed record PartyMembersMessage(IReadOnlyList<PartyMemberStatusRecord> Status) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.PartyMembers;
+    }
+
+    /// <summary><c>party_invited</c> (T-902, the invited only): <c>{"type":"party_invited","from":42,"name":"Ada","expires_in":30}</c>. Answer with <see cref="PartyAnswerMessage"/>.</summary>
+    /// <param name="From">The inviter's entity id.</param>
+    /// <param name="Name">The inviter's character name.</param>
+    /// <param name="ExpiresInSeconds">Seconds until the invite expires.</param>
+    public sealed record PartyInvitedMessage(long From, string Name, long ExpiresInSeconds) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.PartyInvited;
+    }
+
+    /// <summary><c>party_notice</c> (T-902): <c>{"type":"party_notice","notice":"declined","name":"Bo"}</c>. News a <see cref="PartyMessage"/> alone does not carry.</summary>
+    /// <param name="Notice">A "Party notices" term.</param>
+    /// <param name="Name">The character it is about, if any.</param>
+    public sealed record PartyNoticeMessage(string Notice, string? Name = null) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.PartyNotice;
+    }
+
+    /// <summary><c>party_refused</c> (T-902, own only): <c>{"type":"party_refused","intent":"party_invite","reason":"full","name":"Bo"}</c>. Nothing changed.</summary>
+    /// <param name="Intent">The message refused: a <c>party_*</c> client type.</param>
+    /// <param name="Reason">A "Party reasons" term.</param>
+    /// <param name="RetryAfterSeconds">For <c>rate_limited</c>: when the next invite may go.</param>
+    /// <param name="Name">The name an invite named, if any.</param>
+    public sealed record PartyRefusedMessage(string Intent, string Reason, long? RetryAfterSeconds = null, string? Name = null) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.PartyRefused;
     }
 
     /// <summary>

@@ -174,6 +174,7 @@ public static class UiText
     {
         ChatChannels.Map => "Map",
         ChatChannels.Whisper => "Whisper",
+        ChatChannels.Party => "Party",
         ChatChannels.System => "Server",
         _ => channel,
     };
@@ -206,6 +207,91 @@ public static class UiText
         ChatReasons.UnknownLine => "That line can no longer be reported.",
         ChatReasons.AlreadyReported => "You reported that line already.",
         _ => "Chat is not available right now. Try again later.",   // unavailable, and anything newer
+    };
+
+    // ---- party (T-902) ----
+
+    /// <summary>The chat panel's button that opens the party panel (the HUD has no room for one of its own).</summary>
+    public const string Party = "Party";
+
+    /// <summary>The party panel's heading while in no party.</summary>
+    public const string PartyNone = "No party. Invite someone by name, or tap a player.";
+
+    /// <summary>The party panel's name field.</summary>
+    public const string PartyNameHint = "Name";
+
+    /// <summary>The invite button beside the name field.</summary>
+    public const string PartyInvite = "Invite";
+
+    /// <summary>The button that invites the player tapped in the world.</summary>
+    public const string PartyInviteTapped = "Invite tapped player";
+
+    /// <summary>Leave the party.</summary>
+    public const string PartyLeave = "Leave";
+
+    /// <summary>The leader's button that takes a member out.</summary>
+    public const string PartyKick = "Kick";
+
+    /// <summary>The leader's button that hands the leader over.</summary>
+    public const string PartyLead = "Lead";
+
+    /// <summary>Accept an invite.</summary>
+    public const string PartyAccept = "Join";
+
+    /// <summary>Decline an invite.</summary>
+    public const string PartyDecline = "No";
+
+    /// <summary>The mark before the leader's name.</summary>
+    public const string PartyLeaderMark = "★ ";
+
+    /// <summary>The party panel's heading, e.g. <c>Party (3 / 5)</c>.</summary>
+    public static string PartyTitle(int members, int max) =>
+        "Party (" + members.ToString(CultureInfo.InvariantCulture) + (max > 0 ? " / " + max.ToString(CultureInfo.InvariantCulture) : string.Empty) + ")";
+
+    /// <summary>The invite prompt, e.g. <c>Ada invites you to a party (25 s)</c>.</summary>
+    public static string PartyInvited(string name, int secondsLeft) =>
+        name + " invites you to a party (" + Math.Max(0, secondsLeft).ToString(CultureInfo.InvariantCulture) + " s)";
+
+    /// <summary>Where a member is, under its name: its map (the bundle's name), dead, away, or not known yet.</summary>
+    public static string PartyWhere(bool known, bool away, bool dead, string? mapName, bool sameMap) =>
+        !known ? "..." : away ? "Away" : dead ? "Fallen" + (sameMap ? string.Empty : ", " + mapName) : sameMap ? "Here" : mapName ?? "Elsewhere";
+
+    /// <summary>A member's line in the panel: the leader's mark, its name, and (you) for this character.</summary>
+    public static string PartyMemberName(string name, bool leader, bool mine) => (leader ? PartyLeaderMark : string.Empty) + name + (mine ? " (you)" : string.Empty);
+
+    /// <summary>A mark at the screen's edge for a member off the screen: an arrow toward it and its name.</summary>
+    public static string PartyMark(string arrow, string name) => arrow + " " + name;
+
+    /// <summary>The longest map name the layout check puts in the party panel.</summary>
+    public const string LongestMapNameSample = "Extraordinarily Long Map Name of the North";
+
+    /// <summary>The words of a "Party notices" term, e.g. <c>Bo joined the party.</c></summary>
+    public static string PartyNotice(string notice, string? name) => notice switch
+    {
+        PartyNotices.InviteSent => "Invite sent to " + (name ?? "them") + ".",
+        PartyNotices.Declined => (name ?? "They") + " said no.",
+        PartyNotices.Expired => "The party invite ran out.",
+        PartyNotices.Joined => (name ?? "Someone") + " joined the party.",
+        PartyNotices.Left => (name ?? "Someone") + " left the party.",
+        PartyNotices.Kicked => (name ?? "Someone") + " was taken out of the party.",
+        PartyNotices.Leader => (name ?? "Someone") + " leads the party now.",
+        PartyNotices.Disbanded => "The party has ended.",
+        _ => "The party changed.",
+    };
+
+    /// <summary>The words of a "Party reasons" term (a <c>party_refused</c>).</summary>
+    public static string PartyRefused(string reason, long? retryAfterSeconds, string? name) => reason switch
+    {
+        PartyReasons.NotOnline => (name is { Length: > 0 } ? name : "That character") + " is not online.",
+        PartyReasons.InvalidTarget => "You cannot do that to yourself.",
+        PartyReasons.Full => "The party is full.",
+        PartyReasons.AlreadyInParty => (name is { Length: > 0 } ? name + " is" : "You are") + " in a party already.",
+        PartyReasons.InvitePending => (name is { Length: > 0 } ? name : "That character") + " has an invite to answer first.",
+        PartyReasons.NotLeader => "Only the party's leader can do that.",
+        PartyReasons.NotInParty => "That is not in your party.",
+        PartyReasons.NoInvite => "That invite is no longer there.",
+        PartyReasons.RateLimited => retryAfterSeconds is { } wait ? "Too many invites. Wait " + BanTimeSeconds(wait) + "." : "Too many invites.",
+        _ => "The party is not available right now.",
     };
 
     private static string BanTimeSeconds(long seconds) => seconds < 60 ? (seconds == 1 ? "a second" : seconds.ToString(CultureInfo.InvariantCulture) + " seconds") : BanTime(seconds);

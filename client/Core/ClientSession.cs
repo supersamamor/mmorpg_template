@@ -102,6 +102,9 @@ public sealed class ClientSession
     /// <summary>The chat of this session (T-901): in memory only, emptied at every new login and back on the login screen.</summary>
     public Game.Client.Core.Chat.ChatBook Chat { get; } = new Game.Client.Core.Chat.ChatBook();
 
+    /// <summary>The party of this session (T-902): what the server last said, in memory only, emptied at every new login and back on the login screen.</summary>
+    public Game.Client.Core.Party.PartyBook Party { get; } = new Game.Client.Core.Party.PartyBook();
+
     private readonly List<string> _gainedOutfits = new();
 
     /// <summary>Server messages applied so far (for measuring).</summary>
@@ -136,6 +139,7 @@ public sealed class ClientSession
         Stats.Reset();
         Wardrobe.Reset();
         Chat.Clear();
+        Party.Clear();
         Numbers.Clear();
         Connection.Login(name, wallNow);
         RunCommands();
@@ -152,6 +156,7 @@ public sealed class ClientSession
         {
             Autopilot.Reset();   // a run belongs to the session that ended
             Chat.Clear();        // T-901: no chat outlives its session on the device
+            Party.Clear();       // T-902: nor a party
         }
         if (_characterId is not null && Connection.Phase == ConnectionPhase.LoginScreen) Accounts.Refresh();
     }
@@ -373,6 +378,7 @@ public sealed class ClientSession
         Connection.Tick(wallNow);
         RunCommands();
         WatchLogin();
+        Party.Expire(wallNow);   // T-902: an invite past its end is no longer offered
         Accounts.Update();
         _lastViewNow = viewNow;
         World.Advance(viewNow);
@@ -406,6 +412,7 @@ public sealed class ClientSession
                 Connection.OnWelcome(welcome, wallNow);
                 World.ApplyWelcome(welcome);
                 Chat.OwnId = welcome.Id;
+                Party.OwnId = welcome.Id;
                 break;
             case ExpMessage exp:
                 World.ApplyExp(exp);
@@ -503,6 +510,29 @@ public sealed class ClientSession
                 Chat.Apply(chatRefused);
                 ChatRefusedReceived?.Invoke(chatRefused);
                 break;
+            case PartyMessage party:
+                Party.Apply(party);
+                if (!Party.InParty && Chat.Channel == Game.Shared.Vocabulary.ChatChannels.Party) Chat.SetChannel(Game.Shared.Vocabulary.ChatChannels.Map);
+                PartyReceived?.Invoke(party);
+                break;
+            case PartyMembersMessage partyMembers:
+                Party.Apply(partyMembers);
+                PartyMembersReceived?.Invoke(partyMembers);
+                break;
+            case PartyInvitedMessage invited:
+                Party.Apply(invited, wallNow);
+                PartyInvitedReceived?.Invoke(invited);
+                break;
+            case PartyNoticeMessage partyNotice:
+                Party.Apply(partyNotice);
+                Ui.OnParty(UiText.PartyNotice(partyNotice.Notice, partyNotice.Name), viewNow);
+                PartyNoticeReceived?.Invoke(partyNotice);
+                break;
+            case PartyRefusedMessage partyRefused:
+                Party.Apply(partyRefused);
+                Ui.OnParty(UiText.PartyRefused(partyRefused.Reason, partyRefused.RetryAfterSeconds, partyRefused.Name), viewNow);
+                PartyRefusedReceived?.Invoke(partyRefused);
+                break;
             case ChatReportedMessage chatReported:
                 Chat.Apply(chatReported);
                 ChatReportedReceived?.Invoke(chatReported);
@@ -594,6 +624,65 @@ public sealed class ClientSession
     {
         if (Connection.Phase == ConnectionPhase.Online && line > 0) Send(new ReportMessage(line));
     }
+
+    // ---- party (T-902): intents only; the server decides and says ----
+
+    /// <summary>Raised for every <c>party</c> message (for the scripted run).</summary>
+    public event Action<PartyMessage>? PartyReceived;
+
+    /// <summary>Raised for every <c>party_members</c> message (for the scripted run).</summary>
+    public event Action<PartyMembersMessage>? PartyMembersReceived;
+
+    /// <summary>Raised for every invite (for the scripted run).</summary>
+    public event Action<PartyInvitedMessage>? PartyInvitedReceived;
+
+    /// <summary>Raised for every party notice (for the scripted run).</summary>
+    public event Action<PartyNoticeMessage>? PartyNoticeReceived;
+
+    /// <summary>Raised for every party refusal (for the scripted run).</summary>
+    public event Action<PartyRefusedMessage>? PartyRefusedReceived;
+
+    /// <summary>Invites a character by name.</summary>
+    public void InviteToParty(string name)
+    {
+        var trimmed = (name ?? string.Empty).Trim();
+        if (Connection.Phase == ConnectionPhase.Online && trimmed.Length > 0) Send(new PartyInviteMessage(trimmed, null));
+    }
+
+    /// <summary>Invites the player tapped in the world, by its entity id (the server checks it is on this map).</summary>
+    public void InviteToParty(long entity)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && entity > 0) Send(new PartyInviteMessage(null, entity));
+    }
+
+    /// <summary>Answers the invite this character has.</summary>
+    public void AnswerParty(bool accept)
+    {
+        if (Connection.Phase != ConnectionPhase.Online || Party.Invite is null) return;
+        Send(new PartyAnswerMessage(accept));
+        Party.Answered();
+    }
+
+    /// <summary>Leaves the party.</summary>
+    public void LeaveParty()
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Party.InParty) Send(new PartyLeaveMessage());
+    }
+
+    /// <summary>The leader takes a member out.</summary>
+    public void KickFromParty(long member)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Party.Leading) Send(new PartyKickMessage(member));
+    }
+
+    /// <summary>The leader hands the leader to a member.</summary>
+    public void HandPartyLead(long member)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Party.Leading) Send(new PartyLeadMessage(member));
+    }
+
+    /// <summary>A player was tapped in the world: the party panel offers to invite it (nothing goes to the server yet).</summary>
+    public void TapPlayer(long entity) => Party.Tap(entity);
 
     /// <summary>Binds the skill bar's slots to <see cref="PressSkill"/>.</summary>
     private sealed class SkillActivator(ClientSession session) : IHotbarActivator

@@ -26,6 +26,7 @@ namespace Game.Shared.Formulas
             list.Add(new FormulaSource("magic_damage", set.MagicDamage));
             list.Add(new FormulaSource("hit_chance", set.HitChance));
             list.Add(new FormulaSource("crit_chance", set.CritChance));
+            list.Add(new FormulaSource("party_exp", set.PartyExp, FormulaSymbols.PartyShare));
             return list;
         }
 

@@ -40,7 +40,7 @@ public static class ProtocolJson
             string? type = null, name = null, content = null, resume = null, session = null, character = null, slot = null, skill = null, job = null, stat = null, quest = null, itemId = null, outfit = null;
             string? channel = null, to = null, text = null;   // chat (T-901)
             long? line = null;
-            bool? hidden = null;
+            bool? hidden = null, accept = null;
             int? version = null, quantity = null, level = null, amount = null, index = null;
             long? seq = null, target = null, entry = null, card = null;
             GridCell? cell = null;
@@ -83,6 +83,7 @@ public static class ProtocolJson
                     case "item": itemId = String(ref reader); break;
                     case "outfit": outfit = String(ref reader); break;
                     case "hidden": hidden = reader.TokenType is JsonTokenType.True or JsonTokenType.False ? reader.GetBoolean() : throw Bad(); break;
+                    case "accept": accept = reader.TokenType is JsonTokenType.True or JsonTokenType.False ? reader.GetBoolean() : throw Bad(); break;
                     case "amount": amount = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var am) ? am : throw Bad(); break;
                     case "index": index = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var ix) ? ix : throw Bad(); break;
                     case "level": level = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var lv) ? lv : throw Bad(); break;
@@ -136,6 +137,12 @@ public static class ProtocolJson
                 MessageTypes.Block => name is { } blocked ? new BlockMessage(blocked) : null,
                 MessageTypes.Unblock => name is { } unblocked ? new UnblockMessage(unblocked) : null,
                 MessageTypes.Report => line is { } reported ? new ReportMessage(reported) : null,
+                // T-902: exactly one of name and target; the party service decides the rest
+                MessageTypes.PartyInvite => (name is null) != (target is null) ? new PartyInviteMessage(name, target) : null,
+                MessageTypes.PartyAnswer => accept is { } yes ? new PartyAnswerMessage(yes) : null,
+                MessageTypes.PartyLeave => new PartyLeaveMessage(),
+                MessageTypes.PartyKick => target is { } kicked ? new PartyKickMessage(kicked) : null,
+                MessageTypes.PartyLead => target is { } led ? new PartyLeadMessage(led) : null,
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -259,6 +266,19 @@ public static class ProtocolJson
                 break;
             case ReportMessage report:
                 w.WriteNumber("line", report.Line);
+                break;
+            case PartyInviteMessage invite:
+                if (invite.Name is not null) w.WriteString("name", invite.Name);
+                if (invite.Target is { } invited) w.WriteNumber("target", invited);
+                break;
+            case PartyAnswerMessage answer:
+                w.WriteBoolean("accept", answer.Accept);
+                break;
+            case PartyKickMessage kick:
+                w.WriteNumber("target", kick.Target);
+                break;
+            case PartyLeadMessage lead:
+                w.WriteNumber("target", lead.Target);
                 break;
         }
         w.WriteEndObject();
@@ -537,6 +557,53 @@ public static class ProtocolJson
             case ChatReportedMessage reported:
                 w.WriteNumber("line", reported.Line);
                 break;
+            case PartyMessage party:
+                if (party.Party is { } partyId) w.WriteNumber("party", partyId);
+                if (party.Party is not null) w.WriteNumber("leader", party.Leader);
+                w.WriteStartArray("members");
+                foreach (var member in party.Members)
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("id", member.Id);
+                    w.WriteString("name", member.Name);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+                break;
+            case PartyMembersMessage members:
+                w.WriteStartArray("status");
+                foreach (var m in members.Status)
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("id", m.Id);
+                    if (m.Away) w.WriteBoolean("away", true);
+                    else
+                    {
+                        w.WriteNumber("hp", m.Hp);
+                        w.WriteNumber("sp", m.Sp);
+                        if (m.Map is not null) w.WriteString("map", m.Map);
+                        if (m.Cell is { } at) WriteCell(w, "cell", at);
+                        if (m.Dead) w.WriteBoolean("dead", true);
+                    }
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+                break;
+            case PartyInvitedMessage invited:
+                w.WriteNumber("from", invited.From);
+                w.WriteString("name", invited.Name);
+                w.WriteNumber("expires_in", invited.ExpiresInSeconds);
+                break;
+            case PartyNoticeMessage notice:
+                w.WriteString("notice", notice.Notice);
+                if (notice.Name is not null) w.WriteString("name", notice.Name);
+                break;
+            case PartyRefusedMessage partyRefused:
+                w.WriteString("intent", partyRefused.Intent);
+                w.WriteString("reason", partyRefused.Reason);
+                if (partyRefused.RetryAfterSeconds is { } partyWait) w.WriteNumber("retry_after", partyWait);
+                if (partyRefused.Name is not null) w.WriteString("name", partyRefused.Name);
+                break;
             case ByeMessage bye:
                 w.WriteString("reason", bye.Reason);
                 if (bye.RetryAfterSeconds is { } retry) w.WriteNumber("retry_after", retry);
@@ -627,6 +694,10 @@ public static class ProtocolJson
             long? line = null, from = null;
             int maxLength = 0;
             List<string>? blocked = null;
+            long? partyId = null, leader = null, expiresIn = null;   // party (T-902)
+            string? notice = null;
+            List<PartyMemberRecord>? partyMembers = null;
+            List<PartyMemberStatusRecord>? partyStatus = null;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var key = reader.GetString();
@@ -726,6 +797,12 @@ public static class ProtocolJson
                     case "from": from = reader.GetInt64(); break;
                     case "max_length": maxLength = reader.GetInt32(); break;
                     case "blocked": blocked = ReadStrings(ref reader); break;
+                    case "party": partyId = reader.GetInt64(); break;
+                    case "leader": leader = reader.GetInt64(); break;
+                    case "expires_in": expiresIn = reader.GetInt64(); break;
+                    case "notice": notice = String(ref reader); break;
+                    case "members": partyMembers = ReadPartyMembers(ref reader); break;
+                    case "status": partyStatus = ReadPartyStatus(ref reader); break;
                     case "hidden": hidden = reader.GetBoolean(); break;
                     case "removed":
                         if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
@@ -774,6 +851,11 @@ public static class ProtocolJson
                 MessageTypes.ChatRefused => intent is null || reason is null ? null : new ChatRefusedMessage(intent, reason, retryAfter, channel, to, line),
                 MessageTypes.ChatState => new ChatStateMessage(maxLength, (IReadOnlyList<string>?)blocked ?? Array.Empty<string>()),
                 MessageTypes.ChatReported => line is null ? null : new ChatReportedMessage(line.Value),
+                MessageTypes.Party => new PartyMessage(partyId, leader ?? 0, (IReadOnlyList<PartyMemberRecord>?)partyMembers ?? Array.Empty<PartyMemberRecord>()),
+                MessageTypes.PartyMembers => new PartyMembersMessage((IReadOnlyList<PartyMemberStatusRecord>?)partyStatus ?? Array.Empty<PartyMemberStatusRecord>()),
+                MessageTypes.PartyInvited => from is null || name is null || expiresIn is null ? null : new PartyInvitedMessage(from.Value, name, expiresIn.Value),
+                MessageTypes.PartyNotice => notice is null ? null : new PartyNoticeMessage(notice, name),
+                MessageTypes.PartyRefused => intent is null || reason is null ? null : new PartyRefusedMessage(intent, reason, retryAfter, name),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason, retryAfter),
                 null => null,
                 _ => throw new UnknownTypeException(),
@@ -863,6 +945,66 @@ public static class ProtocolJson
         w.WriteStartObject(name);
         for (var i = 0; i < outfit.Count; i++) w.WriteString(outfit[i].Slot, outfit[i].Outfit);
         w.WriteEndObject();
+    }
+
+    /// <summary><c>"members":[{"id":42,"name":"Ada"},...]</c> (T-902).</summary>
+    private static List<PartyMemberRecord> ReadPartyMembers(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+        var list = new List<PartyMemberRecord>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.StartObject)
+        {
+            long? id = null;
+            string? name = null;
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var key = reader.GetString();
+                reader.Read();
+                switch (key)
+                {
+                    case "id": id = reader.GetInt64(); break;
+                    case "name": name = String(ref reader); break;
+                    default: reader.Skip(); break;
+                }
+            }
+            if (id is null || name is null) throw Bad();
+            list.Add(new PartyMemberRecord(id.Value, name));
+        }
+        return list;
+    }
+
+    /// <summary><c>"status":[{"id":43,"hp":80,"sp":100,"map":..,"cell":[x,y],"dead":true,"away":true},...]</c> (T-902).</summary>
+    private static List<PartyMemberStatusRecord> ReadPartyStatus(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+        var list = new List<PartyMemberStatusRecord>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.StartObject)
+        {
+            long? id = null;
+            int hp = 0, sp = 0;
+            string? map = null;
+            GridCell? cell = null;
+            bool dead = false, away = false;
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var key = reader.GetString();
+                reader.Read();
+                switch (key)
+                {
+                    case "id": id = reader.GetInt64(); break;
+                    case "hp": hp = reader.GetInt32(); break;
+                    case "sp": sp = reader.GetInt32(); break;
+                    case "map": map = String(ref reader); break;
+                    case "cell": cell = Cell(ref reader); break;
+                    case "dead": dead = reader.GetBoolean(); break;
+                    case "away": away = reader.GetBoolean(); break;
+                    default: reader.Skip(); break;
+                }
+            }
+            if (id is null) throw Bad();
+            list.Add(new PartyMemberStatusRecord(id.Value, hp, sp, map, cell, dead, away));
+        }
+        return list;
     }
 
     /// <summary>What <see cref="WriteOutfit"/> writes; a value that is not a string is left out (the client then draws the gear there).</summary>

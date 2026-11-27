@@ -43,8 +43,8 @@ public sealed class ChatClientTests
         (chat.WhisperTo, chat.Outgoing("hi", out _)).ShouldBe(("Bo", "hi"));
         chat.SetWhisperTo(new string('x', Game.Shared.Accounts.CharacterNameRules.LongestAllowed + 1));
         chat.Outgoing("hi", out why).ShouldBeNull("no name is that long, and the message must stay under the gateway's limit");
-        chat.SetChannel("party");
-        chat.Channel.ShouldBe(ChatChannels.Whisper, "only map and whisper are chosen here");
+        chat.SetChannel("guild");
+        chat.Channel.ShouldBe(ChatChannels.Whisper, "only map, whisper and (T-902) party are chosen here");
     }
 
     [Fact]

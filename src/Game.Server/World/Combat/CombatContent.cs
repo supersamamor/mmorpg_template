@@ -47,13 +47,19 @@ public sealed class CombatContent
         Check(balance.Regen.OutOfCombatDelayMs >= 0, "regen.out_of_combat_delay_ms must not be negative.");
     }
 
+    /// <summary>How a party shares a kill's EXP (T-902): <c>formulas.yaml</c> <c>party_exp</c> and <c>balance.yaml</c> <c>party</c>. No bonus when not given (tests).</summary>
+    public Game.Shared.Party.PartyExpRule PartyExp { get; init; } = Game.Shared.Party.PartyExpRule.Neutral;
+
     /// <summary>Combat content of a loaded database, with <paramref name="monsters"/> (the catalog the spawner and the AI share).</summary>
     public static CombatContent From(ContentDatabase content, MonsterCatalog monsters)
     {
         ArgumentNullException.ThrowIfNull(content);
         var rules = CombatRules.Compile(content.Formulas, content.Elements, content.Balance.Combat);
         var drops = content.Drops.All.ToDictionary(d => d.Id, StringComparer.Ordinal);
-        return new CombatContent(rules, monsters, content.Balance, drops, new ContentProgression(content), RespawnPoints(content.Maps.All, content.Grids));
+        return new CombatContent(rules, monsters, content.Balance, drops, new ContentProgression(content), RespawnPoints(content.Maps.All, content.Grids))
+        {
+            PartyExp = Game.Shared.Party.PartyExpRule.Of(content.Formulas, content.Balance),
+        };
     }
 
     internal static Dictionary<string, (string MapId, GridCell Cell)> RespawnPoints(IEnumerable<MapDef> maps, IReadOnlyDictionary<string, MapGrid> grids)

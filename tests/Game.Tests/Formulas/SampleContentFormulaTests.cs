@@ -39,7 +39,7 @@ public class SampleContentFormulaTests(ITestOutputHelper output)
     {
         var all = AllFormulas(Db.Value).ToList();
         var failures = all
-            .Select(f => (f.Owner, f.Source, Result: Formula.Parse(f.Source.Text)))
+            .Select(f => (f.Owner, f.Source, Result: Formula.Parse(f.Source.Text, f.Source.Symbols)))
             .Where(f => !f.Result.Success)
             .Select(f => $"{f.Owner} [{f.Source.Path}] '{f.Source.Text}': {string.Join("; ", f.Result.Errors)}")
             .ToList();
@@ -153,6 +153,22 @@ public class SampleContentFormulaTests(ITestOutputHelper output)
 
         context["crit"] = 10;
         Formula.Compile(f.CritChance).Evaluate(context).ShouldBe(0.1, 1e-12);
+    }
+
+    /// <summary>T-902: <c>party_exp</c>, with its own three variables only (one, two and a full party of five; by hand).</summary>
+    [Theory]
+    [InlineData(50, 1, 0, 50)]
+    [InlineData(50, 2, 3, 55)]
+    [InlineData(50, 5, 15, 70)]
+    [InlineData(99, 3, 0, 118)]   // floor(99 * 120 / 100) = floor(118.8)
+    public void Party_exp_golden_values(double exp, double shareCount, double levelSpread, double expected)
+    {
+        var context = new FormulaContext(FormulaSymbols.PartyShare);
+        context["exp"] = exp;
+        context["share_count"] = shareCount;
+        context["level_spread"] = levelSpread;
+        Formula.Compile(Db.Value.Formulas.PartyExp, FormulaSymbols.PartyShare).Evaluate(context).ShouldBe(expected);
+        Formula.Parse(Db.Value.Formulas.PartyExp).Success.ShouldBeFalse("exp and share_count are not caster variables");
     }
 
     [Fact]

@@ -40,13 +40,14 @@
 #                                                         load only when a character needs one (T-711)
 #   .\client\run-e2e.ps1 -Run chat                        two accounts' characters on one map talk and whisper through the chat panel; the second reports a line and blocks the first;
 #                                                         the script reads and closes the report and mutes the first through the admin API, whose next line is refused (T-901). Needs PostgreSQL like account
+#   .\client\run-e2e.ps1 -Run party                       two dev-login characters form a party by name, talk on the party channel, share a slime's EXP by party_exp, and one leaves
 #   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, kick, moderation, textured, chat, bye, release (account,
 #                                                         saving, appearance, wardrobe, kick and moderation are skipped, and said so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -647,6 +648,35 @@ function Invoke-Scenario([string] $Name) {
                 Write-Host "[run-e2e] the server log holds no line a player wrote"
                 return $result.Code
             }
+            "party" {
+                # T-902: two dev-login clients, no database. The expected EXP comes from content/: the Gel Slime's base and job EXP through formulas.yaml party_exp for a party of two,
+                # split evenly with the odd point to the leader (listed first). The script knows the formula's shape, so a changed party_exp stops it here instead of passing wrongly.
+                $slime = Get-Content (Join-Path $root "content/monsters/gel_slime.yaml") -Raw
+                $baseExp = [long]([regex]::Match($slime, '(?m)^base_exp:\s*(\d+)').Groups[1].Value)
+                $jobExp = [long]([regex]::Match($slime, '(?m)^job_exp:\s*(\d+)').Groups[1].Value)
+                $formula = ([regex]::Match((Get-Content (Join-Path $root "content/formulas.yaml") -Raw), '(?m)^party_exp:\s*(.+)$').Groups[1].Value).Trim()
+                if ($formula -ne "floor(exp * (100 + (share_count - 1) * 10) / 100)") { Write-Host "[run-e2e] party_exp changed ($formula): teach the party run its new shape"; return 1 }
+                $basePool = [long][math]::Floor($baseExp * (100 + (2 - 1) * 10) / 100)
+                $jobPool = [long][math]::Floor($jobExp * (100 + (2 - 1) * 10) / 100)
+                $leader = @(([long][math]::Ceiling($basePool / 2)), ([long][math]::Ceiling($jobPool / 2)))
+                $ally = @(($basePool - $leader[0]), ($jobPool - $leader[1]))
+                Write-Host "[run-e2e] party: a Gel Slime ($baseExp base, $jobExp job) for two: $basePool and $jobPool, leader $($leader -join '/'), ally $($ally -join '/')"
+                $server = Start-GameServer
+                $holder = @{ Second = $null }
+                $run = Start-GodotClient (Get-RunClientArgs @("--e2e-party", "e2e-ally", "$($leader[0])", "$($leader[1])", "--e2e-monster", "monster.gel_slime") @()) -EngineArgs $engineArgs
+                $result = Wait-GodotClient $run 360 -OnMarker {
+                    param($marker)
+                    if ($marker -like "party-second:*") {
+                        Write-Host "[run-e2e] starting the ally"
+                        $holder.Second = Start-GodotClient @("--e2e-party-join", $marker.Substring(13), "$($ally[0])", "$($ally[1])", "--server", "ws://127.0.0.1:$Port/ws", "--name", "e2e-ally") -EngineArgs $engineArgs -Headless
+                    }
+                }
+                if (-not $holder.Second) { Write-Host "[run-e2e] the leader never asked for the ally"; return 1 }
+                $second = Wait-GodotClient $holder.Second 120
+                if ($second.Code -ne 0) { Write-Host "[run-e2e] the ally failed (exit code $($second.Code))"; return 1 }
+                if (Select-String -Path $server.Log -Pattern "e2esaid" -Quiet) { Write-Host "[run-e2e] A PLAYER'S LINE IS IN THE SERVER LOG"; return 1 }
+                return $result.Code
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -773,7 +803,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 # The account, saving and appearance runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.

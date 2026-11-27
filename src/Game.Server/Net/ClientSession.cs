@@ -492,6 +492,10 @@ public sealed class ClientSession : IViewSink, IChatSink
             case ChatMessage or BlockMessage or UnblockMessage or ReportMessage:
                 Chat(message);
                 break;
+            case PartyInviteMessage or PartyAnswerMessage or PartyLeaveMessage or PartyKickMessage or PartyLeadMessage:
+                // T-902: decided at once, in memory, off the tick; ignored before the welcome and on a server without parties
+                if (_gateway.Party is { } party && State == SessionState.Joined && _gateway.ChatPeerOf(this) is { } member) party.Handle(member, message);
+                break;
         }
         return null;
     }

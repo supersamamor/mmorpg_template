@@ -64,6 +64,13 @@ public class ProtocolJsonTests
         { "block", new BlockMessage("Ada"), """{"type":"block","name":"Ada"}""" },
         { "unblock", new UnblockMessage("Ada"), """{"type":"unblock","name":"Ada"}""" },
         { "report", new ReportMessage(812), """{"type":"report","line":812}""" },
+        { "party_invite by name", new PartyInviteMessage("Bo", null), """{"type":"party_invite","name":"Bo"}""" },
+        { "party_invite by tap", new PartyInviteMessage(null, 43), """{"type":"party_invite","target":43}""" },
+        { "party_answer", new PartyAnswerMessage(true), """{"type":"party_answer","accept":true}""" },
+        { "party_answer no", new PartyAnswerMessage(false), """{"type":"party_answer","accept":false}""" },
+        { "party_leave", new PartyLeaveMessage(), """{"type":"party_leave"}""" },
+        { "party_kick", new PartyKickMessage(43), """{"type":"party_kick","target":43}""" },
+        { "party_lead", new PartyLeadMessage(43), """{"type":"party_lead","target":43}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -290,6 +297,16 @@ public class ProtocolJsonTests
         { "chat_refused report", new ChatRefusedMessage("report", "unknown_line", Line: 9), """{"type":"chat_refused","intent":"report","reason":"unknown_line","line":9}""" },
         { "chat_state", new ChatStateMessage(120, ["Bo", "Cy"]), """{"type":"chat_state","max_length":120,"blocked":["Bo","Cy"]}""" },
         { "chat_reported", new ChatReportedMessage(812), """{"type":"chat_reported","line":812}""" },
+        { "party", new PartyMessage(3, 42, [new PartyMemberRecord(42, "Ada"), new PartyMemberRecord(43, "Bo")]),
+            """{"type":"party","party":3,"leader":42,"members":[{"id":42,"name":"Ada"},{"id":43,"name":"Bo"}]}""" },
+        { "party none", new PartyMessage(null, 0, []), """{"type":"party","members":[]}""" },
+        { "party_members", new PartyMembersMessage([new PartyMemberStatusRecord(43, 80, 100, "map.meadow", new GridCell(3, 4), false, false),
+                new PartyMemberStatusRecord(44, 0, 0, "map.cave", new GridCell(1, 2), true, false), new PartyMemberStatusRecord(45, 0, 0, null, null, false, true)]),
+            """{"type":"party_members","status":[{"id":43,"hp":80,"sp":100,"map":"map.meadow","cell":[3,4]},{"id":44,"hp":0,"sp":0,"map":"map.cave","cell":[1,2],"dead":true},{"id":45,"away":true}]}""" },
+        { "party_invited", new PartyInvitedMessage(42, "Ada", 30), """{"type":"party_invited","from":42,"name":"Ada","expires_in":30}""" },
+        { "party_notice", new PartyNoticeMessage("declined", "Bo"), """{"type":"party_notice","notice":"declined","name":"Bo"}""" },
+        { "party_notice disbanded", new PartyNoticeMessage("disbanded"), """{"type":"party_notice","notice":"disbanded"}""" },
+        { "party_refused", new PartyRefusedMessage("party_invite", "rate_limited", 10, "Bo"), """{"type":"party_refused","intent":"party_invite","reason":"rate_limited","retry_after":10,"name":"Bo"}""" },
     };
 
     [Theory]

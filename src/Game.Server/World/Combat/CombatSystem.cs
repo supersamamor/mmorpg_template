@@ -67,6 +67,8 @@ public sealed partial class CombatSystem : ITickSystem
     private readonly Queue<(EntityId Id, GroundItem Item)> _groundItems = new();
     private readonly List<RolledDrop> _rolled = new();
     private readonly List<Entity> _eligible = new();
+    private readonly Party.PartyRoster? _parties;                     // T-902: who is in which party (the party service writes it)
+    private readonly FormulaContext _partyContext;
     private long[] _damage = new long[8];
     private long[] _baseShares = new long[8];
     private long[] _jobShares = new long[8];
@@ -94,8 +96,10 @@ public sealed partial class CombatSystem : ITickSystem
     /// Creates the combat system for one instance; <paramref name="progressions"/> is shared by every instance, and so is <paramref name="savePoints"/> (T-601):
     /// a player with a save point respawns and teleports <c>to_save_point</c> there, one without at its map's respawn point.
     /// </summary>
-    public CombatSystem(CombatContent content, IPlayerProgressionStore progressions, ISavePointStore? savePoints = null)
+    public CombatSystem(CombatContent content, IPlayerProgressionStore progressions, ISavePointStore? savePoints = null, Party.PartyRoster? parties = null)
     {
+        _parties = parties;
+        _partyContext = content.PartyExp.NewContext();
         _content = content ?? throw new ArgumentNullException(nameof(content));
         _progressions = progressions ?? throw new ArgumentNullException(nameof(progressions));
         _savePoints = savePoints;
@@ -683,18 +687,103 @@ public sealed partial class CombatSystem : ITickSystem
         if (count > 0)
         {
             var damage = _damage.AsSpan(0, count);
-            ExpSplit.Split(def.BaseExp, damage, _baseShares.AsSpan(0, count));
-            ExpSplit.Split(def.JobExp, damage, _jobShares.AsSpan(0, count));
             var top = 0;
-            for (var i = 0; i < count; i++)
-            {
+            for (var i = 1; i < count; i++)
                 if (damage[i] > damage[top]) top = i;   // ties: the first hitter
-                Grant(context, _eligible[i], monster.Entity, def, damage[i], _baseShares[i], _jobShares[i]);
+            if (!InParties(count))
+            {
+                ExpSplit.Split(def.BaseExp, damage, _baseShares.AsSpan(0, count));
+                ExpSplit.Split(def.JobExp, damage, _jobShares.AsSpan(0, count));
+                for (var i = 0; i < count; i++) Grant(context, _eligible[i], monster.Entity, def, damage[i], _baseShares[i], _jobShares[i]);
             }
+            else PartyReward(context, monster.Entity, def, count);
             owner = _eligible[top].Id;
         }
         _eligible.Clear();
         DropLoot(context, monster.Entity, def, owner);
+    }
+
+    /// <summary>True when one of the first <paramref name="count"/> eligible players is in a party (T-902); otherwise the kill is split exactly as before parties.</summary>
+    private bool InParties(int count)
+    {
+        if (_parties is not { Any: true } parties) return false;
+        for (var i = 0; i < count; i++)
+            if (parties.Of(_eligible[i].Id) is not null) return true;
+        return false;
+    }
+
+    /// <summary>
+    /// A kill with a party among the damage dealers (T-902, ARCHITECTURE §6.9). First the EXP is split by damage between the <b>shares</b>: each player in no party, and each party with
+    /// its members' damage added up, in first-hit order, exactly as <see cref="ExpSplit"/> splits it between players. A player's share is its own. A party's share goes to the members who
+    /// <b>share</b> it (alive, on this instance, within <c>party.exp_range</c> of the death cell; in party order): <c>party_exp</c> of it, split evenly. When none of them may (nobody in
+    /// range, or their base levels differ by more than <c>party.exp_level_gap</c>), the party's damage dealers split its share by damage, as without a party. Allocates (a kill is rare).
+    /// </summary>
+    private void PartyReward(TickContext context, Entity monster, MonsterDef def, int count)
+    {
+        var shares = new List<(Party.PartyView? Party, List<int> Dealers, long Damage)>();
+        for (var i = 0; i < count; i++)
+        {
+            var party = _parties!.Of(_eligible[i].Id);
+            var at = party is null ? -1 : shares.FindIndex(s => s.Party?.Id == party.Id);
+            if (at < 0)
+            {
+                shares.Add((party, [i], _damage[i]));
+                continue;
+            }
+            var share = shares[at];
+            share.Dealers.Add(i);
+            shares[at] = share with { Damage = share.Damage + _damage[i] };
+        }
+        var damage = shares.Select(s => s.Damage).ToArray();
+        var baseShares = new long[shares.Count];
+        var jobShares = new long[shares.Count];
+        ExpSplit.Split(def.BaseExp, damage, baseShares);
+        ExpSplit.Split(def.JobExp, damage, jobShares);
+        var rule = _content.PartyExp;
+        for (var s = 0; s < shares.Count; s++)
+        {
+            var (party, dealers, _) = shares[s];
+            if (party is null)
+            {
+                var i = dealers[0];
+                Grant(context, _eligible[i], monster, def, _damage[i], baseShares[s], jobShares[s]);
+                continue;
+            }
+            var sharing = new List<Entity>(party.Members.Count);
+            int low = int.MaxValue, high = int.MinValue;
+            foreach (var member in party.Members)
+            {
+                if (!_instance!.TryGetEntity(member, out var entity) || entity.Kind != EntityKind.Player || entity.Dead) continue;
+                if (GridDistance.Chebyshev(entity.Cell, monster.Cell) > rule.Balance.ExpRange) continue;
+                sharing.Add(entity);
+                var level = _progressions.GetOrCreate(member, _newCharacter).BaseLevel;
+                low = Math.Min(low, level);
+                high = Math.Max(high, level);
+            }
+            if (sharing.Count == 0 || !rule.Shares(high - low))
+            {
+                // Nobody may share it: its dealers split it by damage, as without a party.
+                var dealt = dealers.Select(i => _damage[i]).ToArray();
+                var baseSplit = new long[dealt.Length];
+                var jobSplit = new long[dealt.Length];
+                ExpSplit.Split(baseShares[s], dealt, baseSplit);
+                ExpSplit.Split(jobShares[s], dealt, jobSplit);
+                for (var d = 0; d < dealers.Count; d++) Grant(context, _eligible[dealers[d]], monster, def, dealt[d], baseSplit[d], jobSplit[d]);
+                continue;
+            }
+            var spread = high - low;
+            var baseEach = new long[sharing.Count];
+            var jobEach = new long[sharing.Count];
+            Game.Shared.Party.PartyExpRule.Even(rule.Pool(baseShares[s], sharing.Count, spread, _partyContext), baseEach);
+            Game.Shared.Party.PartyExpRule.Even(rule.Pool(jobShares[s], sharing.Count, spread, _partyContext), jobEach);
+            for (var m = 0; m < sharing.Count; m++)
+            {
+                long own = 0;
+                foreach (var i in dealers)
+                    if (_eligible[i].Id == sharing[m].Id) own = _damage[i];
+                Grant(context, sharing[m], monster, def, own, baseEach[m], jobEach[m]);
+            }
+        }
     }
 
     private void Grow(int count)

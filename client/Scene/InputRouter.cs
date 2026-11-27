@@ -111,6 +111,12 @@ public sealed class InputRouter
             else _session.TapEntity(id);
             return;
         }
+        // T-902: another player tapped directly: the party panel offers to invite it (nothing is sent until Invite).
+        if (_session.Ui.PendingSkill is null && PickEntity(position, EntityKinds.Player, null) is { } player && player != _session.World.OwnId)
+        {
+            _session.TapPlayer(player);
+            return;
+        }
         if (!_camera.TryTerrain(position, _ground, out var ground)) return;
         var x = TouchTargets.CellOf(ground.X);
         var y = TouchTargets.CellOf(ground.Z);

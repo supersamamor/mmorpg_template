@@ -12,11 +12,14 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>whisper</c>: one online character, named by the sender.</summary>
         public const string Whisper = "whisper";
 
+        /// <summary><c>party</c> (T-902): the members of the sender's party; registered by the party service through the channel seam.</summary>
+        public const string Party = "party";
+
         /// <summary><c>system</c>: the server's own lines. No player sends on it; staff's announcements (T-806) are shown in the chat log under it.</summary>
         public const string System = "system";
 
         /// <summary>Every channel kind, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(Map, Whisper, System);
+        public static readonly VocabularySet All = new VocabularySet(Map, Whisper, Party, System);
     }
 
     /// <summary>Why the server refused a chat line, block, unblock or report (T-901, VOCABULARY.md "Chat reasons"): the <c>reason</c> of a <c>chat_refused</c>.</summary>

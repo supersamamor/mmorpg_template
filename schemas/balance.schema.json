@@ -480,6 +480,33 @@
       },
       "additionalProperties": false,
       "description": "Quest autopilot (T-604, ARCHITECTURE §6.4.2)."
+    },
+    "party": {
+      "type": "object",
+      "properties": {
+        "max_members": {
+          "type": "integer",
+          "description": "Most members of one party, the leader included. At least 2."
+        },
+        "invite_timeout_ms": {
+          "type": "integer",
+          "description": "How long an invite waits for an answer, in milliseconds; then it expires and the inviter is told. Above 0."
+        },
+        "exp_range": {
+          "type": "integer",
+          "description": "A member shares a monster's EXP when it is alive, on the map instance of the kill and at most this many cells (Chebyshev) from the death cell. 0 or more."
+        },
+        "kill_credit_range": {
+          "type": "integer",
+          "description": "A member's kill quest objectives count a party member's kill when it is alive, on the map instance and at most this many cells from the death cell. 0 or more."
+        },
+        "exp_level_gap": {
+          "type": "integer",
+          "description": "The level-gap rule: when the base levels of the members who would share differ by more than this, the party does not share that kill: its damage dealers split their part by damage, as without a party. 0 or more."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Parties (T-902, ARCHITECTURE §6.9)."
     }
   },
   "additionalProperties": false,
