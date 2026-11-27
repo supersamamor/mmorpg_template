@@ -507,6 +507,25 @@
       },
       "additionalProperties": false,
       "description": "Parties (T-902, ARCHITECTURE §6.9)."
+    },
+    "trade": {
+      "type": "object",
+      "properties": {
+        "range": {
+          "type": "integer",
+          "description": "Two may trade while at most this many cells apart (Chebyshev), on the same map instance; farther, the trade ends too_far. At least 1."
+        },
+        "ask_timeout_ms": {
+          "type": "integer",
+          "description": "How long an ask waits for an answer, in milliseconds; then it expires and both are told. Above 0."
+        },
+        "max_entries": {
+          "type": "integer",
+          "description": "Most inventory entries one side may offer (whole entries or parts of stacks; currency does not count). At least 1."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Player trade (T-903, ARCHITECTURE §6.10)."
     }
   },
   "additionalProperties": false,

@@ -63,6 +63,25 @@ namespace Game.Shared.Definitions
 
         /// <summary>Parties (T-902, ARCHITECTURE §6.9).</summary>
         public PartyBalanceDef Party { get; init; } = new PartyBalanceDef();
+
+        /// <summary>Player trade (T-903, ARCHITECTURE §6.10).</summary>
+        public TradeBalanceDef Trade { get; init; } = new TradeBalanceDef();
+    }
+
+    /// <summary>
+    /// Player trade (T-903): the <c>trade</c> section of <c>balance.yaml</c>. The rules a player meets: how near two must stand, how long an ask waits, how much one side may offer. How often
+    /// an account may ask is server configuration (<c>--trade-</c>).
+    /// </summary>
+    public sealed record TradeBalanceDef
+    {
+        /// <summary>Two may trade while at most this many cells apart (Chebyshev), on the same map instance; farther, the trade ends <c>too_far</c>. At least 1.</summary>
+        public int Range { get; init; } = 4;
+
+        /// <summary>How long an ask waits for an answer, in milliseconds; then it expires and both are told. Above 0.</summary>
+        public int AskTimeoutMs { get; init; } = 20_000;
+
+        /// <summary>Most inventory entries one side may offer (whole entries or parts of stacks; currency does not count). At least 1.</summary>
+        public int MaxEntries { get; init; } = 10;
     }
 
     /// <summary>

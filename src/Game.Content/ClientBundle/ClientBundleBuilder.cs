@@ -61,7 +61,7 @@ public static class ClientBundleBuilder
         return new ClientItem(item.Id, item.Name, item.Description, kind, item.IconAssetKey, item.GroundAssetKey,
             slots.ToList(), item.Equip?.WeaponType, item.Equip?.VisualAssetKey, item.UseSfx, item.EquipSfx,
             item.Equip?.CardSlots ?? 0, item.Equip?.Refinable ?? false,
-            item.Consumable?.Effects.Any(e => e is ResetStatsEffect or ResetSkillsEffect) ?? false);
+            item.Consumable?.Effects.Any(e => e is ResetStatsEffect or ResetSkillsEffect) ?? false, item.Tradeable);
     }
 
     private static ClientSkill Skill(SkillDef skill)

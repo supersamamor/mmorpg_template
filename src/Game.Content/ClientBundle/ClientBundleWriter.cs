@@ -119,6 +119,7 @@ public static class ClientBundleWriter
         if (i.CardSlots > 0) w.WriteNumber("card_slots", i.CardSlots);
         if (i.Refinable) w.WriteBoolean("refinable", true);
         if (i.ConfirmUse) w.WriteBoolean("confirm_use", true);
+        if (!i.Tradeable) w.WriteBoolean("untradeable", true);
     }
 
     private static void Refine(Utf8JsonWriter w, ClientRefine? refine)

@@ -71,6 +71,15 @@ public class ProtocolJsonTests
         { "party_leave", new PartyLeaveMessage(), """{"type":"party_leave"}""" },
         { "party_kick", new PartyKickMessage(43), """{"type":"party_kick","target":43}""" },
         { "party_lead", new PartyLeadMessage(43), """{"type":"party_lead","target":43}""" },
+        { "trade_ask", new TradeAskMessage(43), """{"type":"trade_ask","target":43}""" },
+        { "trade_answer", new TradeAnswerMessage(true), """{"type":"trade_answer","accept":true}""" },
+        { "trade_offer", new TradeOfferMessage(1207, 3), """{"type":"trade_offer","entry":1207,"quantity":3}""" },
+        { "trade_offer out", new TradeOfferMessage(1207, 0), """{"type":"trade_offer","entry":1207,"quantity":0}""" },
+        { "trade_currency", new TradeCurrencyMessage(5_000_000_000), """{"type":"trade_currency","currency":5000000000}""" },
+        { "trade_lock", new TradeLockMessage(), """{"type":"trade_lock"}""" },
+        { "trade_unlock", new TradeUnlockMessage(), """{"type":"trade_unlock"}""" },
+        { "trade_confirm", new TradeConfirmMessage(7), """{"type":"trade_confirm","version":7}""" },
+        { "trade_cancel", new TradeCancelMessage(), """{"type":"trade_cancel"}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -307,6 +316,15 @@ public class ProtocolJsonTests
         { "party_notice", new PartyNoticeMessage("declined", "Bo"), """{"type":"party_notice","notice":"declined","name":"Bo"}""" },
         { "party_notice disbanded", new PartyNoticeMessage("disbanded"), """{"type":"party_notice","notice":"disbanded"}""" },
         { "party_refused", new PartyRefusedMessage("party_invite", "rate_limited", 10, "Bo"), """{"type":"party_refused","intent":"party_invite","reason":"rate_limited","retry_after":10,"name":"Bo"}""" },
+        { "trade_asked", new TradeAskedMessage(42, "Ada", 20), """{"type":"trade_asked","from":42,"name":"Ada","expires_in":20}""" },
+        { "trade", new TradeMessage(43, "Bo", 7,
+                new TradeSideRecord([new TradeItemRecord(1207, "item.iron_blade", 1, ["item.gelcap_card"], 4), new TradeItemRecord(1300, "item.healing_draught", 3)], 0, true, false),
+                new TradeSideRecord([], 250, true, true)),
+            """{"type":"trade","partner":43,"name":"Bo","version":7,"mine":{"items":[{"entry":1207,"item":"item.iron_blade","quantity":1,"cards":["item.gelcap_card"],"refine":4},{"entry":1300,"item":"item.healing_draught","quantity":3}],"currency":0,"locked":true},"theirs":{"items":[],"currency":250,"locked":true,"confirmed":true}}""" },
+        { "trade_notice", new TradeNoticeMessage("declined", "Bo"), """{"type":"trade_notice","notice":"declined","name":"Bo"}""" },
+        { "trade_closed", new TradeClosedMessage("too_far", "Bo", true), """{"type":"trade_closed","reason":"too_far","name":"Bo","own":true}""" },
+        { "trade_closed done", new TradeClosedMessage("done", "Bo"), """{"type":"trade_closed","reason":"done","name":"Bo"}""" },
+        { "trade_refused", new TradeRefusedMessage("trade_ask", "rate_limited", 10), """{"type":"trade_refused","intent":"trade_ask","reason":"rate_limited","retry_after":10}""" },
     };
 
     [Theory]

@@ -167,7 +167,8 @@ Rule 8 is enforced by the compiler: `Game.Shared` uses `Microsoft.CodeAnalysis.B
   - **Between characters: the giver's save lands first, or together.** In the tick a saved character puts an item down, `CharacterTicket.PutDown` gives the ground item a link to its next copy (the first one
     without the item); whoever picks it up takes the link (`DependOn`). `CharacterSaves` writes a copy only when every copy it links to has landed, or in one transaction with those copies (and theirs). A crash at
     any point therefore finds the item with the giver, with the receiver, or (put down and saved, not yet landed with the receiver) nowhere: **it may be lost, never doubled.** It holds for stacks too,
-    which the primary key alone would not catch. T-903 and T-905 use the same two calls, on both sides for a trade. The primary key is the second line: a save with an item that is another character's is
+    which the primary key alone would not catch. T-903 and T-905 use the same two calls, on both sides for a trade: in the swap's tick each side's `PutDown`, then each `DependOn` the other's link,
+    so each copy waits for the other's and `CharacterSaves` writes the two in one transaction (§6.10; no `Persistence/**` change was needed). The primary key is the second line: a save with an item that is another character's is
     refused whole and reported (`DUPLICATED ITEMS`).
   - **A lost character** (claimed elsewhere, deleted, or with a duplicated item) is not saved any more: its session gets `bye save_lost` and it leaves. Whoever holds something it gave away after its last landed
     save is lost with it (for them it is a crash), and what it put down can no longer be picked up.
@@ -688,6 +689,36 @@ derived stat `weight_limit` (`formulas.yaml`).
 - **Party chat**: the party service is the `party` channel's `IChannelMembers` (T-901's seam): the members who play now hear a line, with the mute, rate, text, blocks and reports of every channel.
 - **No client authority**: the client sends intents (`party_*`, a tap's entity id) and shows what the server sends; who is in range, who gets EXP and who killed what are the server's.
 
+### 6.10 Trade (T-903)
+`Game.Server/World/Trade` (`TradeSystem`, the intents and events, on the tick), `Game.Server/Trade` (`TradeGate`, `TradeOptions`, off the tick), the swap in `InventorySystem` with the pure
+`Game.Shared/Items/TradeRules`; the client's `TradeBook`, `TradePanel` and the party panel's Trade buttons. Numbers from `balance.yaml` `trade` (`range` 4 cells, `ask_timeout_ms` 20 s,
+`max_entries` 10 per side); the ask rate is server configuration (`--trade-asks-per-minute` 6, `--trade-ask-burst` 3, or `GAME_TRADE_<NAME>`). Items have `tradeable` (default true;
+`item.warden_token` is false), validated with the item schema; the bundle marks `untradeable` ones so the window does not list them (a hint: the server decides).
+- **Asking.** A tap on a player opens the party panel with **Trade** beside its invite; each party member's row has Trade too. The gate takes the per-account rate limit and answers
+  `not_online` for a player who does not play now or whose account blocks the asker (the same answer, as T-902), `invalid_target` for oneself; the rest is the tick's: both on one map instance
+  (else `not_online`), alive, within `trade.range` (Chebyshev), neither in a trade nor with an ask of its own (`busy`), the asker not already waiting (`ask_pending`), and both saved or both
+  development logins (`cannot_trade`: nothing may move between a saved character and one that is never saved). An ask expires after `trade.ask_timeout_ms`; a decline tells the asker.
+- **Offers.** Each side offers carried entries, whole or part of a stack (`trade_offer` with a quantity, 0 takes it out; the same entry again replaces its line), at most `trade.max_entries`, and
+  currency up to what it carries. Worn (`item_equipped`) and not-tradeable items are refused. The server keeps each offered entry **exactly as it was** (id, quantity, cards, refine) and sends
+  both sides the two offers as it holds them (`trade`, with a `version`). When the inventory changes under an offer (the entry dropped, sold, used, equipped, refined) the offer follows what is
+  carried now and both sides unlock.
+- **Two steps.** Each side **locks**; any change to either offer, and `trade_unlock`, unlocks both and clears both confirms; every change raises the version. With both locked each side **confirms
+  the version it saw** (`stale` for another, `not_locked` before), so a last-moment change voids a confirm. When both confirmed the same version the trade is frozen (`swapping`) and the swap is
+  asked for (`TradeSwapRequested`).
+- **Ends.** A cancel, a dropped connection or a takeover by another session (the gateway queues `TradeCancel disconnected`; a resume never finds a trade under way), death, a warp
+  (`left_map`), leaving the world (logout, server stop, staff: `left`), and being farther apart than `trade.range` end the trade; nothing moves. Being attacked does not end it (dying does): a
+  trade is two clicks from done, and a monster hitting a trader should not lose the trade it was confirming. Once both confirmed only the swap's answer ends it.
+- **The swap**, on the inventory's next tick, before that tick's intents, in one step for both characters (`TradeRules.TrySwap`): it checks again that each side carries exactly what it offered
+  (else `offer_changed`), that the receiver stays within `inventory.max_entries` (`inventory_full`) and its weight limit unless the swap makes it lighter (`too_heavy`), and that no currency
+  passes what a bag holds (`currency_full`); then it moves everything or nothing. A whole entry moves with its permanent id, cards and refine; part of a stack becomes a new entry with a new id on
+  the receiving side, never merged into a stack there (so the log says where each unit went). Each side gets one `inventory_changed` `traded`; `ItemsTraded` says what moved (for quests and
+  logs); the trade closes `done`. A side that left, or whose save was lost, refuses the swap (`left`).
+- **Saving** (§3): in the swap's tick both `PutDown` and both `DependOn` the other's link, so the two copies always land in **one transaction** or not at all: a crash before the commit finds both
+  characters before the swap, after it both after (tested at every step of the save against PostgreSQL, with a save already on its way, and with a stop in the middle of a trade).
+- **Logs.** One line per swap, `[trade] {"trade":…,"at":"<UTC>","a":"<character id>","b":"<character id>","a_gave":[{"from":<entry>,"to":<entry>,"item":…,"quantity":…}],"a_currency":…,
+  "b_gave":[…],"b_currency":…}`: permanent ids only, never names or anything else about the people. How long logs are kept is the fork's (STORE_COMPLIANCE §2: the template keeps no log files).
+- **No client authority**: the client sends intents only; what is in an offer, who is in range and whether a swap happened come from the server.
+
 ## 7. Client
 
 **Shape** (T-206). `client/Core` is the pure part, with no Godot namespace, and is compiled into `Game.Tests` too: settings, bundle reader, protocol parsing, the
@@ -845,6 +876,11 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   the top of the safe area. Members on this map who are off the screen get a **mark at the screen's edge**, an arrow and the name, pushed in from the edge toward them: no minimap, as no corner of
   the phone HUD is free at the largest scale and a minimap would draw the map a second time every frame; an arrow says which way, which is what a party needs. The layout check runs a full party of
   the longest names with the leader's buttons on every row, the prompt over it and four marks, at every screen, notch and scale.
+- **Trade** (T-903, §6.10; `TradePanel`): the **ask prompt** (who asks, seconds left, Trade and No) at the top of the safe area; while a trade is open the **window** fills the safe area: the
+  heading (whom with, the state line, Cancel), two columns (what this side gives, each line a button that takes it out, with **Add** opening the bag's tradeable carried entries in the columns'
+  place, with a quantity picker for stacks; what the other side gives), and a footer (currency field, Set, Lock or Unlock, Confirm). Both columns are the server's last `trade`; Confirm sends the
+  version on the screen. How a trade ended goes on the flash line. The layout check runs both columns full of the longest lines with the longest name and the prompt, and the picker, at every
+  screen, notch and scale. It redraws only when the trade's or the bag's version moves.
 
 ### 7.5 Characters & equipment
 Modular 3D characters. Each body type has one shared rig. Equipment is either:
@@ -1370,6 +1406,13 @@ A headless run of the same (no draw calls or triangles without a renderer) gave 
   | `party_leave` | C→S | (none): leave the party |
   | `party_kick` | C→S | `target` (a member's entity id), leader only |
   | `party_lead` | C→S | `target` (a member who plays now), leader only |
+  | `trade_ask` | C→S | `target` (a player's entity id on this map instance): answered by `trade_notice` `ask_sent` or `trade_refused` (T-903, §6.10) |
+  | `trade_answer` | C→S | `accept` (true or false): the ask this character has |
+  | `trade_offer` | C→S | `entry` (a carried entry's id), `quantity` (0 takes it out): replaces that entry's line in this side's offer |
+  | `trade_currency` | C→S | `currency` (0 to what it carries): the currency in this side's offer |
+  | `trade_lock` / `trade_unlock` | C→S | (none): lock this side's offer / unlock both |
+  | `trade_confirm` | C→S | `version` (of the `trade` message whose offers the player saw); `stale` when they changed since |
+  | `trade_cancel` | C→S | (none): end this character's ask or trade |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
@@ -1402,6 +1445,11 @@ A headless run of the same (no draw calls or triangles without a renderer) gave 
   | `party_invited` | S→C (the invited) | `from` (entity id), `name`, `expires_in` (seconds) |
   | `party_notice` | S→C | `notice` (a "Party notices" term), `name` (whom it is about) |
   | `party_refused` | S→C (own) | `intent` (a `party_*` type), `reason` (a "Party reasons" term), `retry_after` (`rate_limited`), `name` (the name an invite named) |
+  | `trade_asked` | S→C (the asked) | `from` (entity id), `name`, `expires_in` (seconds) |
+  | `trade` | S→C (the two) | `partner` (entity id), `name`, `version`, `mine` and `theirs` (`{"items":[{"entry":1207,"item":"item.x","quantity":3,"cards":[...],"refine":4}],"currency":0,"locked":true,"confirmed":true}`, flags and cards only when set): after every change |
+  | `trade_notice` | S→C (own) | `notice` (a "Trade notices" term), `name` (the other character) |
+  | `trade_closed` | S→C (the two) | `reason` (a "Trade ends" term), `name` (the other side), `own` (true when this side caused it); after the swap's `inventory_changed` |
+  | `trade_refused` | S→C (own) | `intent` (a `trade_*` type), `reason` (a "Trade reasons" term), `retry_after` (`rate_limited`) |
   | `pong` | S→C | `seq` |
   | `bye` | S→C (last) | `reason` (VOCABULARY "Bye reasons"), followed by the close frame |
 

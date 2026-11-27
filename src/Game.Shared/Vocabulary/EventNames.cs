@@ -267,6 +267,30 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>PartyKillCredit</c> (T-902): party members near a kill get kill credit for it (the quest system counts their <c>kill</c> objectives).</summary>
         public const string PartyKillCredit = "PartyKillCredit";
 
+        /// <summary><c>TradeAsked</c> (T-903): a player asked another on its map instance to trade; the asked one is told.</summary>
+        public const string TradeAsked = "TradeAsked";
+
+        /// <summary><c>TradeNoticed</c> (T-903): news about an ask for one player (sent, declined, expired).</summary>
+        public const string TradeNoticed = "TradeNoticed";
+
+        /// <summary><c>TradeChanged</c> (T-903): an open trade's offers, locks or confirms changed (or it opened); both sides are told.</summary>
+        public const string TradeChanged = "TradeChanged";
+
+        /// <summary><c>TradeRefused</c> (T-903): a trade intent was refused; nothing changed.</summary>
+        public const string TradeRefused = "TradeRefused";
+
+        /// <summary><c>TradeClosed</c> (T-903): an open trade ended for a player, with a "Trade ends" term.</summary>
+        public const string TradeClosed = "TradeClosed";
+
+        /// <summary><c>TradeSwapRequested</c> (T-903): both confirmed the same offers; the inventory swaps them on its next tick, all or nothing.</summary>
+        public const string TradeSwapRequested = "TradeSwapRequested";
+
+        /// <summary><c>TradeSwapResolved</c> (T-903): the inventory swapped a trade's offers, or refused (nothing moved).</summary>
+        public const string TradeSwapResolved = "TradeSwapResolved";
+
+        /// <summary><c>ItemsTraded</c> (T-903): two players swapped what they offered (items with their entry ids, currency); for quests, logs and audits.</summary>
+        public const string ItemsTraded = "ItemsTraded";
+
         /// <summary>Every term in this category, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             EntitySpawned,
@@ -356,6 +380,14 @@ namespace Game.Shared.Vocabulary
             WardrobeChanged,
             OutfitRefused,
             AdminActionApplied,
-            PartyKillCredit);
+            PartyKillCredit,
+            TradeAsked,
+            TradeNoticed,
+            TradeChanged,
+            TradeRefused,
+            TradeClosed,
+            TradeSwapRequested,
+            TradeSwapResolved,
+            ItemsTraded);
     }
 }

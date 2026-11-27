@@ -200,8 +200,11 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>staff</c> (T-806): staff gave or took items or currency through the admin API.</summary>
         public const string Staff = "staff";
 
+        /// <summary><c>traded</c> (T-903): a trade swapped both sides' offers; items and currency moved in the same change.</summary>
+        public const string Traded = "traded";
+
         /// <summary>Every term in this category, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined, Exchanged, Quest, ShopBuy, ShopSell, Staff);
+        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined, Exchanged, Quest, ShopBuy, ShopSell, Staff, Traded);
     }
 
     /// <summary>What a failed refine does to the equipment, per level of <c>refine.yaml</c> (<c>failure</c>; ARCHITECTURE §6.8). VOCABULARY.md: "Refine failures".</summary>

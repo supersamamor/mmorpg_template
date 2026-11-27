@@ -41,13 +41,15 @@
 #   .\client\run-e2e.ps1 -Run chat                        two accounts' characters on one map talk and whisper through the chat panel; the second reports a line and blocks the first;
 #                                                         the script reads and closes the report and mutes the first through the admin API, whose next line is refused (T-901). Needs PostgreSQL like account
 #   .\client\run-e2e.ps1 -Run party                       two dev-login characters form a party by name, talk on the party channel, share a slime's EXP by party_exp, and one leaves
+#   .\client\run-e2e.ps1 -Run trade                       two new accounts' characters trade a draught and currency for a tonic through the trade window; the server stops itself, the next
+#                                                         one has the swap; a second trade ends when one walks away, and nothing moved (T-903; needs PostgreSQL like account)
 #   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, kick, moderation, textured, chat, bye, release (account,
 #                                                         saving, appearance, wardrobe, kick and moderation are skipped, and said so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -677,6 +679,45 @@ function Invoke-Scenario([string] $Name) {
                 if (Select-String -Path $server.Log -Pattern "e2esaid" -Quiet) { Write-Host "[run-e2e] A PLAYER'S LINE IS IN THE SERVER LOG"; return 1 }
                 return $result.Code
             }
+            "trade" {
+                # T-903: a database like account; two servers one after the other, as saving does. The first stops itself (a clean stop: every character is saved) once the trade is
+                # long done; the clients sign in again by themselves on the second, which must have the swap. The trader asks for the partner by a marker naming its character.
+                $env:GAME_DB_CONNECTION = Get-E2EConnection
+                $holder = @{ Servers = @(); Second = $null }
+                try {
+                    $holder.Servers += Start-GameServer -Extra @("--duration", "150")
+                    $ids = @("--e2e-trade-ids", "item.healing_draught", "item.realign_tonic", "npc.merchant")   # a start stack, a start single, the meadow's merchant (content/balance.yaml, npcs/)
+                    $run = Start-GodotClient (Get-RunClientArgs @("--e2e-trade") (@("--set", "shutdown_retry_seconds=3") + $ids)) -EngineArgs $engineArgs
+                    $result = Wait-GodotClient $run 480 -OnMarker {
+                        param($marker)
+                        if ($marker -like "trade-second:*") {
+                            Write-Host "[run-e2e] starting the partner"
+                            $holder.Second = Start-GodotClient (@("--e2e-trade-join", $marker.Substring(13), "--server", "ws://127.0.0.1:$Port/ws", "--set", "shutdown_retry_seconds=3") + $ids) -EngineArgs $engineArgs -Headless
+                        }
+                    } -OnTick {
+                        if ($holder.Servers.Count -eq 1 -and $holder.Servers[0].Process.HasExited) {
+                            Select-String -Path $holder.Servers[0].Log -Pattern "Every character is saved|NOT SAVED|\[trade\]" | ForEach-Object { Write-Host "[run-e2e] first server: $($_.Line)" }
+                            Write-Host "[run-e2e] the first server has stopped (exit code $($holder.Servers[0].Process.ExitCode)); starting a second one"
+                            $holder.Servers += Start-GameServer
+                        }
+                    }
+                    if (-not $holder.Second) { Write-Host "[run-e2e] the trader never asked for the partner"; return 1 }
+                    $second = Wait-GodotClient $holder.Second 240
+                    if ($second.Code -ne 0) { Write-Host "[run-e2e] the partner failed (exit code $($second.Code))"; return 1 }
+                    if ($holder.Servers.Count -ne 2) { Write-Host "[run-e2e] expected two servers, had $($holder.Servers.Count)"; return 1 }
+                    if ($holder.Servers[0].Process.ExitCode -ne 0) { Write-Host "[run-e2e] the first server did not stop cleanly"; return 1 }
+                    $lines = @(Select-String -Path $holder.Servers[0].Log -Pattern "\[trade\] \{")
+                    if ($lines.Count -ne 1) { Write-Host "[run-e2e] expected one trade log line on the first server, found $($lines.Count)"; return 1 }
+                    if (@(Select-String -Path $holder.Servers[1].Log -Pattern "\[trade\] \{").Count -ne 0) { Write-Host "[run-e2e] the walked-away trade wrote a trade line"; return 1 }
+                    if ($lines[0].Line -match "e2e-trade-|Ta[a-z]{10}|Tb[a-z]{10}") { Write-Host "[run-e2e] A NAME IS IN THE TRADE LOG LINE"; return 1 }
+                    Write-Host "[run-e2e] trade log line: $(($lines[0].Line -split '\[trade\] ')[1])"
+                    return $result.Code
+                }
+                finally {
+                    $env:GAME_DB_CONNECTION = $null
+                    foreach ($one in $holder.Servers) { if (Test-Path $one.Log) { Stop-GameServer $one } }
+                }
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -803,12 +844,12 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 # The account, saving and appearance runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.
 $skipped = @()
-$databaseRuns = @("account", "saving", "appearance", "wardrobe", "kick", "moderation", "chat")
+$databaseRuns = @("account", "saving", "appearance", "wardrobe", "kick", "moderation", "chat", "trade")
 if (@($runs | Where-Object { $databaseRuns -contains $_ }).Count -gt 0 -and -not $env:GAME_TEST_DB_CONNECTION) {
     if ($Run -ne "all") { throw "The $Run run needs a PostgreSQL server: set `$env:GAME_TEST_DB_CONNECTION." }
     $skipped = $databaseRuns

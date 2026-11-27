@@ -43,6 +43,7 @@ public static class ProtocolJson
             bool? hidden = null, accept = null;
             int? version = null, quantity = null, level = null, amount = null, index = null;
             long? seq = null, target = null, entry = null, card = null;
+            long? currency = null;   // trade_currency (T-903)
             GridCell? cell = null;
             // start_autopilot's lists (T-604): where they begin; they are read once the type is known, so in any other message they stay unknown fields, ignored whatever they hold
             Utf8JsonReader questsAt = default, skillsAt = default;
@@ -92,6 +93,7 @@ public static class ProtocolJson
                     case "to": to = String(ref reader); break;
                     case "text": text = String(ref reader); break;
                     case "line": line = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var ln) ? ln : throw Bad(); break;
+                    case "currency": currency = reader.TokenType == JsonTokenType.Number && reader.TryGetInt64(out var cu) ? cu : throw Bad(); break;
                     default: reader.Skip(); break;
                 }
             }
@@ -143,6 +145,15 @@ public static class ProtocolJson
                 MessageTypes.PartyLeave => new PartyLeaveMessage(),
                 MessageTypes.PartyKick => target is { } kicked ? new PartyKickMessage(kicked) : null,
                 MessageTypes.PartyLead => target is { } led ? new PartyLeadMessage(led) : null,
+                // T-903: the shape only; the trade system decides the rest
+                MessageTypes.TradeAsk => target is { } asked ? new TradeAskMessage(asked) : null,
+                MessageTypes.TradeAnswer => accept is { } agreed ? new TradeAnswerMessage(agreed) : null,
+                MessageTypes.TradeOffer => entry is { } offered && quantity is { } units2 ? new TradeOfferMessage(offered, units2) : null,
+                MessageTypes.TradeCurrency => currency is { } coins ? new TradeCurrencyMessage(coins) : null,
+                MessageTypes.TradeLock => new TradeLockMessage(),
+                MessageTypes.TradeUnlock => new TradeUnlockMessage(),
+                MessageTypes.TradeConfirm => version is { } seen ? new TradeConfirmMessage(seen) : null,
+                MessageTypes.TradeCancel => new TradeCancelMessage(),
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -279,6 +290,22 @@ public static class ProtocolJson
                 break;
             case PartyLeadMessage lead:
                 w.WriteNumber("target", lead.Target);
+                break;
+            case TradeAskMessage tradeAsk:
+                w.WriteNumber("target", tradeAsk.Target);
+                break;
+            case TradeAnswerMessage tradeAnswer:
+                w.WriteBoolean("accept", tradeAnswer.Accept);
+                break;
+            case TradeOfferMessage tradeOffer:
+                w.WriteNumber("entry", tradeOffer.Entry);
+                w.WriteNumber("quantity", tradeOffer.Quantity);
+                break;
+            case TradeCurrencyMessage tradeCurrency:
+                w.WriteNumber("currency", tradeCurrency.Currency);
+                break;
+            case TradeConfirmMessage tradeConfirm:
+                w.WriteNumber("version", tradeConfirm.Version);
                 break;
         }
         w.WriteEndObject();
@@ -604,12 +631,107 @@ public static class ProtocolJson
                 if (partyRefused.RetryAfterSeconds is { } partyWait) w.WriteNumber("retry_after", partyWait);
                 if (partyRefused.Name is not null) w.WriteString("name", partyRefused.Name);
                 break;
+            case TradeAskedMessage tradeAsked:
+                w.WriteNumber("from", tradeAsked.From);
+                w.WriteString("name", tradeAsked.Name);
+                w.WriteNumber("expires_in", tradeAsked.ExpiresInSeconds);
+                break;
+            case TradeMessage trade:
+                w.WriteNumber("partner", trade.Partner);
+                w.WriteString("name", trade.Name);
+                w.WriteNumber("version", trade.Version);
+                WriteTradeSide(w, "mine", trade.Mine);
+                WriteTradeSide(w, "theirs", trade.Theirs);
+                break;
+            case TradeNoticeMessage tradeNotice:
+                w.WriteString("notice", tradeNotice.Notice);
+                if (tradeNotice.Name is not null) w.WriteString("name", tradeNotice.Name);
+                break;
+            case TradeClosedMessage tradeClosed:
+                w.WriteString("reason", tradeClosed.Reason);
+                if (tradeClosed.Name is not null) w.WriteString("name", tradeClosed.Name);
+                if (tradeClosed.Own) w.WriteBoolean("own", true);
+                break;
+            case TradeRefusedMessage tradeRefused:
+                w.WriteString("intent", tradeRefused.Intent);
+                w.WriteString("reason", tradeRefused.Reason);
+                if (tradeRefused.RetryAfterSeconds is { } tradeWait) w.WriteNumber("retry_after", tradeWait);
+                break;
             case ByeMessage bye:
                 w.WriteString("reason", bye.Reason);
                 if (bye.RetryAfterSeconds is { } retry) w.WriteNumber("retry_after", retry);
                 break;
         }
         w.WriteEndObject();
+    }
+
+    /// <summary>One side of a <c>trade</c> message (T-903): its entries (cards and refine only when it has them), currency, and the flags only when true.</summary>
+    private static void WriteTradeSide(Utf8JsonWriter w, string name, TradeSideRecord side)
+    {
+        w.WriteStartObject(name);
+        w.WriteStartArray("items");
+        foreach (var item in side.Items)
+        {
+            w.WriteStartObject();
+            w.WriteNumber("entry", item.Entry);
+            w.WriteString("item", item.Item);
+            w.WriteNumber("quantity", item.Quantity);
+            if (item.Cards is { Count: > 0 } cards) WriteStrings(w, "cards", cards);
+            if (item.Refine > 0) w.WriteNumber("refine", item.Refine);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteNumber("currency", side.Currency);
+        if (side.Locked) w.WriteBoolean("locked", true);
+        if (side.Confirmed) w.WriteBoolean("confirmed", true);
+        w.WriteEndObject();
+    }
+
+    /// <summary>Reads one side of a <c>trade</c> message (T-903).</summary>
+    private static TradeSideRecord ReadTradeSide(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartObject) throw Bad();
+        var items = new List<TradeItemRecord>();
+        long currency = 0;
+        bool locked = false, confirmed = false;
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var key = reader.GetString();
+            reader.Read();
+            switch (key)
+            {
+                case "items":
+                    if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
+                    while (reader.Read() && reader.TokenType == JsonTokenType.StartObject)
+                    {
+                        long entry = 0;
+                        string? item = null;
+                        int quantity = 0, refine = 0;
+                        List<string>? cards = null;
+                        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+                        {
+                            var field = reader.GetString();
+                            reader.Read();
+                            switch (field)
+                            {
+                                case "entry": entry = reader.GetInt64(); break;
+                                case "item": item = String(ref reader); break;
+                                case "quantity": quantity = reader.GetInt32(); break;
+                                case "refine": refine = reader.GetInt32(); break;
+                                case "cards": cards = ReadStrings(ref reader); break;
+                                default: reader.Skip(); break;
+                            }
+                        }
+                        items.Add(new TradeItemRecord(entry, item ?? throw Bad(), quantity, cards, refine));
+                    }
+                    break;
+                case "currency": currency = reader.GetInt64(); break;
+                case "locked": locked = reader.GetBoolean(); break;
+                case "confirmed": confirmed = reader.GetBoolean(); break;
+                default: reader.Skip(); break;
+            }
+        }
+        return new TradeSideRecord(items, currency, locked, confirmed);
     }
 
     /// <summary>A server message as a new byte array.</summary>
@@ -698,6 +820,9 @@ public static class ProtocolJson
             string? notice = null;
             List<PartyMemberRecord>? partyMembers = null;
             List<PartyMemberStatusRecord>? partyStatus = null;
+            long? partner = null;   // trade (T-903)
+            TradeSideRecord? mine = null, theirs = null;
+            bool own = false;
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var key = reader.GetString();
@@ -803,6 +928,10 @@ public static class ProtocolJson
                     case "notice": notice = String(ref reader); break;
                     case "members": partyMembers = ReadPartyMembers(ref reader); break;
                     case "status": partyStatus = ReadPartyStatus(ref reader); break;
+                    case "partner": partner = reader.GetInt64(); break;
+                    case "mine": mine = ReadTradeSide(ref reader); break;
+                    case "theirs": theirs = ReadTradeSide(ref reader); break;
+                    case "own": own = reader.GetBoolean(); break;
                     case "hidden": hidden = reader.GetBoolean(); break;
                     case "removed":
                         if (reader.TokenType != JsonTokenType.StartArray) throw Bad();
@@ -856,6 +985,11 @@ public static class ProtocolJson
                 MessageTypes.PartyInvited => from is null || name is null || expiresIn is null ? null : new PartyInvitedMessage(from.Value, name, expiresIn.Value),
                 MessageTypes.PartyNotice => notice is null ? null : new PartyNoticeMessage(notice, name),
                 MessageTypes.PartyRefused => intent is null || reason is null ? null : new PartyRefusedMessage(intent, reason, retryAfter, name),
+                MessageTypes.TradeAsked => from is null || name is null || expiresIn is null ? null : new TradeAskedMessage(from.Value, name, expiresIn.Value),
+                MessageTypes.Trade => partner is null || name is null || mine is null || theirs is null ? null : new TradeMessage(partner.Value, name, version, mine, theirs),
+                MessageTypes.TradeNotice => notice is null ? null : new TradeNoticeMessage(notice, name),
+                MessageTypes.TradeClosed => reason is null ? null : new TradeClosedMessage(reason, name, own),
+                MessageTypes.TradeRefused => intent is null || reason is null ? null : new TradeRefusedMessage(intent, reason, retryAfter),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason, retryAfter),
                 null => null,
                 _ => throw new UnknownTypeException(),

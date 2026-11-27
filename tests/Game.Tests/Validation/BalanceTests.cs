@@ -155,6 +155,29 @@ public class BalanceTests : IDisposable
         issue.Line.ShouldBeGreaterThan(0);
     }
 
+    [Theory]
+    [InlineData("  range: 4\n", "  range: 0\n", "trade.range")]
+    [InlineData("ask_timeout_ms: 20000", "ask_timeout_ms: 0", "trade.ask_timeout_ms")]
+    [InlineData("  max_entries: 10\n", "  max_entries: 0\n", "trade.max_entries")]
+    public void Trade_numbers_out_of_range_are_errors(string from, string to, string path)
+    {
+        Edit(from, to);
+        var issue = Validate().Issues.Single(i => i.Code == ValidationCodes.BalanceRange);
+        (issue.File, issue.Path).ShouldBe(("balance.yaml", path));
+        issue.Line.ShouldBeGreaterThan(0);
+    }
+
+    [Fact]
+    public void Items_are_tradeable_unless_content_says_not_and_the_bundle_says_which()
+    {
+        var content = Game.Tests.World.TestGrids.SampleContent;
+        content.Items.Get("item.warden_token").Tradeable.ShouldBeFalse();
+        content.Items.All.Count(i => !i.Tradeable).ShouldBe(1, "only the trial's proof, so far");
+        var bundle = Game.Content.ClientExport.ClientBundleBuilder.Build(content);
+        bundle.Items.Single(i => i.Id == "item.warden_token").Tradeable.ShouldBeFalse();
+        bundle.Items.Single(i => i.Id == "item.healing_draught").Tradeable.ShouldBeTrue();
+    }
+
     [Fact]
     public void Min_above_max_damage_is_an_error_in_balance_yaml()
     {

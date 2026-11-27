@@ -113,6 +113,18 @@ public sealed class UiRuns
         Check(Hud.Blocks(party.LeaveButton.GetGlobalRect().GetCenter()), "a touch on the party panel never reaches the world");
         Check(Hud.Blocks(party.AcceptButton.GetGlobalRect().GetCenter()), "a touch on the invite prompt never reaches the world");
         party.ClearSamples();
+        // T-903: the trade window with both offers full of the longest lines, the longest name and state, the currency field and the footer, the ask prompt over it; then the bag's
+        // list of what can be offered with the quantity picker in the columns' place.
+        var trade = Hud.Trade!;
+        trade.ShowSamples(picker: false);
+        await FramesAsync(3);
+        await LayoutMatrixAsync("trade window and ask prompt");
+        Check(Hud.Blocks(trade.ConfirmButton.GetGlobalRect().GetCenter()), "a touch on the trade window never reaches the world");
+        Check(Hud.Blocks(trade.AcceptButton.GetGlobalRect().GetCenter()), "a touch on the ask prompt never reaches the world");
+        trade.ShowSamples(picker: true);
+        await FramesAsync(3);
+        await LayoutMatrixAsync("trade window, picking with the quantity picker");
+        trade.ClearSamples();
         var wardrobe = Hud.Wardrobe!;   // T-708: five slots of the longest names, the switch and the line under them
         wardrobe.ShowSamples(LongName);
         await FramesAsync(3);

@@ -46,6 +46,10 @@
       "type": "integer",
       "description": "Maximum units per inventory stack. Default 1 (not stackable)."
     },
+    "tradeable": {
+      "type": "boolean",
+      "description": "Whether players may trade it to each other (T-903). Default true; false keeps it with the character that has it (a quest proof, a reward bound to its earner). Nothing else reads it: it may still be dropped, sold or used as its other fields allow."
+    },
     "icon_asset_key": {
       "type": [
         "string",

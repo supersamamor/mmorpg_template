@@ -379,6 +379,77 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.PartyLead;
     }
 
+    /// <summary>
+    /// <c>trade_ask</c> (T-903): <c>{"type":"trade_ask","target":43}</c>. Asks a player on this map instance to trade, by tapping it or from the party panel. An intent: a refusal comes back
+    /// as <see cref="TradeRefusedMessage"/>, the ask as <see cref="TradeNoticeMessage"/> <c>ask_sent</c>.
+    /// </summary>
+    /// <param name="Target">The entity id of the player asked.</param>
+    public sealed record TradeAskMessage(long Target) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeAsk;
+    }
+
+    /// <summary><c>trade_answer</c> (T-903): <c>{"type":"trade_answer","accept":true}</c>. Answers the ask this character has (<see cref="TradeAskedMessage"/>).</summary>
+    /// <param name="Accept">True opens the trade; false declines.</param>
+    public sealed record TradeAnswerMessage(bool Accept) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeAnswer;
+    }
+
+    /// <summary>
+    /// <c>trade_offer</c> (T-903): <c>{"type":"trade_offer","entry":1207,"quantity":3}</c>. Puts <see cref="Quantity"/> units of the carried entry in this side's offer, in place of any
+    /// units of it there; 0 takes it out. Any change unlocks both sides.
+    /// </summary>
+    /// <param name="Entry">The inventory entry's id.</param>
+    /// <param name="Quantity">Units offered, 0 to the entry's quantity.</param>
+    public sealed record TradeOfferMessage(long Entry, int Quantity) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeOffer;
+    }
+
+    /// <summary><c>trade_currency</c> (T-903): <c>{"type":"trade_currency","currency":250}</c>. The currency in this side's offer, 0 to what it carries. Any change unlocks both sides.</summary>
+    /// <param name="Currency">The amount.</param>
+    public sealed record TradeCurrencyMessage(long Currency) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeCurrency;
+    }
+
+    /// <summary><c>trade_lock</c> (T-903): <c>{"type":"trade_lock"}</c>. Locks this side's offer as it stands.</summary>
+    public sealed record TradeLockMessage : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeLock;
+    }
+
+    /// <summary><c>trade_unlock</c> (T-903): <c>{"type":"trade_unlock"}</c>. Unlocks both offers (and any confirm).</summary>
+    public sealed record TradeUnlockMessage : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeUnlock;
+    }
+
+    /// <summary>
+    /// <c>trade_confirm</c> (T-903): <c>{"type":"trade_confirm","version":7}</c>. Confirms the two locked offers of <see cref="TradeMessage.Version"/> <see cref="Version"/>; refused
+    /// <c>stale</c> when they changed since. The swap happens when both confirmed the same version.
+    /// </summary>
+    /// <param name="Version">The version of the <c>trade</c> message whose offers the player saw.</param>
+    public sealed record TradeConfirmMessage(int Version) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeConfirm;
+    }
+
+    /// <summary><c>trade_cancel</c> (T-903): <c>{"type":"trade_cancel"}</c>. Ends this character's ask or trade; nothing moves.</summary>
+    public sealed record TradeCancelMessage : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeCancel;
+    }
+
     /// <summary>A message the server sends. <see cref="Type"/> is its <see cref="MessageTypes"/> name.</summary>
     public abstract record ServerMessage
     {
@@ -1063,6 +1134,75 @@ namespace Game.Shared.Protocol
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.PartyRefused;
+    }
+
+    /// <summary>
+    /// <c>trade_asked</c> (T-903, the asked only): <c>{"type":"trade_asked","from":42,"name":"Ada","expires_in":20}</c>. Answer with <see cref="TradeAnswerMessage"/>.
+    /// </summary>
+    /// <param name="From">The asker's entity id.</param>
+    /// <param name="Name">The asker's character name.</param>
+    /// <param name="ExpiresInSeconds">Seconds until the ask expires.</param>
+    public sealed record TradeAskedMessage(long From, string Name, long ExpiresInSeconds) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeAsked;
+    }
+
+    /// <summary>
+    /// One offered entry in a <see cref="TradeSideRecord"/> (T-903): the entry id on the giver's side, the item, the units offered, and for equipment its cards and refine level (what the
+    /// receiver would get).
+    /// </summary>
+    public sealed record TradeItemRecord(long Entry, string Item, int Quantity, IReadOnlyList<string>? Cards = null, int Refine = 0);
+
+    /// <summary>One side of a <see cref="TradeMessage"/> (T-903): what it offers, and whether it locked and confirmed.</summary>
+    public sealed record TradeSideRecord(IReadOnlyList<TradeItemRecord> Items, long Currency, bool Locked, bool Confirmed);
+
+    /// <summary>
+    /// <c>trade</c> (T-903, the two only): the open trade as the server holds it, after every change:
+    /// <c>{"type":"trade","partner":43,"name":"Bo","version":7,"mine":{"items":[...],"currency":0,"locked":true},"theirs":{"items":[],"currency":250}}</c>
+    /// (<c>locked</c>, <c>confirmed</c> only when true). A confirm names <see cref="Version"/>.
+    /// </summary>
+    /// <param name="Partner">The other side's entity id.</param>
+    /// <param name="Name">The other side's character name.</param>
+    /// <param name="Version">Goes up with every change of either offer or lock.</param>
+    /// <param name="Mine">This character's side.</param>
+    /// <param name="Theirs">The other side.</param>
+    public sealed record TradeMessage(long Partner, string Name, int Version, TradeSideRecord Mine, TradeSideRecord Theirs) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Trade;
+    }
+
+    /// <summary><c>trade_notice</c> (T-903): <c>{"type":"trade_notice","notice":"declined","name":"Bo"}</c>. News about an ask.</summary>
+    /// <param name="Notice">A "Trade notices" term.</param>
+    /// <param name="Name">The other character, if known.</param>
+    public sealed record TradeNoticeMessage(string Notice, string? Name = null) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeNotice;
+    }
+
+    /// <summary>
+    /// <c>trade_closed</c> (T-903, the two only): <c>{"type":"trade_closed","reason":"too_far","name":"Bo"}</c>, <c>"own":true</c> when this side caused it (it cancelled, walked away, its bag
+    /// was full). Only <c>done</c> moved anything; the <c>inventory_changed</c> of the swap comes before it.
+    /// </summary>
+    /// <param name="Reason">A "Trade ends" term.</param>
+    /// <param name="Name">The other side's character name, if known.</param>
+    /// <param name="Own">True when this side caused the end.</param>
+    public sealed record TradeClosedMessage(string Reason, string? Name = null, bool Own = false) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeClosed;
+    }
+
+    /// <summary><c>trade_refused</c> (T-903, own only): <c>{"type":"trade_refused","intent":"trade_offer","reason":"not_tradeable"}</c>. Nothing changed.</summary>
+    /// <param name="Intent">The message refused: a <c>trade_*</c> client type.</param>
+    /// <param name="Reason">A "Trade reasons" term.</param>
+    /// <param name="RetryAfterSeconds">For <c>rate_limited</c>: when the next ask may go.</param>
+    public sealed record TradeRefusedMessage(string Intent, string Reason, long? RetryAfterSeconds = null) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.TradeRefused;
     }
 
     /// <summary>
