@@ -134,7 +134,8 @@ public sealed class GuildRuns
         var screen = _main.Hud!.Accounts!;
         await FramesAsync(3);
         var tag = Tag();
-        screen.Username.Text = "e2e-guild-" + tag;
+        var username = "e2e-guild-" + tag;
+        screen.Username.Text = username;
         screen.Password.Text = Guid.NewGuid().ToString("N");   // thrown away with the run
         Press(screen.RegisterButton);
         await UntilAsync(() => accounts.Screen == AccountScreen.Characters && !accounts.Busy, 15, "the character list after registering");
