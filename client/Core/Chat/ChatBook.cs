@@ -86,6 +86,11 @@ public sealed class ChatBook
             why = UiText.ChatNoWhisperTarget;
             return null;
         }
+        if (Channel == ChatChannels.Whisper && WhisperTo.Length > Game.Shared.Accounts.CharacterNameRules.LongestAllowed)
+        {
+            why = UiText.ChatRefused(ChatReasons.NotOnline, null, null);   // no name is that long; a longer message could pass the gateway's limit
+            return null;
+        }
         return text;
     }
 

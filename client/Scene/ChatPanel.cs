@@ -9,8 +9,9 @@ namespace Game.Client.Scene;
 /// <summary>
 /// Chat on the phone HUD (T-901, ARCHITECTURE §7.4 and "Chat"). Two parts:
 /// <list type="bullet">
-/// <item><b>The strip</b>, in the bottom row above the flash line: the Chat button and the last two lines beside it. The lines take no touches, so the world under them is still the
-/// world's; the strip is one button tall and shows only while playing.</item>
+/// <item><b>The strip</b>, at the top of the HUD's centre column (between the bars and the buttons on the right, above the target frame): the Chat button and the last two lines beside
+/// it, in what is left of the column's width. The lines take no touches, so the world under them is still the world's; the strip is one button tall and shows only while playing. The
+/// bottom of a 640x360 dp phone at the larger UI scales has no row to spare for it (the layout check found that), and the top edge covers the least of the play area.</item>
 /// <item><b>The panel</b>, opened by the button, at the <b>top</b> of the safe area: the input row first (the channel switch, a whisper target field, the text field and Send), then the log.
 /// The on-screen keyboard (Godot's virtual keyboard on Android and iOS) comes up from the bottom when the text field takes focus, so the panel is cut to what is left above it, every frame
 /// the keyboard's height changes: the field being typed in is never under the keyboard.</item>
@@ -22,7 +23,6 @@ namespace Game.Client.Scene;
 public sealed class ChatPanel
 {
     private const double PanelMaxWidthDp = 680;
-    private const double StripLogWidthDp = 300;
     private const double LogFontDp = 13;
     private const int StripLines = 2;
 
@@ -43,7 +43,7 @@ public sealed class ChatPanel
     private readonly VBoxContainer _box = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly HBoxContainer _inputRow = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly Button _channel = new();
-    private readonly LineEdit _to = new() { PlaceholderText = UiText.ChatWhisperHint, Visible = false };
+    private readonly LineEdit _to = new() { PlaceholderText = UiText.ChatWhisperHint, Visible = false, MaxLength = Game.Shared.Accounts.CharacterNameRules.LongestAllowed };
     private readonly LineEdit _text = new() { PlaceholderText = UiText.ChatHint, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
     private readonly Button _send = new() { Text = UiText.ChatSend };
     private readonly Button _close = new() { Text = UiText.Close };
@@ -60,11 +60,12 @@ public sealed class ChatPanel
     private float _target = 48;
     private Vector2 _safeSize;
     private float _canvasPerPixel = 1;
+    private float _canvasHeight;
     private float _keyboard = -1;   // the keyboard's height in canvas units last laid out for
     private bool _samples;
 
-    /// <summary>Builds the strip into <paramref name="bottom"/> (above the flash line) and the panel (closed) into <paramref name="safe"/>.</summary>
-    public ChatPanel(Control safe, VBoxContainer bottom, ClientSession session, List<Control> interactive, Action tap)
+    /// <summary>Builds the strip at the top of <paramref name="column"/> (the HUD's centre column) and the panel (closed) into <paramref name="safe"/>.</summary>
+    public ChatPanel(Control safe, VBoxContainer column, ClientSession session, List<Control> interactive, Action tap)
     {
         _session = session;
         _chat = session.Chat;
@@ -75,8 +76,9 @@ public sealed class ChatPanel
         _strip.AddChild(_recent);
         _recent.MouseFilter = Control.MouseFilterEnum.Ignore;   // the world's taps go through the lines
         _recent.ScrollFollowing = true;
-        bottom.AddChild(_strip);
-        bottom.MoveChild(_strip, 0);
+        _recent.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        column.AddChild(_strip);
+        column.MoveChild(_strip, 0);
         _open.Pressed += () => { _tap(); SetOpen(!Open); };
 
         safe.AddChild(_area);
@@ -175,8 +177,40 @@ public sealed class ChatPanel
     /// <summary>The panel's rectangle and the text field's (canvas units), for the layout check's keyboard rule.</summary>
     public (Rect2 Panel, Rect2 Field) Rects => (_panel.GetGlobalRect(), _text.GetGlobalRect());
 
-    /// <summary>The keyboard height (canvas units) the layout check pretends is up; null: ask the engine.</summary>
+    /// <summary>The share of the screen's height the layout check pretends the keyboard takes; null: ask the engine.</summary>
     public float? SimulatedKeyboard { get; set; }
+
+    /// <summary>The strip's Chat button and its lines (for the overlap checks).</summary>
+    public IEnumerable<Control> StripControls => [_open, _recent];
+
+    /// <summary>
+    /// With the keyboard up (<paramref name="keyboardTop"/>: its top edge in canvas units), what of the open panel it would cover that must stay visible: the text field, Send and the
+    /// channel switch. Empty when the panel is closed.
+    /// </summary>
+    public List<string> KeyboardProblems(float keyboardTop)
+    {
+        var found = new List<string>();
+        if (!Open) return found;
+        foreach (var control in new Control[] { _text, _send, _channel, _close })
+            if (control.IsVisibleInTree() && control.GetGlobalRect().End.Y > keyboardTop + 0.6f)
+                found.Add($"{control.GetType().Name}\"{(control as Button)?.Text}\" ends at {control.GetGlobalRect().End.Y:0} under the keyboard's top {keyboardTop:0}");
+        return found;
+    }
+
+    /// <summary>The longest lines in the strip only (the HUD's own samples).</summary>
+    public void ShowStripSamples()
+    {
+        var name = new string('W', Game.Shared.Accounts.CharacterNameRules.LongestAllowed);
+        var lines = new List<ChatEntry>
+        {
+            new(1, ChatChannels.Whisper, 1, name, new string('W', 40) + " " + new string('m', 40), name, false),
+            new(2, ChatChannels.Map, 1, name, new string('W', 40) + " " + new string('m', 40), null, false),
+        };
+        _strip.Visible = true;
+        _open.Text = UiText.ChatUnread;
+        Draw(_recent, lines, 0, meta: false);
+        _shownVersion = _chat.Version;
+    }
 
     /// <summary>Opens or closes the panel; opening marks the log read.</summary>
     public void SetOpen(bool open)
@@ -222,8 +256,9 @@ public sealed class ChatPanel
     }
 
     /// <summary>Lays the strip and the panel out for the HUD's safe area (canvas units).</summary>
-    public void ApplyMetrics(Func<double, float> dp, float target, Vector2 safeSize, float canvasPerPixel)
+    public void ApplyMetrics(Func<double, float> dp, float target, Vector2 safeSize, float canvasPerPixel, float canvasHeight)
     {
+        _canvasHeight = canvasHeight;
         _dp = dp;
         _target = target;
         _safeSize = safeSize;
@@ -234,8 +269,8 @@ public sealed class ChatPanel
             log.AddThemeFontSizeOverride("normal_font_size", font);
             log.AddThemeConstantOverride("line_separation", 0);
         }
-        _open.CustomMinimumSize = new Vector2(dp(104), target);
-        _recent.CustomMinimumSize = new Vector2(Mathf.Min(dp(StripLogWidthDp), safeSize.X * 0.45f), target);
+        _open.CustomMinimumSize = new Vector2(target, target);
+        _recent.CustomMinimumSize = new Vector2(0, target);   // whatever the column leaves: never wider than it
         _strip.AddThemeConstantOverride("separation", Mathf.RoundToInt(dp(6)));
         var gap = Mathf.RoundToInt(dp(6));
         _panelStyle.SetContentMarginAll(dp(8));
@@ -314,19 +349,20 @@ public sealed class ChatPanel
     /// <summary>The panel at the top of the safe area, as wide as fits, as tall as is left above the keyboard (at most two thirds of the screen).</summary>
     private void Place()
     {
-        var keyboard = SimulatedKeyboard ?? DisplayServer.VirtualKeyboardGetHeight() * _canvasPerPixel;
+        var keyboard = SimulatedKeyboard is { } share ? share * _canvasHeight : DisplayServer.VirtualKeyboardGetHeight() * _canvasPerPixel;
         if (Mathf.IsEqualApprox(keyboard, _keyboard)) return;
         _keyboard = keyboard;
         var margin = _dp(8);
         var width = Mathf.Min(_dp(PanelMaxWidthDp), _safeSize.X - 2 * margin);
         var free = _safeSize.Y - keyboard - 2 * margin;
-        var height = Mathf.Max(_target + 2 * _dp(8), Mathf.Min(_safeSize.Y * 2 / 3f, free));
+        var least = 2 * _target + 3 * _dp(6) + 2 * _dp(8) + _dp(36);   // the input row, the line actions, padding and two lines of log
+        var height = Mathf.Max(least, Mathf.Min(_safeSize.Y * 2 / 3f, free));
         _area.Position = new Vector2((_safeSize.X - width) / 2, margin);
         _area.Size = new Vector2(width, height);
         _panel.Position = Vector2.Zero;
         _panel.Size = new Vector2(width, height);
         _panel.CustomMinimumSize = new Vector2(width, height);
-        _log.CustomMinimumSize = new Vector2(0, Mathf.Max(0, height - 2 * _target - _dp(40)));
+        _log.CustomMinimumSize = new Vector2(0, Mathf.Max(_dp(30), height - 2 * _target - 3 * _dp(6) - 2 * _dp(8) - 1));
     }
 
     private static void Draw(RichTextLabel label, IReadOnlyList<ChatEntry> lines, int from, bool meta)

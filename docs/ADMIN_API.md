@@ -65,6 +65,7 @@ $h = @{ Authorization = "Bearer $env:GAME_ADMIN_CREDENTIAL"; "X-Staff-Id" = "dev
 | `GET /admin/v1/accounts/{id}/moderation` (T-806) | `account_id`, `banned`, `muted` (in force now), `bans[]` and `mutes[]` newest first (`id`, `kind`, `from`, `until` (null: no end), `in_force`, `audit_id`, `lifted_at`, `lifted_audit_id`), `requests[]` (as below) |
 | `GET /admin/v1/characters/{id}/staff-changes?before=&limit=` (T-806) | The item, currency and place changes staff made to the character: its audit rows (as `/audit`), newest first, and `next` |
 | `GET /admin/v1/requests?status=&account=&before=&limit=` (T-806) | The support queue, newest first: `items[]` (`id`, `account_id`, `kind`, `status`, `opened_at`, `opened_audit_id`, `closed_at`, `closed_audit_id`) and `next` (pass it as `before`). `status` is a "Support request statuses" term |
+| `GET /admin/v1/chat-reports?status=&account=&before=&limit=` (T-901) | Players' reports of chat lines, newest first: `items[]` (`id`, `reported_at`, `reporter_account_id`, `reporter_character_id`, `sender_account_id`, `sender_character_id`, `channel`, `text` (what was said: the server's copy, never the reporter's), `said_at`, `status` (a "Chat report statuses" term), `closed_at`, `closed_audit_id`) and `next` (pass it as `before`). `account` matches the sender or the reporter |
 
 `/status` (T-806) also has `maintenance`: `on`, `since`, `games_end_at` (null once the games have ended).
 
@@ -104,6 +105,7 @@ Times in answers and rows are ISO 8601, UTC.
 | `open_request` | `support` | `account_id`, `kind` (`deletion`, `export`), `reason` | Puts a request that came in through support in the queue, once support has checked it is the owner's; `result.request_id` |
 | `complete_request` | `support` | `request_id`, `reason` | A `deletion`: T-703's path, with its wait (`--account-erase-days`): every session and game ends, nobody signs in, it is erased after the wait unless the owner keeps it; `result`: `erase_after`, `sessions_ended`. An `export`: `result.export`, everything stored about the account as JSON, for staff to send (no e-mail is sent); the row says it was done, never the data. Refused: `unknown_target`, `request_closed`, `account_deleting` |
 | `cancel_request` | `support` | `request_id`, `reason` | Closes the request without handling it. Refused: `unknown_target`, `request_closed` |
+| `close_report` (T-901) | `support` | `report_id`, `reason` | Closes a player's report of a chat line: the status and the audit row in one transaction; the row holds the report's number, status and ids, never the line. What staff do about the sender is its own command (`mute`, `ban`). A closed report is erased 30 days later (`--chat-closed-report-days`). `result.closed_at`. Refused: `unknown_target`, `report_closed` |
 
 Maintenance and announcements are this server process's only (ADR-002 row 320); bans and mutes are the database's.
 
@@ -112,7 +114,7 @@ $body = @{ account_id = "<id>"; reason = "spamming the start square" } | Convert
 Invoke-RestMethod -Method Post -Headers $h -ContentType application/json -Body $body http://127.0.0.1:7781/admin/v1/commands/kick
 ```
 
-`client/run-e2e.ps1 -Run kick` does exactly this against a real client; `-Run moderation` gives an item, bans and unbans (T-806).
+`client/run-e2e.ps1 -Run kick` does exactly this against a real client; `-Run moderation` gives an item, bans and unbans (T-806); `-Run chat` reads and closes a player's report and mutes the sender, whose next line is refused (T-901).
 
 ```powershell
 $gm = $h.Clone(); $gm["X-Staff-Role"] = "gm"
@@ -150,6 +152,13 @@ dispatched at once on the request's thread). A subscriber that must touch the wo
 
 A command that reads or changes the world does it in a **step on the tick**: `AdminRoad.OnTickAsync(entity, action, step)` queues an `AdminIntent` on the instance that holds the entity; `AdminSystem`
 (last before the AOI) runs it there with the tick's context, like any intent, and the command waits up to `step-timeout-ms`. Kick reads the character's place this way for its `before`.
+
+## Chat (T-901)
+
+`mute` is what chat asks (`ModerationChecks.SpeakAsync`, cached 5 s per account; a mute made through this server is seen at once). Reports come from players (`report` on the game's socket) and
+are read with `GET /chat-reports` and closed with `close_report`. **For T-805** the panel needs: a reports page (open first; the line, the channel and both times; the sender's and the
+reporter's character names looked up by id with `/characters/{id}`; links to the sender's moderation page), a Close button that asks for the reason, and Mute and Ban beside it (the
+existing commands). Tell staff that the line in a report is personal data: do not copy it into a reason.
 
 ## How T-805 and T-806 build on it
 

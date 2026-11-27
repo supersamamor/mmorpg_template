@@ -802,6 +802,12 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
 - **Budgets (§9).** The HUD is about 40 nodes and adds about 24 draw calls (windowed measurement, T-211 report); the frame cap is 30 fps and the HUD does work only when
   a version counter changes, plus one size comparison per frame and one comparison while no finger is down.
 
+- **Chat** (T-901, §10 "Chat"): the strip sits at the top of the centre column, above the target frame (one button tall, only while playing; the log gets what width is left). The bottom of a
+  640x360 dp phone at UI scale 1.25 and 1.5 has no row to spare: a strip there covered the left column's read-outs in the layout check. The panel opens at the top of the safe area
+  so the on-screen keyboard, which comes up from the bottom, never covers the field being typed in: each frame the keyboard's height changes, the panel is cut to what is left
+  (`DisplayServer.VirtualKeyboardGetHeight`). The layout check runs the strip in every "playing" combination (it must lie over no other part of the HUD) and the open panel with its
+  longest lines with and without a keyboard taking 60% of the screen's height (the field, Send, the switch and Close must stay above it).
+
 ### 7.5 Characters & equipment
 Modular 3D characters. Each body type has one shared rig. Equipment is either:
 - **skinned** to that rig (body armor, garment, footgear) — swapped as meshes, or
@@ -1291,6 +1297,10 @@ still well inside 150k. Not run on a phone (ADR-002 row 112).
   | `start_autopilot` | C→S | `quests` (active quest ids, in the order to play), `skills` (`[["skill.x",level],...]`: the shortcut slots in order; level 0 = the learned one; may be left out). Replaces a run in progress; may come back `rejected` with an "Autopilot reasons" term and the `quest` or `skill` (T-604) |
   | `stop_autopilot` | C→S | none: switch it off; ignored when it is off (T-604) |
   | `set_outfit` | C→S | either `slot` (an "Outfit slots" term) and `outfit` (left out: nothing), or `hidden` (true hides every outfit, false shows the choices again); a request, it may come back `rejected` (`intent` `set_outfit`, an "Outfit reasons" term, `slot`, `item` the outfit) (T-708) |
+  | `chat` | C→S | `channel` (a "Chat channels" term a player may send on), `to` (a whisper's character name, any letter case), `text`: an intent; the server answers with `chat_line` to everyone it reaches (the sender included) or `chat_refused` (T-901, "Chat" below) |
+  | `block` | C→S | `name`: that character's lines no longer reach this account; answered by `chat_state` or `chat_refused` (T-901) |
+  | `unblock` | C→S | `name` (T-901) |
+  | `report` | C→S | `line` (a `chat_line`'s number this client received): the server stores its own copy of the line; answered by `chat_reported` or `chat_refused` (T-901) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |
   | `snapshot` | S→C | `tick`, `map`, `id`, `entities` (view records), `vitals` (own `hp`, `max_hp`, `sp`, `max_sp`). Replaces the view; a new `map` means you changed maps |
   | `delta` | S→C | `tick`, `appeared` (records), `changed` (id + changed fields; `"next":null` = stopped), `disappeared` (ids), `hits` (`[attacker,target,amount,"hit"|"crit"|"miss"]`), `casts` (`[caster,"skill",ms]`: a cast with a cast time began in view; never costs or numbers), `cast_ends` (`[caster,"skill","done"|"cancelled"|"interrupted"]`), `vitals` (when changed); empty ones left out |
@@ -1314,6 +1324,10 @@ still well inside 150k. Not run on a phone (ADR-002 row 112).
   | `skills` | S→C (owner) | `job`, `points` (unspent), `levels` (`[["skill.x",2],...]`), `cooldowns` (`[["skill.x",ms left],...]`), `jobs` (the jobs `change_job` would accept now). After every snapshot, a learn, a job change and a level (T-502) |
   | `stats` | S→C (owner) | `points` (unspent stat points), `stats` (`[["str",3,2],...]`: stat id, base value, the cost of its next +1, 0 at the maximum), `derived` (`[["atk",12],...]`: `DerivedStats.Panel`, floored from the sheet). After every snapshot, a raise, a stat reset, a level, a job change, a learned skill, a skill reset and a gear change (T-503). The client never computes a cost or a derived value |
   | `cooldown` | S→C (owner) | `skill`, `ms`: the skill went on cooldown when its cast ended (T-502) |
+  | `chat_line` | S→C | `line` (its number on this server), `channel`, `from` (the sender's entity id), `name` (its character name), `to` (a whisper's receiver), `text` (the server's cleaned copy). The same bytes to everyone it reaches; never before the server took it (T-901) |
+  | `chat_refused` | S→C (own) | `intent` (`chat`, `block`, `unblock`, `report`), `reason` (a "Chat reasons" term), `retry_after` (seconds: `muted`, `rate_limited`), `channel`, `to`, `line` (T-901) |
+  | `chat_state` | S→C (own) | `max_length` (the longest line, UTF-16 code units), `blocked` (the names this account blocks). After every `welcome` and every block change; it replaces what the client had (T-901) |
+  | `chat_reported` | S→C (own) | `line`: the report is stored (T-901) |
   | `pong` | S→C | `seq` |
   | `bye` | S→C (last) | `reason` (VOCABULARY "Bye reasons"), followed by the close frame |
 
@@ -1402,6 +1416,39 @@ still well inside 150k. Not run on a phone (ADR-002 row 112).
     Usernames and character names become free. `account_deletions` keeps the account's id and the two times, for support and for cleaning a restored backup. The cascade rules stay: nothing but this removes an account.
   - **The client** (`client/Core/Accounts`, `Scene/AccountPanel`) keeps the session token in memory only: Godot offers no secure storage (Keychain, Keystore) without
     native code. The password is never kept. A restarted app signs in again. `TransportPolicy.AccountBase` gives the endpoints' address: a release build has none for `ws://`.
+- **Chat** (T-901, `Game.Server/Chat`, `ChatService`; the client's `ChatBook` and `ChatPanel`). The server decides every line; the client sends an intent and shows a line only when the server sends it back.
+  - **Order of the checks** (each refusal is a `chat_refused`, and the line goes nowhere): the **mute** (`ModerationChecks.SpeakAsync`, T-806: cached 5 s per account, so a burst costs one read, and it
+    fails closed: `unavailable` when the database is away; a muted sender gets `muted` with `retry_after`), the **rate** (`ChatLimits`), the **text** (`ChatText`), the **channel**, then **blocks**.
+    Sending a line reads nothing else: block lists are read when an account signs in (on the receive loop, before its character enters) and kept in memory while it plays; a sweep a minute
+    forgets those of accounts that left. A session's chat messages are handled in order, off its receive loop (the mute check may read the database), never on a tick.
+  - **Channels** (a "Chat channels" term each). `map`: every playing character on the sender's **map instance**, not its area of interest: the AOI window is a few buckets and the crowd
+    cap cuts players out of it unpredictably, so a conversation beside someone could miss them; and the AOI's state is the tick thread's. A map is what players see as "here", the line
+    costs one pass over the gateway's characters (bounded by the rate limit), and a fork that wants a local channel can register one (below). `whisper`: one playing character by name
+    (a character in its grace period is not playing); nobody of that name, and one who blocks the sender, both answer `not_online`, so a block does not show; oneself is `invalid_target`.
+    `system`: the server's; no player sends on it. Staff's announcements (T-806) stay their own `announcement` message (they also reach players not looking at chat); the client also
+    writes them into the chat log under "Server". One server process: a whisper does not cross to another process on the same database.
+  - **The seam** for party (T-902) and guild (T-904): `ChatService.Register(kind, IChannelMembers)`, with a new "Chat channels" term. Chat asks the members for the characters who hear a
+    line (the speaker included; empty when the speaker is in none, `invalid_channel`) and routes it like the map, with every rule above. Chat knows nothing of parties or guilds; a test
+    double shows it works.
+  - **Text** (`ChatText`): NFC; format characters (zero-width ones, the bidirectional controls such as U+202E, the BOM, tags, the soft hyphen), private use, unassigned code points and the
+    letters that draw nothing are **removed**, not refused; line breaks, tabs, other controls and every space become one space; combining marks are kept up to `marks-per-letter` after a
+    letter; trimmed; then `empty` or `too_long` (`max-length`, UTF-16 code units, never cut). Right-to-left letters stay. **No word filter**: a list is language- and community-specific, easy
+    to get round and wrong about innocent words; moderation is reports, mutes and blocks. A fork that wants one adds it after the text rules, with its list in content or theme data.
+  - **Rate**: a token bucket per **account** (`burst` lines, `lines-per-minute` back): a connection is cheap to replace (a resume or a new sign-in brings a fresh one), an account is not. Blocks,
+    unblocks and reports take from it too. A dev login is counted by its entity.
+  - **Blocks** (`chat_blocks`): on the server and saved, per account and blocked character, at most `block-limit`; so they hold on every device, survive reinstalling the app, and let a
+    whisper be refused for the sender. They go when either account is erased.
+  - **Reports** (`chat_reports`): `report` names a line by number. The server keeps every line in memory for `report-window-seconds` (600) and, per account, the numbers of the last
+    `reportable-lines-per-player` (200) lines that reached it, at most `recent-lines-max` (20,000) lines in all; a report must name one of those, not one's own, once. It stores the server's
+    copy with who said it, who reported it (account and character ids) and both times; staff read and close it through the admin API (§12.8). The client never sends a text.
+  - **Nothing a player wrote is logged**: chat logs ids and numbers only (a failure's exception type, never its message). A report is the only place a line is kept. The client keeps the
+    last 50 lines of this session in memory, and empties them when the player signs out.
+  - **Settings**: `ChatOptions`, server configuration (`--chat-<name>` or `GAME_CHAT_<NAME>`): `max-length` 120, `marks-per-letter` 3, `lines-per-minute` 20, `burst` 5, `block-limit` 100,
+    `report-window-seconds` 600, `reportable-lines-per-player` 200, `recent-lines-max` 20,000, `closed-report-days` 30. The server refuses to start when `max-length` cannot fit the gateway's
+    `max-message-bytes` (a code unit may take six bytes escaped).
+  - **The panel** (§7.4): a strip at the top of the HUD's centre column (the Chat button and the last two lines, which take no touches) and, opened by it, a panel at the top of the safe area with the input
+    first and the log below, cut to what the on-screen keyboard leaves. The log is one `RichTextLabel` without BBCode: names (the server's, a colour per channel) and texts go in with
+    `AddText`, so nothing a player typed can colour, style or move a name. A tap on a name gives Whisper, Report and Block (or Unblock).
 - **Client resume flow** (for T-206):
   1. Keep the token from the latest `welcome` **in memory only** (never on disk or in preferences); replace it on every `welcome`.
   2. On a socket drop, or when the app comes back to the foreground and the socket is gone, reconnect with backoff (e.g. 0.5 s,
@@ -1563,6 +1610,15 @@ Every endpoint and field: **docs/ADMIN_API.md**. Code: `src/Game.Server/Admin` (
   erasure wait, `account_deletions`, every session and game ended; the owner can still keep the account by signing in. An export answers with everything stored about the account
   (docs/STORE_COMPLIANCE.md §2) as JSON for staff to send, read in one snapshot; never a hash or a token, not who of staff did what or why. The server sends no e-mail.
 - **Erasing** an account takes its sanctions, requests and the `admin_items` marks of the items erased with it; its audit rows stay (§12.6).
+
+### 12.8 Chat reports as built (T-901)
+Endpoints: **docs/ADMIN_API.md**. Code: `Admin/ChatReportCommands.cs`, the `/chat-reports` read in `AdminApi`, `Persistence/PostgresChatStore`, the `Chat` migration (`chat_blocks`, `chat_reports`).
+- **Read** (`GET /admin/v1/chat-reports`, any staff role): reports newest first by status and account (as sender or reporter), with what was said (the server's copy), the channel, both
+  times, and the account and character ids of the sender and the reporter. Staff look the names up by id (`/characters/{id}`).
+- **Close** (`close_report`, `support`): the report's status and its audit row in one transaction; before and after hold the status and ids, never the line. What staff do about the sender
+  (a mute, a ban) is its own command and row. A closed report is erased `--chat-closed-report-days` (30) after it was closed (the chat sweep, hourly); an open one stays until it is closed.
+- **Erasing** either account takes the reports that name it (as sender or reporter) and the blocks it made or that name its characters (docs/STORE_COMPLIANCE.md §2, §6). The data export
+  holds its blocks, the reports it made and the reports of its own lines (without who reported them).
 
 ## 13. Non-goals for v1
 Sharding/multi-server, client prediction beyond movement interpolation, PvP balance,

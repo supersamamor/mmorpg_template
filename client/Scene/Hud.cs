@@ -275,7 +275,7 @@ public sealed class Hud
             _bag!.ShowWardrobe = () => _wardrobe.SetOpen(true);
         }
         if (session is not null && bundle is not null) _questPanel = new QuestPanel(_safe, session, bundle, _interactive, Tap);
-        if (session is not null) _chatPanel = new ChatPanel(_safe, _bottom, session, _interactive, Tap);
+        if (session is not null) _chatPanel = new ChatPanel(_safe, _center, session, _interactive, Tap);
         if (session is not null)
         {
             _statsPanel = new StatsPanel(_safe, session, _interactive, Tap);
@@ -385,6 +385,7 @@ public sealed class Hud
         _tracker.Visible = true;
         _autopilot.Text = UiText.AutopilotPausedTitle + "\n" + UiText.AutopilotPause(AutopilotPauses.NeedsEquip, longName + " of the Far Northern Reaches");
         _autopilot.Visible = true;
+        _chatPanel?.ShowStripSamples();   // T-901: the strip with its longest lines, above the flash line
         ShowInfo(longName, UiText.EntityKind(EntityKinds.Item, true), new Vector2((float)_metrics.CanvasWidth, (float)_metrics.CanvasHeight));
     }
 
@@ -665,7 +666,8 @@ public sealed class Hud
         _dialoguePanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _questPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
-        _chatPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _window.Size.Y > 0 ? (float)(metrics.CanvasHeight / _window.Size.Y) : 1f);
+        _chatPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _window.Size.Y > 0 ? (float)(metrics.CanvasHeight / _window.Size.Y) : 1f,
+            (float)metrics.CanvasHeight);
         _tracker.CustomMinimumSize = new Vector2(Dp(LeftColumnDp), buttonHeight);
         // Compact, and never wider than the centre column (a wider minimum would push the right column off the safe area).
         var column = (float)safe.Width - 4 * margin - Dp(LeftColumnDp) - Dp(RightColumnDp);
@@ -993,13 +995,29 @@ public sealed class Hud
     /// The other HUD buttons and the target frame the quest tracker lies over now, as "name (rect)" (T-406). The layout check compares the long tracker's list with the
     /// one-line tracker's: a long quest must not cover anything that the plain "Quests" button does not.
     /// </summary>
+    /// <summary>What the chat strip (T-901) lies over now: the hotbar, its buttons, the flash and announcement lines, the read-outs. The layout check wants none.</summary>
+    public List<string> ChatStripOverlaps()
+    {
+        var found = new List<string>();
+        if (_chatPanel is null) return found;
+        foreach (var mine in _chatPanel.StripControls)
+        {
+            if (!mine.IsVisibleInTree()) continue;
+            var rect = mine.GetGlobalRect().Grow(-0.6f);
+            foreach (var control in _slots.Cast<Control>().Concat([_skillsButton, _bagButton, _logout, _uiSize, _soundButton, _flash, _announcement, _levels, _hpText, _spText, _statusRow, _tracker, _targetFrame, _autopilot, _connection, _banner]))
+                if (control.IsVisibleInTree() && rect.Intersects(control.GetGlobalRect()))
+                    found.Add($"{mine.GetType().Name} covers {control.GetType().Name}\"{(control as Button)?.Text ?? (control as Label)?.Text}\" {Describe(control.GetGlobalRect())}");
+        }
+        return found;
+    }
+
     public List<string> TrackerOverlaps()
     {
         var found = new List<string>();
         if (!_tracker.IsVisibleInTree()) return found;
         var mine = _tracker.GetGlobalRect().Grow(-0.6f);
         // The HUD's own buttons only: a panel opened over the tracker (the sound settings, the bag) is meant to cover it.
-        foreach (var control in _slots.Cast<Control>().Concat([_skillsButton, _bagButton, _uiSize, _soundButton, _logout]))
+        foreach (var control in _slots.Cast<Control>().Concat([_skillsButton, _bagButton, _uiSize, _soundButton, _logout]).Concat(_chatPanel?.StripControls ?? []))
         {
             if (!control.IsVisibleInTree()) continue;
             if (mine.Intersects(control.GetGlobalRect())) found.Add($"{control.GetType().Name}\"{(control as Button)?.Text}\" {Describe(control.GetGlobalRect())}");
@@ -1018,7 +1036,7 @@ public sealed class Hud
         if (!_autopilot.IsVisibleInTree()) return found;
         var mine = _autopilot.GetGlobalRect().Grow(-0.6f);
         foreach (var control in _slots.Cast<Control>().Concat([_skillsButton, _bagButton, _uiSize, _soundButton, _logout, _tracker, _levels, _hpText, _spText, _hpBar, _spBar, _expBar,
-                     _statusRow, _targetFrame, _banner, _announcement, _flash, _connection]))
+                     _statusRow, _targetFrame, _banner, _announcement, _flash, _connection]).Concat(_chatPanel?.StripControls ?? []))
         {
             if (!control.IsVisibleInTree()) continue;
             if (mine.Intersects(control.GetGlobalRect())) found.Add($"{control.GetType().Name}\"{(control as Button)?.Text ?? (control as Label)?.Text}\" {Describe(control.GetGlobalRect())}");
