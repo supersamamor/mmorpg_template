@@ -146,6 +146,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-901 | Chat: map and whisper channels, a seam for party and guild channels, mute check (T-806), rate limit, blocking, reports for staff | Claude Code | Opus 5.5 | [T-901](../tasks/prompts/T-901.md) | T-701, T-806 | Review | Restricted `Net/**`, `Persistence/**` and `Admin/**` scopes in the prompt's header; Opus instead of Sonnet: restricted areas and stored reports |
 | T-902 | Party: invite, leave, leader, members' HP and place, EXP share formula, quest kill credit via the event bus, party chat through T-901's seam | Claude Code | Opus 5.5 | [T-902](../tasks/prompts/T-902.md) | T-901 | Review | Restricted `content/formulas.yaml` (new party expressions only) and `Net/**` scopes in the prompt's header |
 | T-903 | Player trade: ask, two-step lock and confirm, atomic swap on the tick, both saves land together, dupe-safe (rule 10) | Claude Code | Opus 5.5 | [T-903](../tasks/prompts/T-903.md) | T-702, T-902 | Review | Restricted `Net/**` and, only if T-702's save links cannot do it, `Persistence/**` scopes in the prompt's header |
+| T-904 | Guilds: found, invite, ranks with permissions, notice, guild chat through T-901's seam, emblem from the theme's set, erased with the account | Claude Code | Opus 5.5 | [T-904](../tasks/prompts/T-904.md) | T-901, T-902, T-703 | Ready | Restricted `Persistence/**` (one migration) and `Net/**` scopes in the prompt's header |
 
 ## Backlog (prompts written when the previous phase is Done)
 
@@ -158,7 +159,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-801 | 8 | Content hot-reload + simple editor | Claude Code | Sonnet 5.5 | Backlog |
 | T-802 | 8 | Mobile build pipeline (Android AAB, iOS on macOS CI, TestFlight / Play internal) | Claude Code | Sonnet 5.5 | Backlog |
 | T-803 | 8 | On-device performance capture vs ARCHITECTURE §9 budgets | Claude Code | Sonnet 5.5 | Backlog |
-| T-904 | 9 | Guild: create/join/leave, ranks + permissions, notice, guild chat, emblem chosen from a theme set (no uploads) | Claude Code | Opus 5.5 | Backlog |
 | T-905 | 9 | Guild storage: shared items with rank permissions and audit log, transactional | Claude Code | Opus 5.5 | Backlog |
 
 ## Workflow
