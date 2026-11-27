@@ -168,6 +168,30 @@ namespace Game.Shared.Protocol
         /// <summary><c>pong</c> (server → client): answer to <c>ping</c>.</summary>
         public const string Pong = "pong";
 
+        /// <summary><c>chat</c> (T-901, client to server): say a line on a channel (<see cref="Game.Shared.Vocabulary.ChatChannels"/>), to a character by name for a whisper.</summary>
+        public const string Chat = "chat";
+
+        /// <summary><c>block</c> (T-901, client to server): that character's lines no longer reach this account.</summary>
+        public const string Block = "block";
+
+        /// <summary><c>unblock</c> (T-901, client to server): takes a block back.</summary>
+        public const string Unblock = "unblock";
+
+        /// <summary><c>report</c> (T-901, client to server): report a line this client received, by its number; the server keeps what was said.</summary>
+        public const string Report = "report";
+
+        /// <summary><c>chat_line</c> (T-901, server to client): a line the server accepted, with the sender's character name and entity id.</summary>
+        public const string ChatLine = "chat_line";
+
+        /// <summary><c>chat_refused</c> (T-901, server to client, own only): a line, block, unblock or report the server refused, with a "Chat reasons" term.</summary>
+        public const string ChatRefused = "chat_refused";
+
+        /// <summary><c>chat_state</c> (T-901, server to client, own only): the longest line and the names this account blocks. After every welcome and block change.</summary>
+        public const string ChatState = "chat_state";
+
+        /// <summary><c>chat_reported</c> (T-901, server to client, own only): the report of a line is stored.</summary>
+        public const string ChatReported = "chat_reported";
+
         /// <summary><c>announcement</c> (server → client, T-806): staff's words, or a coming maintenance, for everyone playing on this server.</summary>
         public const string Announcement = "announcement";
 
@@ -175,10 +199,10 @@ namespace Game.Shared.Protocol
         public const string Bye = "bye";
 
         /// <summary>Types a client may send.</summary>
-        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot, SetOutfit);
+        public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot, SetOutfit, Chat, Block, Unblock, Report);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Announcement, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Announcement, ChatLine, ChatRefused, ChatState, ChatReported, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);

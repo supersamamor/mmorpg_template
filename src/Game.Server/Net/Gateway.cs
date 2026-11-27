@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Net.WebSockets;
 using Game.Server.Hosting;
 using Game.Server.Accounts;
+using Game.Server.Chat;
 using Game.Server.World;
 using Game.Server.World.Aoi;
 using Game.Server.World.Autopilot;
@@ -107,7 +108,7 @@ public sealed class GatewayStats
 /// <para>Every change to which session plays a character (join, resume and takeover, drop, logout, end of the grace period, shutdown)
 /// happens under one lock, so a character never has two sessions and a resume never races its own expiry.</para>
 /// </remarks>
-public sealed class Gateway
+public sealed class Gateway : IChatDirectory
 {
     private readonly GameWorld _world;
     private readonly NewCharacters _start;
@@ -215,6 +216,9 @@ public sealed class Gateway
             });
         }
     }
+
+    /// <summary>Chat (T-901): set once, before sessions arrive; null when the server has none (then chat messages are ignored).</summary>
+    public ChatService? Chat { get; set; }
 
     /// <summary>Where players' <c>exp</c> messages come from, or null when the gateway sends none (tests without combat).</summary>
     public OwnProgress? Progress { get; }
@@ -359,6 +363,7 @@ public sealed class Gateway
                     link.SessionKey = session.SessionKey;
                     token = Tokens.Issue(link.Character); // the replaced session's token stops working
                     session.OnResumed(link.Character, link.DisplayName, map, token);
+                    PostChatState(session, link.AccountId);   // T-901
                     Enqueue(new StopAutopilot(link.Character, AutopilotStops.Disconnected));   // T-604: the new session has not asked for it
                     Enqueue(new AttachView(link.Character, session));
                     Enqueue(new RequestSnapshot(link.Character));
@@ -540,6 +545,7 @@ public sealed class Gateway
                 }
             }
             session.OnJoinedOnTick(entity, token);
+            PostChatState(session, login.AccountId);   // T-901: right after its welcome
         }, entered?.Ticket);
         Log.Info($"[net] {session.Peer} joined as '{session.DisplayName}' ({id} on {map})");
         return id;
@@ -579,6 +585,7 @@ public sealed class Gateway
                     // Welcome first, then the view: the AOI snapshots a new sink in the tick that attaches it. Inside the lock so that a drop
                     // (grace: detach) or a warp arrival (re-attach) cannot queue its view change between these.
                     session.OnResumed(id, link.DisplayName, map, token);
+                    PostChatState(session, link.AccountId);   // T-901
                     Enqueue(new StopAutopilot(id, AutopilotStops.Disconnected));   // T-604: a resume never plays on (a dropped session's run ended with its grace period's start)
                     Enqueue(new AttachView(id, session));
                     Enqueue(new RequestSnapshot(id));
@@ -705,6 +712,46 @@ public sealed class Gateway
                     Release(link, "grace period over");
         }
     }
+
+    // ---- chat (T-901): who plays where, read from the links; nothing here touches the tick's state or the database ------------------------------
+
+    /// <summary>Queues <c>chat_state</c> to a session that has had its welcome: the longest line, and the names its account blocks (in memory since its sign-in).</summary>
+    private void PostChatState(ClientSession session, Guid? account)
+    {
+        if (Chat is { } chat && session.Welcomed) session.Post(chat.StateFor(account));
+    }
+
+    /// <summary>The chat peer of a session that plays its character now, or null.</summary>
+    internal ChatPeer? ChatPeerOf(ClientSession session) =>
+        session.Entity is { } id && _links.TryGetValue(id, out var link) && link.Session == session ? PeerOf(link) : null;
+
+    private ChatPeer? PeerOf(CharacterLink link) =>
+        link.Session is { State: SessionState.Joined } session
+            ? new ChatPeer(link.Character, link.DisplayName ?? string.Empty, link.AccountId, link.CharacterId, _world.LocationOf(link.Character), session)
+            : null;
+
+    /// <inheritdoc />
+    IReadOnlyList<ChatPeer> IChatDirectory.OnMap(string mapId)
+    {
+        var peers = new List<ChatPeer>();
+        foreach (var link in _links.Values)
+            if (PeerOf(link) is { } peer && peer.MapId == mapId) peers.Add(peer);
+        return peers;
+    }
+
+    /// <inheritdoc />
+    ChatPeer? IChatDirectory.Online(string nameKey)
+    {
+        foreach (var link in _links.Values)
+            if (ChatNames.Key(link.DisplayName) == nameKey && PeerOf(link) is { } peer) return peer;
+        return null;
+    }
+
+    /// <inheritdoc />
+    ChatPeer? IChatDirectory.Find(EntityId character) => _links.TryGetValue(character, out var link) ? PeerOf(link) : null;
+
+    /// <inheritdoc />
+    IReadOnlyCollection<Guid> IChatDirectory.PlayingAccounts() => PlayingAccounts();
 
     private void OnMoveRejected(MoveRejected e) => Owner(e.Entity)?.Post(new RejectedMessage(MessageTypes.Move, e.Reason, e.Target));
 

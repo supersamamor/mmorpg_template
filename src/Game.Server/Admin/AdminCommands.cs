@@ -59,6 +59,9 @@ public sealed class AdminRoad(GameWorld world, Gateway gateway, IAdminStore stor
     /// <summary>Bans, mutes, the support queue and offline character changes (T-806); null without them (a command that needs them answers <c>unavailable</c>).</summary>
     public IModerationStore? Moderation { get; init; }
 
+    /// <summary>Players' reports of chat lines (T-901); null without a database (<c>close_report</c> answers <c>unavailable</c>).</summary>
+    public Chat.IChatReportStore? ChatReports { get; init; }
+
     /// <summary>The moderation checks (T-806), to forget a cached mute when one changes here; null without them.</summary>
     public ModerationChecks? Checks { get; init; }
 

@@ -295,6 +295,47 @@ namespace Game.Shared.Protocol
         public override string Type => MessageTypes.Refine;
     }
 
+    /// <summary>
+    /// <c>chat</c> (T-901): say <see cref="Text"/> on <see cref="Channel"/>. <c>{"type":"chat","channel":"map","text":"hello"}</c>, or a whisper:
+    /// <c>{"type":"chat","channel":"whisper","to":"Ada","text":"hello"}</c>. An intent: the server checks it (mute, rate, text) and sends the line back to everyone it reaches, the sender
+    /// included; nothing is shown before that. A refusal comes back as <see cref="ChatRefusedMessage"/>.
+    /// </summary>
+    /// <param name="Channel">A "Chat channels" term a player may send on.</param>
+    /// <param name="To">For a whisper: the character's name (any letter case); else null.</param>
+    /// <param name="Text">What the player typed.</param>
+    public sealed record ChatMessage(string Channel, string? To, string Text) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Chat;
+    }
+
+    /// <summary><c>block</c> (T-901): <c>{"type":"block","name":"Ada"}</c>. That character's lines no longer reach this account; its whispers are refused as if nobody of the name were online.</summary>
+    /// <param name="Name">The character's name.</param>
+    public sealed record BlockMessage(string Name) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Block;
+    }
+
+    /// <summary><c>unblock</c> (T-901): <c>{"type":"unblock","name":"Ada"}</c>.</summary>
+    /// <param name="Name">The character's name, as <see cref="ChatStateMessage.Blocked"/> lists it.</param>
+    public sealed record UnblockMessage(string Name) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Unblock;
+    }
+
+    /// <summary>
+    /// <c>report</c> (T-901): <c>{"type":"report","line":812}</c>. Reports a line this client received, by the number its <see cref="ChatLineMessage"/> carried. The client never sends the text:
+    /// the server keeps recent lines for a while and stores what was really said.
+    /// </summary>
+    /// <param name="Line">The line's number.</param>
+    public sealed record ReportMessage(long Line) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.Report;
+    }
+
     /// <summary>A message the server sends. <see cref="Type"/> is its <see cref="MessageTypes"/> name.</summary>
     public abstract record ServerMessage
     {
@@ -866,6 +907,56 @@ namespace Game.Shared.Protocol
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.Announcement;
+    }
+
+    /// <summary>
+    /// <c>chat_line</c> (T-901): a line the server accepted. <c>{"type":"chat_line","line":812,"channel":"map","from":42,"name":"Ada","text":"hello"}</c>; a whisper adds
+    /// <c>"to":"Bo"</c>, and its sender gets the same message. The text is the server's cleaned copy; the name is the character's, which the client draws apart from the text.
+    /// </summary>
+    /// <param name="Line">The line's number on this server (what a <see cref="ReportMessage"/> names).</param>
+    /// <param name="Channel">A "Chat channels" term.</param>
+    /// <param name="From">The sender's entity id (this server's, like a view record's).</param>
+    /// <param name="Name">The sender's character name.</param>
+    /// <param name="Text">What was said.</param>
+    /// <param name="To">For a whisper: the receiver's character name; else null.</param>
+    public sealed record ChatLineMessage(long Line, string Channel, long From, string Name, string Text, string? To = null) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.ChatLine;
+    }
+
+    /// <summary>
+    /// <c>chat_refused</c> (T-901): <c>{"type":"chat_refused","intent":"chat","reason":"muted","retry_after":240}</c>. The line went nowhere (or the block, unblock or report was not made).
+    /// </summary>
+    /// <param name="Intent">The message refused: <c>chat</c>, <c>block</c>, <c>unblock</c> or <c>report</c>.</param>
+    /// <param name="Reason">A "Chat reasons" term.</param>
+    /// <param name="RetryAfterSeconds">For <c>muted</c> and <c>rate_limited</c>: seconds until a line may go out; else null.</param>
+    /// <param name="Channel">The refused line's channel, for <c>chat</c>.</param>
+    /// <param name="To">The name the whisper, block or unblock named, if any.</param>
+    /// <param name="Line">The line a refused report named.</param>
+    public sealed record ChatRefusedMessage(string Intent, string Reason, long? RetryAfterSeconds = null, string? Channel = null, string? To = null, long? Line = null) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.ChatRefused;
+    }
+
+    /// <summary>
+    /// <c>chat_state</c> (T-901): <c>{"type":"chat_state","max_length":120,"blocked":["Bo"]}</c>. After every welcome and every block or unblock; it replaces what the client had.
+    /// </summary>
+    /// <param name="MaxLength">The longest line the server takes, in UTF-16 code units after cleaning (server configuration).</param>
+    /// <param name="Blocked">The names of the characters this account blocks, by name.</param>
+    public sealed record ChatStateMessage(int MaxLength, IReadOnlyList<string> Blocked) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.ChatState;
+    }
+
+    /// <summary><c>chat_reported</c> (T-901): <c>{"type":"chat_reported","line":812}</c>. The report is stored for staff.</summary>
+    /// <param name="Line">The line reported.</param>
+    public sealed record ChatReportedMessage(long Line) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.ChatReported;
     }
 
     /// <summary>

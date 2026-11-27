@@ -405,3 +405,63 @@ public sealed class AdminItemRow
     /// <summary>The audit row of the <c>give_item</c> that made it.</summary>
     public long AuditId { get; set; }
 }
+
+/// <summary>
+/// Table <c>chat_blocks</c> (T-901): an account blocks a character; that character's chat lines no longer reach the account, and its whispers to it are refused as "not online". Per account (the
+/// person, whichever character it plays) and per character (whom it saw). Ids and a time only. Erased with either account (docs/STORE_COMPLIANCE.md).
+/// </summary>
+public sealed class ChatBlockRow
+{
+    /// <summary>Who blocks.</summary>
+    public Guid AccountId { get; set; }
+
+    /// <summary>Whom (a permanent character id).</summary>
+    public Guid BlockedCharacterId { get; set; }
+
+    /// <summary>When (UTC).</summary>
+    public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Table <c>chat_reports</c> (T-901): a player reported a chat line it received. What was said is the server's copy (the client never sends it), with who said it and who reported it (account
+/// and character ids), when each happened, and whether staff closed it (and with which audit row). The only place a line a player wrote is kept. Erased with either account, and a closed report
+/// <c>--chat-closed-report-days</c> after it was closed (docs/STORE_COMPLIANCE.md).
+/// </summary>
+public sealed class ChatReportRow
+{
+    /// <summary>From an identity sequence.</summary>
+    public long Id { get; set; }
+
+    /// <summary>When it was reported (UTC).</summary>
+    public DateTime ReportedAt { get; set; }
+
+    /// <summary>The reporter's account.</summary>
+    public Guid ReporterAccountId { get; set; }
+
+    /// <summary>The character it played.</summary>
+    public Guid ReporterCharacterId { get; set; }
+
+    /// <summary>Who said it: the account.</summary>
+    public Guid SenderAccountId { get; set; }
+
+    /// <summary>Who said it: the character.</summary>
+    public Guid SenderCharacterId { get; set; }
+
+    /// <summary>The line's channel (a "Chat channels" term).</summary>
+    public string Channel { get; set; } = string.Empty;
+
+    /// <summary>What was said, as the server sent it.</summary>
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>When it was said (UTC).</summary>
+    public DateTime SaidAt { get; set; }
+
+    /// <summary><c>open</c> or <c>closed</c> (a "Chat report statuses" term).</summary>
+    public string Status { get; set; } = string.Empty;
+
+    /// <summary>When staff closed it (UTC), or null.</summary>
+    public DateTime? ClosedAt { get; set; }
+
+    /// <summary>The audit row that closed it, or null.</summary>
+    public long? ClosedAuditId { get; set; }
+}

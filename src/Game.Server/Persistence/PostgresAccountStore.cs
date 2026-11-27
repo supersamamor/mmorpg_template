@@ -121,6 +121,10 @@ public sealed class PostgresAccountStore(GameDatabase database) : IAccountStore
         await db.AdminItems.Where(a => db.Items.Any(i => i.Id == a.ItemInstanceId && characters.Contains(i.CharacterId))).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.Sanctions.Where(s => s.AccountId == account).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.SupportRequests.Where(r => r.AccountId == account).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        // T-901: chat reports it made or that name what it said, its blocks and the blocks of its characters by others (the lines and the ids go with either side).
+        await db.ChatReports.Where(r => r.ReporterAccountId == account || r.SenderAccountId == account || characters.Contains(r.ReporterCharacterId) || characters.Contains(r.SenderCharacterId))
+            .ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
+        await db.ChatBlocks.Where(b => b.AccountId == account || characters.Contains(b.BlockedCharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.Items.Where(i => characters.Contains(i.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.Outfits.Where(o => characters.Contains(o.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.CharacterStates.Where(s => characters.Contains(s.CharacterId)).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);

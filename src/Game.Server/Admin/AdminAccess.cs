@@ -190,6 +190,7 @@ public static class AdminCommandTable
         [AdminActions.OpenRequest] = StaffRoles.Support,
         [AdminActions.CompleteRequest] = StaffRoles.Support,
         [AdminActions.CancelRequest] = StaffRoles.Support,
+        [AdminActions.CloseReport] = StaffRoles.Support,   // T-901: support reads and closes players' reports of chat lines (and mutes)
         [AdminActions.Ban] = StaffRoles.Gm,
         [AdminActions.Unban] = StaffRoles.Gm,
         [AdminActions.GiveItem] = StaffRoles.Gm,
@@ -206,6 +207,7 @@ public static class AdminCommandTable
     [
         new KickCommand(), new BanCommand(), new UnbanCommand(), new MuteCommand(), new UnmuteCommand(), new GiveItemCommand(), new RemoveItemCommand(), new ChangeCurrencyCommand(),
         new UnstickCommand(), new AnnounceCommand(), new StartMaintenanceCommand(), new EndMaintenanceCommand(), new OpenRequestCommand(), new CompleteRequestCommand(), new CancelRequestCommand(),
+        new CloseReportCommand(),
     ];
 
     /// <summary>The lowest role for reads (status, lookups, the audit log).</summary>
