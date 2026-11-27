@@ -1,0 +1,45 @@
+@* Every command the server lists. One below the staff member's role is greyed out; the server checks the role of every command whatever is shown here. *@
+<div class="commands">
+    @if (List.Failure is not null)
+    {
+        <FailureBox Failure="List.Failure" />
+    }
+    else if (List.Value is { } list)
+    {
+        @foreach (var command in list.Commands)
+        {
+            <span class="command">
+                @if (!AdminApiClient.IsActionName(command.Action))
+                {
+                    <button type="button" disabled title="Not a command name the panel can send">@command.Action</button>
+                }
+                else if (Me.Reaches(command.LowestRole))
+                {
+                    <a class="button" data-command="@command.Action" href="@Href(command.Action)">@Label(command.Action)</a>
+                }
+                else
+                {
+                    <button type="button" disabled data-command="@command.Action" title="Needs the role @command.LowestRole or higher">@Label(command.Action)</button>
+                    <span class="small">needs @command.LowestRole</span>
+                }
+            </span>
+        }
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ApiResult<CommandListAnswer> List { get; set; } = default!;
+
+    [Parameter, EditorRequired] public Staff Me { get; set; } = default!;
+
+    /// <summary>The target's ids, as query parameters of the command's page.</summary>
+    [Parameter] public IReadOnlyList<(string Name, string Value)> Target { get; set; } = [];
+
+    /// <summary>Only these commands (those that fit the page), or all.</summary>
+    [Parameter] public Func<string, bool>? Show { get; set; }
+
+    private static string Label(string action) => action == AdminActions.Kick ? "Kick" : action;
+
+    private string Href(string action) =>
+        "/commands/" + action + (Target.Count == 0 ? "" : "?" + string.Join('&', Target.Select(t => t.Name + "=" + Uri.EscapeDataString(t.Value))));
+}

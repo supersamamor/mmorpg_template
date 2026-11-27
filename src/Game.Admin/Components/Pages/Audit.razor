@@ -1,0 +1,102 @@
+@page "/audit"
+@inherits PanelPage
+
+<PageTitle>Audit log · Staff panel</PageTitle>
+<h1>Audit log</h1>
+
+<form method="get" action="/audit" class="search">
+    <label>Target id <input name="target" value="@Target" maxlength="128" size="38" /></label>
+    <label>Staff id <input name="staff" value="@StaffId" maxlength="128" /></label>
+    <label>Action
+        <select name="action">
+            <option value="">any</option>
+            @foreach (var action in _actions)
+            {
+                <option value="@action" selected="@(action == Action)">@action</option>
+            }
+        </select>
+    </label>
+    <label>From (UTC) <input type="datetime-local" name="from" value="@From" /></label>
+    <label>To (UTC) <input type="datetime-local" name="to" value="@To" /></label>
+    <button type="submit">Search</button>
+</form>
+
+<FailureBox Failure="_page?.Failure" />
+@if (_page?.Value is { } page)
+{
+    @if (page.Items.Count == 0)
+    {
+        <p>No audit row matches.</p>
+    }
+    else
+    {
+        <div class="scroll">
+            <table>
+                <thead><tr><th>#</th><th>When</th><th>Staff</th><th>Action</th><th>Target</th><th>Reason</th><th>Before</th><th>After</th><th>Request</th></tr></thead>
+                <tbody>
+                    @foreach (var row in page.Items)
+                    {
+                        <tr>
+                            <td>@row.Id</td><td>@Time(row.At)</td>
+                            <td>@row.StaffName<br /><span class="small"><code>@row.StaffId</code> · @row.StaffRole</span></td>
+                            <td>@row.Action</td>
+                            <td>@row.TargetKind<br />
+                                @if (TargetLink(row) is { } link)
+                                {
+                                    <a href="@link"><code>@row.TargetId</code></a>
+                                }
+                                else
+                                {
+                                    <code>@row.TargetId</code>
+                                }
+                            </td>
+                            <td class="reason">@row.Reason</td>
+                            <td><JsonView Value="row.Before" /></td><td><JsonView Value="row.After" /></td>
+                            <td><code>@row.RequestId</code></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <p class="pages">
+        @if (Before is not null)
+        {
+            <a href="@Link(null)">Newest</a>
+        }
+        @if (page.Next is { } next)
+        {
+            <a href="@Link(next)" rel="next">Older</a>
+        }
+    </p>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "target")] public string? Target { get; set; }
+    [SupplyParameterFromQuery(Name = "staff")] public string? StaffId { get; set; }
+    [SupplyParameterFromQuery(Name = "action")] public string? Action { get; set; }
+    [SupplyParameterFromQuery(Name = "from")] public string? From { get; set; }
+    [SupplyParameterFromQuery(Name = "to")] public string? To { get; set; }
+    [SupplyParameterFromQuery(Name = "before")] public string? Before { get; set; }
+
+    private ApiResult<AuditPageAnswer>? _page;
+    private IReadOnlyList<string> _actions = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (await StaffAsync() is not { } me) return;
+        // The actions to pick from: the server's commands, and the terms the panel was built with (a row of a command the server no longer has can still be found).
+        var commands = await Api.GetCommandsAsync(me);
+        _actions = AdminActions.All.Ordered.Concat(commands.Value?.Commands.Select(c => c.Action) ?? []).Distinct().Order(StringComparer.Ordinal).ToList();
+        _page = await Api.SearchAuditAsync(me, Clean(Target), Clean(StaffId), Clean(Action), Clean(From), Clean(To), Clean(Before));
+    }
+
+    private string Link(string? before) => Paging.Link("/audit", ("target", Clean(Target)), ("staff", Clean(StaffId)), ("action", Clean(Action)), ("from", Clean(From)),
+        ("to", Clean(To)), ("before", before));
+
+    private static string? TargetLink(AuditAnswer row) =>
+        !Guid.TryParse(row.TargetId, out var id) ? null
+        : row.TargetKind == AdminTargetKinds.Account ? $"/accounts/{id}"
+        : row.TargetKind == AdminTargetKinds.Character ? $"/characters/{id}"
+        : null;
+}

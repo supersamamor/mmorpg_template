@@ -1,0 +1,62 @@
+@page "/accounts"
+@inherits PanelPage
+
+<PageTitle>Accounts · Staff panel</PageTitle>
+<h1>Accounts</h1>
+
+<form method="get" action="/accounts" class="search">
+    <label>Username starts with <input name="name" value="@Name" maxlength="128" /></label>
+    <label>Account id <input name="id" value="@Id" maxlength="128" size="38" /></label>
+    <button type="submit">Search</button>
+</form>
+
+<FailureBox Failure="_page?.Failure" />
+@if (_page?.Value is { } page)
+{
+    @if (page.Items.Count == 0)
+    {
+        <p>No account matches.</p>
+    }
+    else
+    {
+        <div class="scroll">
+            <table>
+                <thead><tr><th>Username</th><th>Account id</th><th>Created</th><th>Characters</th><th>Sign-ins</th><th>Online</th><th>Deletion due</th></tr></thead>
+                <tbody>
+                    @foreach (var account in page.Items)
+                    {
+                        <tr>
+                            <td><a href="/accounts/@account.Id">@account.Username</a></td><td><code>@account.Id</code></td><td>@Time(account.CreatedAt)</td>
+                            <td>@account.Characters</td><td>@account.Sessions</td><td>@(account.Online ? "yes" : "no")</td><td>@Time(account.EraseAfter)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+    <p class="pages">
+        @if (After is not null)
+        {
+            <a href="@Link(null)">First page</a>
+        }
+        @if (page.Next is { } next)
+        {
+            <a href="@Link(next)" rel="next">Next page</a>
+        }
+    </p>
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "name")] public string? Name { get; set; }
+    [SupplyParameterFromQuery(Name = "id")] public string? Id { get; set; }
+    [SupplyParameterFromQuery(Name = "after")] public string? After { get; set; }
+
+    private ApiResult<PageAnswer<AccountAnswer>>? _page;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (await StaffAsync() is { } me) _page = await Api.FindAccountsAsync(me, Clean(Name), Clean(Id), Clean(After));
+    }
+
+    private string Link(string? after) => Paging.Link("/accounts", ("name", Clean(Name)), ("id", Clean(Id)), ("after", after));
+}

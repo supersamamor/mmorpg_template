@@ -18,6 +18,8 @@
     <ProjectReference Include="..\..\src\Game.Content\Game.Content.csproj" />
     <ProjectReference Include="..\..\src\Game.Server\Game.Server.csproj" />
     <ProjectReference Include="..\..\src\Game.Tools\Game.Tools.csproj" />
+    <!-- T-805: the staff panel, started in process by its tests. -->
+    <ProjectReference Include="..\..\src\Game.Admin\Game.Admin.csproj" />
     <!-- T-207: the placeholder pack generator; a test checks the committed pack is exactly what it writes. -->
     <ProjectReference Include="..\..\tools\themegen\ThemeGen.csproj" />
     <ProjectReference Include="..\..\tools\themeimport\ThemeImport.csproj" />

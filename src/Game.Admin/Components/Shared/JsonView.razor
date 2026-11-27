@@ -1,0 +1,51 @@
+@* A JSON value as nested lists, content ids shown with their names. For the saved parts whose shape is the server's own. *@
+@inject ContentNames Names
+
+@switch (Value.ValueKind)
+{
+    case JsonValueKind.Object:
+        if (!Value.EnumerateObject().Any())
+        {
+            <span class="empty">none</span>
+        }
+        else
+        {
+            <dl class="json">
+                @foreach (var property in Value.EnumerateObject())
+                {
+                    <dt>@Names.Describe(property.Name)</dt>
+                    <dd><JsonView Value="property.Value" /></dd>
+                }
+            </dl>
+        }
+        break;
+    case JsonValueKind.Array:
+        if (Value.GetArrayLength() == 0)
+        {
+            <span class="empty">none</span>
+        }
+        else
+        {
+            <ul class="json">
+                @foreach (var item in Value.EnumerateArray())
+                {
+                    <li><JsonView Value="item" /></li>
+                }
+            </ul>
+        }
+        break;
+    case JsonValueKind.String:
+        <span>@Names.Describe(Value.GetString())</span>
+        break;
+    case JsonValueKind.Undefined:
+    case JsonValueKind.Null:
+        <span class="empty">—</span>
+        break;
+    default:
+        <span>@Value.GetRawText()</span>
+        break;
+}
+
+@code {
+    [Parameter] public JsonElement Value { get; set; }
+}

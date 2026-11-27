@@ -1,0 +1,63 @@
+@page "/accounts/{Id:guid}"
+@inherits PanelPage
+
+<PageTitle>Account · Staff panel</PageTitle>
+<h1>Account</h1>
+
+<FailureBox Failure="_account?.Failure" />
+@if (_account?.Value is { } detail && _me is not null && _commands is not null)
+{
+    var account = detail.Account;
+    <dl class="facts">
+        <dt>Username</dt><dd>@account.Username</dd>
+        <dt>Account id</dt><dd><code>@account.Id</code></dd>
+        <dt>Created</dt><dd>@Time(account.CreatedAt)</dd>
+        <dt>Password changed</dt><dd>@Time(account.PasswordChangedAt)</dd>
+        <dt>Sign-ins</dt><dd>@account.Sessions</dd>
+        <dt>Online</dt><dd>@(account.Online ? "yes" : "no")</dd>
+        <dt>Deletion due</dt><dd>@Time(account.EraseAfter)</dd>
+    </dl>
+
+    <h2>Commands</h2>
+    <CommandButtons List="_commands" Me="_me" Target="@([(AdminCommandFields.AccountId, account.Id.ToString())])" />
+    <p><a href="/audit?target=@account.Id">Audit rows about this account</a></p>
+
+    <h2>Characters</h2>
+    @if (detail.Characters.Count == 0)
+    {
+        <p>No characters.</p>
+    }
+    else
+    {
+        <div class="scroll">
+            <table>
+                <thead><tr><th>Slot</th><th>Name</th><th>Job</th><th>Created</th><th>Deleted</th><th>Online</th></tr></thead>
+                <tbody>
+                    @foreach (var character in detail.Characters)
+                    {
+                        <tr>
+                            <td>@character.Slot</td><td><a href="/characters/@character.Id">@character.Name</a></td><td>@Names.Describe(character.JobId)</td>
+                            <td>@Time(character.CreatedAt)</td><td>@Time(character.DeletedAt)</td><td>@(character.Online ? "yes" : "no")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Staff? _me;
+    private ApiResult<AccountDetailAnswer>? _account;
+    private ApiResult<CommandListAnswer>? _commands;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _me = await StaffAsync();
+        if (_me is null) return;
+        _account = await Api.GetAccountAsync(_me, Id);
+        if (_account.Value is not null) _commands = await Api.GetCommandsAsync(_me);
+    }
+}

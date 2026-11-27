@@ -1,0 +1,33 @@
+@inherits LayoutComponentBase
+@inject StaffSessions Sessions
+
+<header>
+    <strong>Staff panel</strong>
+    @if (_me is not null)
+    {
+        <nav>
+            <NavLink href="/" Match="NavLinkMatch.All">Status</NavLink>
+            <NavLink href="/accounts">Accounts</NavLink>
+            <NavLink href="/characters">Characters</NavLink>
+            <NavLink href="/audit">Audit log</NavLink>
+            <NavLink href="/commands">Commands</NavLink>
+        </nav>
+        <span class="who">@_me.Name · <span class="role">@_me.Role</span></span>
+        <form method="post" action="@SignInPaths.SignOut">
+            <AntiforgeryToken />
+            <button type="submit">Sign out</button>
+        </form>
+    }
+</header>
+<main>
+    @Body
+</main>
+
+@code {
+    private Staff? _me;
+
+    [CascadingParameter] private Task<AuthenticationState>? Authentication { get; set; }
+
+    protected override async Task OnInitializedAsync() =>
+        _me = Authentication is null ? null : Sessions.Resolve((await Authentication).User);
+}

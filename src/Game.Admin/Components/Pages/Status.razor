@@ -1,0 +1,132 @@
+@page "/"
+@page "/status"
+@rendermode InteractiveServer
+@inherits PanelPage
+@implements IDisposable
+@inject PanelSettings Settings
+@inject TimeProvider Clock
+
+<PageTitle>Status · Staff panel</PageTitle>
+<h1>Server status</h1>
+
+@if (_ended)
+{
+    <div class="failure" role="alert"><p>Your sign-in has ended. <a href="@SignInPaths.Page" data-enhance-nav="false">Sign in again</a>.</p></div>
+}
+else
+{
+    <p class="small">Asks the server again every @Settings.StatusRefreshSeconds s. Last asked @Time(_asked).</p>
+    <FailureBox Failure="_result?.Failure" />
+    @if (_result?.Value is { } status)
+    {
+        <dl class="facts">
+            <dt>Players online</dt><dd data-fact="players_online">@status.PlayersOnline</dd>
+            <dt>Connections</dt><dd>@status.Sessions</dd>
+            <dt>Running since</dt><dd>@status.StartedAt</dd>
+            <dt>Content hash</dt><dd><code>@status.ContentHash</code></dd>
+            <dt>Errors logged</dt><dd>@status.Errors.LoggedErrors</dd>
+            <dt>Warnings logged</dt><dd>@status.Errors.LoggedWarnings</dd>
+            <dt>server_error byes</dt><dd>@status.Errors.ServerErrorByes</dd>
+        </dl>
+        @if (Names.Hash is { } hash && hash != status.ContentHash)
+        {
+            <p class="warning">The panel's content is not the server's (hash differs): names shown here may be old or missing. Give the panel the server's content/ folder and restart it.</p>
+        }
+
+        <h2>Map instances</h2>
+        <div class="scroll">
+            <table>
+                <thead><tr><th>Map</th><th>Tick</th><th>p50 ms</th><th>p99 ms</th><th>Max ms</th><th>Lifetime max ms</th><th>System errors</th><th>Handler errors</th><th>Intents dropped</th></tr></thead>
+                <tbody>
+                    @foreach (var instance in status.Instances)
+                    {
+                        <tr>
+                            <td>@Names.Describe(instance.MapId)</td><td>@instance.Tick</td><td>@Millis(instance.TickP50Micros)</td><td>@Millis(instance.TickP99Micros)</td>
+                            <td>@Millis(instance.TickMaxMicros)</td><td>@Millis(instance.TickLifetimeMaxMicros)</td><td>@instance.SystemErrors</td>
+                            <td>@instance.HandlerErrors</td><td>@instance.IntentsDropped</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <h2>Saving</h2>
+        @if (status.Saves is { } saves)
+        {
+            <dl class="facts">
+                <dt>Saves</dt><dd>@saves.Saves</dd>
+                <dt>Transactions</dt><dd>@saves.Transactions</dd>
+                <dt>Failures</dt><dd>@saves.Failures</dd>
+                <dt>Lost</dt><dd>@saves.Lost</dd>
+                <dt>Held</dt><dd>@saves.Held</dd>
+                <dt>Waiting</dt><dd>@saves.Waiting</dd>
+                <dt>At risk</dt><dd>@saves.AtRisk</dd>
+            </dl>
+        }
+        else
+        {
+            <p>The server saves nothing (it runs without saved characters).</p>
+        }
+    }
+}
+
+@code {
+    private ApiResult<AdminStatusAnswer>? _result;
+    private DateTime? _asked;
+    private bool _ended;
+    private readonly CancellationTokenSource _gone = new();
+
+    protected override Task OnInitializedAsync() => RefreshAsync();
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender) _ = RunAsync(); // only on the live connection: a prerender has no after-render
+    }
+
+    private async Task RunAsync()
+    {
+        // The settings refuse less than the minimum; the clamp holds even for settings made in code.
+        var every = TimeSpan.FromSeconds(Math.Max(PanelSettings.MinStatusRefreshSeconds, Settings.StatusRefreshSeconds));
+        using var timer = new PeriodicTimer(every, Clock);
+        try
+        {
+            while (!_ended && await timer.WaitForNextTickAsync(_gone.Token))
+            {
+                await InvokeAsync(async () =>
+                {
+                    await RefreshAsync();
+                    StateHasChanged();
+                });
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // the page was left
+        }
+        catch (Exception e)
+        {
+            await DispatchExceptionAsync(e);
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        // Checked before every call: a sign-out or the end of the sign-in stops an open page too.
+        if (await StaffAsync() is not { } me)
+        {
+            _ended = true;
+            _result = null;
+            return;
+        }
+        _result = await Api.GetStatusAsync(me, _gone.Token);
+        _asked = Clock.GetUtcNow().UtcDateTime;
+    }
+
+    private static string Millis(long micros) => (micros / 1000.0).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+
+    public void Dispose()
+    {
+        _gone.Cancel();
+        _gone.Dispose();
+    }
+}

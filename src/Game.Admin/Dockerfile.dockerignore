@@ -1,0 +1,22 @@
+# The build context of the panel image (src/Game.Admin/Dockerfile): everything is left out, then only what the panel needs is let back in.
+# BuildKit reads this file instead of the root .dockerignore (the server image's) for this Dockerfile.
+**
+
+!global.json
+!Directory.Build.props
+!Directory.Packages.props
+!.editorconfig
+!src/Game.Shared/**
+!src/Game.Content/**
+!src/Game.Admin/**
+!content/**
+content/client-content.reference.json
+
+**/bin/
+**/obj/
+**/*.md
+**/*.pfx
+**/*.pem
+**/*.key
+**/.env
+**/appsettings.Development.local.json
