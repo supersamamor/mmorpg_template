@@ -140,6 +140,9 @@ public sealed class ModelStore
         }
     }
 
+    /// <summary>True when the scene at <paramref name="path"/> is loaded or loading (for checking what was preloaded, T-711).</summary>
+    public bool Holds(string path) => _requested.Contains(path) || (_scenes.TryGetValue(path, out var entry) && entry.Scene is not null);
+
     /// <summary>True when the worn piece at <paramref name="path"/> is ready (loaded and taken from its scene) or has failed for good.</summary>
     public bool HasPiece(string path) => _pieces.ContainsKey(path) || _retries.GaveUp(path);
 

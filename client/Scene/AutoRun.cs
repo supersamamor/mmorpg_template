@@ -45,7 +45,7 @@ public sealed class AutoRun
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
         Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-autopilot") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 || Array.IndexOf(args, "--e2e-appearance") >= 0 || Array.IndexOf(args, "--e2e-appearance-watch") >= 0 ||
-        Array.IndexOf(args, "--e2e-wardrobe") >= 0 || Array.IndexOf(args, "--e2e-wardrobe-watch") >= 0 || Array.IndexOf(args, "--e2e-kick") >= 0 || Array.IndexOf(args, "--e2e-moderation") >= 0 ||
+        Array.IndexOf(args, "--e2e-wardrobe") >= 0 || Array.IndexOf(args, "--e2e-wardrobe-watch") >= 0 || Array.IndexOf(args, "--e2e-kick") >= 0 || Array.IndexOf(args, "--e2e-moderation") >= 0 || Array.IndexOf(args, "--e2e-textured") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -89,6 +89,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-appearance") >= 0) await new LookRuns(_main, ShotAsync).CreatorAsync();
             else if (Value("--e2e-wardrobe-watch") is { } outfit) await new WardrobeRuns(_main, ShotAsync).WatcherAsync(outfit);
             else if (Array.IndexOf(_args, "--e2e-wardrobe") >= 0) await new WardrobeRuns(_main, ShotAsync).WearerAsync();
+            else if (Value("--e2e-textured") is { } other) await TexturedRunAsync(other);
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
             else await PlayRunAsync();
@@ -1916,6 +1917,17 @@ public sealed class AutoRun
         Session.Logout(Clocks.Wall());
         await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen, 10, "bye logout");
         Print("logout: bye logout");
+    }
+
+    /// <summary>T-711: textured characters in one draw call, on the textured test theme (<see cref="TexturedRuns"/>).</summary>
+    private async Task TexturedRunAsync(string otherImage)
+    {
+        await LoginAsync();
+        var dress = Value("--e2e-textured-dress")?.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
+        await new TexturedRuns(_main, ShotAsync).RunAsync(otherImage.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToHashSet(StringComparer.Ordinal), dress);
+        Session.Logout(Clocks.Wall());
+        await UntilAsync(() => Session.Connection.Phase == ConnectionPhase.LoginScreen, 10, "bye logout");
+        Print("textured: bye logout");
     }
 
     private async Task MeasureAsync()

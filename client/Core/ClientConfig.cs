@@ -110,6 +110,9 @@ public sealed class ClientConfig
     /// <summary>Draw characters by their own looks (T-706); off draws them by their job's model as before, for measuring.</summary>
     public bool DrawAppearance { get; set; } = true;
 
+    /// <summary>Merge a character's textured parts by the image they draw (T-711); off groups them by texture object as before, so each file's texture is a surface of its own, for measuring.</summary>
+    public bool MergeByImage { get; set; } = true;
+
     /// <summary>Most worn-visual models loaded ahead of need (worn on screen first, then the own bag, T-405); 0 turns the preload off. Their meshes count toward <see cref="ModelCacheLimit"/>.</summary>
     public int GearPreloadLimit { get; set; } = 16;
 
@@ -359,6 +362,7 @@ public sealed class ClientConfig
             case "preview_turn_degrees": PreviewTurnDegreesPerSecond = Number(value); break;
             case "preview_drag_degrees": PreviewDragDegrees = Number(value); break;
             case "draw_appearance": DrawAppearance = Number(value) != 0; break;
+            case "merge_by_image": MergeByImage = Number(value) != 0; break;
             case "gear_preload_limit": GearPreloadLimit = Math.Max(0, (int)Number(value)); break;
             case "piece_load_attempts": PieceLoadAttempts = Math.Max(1, (int)Number(value)); break;
             case "toon_shading": ToonShading = Number(value) != 0; break;

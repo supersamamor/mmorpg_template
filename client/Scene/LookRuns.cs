@@ -168,7 +168,7 @@ public sealed class LookRuns
         OS.LowProcessorUsageMode = false;
         await SecondsAsync(5); // shaders settle
         var options = _main.Bundle!.Appearance!;
-        Print($"measure: looks offered: {Variety(options)} ({string.Join(" + ", options.Genders.Select(g => $"{g.Faces.Count} faces x {g.Hairstyles.Count} hairstyles"))}, x {options.SkinTones.Count} skin tones x {options.HairColors.Count} hair colours); cache limit {_main.Config.LookCacheLimit} looks");
+        Print($"measure: looks offered: {Variety(options)} ({string.Join(" + ", options.Genders.Select(g => $"{g.Faces.Count} faces x {g.Hairstyles.Count} hairstyles"))}, x {options.SkinTones.Count} skin tones x {options.HairColors.Count} hair colours); cache limit {_main.Config.LookCacheLimit} looks; {entities.JobModelsHeld()} job models loaded before the first phase; theme {_main.Config.Theme}");
 
         async Task Phase(string what, Action change)
         {
@@ -212,7 +212,7 @@ public sealed class LookRuns
             }
             var visuals = World.Entities.Where(Players).Select(e => e.Visual).OfType<ModelVisual>().ToList();
             var different = World.Entities.Where(Players).Select(e => e.Visual).OfType<ModelVisual>().Where(v => v.Character is not null).Select(v => v.Character!.Ids).Distinct().Count();
-            Print($"measure: {what}: {sumOn / frames:0.0} players in view, {sumScreen / frames:0.0} entities on screen (at most {maxScreen}), {different} different looks, surfaces per player at most {visuals.Select(v => v.Surfaces).DefaultIfEmpty().Max()}");
+            Print($"measure: {what}: {sumOn / frames:0.0} players in view, {sumScreen / frames:0.0} entities on screen (at most {maxScreen}), {different} different looks, surfaces per player at most {visuals.Select(v => v.Surfaces).DefaultIfEmpty().Max()} ({string.Join(", ", visuals.GroupBy(v => v.Surfaces).OrderBy(g => g.Key).Select(g => $"{g.Count()} with {g.Key}"))})");
             Print($"measure: {what}: draw calls avg {sumDraws / frames:0.0}, max {maxDraws:0} (with {screenAtMax} on screen); triangles max {maxTriangles:0}; {frames / clock.Elapsed.TotalSeconds:0.0} fps, worst frame {worst:0.0} ms, process {sumProcess / frames:0.00} ms a frame");
             Print($"measure: {what}: change settled in {settled:0.00} s (worst frame {worstChange:0.0} ms, {entities.Created - created} instances and dressings, {entities.Merged.Built - built} merges, {entities.MergeMainThreadMs - main:0.0} ms of them on the main thread); " +
                   $"{entities.Merged.Cached} merged characters cached; static memory {OS.GetStaticMemoryUsage() / 1048576.0:0.0} MB, video {Performance.GetMonitor(Performance.Monitor.RenderVideoMemUsed) / 1048576.0:0.0} MB");
@@ -246,7 +246,21 @@ public sealed class LookRuns
                 presenter.OutfitOverride = e => byGender[Nth(options, e.Id).Gender];
                 presenter.Redraw();
             });
-        Print($"measure: {entities.LookKinds} looks remembered; {_main.Look?.Materials ?? 0} toon materials; adapter {RenderingServer.GetVideoAdapterName()}");
+        // T-711: the same crowd, the textured parts grouped by texture object as before T-711 (each file's copy of the atlas a surface of its own), then back.
+        var (textures, images, imageMs) = entities.Images;
+        if (_main.Config.MergeByImage && textures > 0)
+        {
+            var last = outfits.Count > 0 ? (dress is { Count: > 0 } ? "all different, dressed, in outfits" : "all different, in outfits") : dress is { Count: > 0 } ? "all different, dressed" : "all different";
+            await Phase(last + ", merged by file (before T-711)", () =>
+            {
+                presenter.Redraw();
+                entities.SetMergeByImage(false);
+            });
+            presenter.Redraw();
+            entities.SetMergeByImage(true);
+        }
+        Print($"measure: {entities.LookKinds} looks remembered; {_main.Look?.Materials ?? 0} toon materials; {textures} textures read as {images} images ({imageMs:0.0} ms); "
+              + $"{entities.JobModelsHeld()} job models held; adapter {RenderingServer.GetVideoAdapterName()}");
         await _shot(string.Empty);
     }
 

@@ -180,6 +180,10 @@ public sealed class ModelVisual : IEntityVisual
     /// <summary>Surfaces drawn at the full level of detail (for checking: one per character, §9).</summary>
     public int Surfaces => _lod0?.Mesh?.GetSurfaceCount() ?? 0;
 
+    /// <summary>The material a surface of the full-detail mesh is drawn with: its override (the toon look's) or the mesh's own (for checking, T-711).</summary>
+    public Material? DrawnMaterial(int surface) =>
+        _lod0?.Mesh is { } mesh && surface < mesh.GetSurfaceCount() ? _lod0.GetSurfaceOverrideMaterial(surface) ?? mesh.SurfaceGetMaterial(surface) : null;
+
     /// <summary>The distinct vertex colours of the drawn mesh (for checking that the character's colours are baked in, T-706).</summary>
     public IReadOnlyCollection<Color> DrawnColors()
     {

@@ -56,8 +56,9 @@ public sealed record DressedMesh(ArrayMesh Mesh0, Skin Skin0, ArrayMesh? Mesh1, 
 /// Merges a character's body and its worn pieces into one skinned mesh per level of detail (T-403, §9). Attached pieces become parts of the skin weighted fully to their
 /// bone, so they follow it exactly as a bone attachment would; skinned pieces keep their weights, with their skin's binds mapped onto the character's. Surfaces whose
 /// materials differ only in colour (untextured <see cref="StandardMaterial3D"/>, opaque, the same shading) are joined into one surface with the colour baked into the
-/// vertex colours, so a character costs one draw call whatever it wears; a textured material keeps its own surface (real art needs an atlas to merge, §9's
-/// "1 material"). Since T-706 the face and hairstyle are parts like the gear, and the skin, hair and cloth colours are baked into the vertex colours
+/// vertex colours, so a character costs one draw call whatever it wears. Since T-711 textured materials merge the same way when they draw the same image
+/// (<see cref="ImageIdentity"/>: the same pixels in any number of files, since every .glb embeds its own copy), so a character whose parts share the theme's
+/// atlas is one draw call too; each other image is one surface more (docs/THEMES.md 1.9). Since T-706 the face and hairstyle are parts like the gear, and the skin, hair and cloth colours are baked into the vertex colours
 /// (<see cref="Recolor"/>). Results are cached by <see cref="WornSet"/> key, both levels of detail together, at most <c>look_cache_limit</c> of them (the least recently
 /// used go first), so a crowd with the same looks and gear shares one mesh and one skin.
 /// <para><b>Off the main thread</b> (T-222, ADR-002 row 223): the merge used to take one 60–105 ms frame. Now each source mesh's arrays are read once (on the main
@@ -88,13 +89,35 @@ public sealed class GearMesher
     private readonly Dictionary<ulong, SourceMesh> _sources = new();
     private readonly int _limit;
     private readonly bool _threaded;
+    private readonly ImageIdentity _images;
 
     /// <summary>Creates a mesher that keeps at most <paramref name="limit"/> merged characters (the least recently used go first; a character still showing one keeps it).
-    /// Without <paramref name="threaded"/> the merge runs at once on the calling thread.</summary>
-    public GearMesher(int limit, bool threaded = true)
+    /// Without <paramref name="threaded"/> the merge runs at once on the calling thread. <paramref name="warn"/> hears about textures that cannot be read (once each).</summary>
+    public GearMesher(int limit, bool threaded = true, Action<string>? warn = null)
     {
         _limit = Math.Max(1, limit);
         _threaded = threaded;
+        _images = new ImageIdentity(warn ?? (message => GD.PushWarning(message)));
+    }
+
+    /// <summary>Which textures are the same image (for measuring and checking, T-711).</summary>
+    public ImageIdentity Images => _images;
+
+    private bool _byImage = true;
+
+    /// <summary>
+    /// Merge textured parts by the image they draw (T-711); false groups them by texture object as before T-711, so every file's texture is a surface of its own (for measuring the
+    /// difference on one crowd). Changing it forgets every merged character and source.
+    /// </summary>
+    public bool ByImage
+    {
+        get => _byImage;
+        set
+        {
+            if (value == _byImage) return;
+            _byImage = value;
+            Clear();
+        }
     }
 
     /// <summary>Merged characters cached now (for measuring).</summary>
@@ -196,6 +219,7 @@ public sealed class GearMesher
         _cache.Clear();
         _baked.Clear();
         _sources.Clear();
+        _images.Clear();
     }
 
     // ---- plain data: what a worker may touch ----
@@ -303,17 +327,29 @@ public sealed class GearMesher
     }
 
     /// <summary>
-    /// Which group a surface joins: an untextured opaque <see cref="StandardMaterial3D"/> joins the shared material for its shading, with its colour baked into the
-    /// vertex colours; anything else keeps its own material (and its own surface).
+    /// Which group a surface joins: an opaque <see cref="StandardMaterial3D"/> with no texture, or with only an albedo texture, joins the shared material for its
+    /// shading and its image (none, or the same pixels whatever file they came from: <see cref="ImageIdentity"/>), with its colour baked into the vertex colours;
+    /// anything else (see-through, a shader, other textures, an image that cannot be read) keeps its own material and its own surface.
     /// </summary>
     private void Classify(Material? material, SourceSurface surface)
     {
-        if (material is StandardMaterial3D standard && standard.AlbedoTexture is null && standard.Transparency == BaseMaterial3D.TransparencyEnum.Disabled)
+        if (material is StandardMaterial3D standard && standard.Transparency == BaseMaterial3D.TransparencyEnum.Disabled && OnlyAlbedo(standard))
         {
-            var key = $"baked:{standard.ShadingMode}:{standard.Roughness:0.###}:{standard.Metallic:0.###}:{standard.CullMode}:{standard.VertexColorIsSrgb}:{standard.SpecularMode}:{standard.DiffuseMode}";
+            var image = string.Empty;
+            if (standard.AlbedoTexture is { } texture)
+            {
+                if (!_byImage || ImageOf(texture) is not { } known)
+                {
+                    Own(material, surface);
+                    return;
+                }
+                // How the image is sampled is part of the material too.
+                image = $"{known}:{standard.TextureFilter}:{standard.TextureRepeat}:{standard.Uv1Scale}:{standard.Uv1Offset}:{standard.Uv1Triplanar}";
+            }
+            var key = $"baked:{image}:{standard.ShadingMode}:{standard.Roughness:0.###}:{standard.Metallic:0.###}:{standard.CullMode}:{standard.VertexColorIsSrgb}:{standard.SpecularMode}:{standard.DiffuseMode}";
             if (!_baked.TryGetValue(key, out var shared))
             {
-                shared = (StandardMaterial3D)standard.Duplicate();
+                shared = (StandardMaterial3D)standard.Duplicate(); // a textured one keeps the first file's copy of the image: every other copy is the same pixels
                 shared.AlbedoColor = Colors.White;
                 shared.VertexColorUseAsAlbedo = true;
                 _baked[key] = shared;
@@ -325,9 +361,36 @@ public sealed class GearMesher
             surface.Srgb = standard.VertexColorIsSrgb;
             return;
         }
+        Own(material, surface);
+    }
+
+    private static void Own(Material? material, SourceSurface surface)
+    {
         surface.GroupKey = "own:" + (material?.GetInstanceId() ?? 0);
         surface.Target = material;
     }
+
+    /// <summary>True when the material uses no texture but the albedo one (a normal or emission map would be lost on the shared material).</summary>
+    private static bool OnlyAlbedo(StandardMaterial3D material)
+    {
+        for (var p = 0; p < (int)BaseMaterial3D.TextureParam.Max; p++)
+            if (p != (int)BaseMaterial3D.TextureParam.Albedo && material.GetTexture((BaseMaterial3D.TextureParam)p) is not null) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// The image key of a texture, read once: the bytes of its imported file when it has one (no GPU read-back, and the same pixels imported the same way are the
+    /// same bytes), else its pixels; null when neither can be read.
+    /// </summary>
+    private string? ImageOf(Texture2D texture) =>
+        _images.KeyOf(texture.GetInstanceId(), texture.ResourcePath.Length > 0 ? texture.ResourcePath : texture.ResourceName, () =>
+        {
+            if (texture is CompressedTexture2D compressed && compressed.LoadPath is { Length: > 0 } path && Godot.FileAccess.FileExists(path))
+                return ("file", Godot.FileAccess.GetFileAsBytes(path));
+            if (texture.GetImage() is { } pixels && !pixels.IsEmpty())
+                return ($"pixels:{pixels.GetWidth()}x{pixels.GetHeight()}:{(int)pixels.GetFormat()}:{pixels.HasMipmaps()}", pixels.GetData());
+            return null;
+        });
 
     // ---- worker: the merge over plain arrays ----
 
@@ -448,8 +511,8 @@ public sealed class GearMesher
     /// <summary>
     /// Albedo × vertex colour, done the way the shader does it: the albedo colour is sRGB, vertex colours are linear unless the material says sRGB. Vertex colours
     /// always count: glTF says COLOR_0 multiplies the base colour, though Godot's importer leaves the flag off, and the T-222 placeholders keep their colours there.
-    /// The alpha is kept: 0 marks a glowing part (T-222), which takes no character colour (T-706). A textured surface keeps its albedo in its material, and only its
-    /// vertex colour takes part.
+    /// The alpha is kept: 0 marks a glowing part (T-222), which takes no character colour (T-706). A merged textured surface (T-711) bakes its albedo colour the same
+    /// way and keeps the image in the shared material, which multiplies it by the vertex colour; a surface of its own keeps its albedo in its material.
     /// </summary>
     private static Color Tint(SourceSurface surface, Color c, Recolor recolor, LinearColor dominant)
     {

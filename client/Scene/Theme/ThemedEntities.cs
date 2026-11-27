@@ -47,7 +47,8 @@ public sealed class ThemedEntities : IEntityVisualSource
         _store = new ModelStore(config.ModelCacheLimit, threaded, message => GD.PushWarning(message), config.PieceLoadAttempts);
         _equipment = new EquipmentCatalog(catalog, id => bundle.Item(id)?.Visual, id => bundle.Item(id)?.Slots);
         _appearance = new AppearanceCatalog(catalog, _equipment, bundle);
-        _mesher = new GearMesher(config.LookCacheLimit, threaded);
+        _mesher = new GearMesher(config.LookCacheLimit, threaded, message => GD.PushWarning(message));
+        _mesher.ByImage = config.MergeByImage;
         _gearPreload = new GearPreload(catalog, id => bundle.Item(id)?.Visual, config.GearPreloadLimit);
         _needsDressing = visual =>
         {
@@ -67,6 +68,9 @@ public sealed class ThemedEntities : IEntityVisualSource
 
     /// <summary>Merged characters: cached now, and built so far (for measuring).</summary>
     public (int Cached, int Built) Merged => (_mesher.Cached, _mesher.Built);
+
+    /// <summary>Textures read to tell which are the same image, and how many distinct images they were (T-711), for measuring.</summary>
+    public (int Textures, int Images, double Ms) Images => (_mesher.Images.Read, _mesher.Images.Distinct, _mesher.Images.Milliseconds);
 
     /// <summary>Main-thread milliseconds spent on merges so far (T-222: the merge itself runs on a worker), for measuring.</summary>
     public double MergeMainThreadMs => _mesher.MainThreadMs;
@@ -116,6 +120,28 @@ public sealed class ThemedEntities : IEntityVisualSource
         PreloadGear(_gearWorn, _gearBag);
     }
 
+    /// <summary>
+    /// Measuring only (T-711): merges textured parts by image (true) or by texture object as before T-711, and frees every pooled visual, so the characters drawn next are merged anew.
+    /// Call after <see cref="WorldPresenter.Redraw"/>, which gives the visuals back.
+    /// </summary>
+    public void SetMergeByImage(bool byImage)
+    {
+        _config.MergeByImage = byImage;
+        _mesher.ByImage = byImage;
+        foreach (var pool in _pools.Values)
+            while (pool.Count > 0) pool.Pop().Free();
+        _pools.Clear();
+    }
+
+    /// <summary>Job models loaded or loading now (T-711: only once a character is drawn by one), for checking and measuring.</summary>
+    public int JobModelsHeld()
+    {
+        var held = 0;
+        foreach (var key in _bundle.ModelKeys)
+            if (_bundle.IsJobModelOnly(key) && _catalog.TryFind(key, out var path, out _) && _store.Holds(path)) held++;
+        return held;
+    }
+
     /// <summary>The store (for measuring).</summary>
     public ModelStore Store => _store;
 
@@ -135,11 +161,16 @@ public sealed class ThemedEntities : IEntityVisualSource
     /// <summary>Starts loading, in the background, every model the bundle names and the fallback models (so the first sight of one does not wait on the disk).</summary>
     public void Preload()
     {
-        foreach (var key in _bundle.ModelKeys) Request(_catalog.ResolveModel(key, string.Empty));
+        // Job models only when a body is missing (T-711, ADR-002 row 314): otherwise the first character drawn by one loads it then, hidden until it is in. The players'
+        // fallback stands in for a missing job model, so it goes with them.
+        bool HasBody(string body) => _catalog.TryFind(body, out _, out _);
+        var withJobs = !ModelPreload.JobModelsUnneeded(_bundle, _config.DrawAppearance, HasBody);
+        foreach (var key in ModelPreload.Keys(_bundle, _config.DrawAppearance, HasBody)) Request(_catalog.ResolveModel(key, string.Empty));
         if (_bundle.Appearance is { } looks) // the bodies; faces and hairstyles load when someone with them is seen
             foreach (var gender in looks.Genders)
                 if (_catalog.TryFind(gender.BodyModelAssetKey, out var path, out var asset)) Request(new ModelResolution(gender.BodyModelAssetKey, path, asset, ResolutionLevel.Exact));
-        foreach (var kind in new[] { EntityKinds.Player, EntityKinds.Monster, EntityKinds.Npc, EntityKinds.Item }) Request(_catalog.ResolveModel(null, kind));
+        foreach (var kind in new[] { EntityKinds.Player, EntityKinds.Monster, EntityKinds.Npc, EntityKinds.Item })
+            if (withJobs || kind != EntityKinds.Player) Request(_catalog.ResolveModel(null, kind));
     }
 
     private void Request(ModelResolution resolution)

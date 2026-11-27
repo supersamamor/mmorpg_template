@@ -58,6 +58,7 @@ public static class ThemeCheck
         var contract = new ContractPass(chain, rigs, issues);
         contract.Run();
         CheckAppearance(database, chain, rigs, bodyRigs, contract, issues);
+        CheckCharacterImages(database, chain, contract, issues);
 
         var missing = chain.Select(m => m.Fallback("missing")).FirstOrDefault(k => k is not null);
         foreach (var item in database.Items.All)
@@ -332,8 +333,6 @@ public static class ThemeCheck
                     if (contract.ChainFacts(key) is not { Body0: { } part } partFacts) continue;
                     most0 = Math.Max(most0, part.Triangles);
                     most1 = Math.Max(most1, (partFacts.Body1 ?? part).Triangles);
-                    if (partFacts.Textures.Count > 0 && Holder(key) is { } partManifest)
-                        Warn(partManifest, key, "has a texture of its own, so it stays a second surface and every character pays one more draw call for it (§9); colour it with vertex colours instead");
                 }
                 lod0 += most0;
                 lod1 += most1;
@@ -345,6 +344,64 @@ public static class ThemeCheck
                 issues.Add(Issue(ValidationSeverity.Error, manifest, bodyKey, bodyKey, ValidationCodes.ThemeBudget,
                     $"{bodyKey}: with its largest face and hairstyle it has {lod1} triangles at {ModelFacts.Lod1}, over the {ThemeContract.CharacterLod1Triangles} budget of a far character (§9); give the face and hairstyle a '{ModelFacts.Lod1}' mesh"));
         }
+    }
+
+    // ---------------- T-711: one draw call a character ----------------
+
+    /// <summary>
+    /// Every part a character of a gender merges into its body (its faces and hairstyles, the jobs' pieces, the outfits' pieces for that gender, worn equipment)
+    /// must draw the same image as the body, with the same shading, or it stays a surface of its own: one more draw call for every character that has it (§9). One
+    /// warning per part, naming the bodies it splits from. A body with more than one material is the budget's error, so it is left out here. An untextured part
+    /// on an untextured body is left out too: other material settings there (a metal blade) cost what they did before T-711, and the rule is about the atlas.
+    /// </summary>
+    private static void CheckCharacterImages(ContentDatabase database, List<Manifest> chain, ContractPass contract, List<ValidationIssue> issues)
+    {
+        Manifest? Holder(string key) => chain.FirstOrDefault(m => m.HasFile(key));
+        var splits = new SortedDictionary<string, (string Part, SortedSet<string> Bodies, string Body)>(StringComparer.Ordinal);
+        var equipment = database.Items.All.Select(i => i.Equip?.VisualAssetKey).Where(k => !string.IsNullOrEmpty(k)).Select(k => k!).ToList();
+        var jobPieces = database.Jobs.All.SelectMany(j => j.Look.Pieces).Select(p => p.ModelAssetKey).ToList();
+        foreach (var (genderId, gender) in database.Appearance.Genders)
+        {
+            var bodyKey = gender.BodyModelAssetKey;
+            if (contract.ChainFacts(bodyKey) is not { Body0: { } body } bodyFacts) continue; // reported elsewhere
+            var bodyGroups = Groups(bodyFacts, body);
+            if (bodyGroups.Count != 1) continue;
+            var reference = bodyGroups.First();
+            var parts = gender.Faces.Select(f => f.ModelAssetKey)
+                .Concat(gender.Hairstyles.Select(h => h.ModelAssetKey))
+                .Concat(jobPieces)
+                .Concat(database.Outfits.All.SelectMany(o => o.Pieces).Where(p => p.Gender is null || p.Gender == genderId).Select(p => p.ModelAssetKey))
+                .Concat(equipment);
+            foreach (var key in parts.Distinct(StringComparer.Ordinal))
+            {
+                if (contract.ChainFacts(key) is not { Body0: { } part } facts) continue;
+                var other = Groups(facts, part).Where(g => g != reference).ToList();
+                if (other.Count == 0) continue;
+                if (ModelFacts.ImageOf(reference) == "none" && other.All(g => ModelFacts.ImageOf(g) == "none")) continue; // untextured on untextured: not the atlas rule
+                var shading = ModelFacts.ImageOf(other[0]) == ModelFacts.ImageOf(reference); // the same image, other material settings: say which
+                if (!splits.TryGetValue(key, out var split)) splits[key] = split = (Describe(other[0], shading), new SortedSet<string>(StringComparer.Ordinal), Describe(reference, shading));
+                split.Bodies.Add(bodyKey);
+            }
+        }
+        foreach (var (key, split) in splits)
+        {
+            if (Holder(key) is not { } manifest) continue;
+            issues.Add(Issue(ValidationSeverity.Warning, manifest, key, key, ValidationCodes.WarnThemeLook,
+                $"{key}: draws {split.Part} where {string.Join(" and ", split.Bodies)} draw{(split.Bodies.Count == 1 ? "s" : "")} {split.Body}, so it stays a surface of its own and every character "
+                + "that has it costs one more draw call (§9); paint it on the body's atlas image with the same material settings (docs/THEMES.md 1.9)"));
+        }
+    }
+
+    private static HashSet<string> Groups(ModelFacts facts, MeshFacts mesh) =>
+        mesh.Materials.Select(m => facts.MaterialGroups.TryGetValue(m, out var g) ? g : "none|r1|m1|one-sided").ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>A material group in words.</summary>
+    private static string Describe(string group, bool withShading)
+    {
+        var image = ModelFacts.ImageOf(group);
+        var shading = withShading && group.Length > image.Length ? " (" + group[(image.Length + 1)..].Replace('|', ' ') + ")" : "";
+        if (image.StartsWith("own:", StringComparison.Ordinal)) return "a material of its own (see-through, or a texture other than the base colour)";
+        return (image == "none" ? "no texture" : "image " + image["image:".Length..]) + shading;
     }
 
     private static IReadOnlyList<string>? ContractPaint(string role) => role switch

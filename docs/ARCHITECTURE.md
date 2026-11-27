@@ -822,8 +822,12 @@ ids (T-401); `EntityView.LookVersion` counts their changes.
   the next entity and swaps only what differs. A two-handed weapon arrives with the shield already gone in the same change (ADR-002 row 170), so the off hand is empty.
 - *One draw call per character (§9):* the body and its pieces are merged into the body's own skinned mesh, per level of detail (`GearMesher`). An attached piece becomes
   part of the skin, weighted fully to its bone, so it follows the bone exactly; a skinned piece keeps its weights, its skin's binds mapped onto the body's. Surfaces whose
-  materials differ only in colour (untextured, opaque `StandardMaterial3D`, the same shading) join one surface with the colour baked into the vertex colours; a textured
-  material keeps its own surface, so real art merges into one call only with a shared atlas (§9's one material per character). A merged character (both levels of detail together) is
+  materials differ only in colour (opaque `StandardMaterial3D`, the same shading, and the same image or none) join one surface with the colour baked into the vertex colours. Since T-711 the image is
+  told by **content**, not by file: every `.glb` embeds its own copy of a texture, so `ImageIdentity` (pure, `client/Core/Theme`) keys each texture once by a hash of its imported bytes (the
+  `.ctex` file, read without touching the GPU; else its pixels), and parts that embed the same atlas merge although each file has its own texture object; the shared material keeps the first copy.
+  Vertex colours keep multiplying the texture, so the character's colours still show on textured parts. A material that is see-through, has another texture than the base colour, or whose image
+  cannot be read (one warning per texture) keeps a surface of its own, as does every other image: the theme's artist rule is one character atlas (THEMES.md §1.9, checked by `validate --theme`),
+  not an atlas built on the phone (why: §1.9); `merge_by_image` off groups by texture object as before, for measuring. A merged character (both levels of detail together) is
   cached by body file, the character's colours and the set of parts in any order (`WornSet`, T-706: face, hairstyle and job pieces are parts too, §7.5.1), so a crowd with the same looks and gear shares one mesh
   and one skin per level. The cache keeps `look_cache_limit` (64) characters, the least recently used go first. A piece without a LOD1 mesh uses its LOD0 at both levels.
 - *Loading:* a piece's file loads through the same `ModelStore` as characters (threaded with a renderer, on the main thread headless: ADR-002 row 141); its meshes are
@@ -890,14 +894,15 @@ Chosen once at character creation; **cosmetic only** (never changes stats or rul
   `look.pieces` (worn-piece models merged like equipment, each with an optional `gender` and an optional equipment `slot`; equipment worn in that slot is drawn instead of the piece). Why: a job model is a whole
   body with a head, so it cannot keep the chosen face, skin and hair, and a model per job, gender, face and hairstyle is not affordable. A colour needs no art and no draw call and works on every body at once, so it is what
   the template uses (its three jobs have the identity colours of `palette.json`); colour alone is weak for people who cannot tell colours apart and gives no silhouette (ADR-003 point 3), so a fork adds pieces (a hat, a
-  tabard, pauldrons). The template ships no such art and lists no pieces. `model_asset_key` stays: it is the fallback body. A job change puts the new job's look on the same body at once. Monsters and NPCs are drawn as before.
+  tabard, pauldrons). The template ships no such art and lists no pieces. `model_asset_key` stays: it is the fallback body, and since T-711 (ADR-002 row 314) it is not preloaded while looks are drawn and every gender's body is in the theme (`ModelPreload`, with the
+  players' kind fallback): the first character drawn by one loads it then, on a worker like any model and hidden until it is in. A job change puts the new job's look on the same body at once. Monsters and NPCs are drawn as before.
 - *What is merged* (`DressPlan`), over the body: the face; the hairstyle, unless a worn piece or a drawn job piece has `hides_hair`; the job's pieces whose slot no equipment takes; the worn equipment (§7.5). All in one
   `GearMesher` merge, so a character stays one surface and one draw call (two with the outline).
 - *Colours* (`Recolor`): baked into the vertex colours during the merge. A model says what it is painted with per colour role (VOCABULARY "Appearance colour roles") in its manifest entry's `recolor`, else the contract's
   colours (`AppearancePaint`, THEMES.md 1.7): a vertex painted with the first colour of a role's list takes the character's colour, the others in the list keep their relation to the first (a cheek on deep skin is a deep
   cheek). `skin` and `hair` apply to the body and the face, `cloth` to the body. A hairstyle takes the hair colour as a whole, keeping each vertex's relation to its most common colour, unless its entry names its `hair`
   paint (then the rest, a ribbon, stays). Glowing vertices (alpha 0) never change. Equipment and job pieces keep their own colours. A textured surface keeps its texture and has only its vertex colours replaced, so skin
-  in an atlas is painted white there and by vertex colour.
+  in an atlas is painted white there and by vertex colour; parts on the same atlas stay one surface (T-711, §7.5).
 - *Cache.* The template offers 864 looks (2 x 3 faces x 4 hairstyles x 6 skin tones x 6 hair colours), times the jobs' looks, times gear; a crowd is bounded, the product is not. So the mesher keeps at most
   `look_cache_limit` (64) merged characters, least recently used out first, above the 50 entities a client can see: a crowd of all different characters merges each one once and never thrashes. Characters on screen hold their
   own meshes, and idle pooled ones too (`pool_idle_limit` per body). Placeholder cost about 0.14 MB of video memory a look, so 9 MB at the limit; art at the §9 limits (5k + 2k triangles) is about 0.4 MB a look, 26 MB.
@@ -1153,7 +1158,7 @@ These are requirements, not goals. **Reference devices:** a 2020-era mid-range A
 | Frame rate | 30 fps locked on reference devices; 60 fps option on high-end |
 | Draw calls | ≤ 100 in a typical scene |
 | Visible triangles | ≤ 150k |
-| Character | LOD0 ≤ 5k triangles (the nearest 8 characters), LOD1 ≤ 2k triangles (everyone else); 1 material, ≤ 1024² texture. Worst case 8 × 5k + 32 × 2k = 104k, leaving ≥ 45k of the 150k for map, props and VFX (ADR-002) |
+| Character | LOD0 ≤ 5k triangles (the nearest 8 characters), LOD1 ≤ 2k triangles (everyone else); 1 material, ≤ 1024² texture, one atlas image shared by all of a character's parts (THEMES.md §1.9, T-711). Worst case 8 × 5k + 32 × 2k = 104k, leaving ≥ 45k of the 150k for map, props and VFX (ADR-002) |
 | Animated characters on screen | 40 at full rate; further ones at reduced animation rate |
 | Real-time shadows | Player only by default; off on low settings. One 1024² directional shadow map (4 MB of 32-bit depth, hard edges, 24 units; T-222): one extra draw call (the player) in the shadow pass |
 | App memory | ≤ 1 GB |
@@ -1201,6 +1206,27 @@ phase that also puts every player in the template's outfits in every slot they h
 
 Every player is one surface in every phase, so outfits add no draw call; 30.0 fps throughout. The placeholder outfits are rounder than the gear they replace (a hood, a long coat, a cape), hence the triangles,
 still well inside 150k. Not run on a phone (ADR-002 row 112).
+
+**Textured characters (T-711, §7.5), measured** on the same machine and the same way as "Outfits", on the textured test theme (`tools/themegen --textured`: every character part embeds one 64² atlas in its own
+file; two non-default hairstyles, Curls and Topknot, another image; job models stay `default`'s, untextured), one windowed run moved off the screen by the client (`--offscreen`: Godot 4.7.2 put a
+window given `--position` off every screen back on it, ADR-002 row 346; a watcher saw the window only off screen for the whole run). The last phase is the same crowd merged by file as before T-711
+(`merge_by_image=0`):
+
+| Phase | Players in view, different looks | Surfaces per player | Draw calls avg / peak (on screen) | Triangles peak | Worst frame | Putting it on | Static / video memory |
+|---|---|---|---|---|---|---|---|
+| Job models (loaded now on demand) | 37.3, 0 | 2 (job model untextured, dagger textured) | 71.2 / 74 (29) | 48.8k | 83.0 ms | 0.52 s, worst frame 34.5 ms | 57.0 / 35.8 MB |
+| Own looks, all the default | 38.2, 1 | 1 | 73.7 / 76 (37) | 60.9k | 80.5 ms | 0.28 s | 57.0 / 36.1 MB |
+| All different | 37.9, 43 | 1 (33), 2 (10: the other image) | 76.9 / 80 (36) | 62.6k | 66.4 ms | 0.89 s, worst frame 35.1 ms | 59.8 / 45.4 MB |
+| All different, dressed | 35.5, 42 | 1 (the cap hides the hair) | 79.5 / 84 (42) | 83.4k | 41.0 ms | 0.83 s, worst frame 33.4 ms | 61.2 / 55.9 MB |
+| All different, dressed, in outfits | 38.7, 42 | 1 (33), 2 (10) | 80.9 / 87 (39) | 107.4k | 54.8 ms | 0.92 s, worst frame 36.1 ms; 65 merges, 73 ms of main thread | 63.2 / 71.5 MB |
+| The same, merged by file (before T-711) | 38.6, 38 | **8** (39) | 85.2 / 95 (42) | 110.1k | 89.5 ms | 2.07 s, worst frame **559.9 ms**; 62 merges, 1,332 ms of main thread | 66.4 / 51.6 MB |
+
+By image every player is one surface, two with a part on another image; by file a character in outfits was eight (body, face, hair and five pieces, each file's own copy of the atlas). The engine's
+draw-call monitor rose by far less than the surfaces did (peak 87 → 95 for about 7 more surfaces per character on screen): like the outline pass (T-222), Godot's Mobile renderer on this desktop does
+not count what a phone pays for each surface, so the surfaces are the budget's measure and a phone run (T-803) settles the count. Telling the images apart read 23 textures as 2 images in 32 ms of main
+thread over the run (once per texture). The job models are no longer preloaded: none is loaded before the first phase; the first character drawn by one waited 0.52 s for it, hidden, with no frame over 35 ms
+(`run-e2e.ps1 -Run textured`, headless, where loading runs on the main thread: 0.06 s). The 80 ms worst frames are outside the changes (the crowd moving in, as in earlier runs); 30 fps throughout.
+A headless run of the same (no draw calls or triangles without a renderer) gave the same surfaces and 64.7 MB static memory dressed in outfits against 75.7 MB merged by file. Not run on a phone (ADR-002 row 112).
 
 ## 10. Networking on mobile
 
