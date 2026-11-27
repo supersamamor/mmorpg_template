@@ -81,6 +81,7 @@ public sealed class Hud
     private DialoguePanel? _dialoguePanel;
     private ShopPanel? _shopPanel;
     private QuestPanel? _questPanel;
+    private ChatPanel? _chatPanel;   // T-901: the strip above the flash line, and the panel at the top
     private WardrobePanel? _wardrobe;   // T-708: opened from the bag, as the stats are from the skills: the phone HUD has no room for another button
     // The quest tracker (T-602): under the bars on the left, the tracked quest's name and counters; a tap opens the quest log. With no active quest it is the
     // "Quests" button, so the log needs no button of its own on a full phone HUD. Each line is trimmed to the column with an ellipsis instead of wrapping (T-406): a long
@@ -274,6 +275,7 @@ public sealed class Hud
             _bag!.ShowWardrobe = () => _wardrobe.SetOpen(true);
         }
         if (session is not null && bundle is not null) _questPanel = new QuestPanel(_safe, session, bundle, _interactive, Tap);
+        if (session is not null) _chatPanel = new ChatPanel(_safe, _bottom, session, _interactive, Tap);
         if (session is not null)
         {
             _statsPanel = new StatsPanel(_safe, session, _interactive, Tap);
@@ -663,6 +665,7 @@ public sealed class Hud
         _dialoguePanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _questPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
+        _chatPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _window.Size.Y > 0 ? (float)(metrics.CanvasHeight / _window.Size.Y) : 1f);
         _tracker.CustomMinimumSize = new Vector2(Dp(LeftColumnDp), buttonHeight);
         // Compact, and never wider than the centre column (a wider minimum would push the right column off the safe area).
         var column = (float)safe.Width - 4 * margin - Dp(LeftColumnDp) - Dp(RightColumnDp);
@@ -796,6 +799,7 @@ public sealed class Hud
             _tracker.Text = _session.Quests.TrackerText(_bundle);
         }
         _questPanel?.Refresh();
+        _chatPanel?.Refresh(connection.Phase);
         RefreshAutopilot();
     }
 
@@ -830,6 +834,9 @@ public sealed class Hud
 
     /// <summary>The autopilot indicator (T-605), for the scripted run: shown only while a run is on or paused.</summary>
     public Button Autopilot => _autopilot;
+
+    /// <summary>The chat strip and panel (T-901), or null without a session.</summary>
+    public ChatPanel? Chat => _chatPanel;
 
     /// <summary>The quest log panel (T-602).</summary>
     public QuestPanel? Quests => _questPanel;

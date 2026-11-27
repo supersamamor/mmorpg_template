@@ -391,9 +391,9 @@ Functions: `min`, `max`, `floor`, `ceil`, `round`, `clamp`, `pow`, `sqrt`
 
 ## Message types (wire protocol)
 Every message is a JSON object whose `type` field is one of these (shapes in ARCHITECTURE §10; constants in `Game.Shared/Protocol`).
-Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`, `set_outfit`
-Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`, `announcement`, `pong`, `bye`
-Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`.
+Client → server: `hello`, `move`, `stop`, `attack`, `stop_attack`, `respawn`, `ping`, `logout`, `pick_up`, `use_item`, `equip`, `unequip`, `drop_item`, `insert_card`, `refine`, `use_skill`, `learn_skill`, `change_job`, `raise_stat`, `talk`, `dialogue_choice`, `dialogue_close`, `abandon_quest`, `shop_buy`, `shop_sell`, `start_autopilot`, `stop_autopilot`, `set_outfit`, `chat`, `block`, `unblock`, `report`
+Server → client: `welcome`, `snapshot`, `delta`, `rejected`, `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`, `announcement`, `chat_line`, `chat_refused`, `chat_state`, `chat_reported`, `pong`, `bye`
+Owner only (about the client's own character): `attack_stopped`, `exp`, `level_up`, `you_died`, `respawned`, `inventory`, `inventory_changed`, `refine_result`, `skills`, `stats`, `cooldown`, `dialogue`, `dialogue_ended`, `service_opened`, `shop`, `quest_log`, `quest`, `autopilot`, `wardrobe`; and (T-901) `chat_refused`, `chat_state`, `chat_reported`. A `chat_line` goes to everyone the line reaches, its sender included.
 
 ## Bye reasons
 In `bye` (the server's last message before it closes the connection): `timeout`, `bad_version`, `malformed`, `unknown_type`,
@@ -439,15 +439,15 @@ save it; the newest. **Run**: one server start, numbered by the database. **Link
 
 ## Admin actions
 What an admin command does; the `action` of its audit row (T-804, T-806): `kick`, `ban`, `unban`, `mute`, `unmute`, `give_item`, `remove_item`, `change_currency`, `unstick`, `announce`,
-`start_maintenance`, `end_maintenance`, `open_request`, `complete_request`, `cancel_request`.
+`start_maintenance`, `end_maintenance`, `open_request`, `complete_request`, `cancel_request`, `close_report` (T-901: staff handled a player's report of a chat line).
 
 ## Admin target kinds
-What an admin command or audit row is about: `account`, `character`, `request` (a support request's number, T-806), `server` (this server process; its id is `server`, T-806).
+What an admin command or audit row is about: `account`, `character`, `request` (a support request's number, T-806), `server` (this server process; its id is `server`, T-806), `chat_report` (a chat report's number, T-901).
 
 ## Admin errors
 The `error` of a refused admin request or command (T-804, docs/ADMIN_API.md): `invalid_request`, `unauthorized`, `invalid_staff`, `unknown_role`, `forbidden`, `reason_required`, `not_found`,
 `unknown_target`, `rate_limited`, `timeout`, `unavailable`, and (T-806) `already_banned`, `not_banned`, `already_muted`, `not_muted`, `character_busy` (a server holds the character but this one's world
-does not have it), `never_saved`, `unknown_item`, `item_gone`, `not_enough`, `inventory_full`, `currency_limit`, `maintenance_on`, `maintenance_off`, `request_closed`, `account_deleting`. `rate_limited` comes with a `Retry-After` header. A refused command changed nothing and wrote no audit row.
+does not have it), `never_saved`, `unknown_item`, `item_gone`, `not_enough`, `inventory_full`, `currency_limit`, `maintenance_on`, `maintenance_off`, `request_closed`, `account_deleting`, and (T-901) `report_closed`. `rate_limited` comes with a `Retry-After` header. A refused command changed nothing and wrote no audit row.
 
 ## Admin outcomes
 The `outcome` of an admin command: `done` (made and audited), `accepted` (audited; the world applies it on a coming tick), `refused` (with an "Admin errors" term).
@@ -463,6 +463,24 @@ A request that came in through support (T-806, `support_requests`): `deletion` (
 
 ## Announcement kinds
 The `kind` of an `announcement` (T-806): `staff` (staff's words in `text`, at most 80 characters), `maintenance` (every game here ends, saved, in `in` seconds).
+
+## Chat channels
+Where a chat line goes (T-901, ARCHITECTURE §10 "Chat"): `map` (every playing character on the sender's map instance), `whisper` (one playing character, named by the sender), `system` (the server's own
+lines: no player sends on it; the client lists staff's announcements under it). A channel whose members something else supplies (a party, T-902; a guild, T-904) is one more term here and
+one `IChannelMembers` registered with the chat service; chat does not change.
+
+## Chat reasons
+The `reason` of a `chat_refused` (T-901): `muted` (with `retry_after`, seconds left), `rate_limited` (with `retry_after`), `not_online` (nobody of that name plays now, or the one named blocks
+the sender: the same answer, so a block does not show), `invalid_target` (oneself), `empty`, `too_long`, `invalid_channel`, `unavailable` (the database is away, or a dev login, which has no
+account), `unknown_character`, `already_blocked`, `not_blocked`, `block_limit`, `unknown_line` (a report of a line that did not reach the reporter, is its own, or is no longer kept),
+`already_reported`.
+
+## Chat report statuses
+`open`, `closed` (`chat_reports.status`, T-901).
+
+## Chat terms
+(T-901.) **Line**: what one player said once, cleaned by the server, with a number the server gives it (`line`). **Block**: an account no longer hears a character (`chat_blocks`). **Report**:
+a player's report of a line it received; the server stores its own copy of the line (`chat_reports`). **Recent lines**: the lines kept in server memory for a while so they can be reported.
 
 ## Admin terms
 (T-804, ARCHITECTURE §12.) **Admin API**: the server's private HTTP listener for staff tooling, on its own port. **Service credential**: the secret that proves a request comes from the panel.

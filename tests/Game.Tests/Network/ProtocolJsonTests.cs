@@ -59,6 +59,11 @@ public class ProtocolJsonTests
         { "set_outfit", new SetOutfitMessage("head", "outfit.rain_cloak"), """{"type":"set_outfit","slot":"head","outfit":"outfit.rain_cloak"}""" },
         { "set_outfit to nothing", new SetOutfitMessage("head"), """{"type":"set_outfit","slot":"head"}""" },
         { "set_outfit hides them all", new SetOutfitMessage(null, null, true), """{"type":"set_outfit","hidden":true}""" },
+        { "chat map", new ChatMessage("map", null, "hello"), """{"type":"chat","channel":"map","text":"hello"}""" },
+        { "chat whisper", new ChatMessage("whisper", "Ada", "café <b>"), """{"type":"chat","channel":"whisper","to":"Ada","text":"caf\u00E9 \u003Cb\u003E"}""" },
+        { "block", new BlockMessage("Ada"), """{"type":"block","name":"Ada"}""" },
+        { "unblock", new UnblockMessage("Ada"), """{"type":"unblock","name":"Ada"}""" },
+        { "report", new ReportMessage(812), """{"type":"report","line":812}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -278,6 +283,13 @@ public class ProtocolJsonTests
         { "bye banned", new ByeMessage("banned", 3600), """{"type":"bye","reason":"banned","retry_after":3600}""" },
         { "announcement", new AnnouncementMessage("staff", "Noon.", null), """{"type":"announcement","kind":"staff","text":"Noon."}""" },
         { "announcement maintenance", new AnnouncementMessage("maintenance", null, 300), """{"type":"announcement","kind":"maintenance","in":300}""" },
+        { "chat_line", new ChatLineMessage(812, "map", 42, "Ada", "hello"), """{"type":"chat_line","line":812,"channel":"map","from":42,"name":"Ada","text":"hello"}""" },
+        { "chat_line whisper", new ChatLineMessage(813, "whisper", 42, "Ada", "psst", "Bo"), """{"type":"chat_line","line":813,"channel":"whisper","from":42,"name":"Ada","to":"Bo","text":"psst"}""" },
+        { "chat_refused muted", new ChatRefusedMessage("chat", "muted", 240, "map"), """{"type":"chat_refused","intent":"chat","reason":"muted","retry_after":240,"channel":"map"}""" },
+        { "chat_refused whisper", new ChatRefusedMessage("chat", "not_online", null, "whisper", "Bo"), """{"type":"chat_refused","intent":"chat","reason":"not_online","channel":"whisper","to":"Bo"}""" },
+        { "chat_refused report", new ChatRefusedMessage("report", "unknown_line", Line: 9), """{"type":"chat_refused","intent":"report","reason":"unknown_line","line":9}""" },
+        { "chat_state", new ChatStateMessage(120, ["Bo", "Cy"]), """{"type":"chat_state","max_length":120,"blocked":["Bo","Cy"]}""" },
+        { "chat_reported", new ChatReportedMessage(812), """{"type":"chat_reported","line":812}""" },
     };
 
     [Theory]
@@ -355,6 +367,11 @@ public class ProtocolJsonTests
     [InlineData("""{"type":"start_autopilot","quests":["quest.a"],"skills":["skill.a"]}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"autopilot","mode":"off"}""", ByeReasons.UnknownType)]
     [InlineData("""{"type":"set_outfit"}""", ByeReasons.Malformed)]                                          // neither slot nor hidden
+    [InlineData("""{"type":"chat","channel":"map"}""", ByeReasons.Malformed)]                                // no text (T-901)
+    [InlineData("""{"type":"chat","text":"hi"}""", ByeReasons.Malformed)]                                   // no channel
+    [InlineData("""{"type":"chat","channel":"map","text":7}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"block"}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"report","line":"7"}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"set_outfit","slot":"head","hidden":true}""", ByeReasons.Malformed)]             // both
     [InlineData("""{"type":"set_outfit","outfit":"outfit.x","hidden":false}""", ByeReasons.Malformed)]      // an outfit without a slot
     [InlineData("""{"type":"set_outfit","slot":7}""", ByeReasons.Malformed)]

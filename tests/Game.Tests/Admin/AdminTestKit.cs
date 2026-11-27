@@ -152,7 +152,8 @@ public sealed class AdminRig : IAsyncDisposable
     /// over the same accounts).
     /// </summary>
     public static async Task<AdminRig> StartAsync(Func<AdminOptions, AdminOptions>? configure = null, IAdminStore? store = null, AccountRigOptions? accounts = null,
-        IEnumerable<IAdminCommand>? commands = null, IReadOnlyDictionary<string, string>? table = null, IModerationStore? moderation = null, int saveWaitMs = 10_000)
+        IEnumerable<IAdminCommand>? commands = null, IReadOnlyDictionary<string, string>? table = null, IModerationStore? moderation = null, int saveWaitMs = 10_000,
+        Game.Server.Chat.IChatStore? chat = null)
     {
         var time = accounts?.Time as FakeTime ?? new FakeTime { Now = DateTimeOffset.UtcNow };   // one clock for accounts and the admin road
         var memory = accounts is null ? new MemoryAccountStore() : accounts.Store as MemoryAccountStore;
@@ -168,9 +169,21 @@ public sealed class AdminRig : IAsyncDisposable
         {
             Moderation = moderation, Checks = checks, NextItemId = game.Saves is null ? null : game.Saves.NextItemId, Content = game.Content, SaveWaitMs = saveWaitMs,
         };
+        // T-901: chat, as Program wires it (before anyone plays), when the rig has a chat store.
+        if (chat is not null)
+        {
+            game.Gateway.Chat = new Game.Server.Chat.ChatService(new Game.Server.Chat.ChatOptions(), game.Gateway, chat, checks is null ? null : checks.SpeakAsync, time, log,
+                chat as Game.Server.Chat.IChatReportStore);
+            road = new AdminRoad(game.World, game.Gateway, store, options, time)
+            {
+                Moderation = moderation, Checks = checks, NextItemId = game.Saves is null ? null : game.Saves.NextItemId, Content = game.Content, SaveWaitMs = saveWaitMs,
+                ChatReports = chat as Game.Server.Chat.IChatReportStore,
+            };
+        }
         var runner = new AdminCommands(commands ?? [new KickCommand()], road, events, log, table);
         var api = new AdminApi(options, new ServiceCredential(Credential), new AdminRateLimit(options, time), runner, store,
-            new AdminStatusSource(game.World, game.Gateway, game.Saves, log, game.ContentHash, new DateTime(2026, 11, 26, 0, 0, 0, DateTimeKind.Utc)), game.Gateway, log, moderation, road.Maintenance);
+            new AdminStatusSource(game.World, game.Gateway, game.Saves, log, game.ContentHash, new DateTime(2026, 11, 26, 0, 0, 0, DateTimeKind.Utc)), game.Gateway, log, moderation, road.Maintenance,
+            chat as Game.Server.Chat.IChatReportStore);
         var host = await AdminHost.StartAsync(options, game.Endpoint.Port, api, name => name == options.CredentialEnv ? Credential : null);
         return new AdminRig(game, store, host, events, log, memory, time, options) { Road = road, Checks = checks };
     }

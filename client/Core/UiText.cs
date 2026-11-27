@@ -134,6 +134,85 @@ public static class UiText
     /// <summary>The flash line when staff gave or took items or currency (T-806).</summary>
     public const string StaffChangedItems = "A game master changed your items.";
 
+    // ---- chat (T-901) ----
+
+    /// <summary>The HUD button that opens the chat, and the panel's title.</summary>
+    public const string Chat = "Chat";
+
+    /// <summary>The chat button when lines came that were not read.</summary>
+    public const string ChatUnread = "Chat •";
+
+    /// <summary>The send button.</summary>
+    public const string ChatSend = "Send";
+
+    /// <summary>The text field's hint.</summary>
+    public const string ChatHint = "Say something";
+
+    /// <summary>The whisper target field's hint.</summary>
+    public const string ChatWhisperHint = "Name";
+
+    /// <summary>The line's action buttons.</summary>
+    public const string ChatReport = "Report";
+
+    /// <summary>Blocks the line's sender.</summary>
+    public const string ChatBlock = "Block";
+
+    /// <summary>Takes a block back.</summary>
+    public const string ChatUnblock = "Unblock";
+
+    /// <summary>Whispers back to the line's sender.</summary>
+    public const string ChatReply = "Whisper";
+
+    /// <summary>A whisper with no name to send it to.</summary>
+    public const string ChatNoWhisperTarget = "Type the name of the one you whisper to.";
+
+    /// <summary>A report was stored.</summary>
+    public const string ChatReported = "Thank you. The line was reported to the game masters.";
+
+    /// <summary>The channel switch's text: the channel the next line goes to.</summary>
+    public static string ChatChannel(string channel) => channel switch
+    {
+        ChatChannels.Map => "Map",
+        ChatChannels.Whisper => "Whisper",
+        ChatChannels.System => "Server",
+        _ => channel,
+    };
+
+    /// <summary>
+    /// Who said a line, drawn apart from its text: "Ada", "Ada > Bo" (a whisper), "Server" for the server's lines. Only the server's name and channel go in it, never anything the sender
+    /// typed.
+    /// </summary>
+    public static string ChatSpeaker(string channel, string name, string? to) => channel switch
+    {
+        ChatChannels.System => ChatChannel(ChatChannels.System),
+        ChatChannels.Whisper => name + " > " + to,
+        _ => name,
+    };
+
+    /// <summary>Why the server refused a chat line, block, unblock or report.</summary>
+    public static string ChatRefused(string reason, long? retryAfterSeconds, string? to) => reason switch
+    {
+        ChatReasons.Muted => retryAfterSeconds is { } left ? "A game master muted you. You can talk again in " + BanTime(left) + "." : "A game master muted you.",
+        ChatReasons.RateLimited => retryAfterSeconds is { } wait ? "You are talking too fast. Wait " + BanTimeSeconds(wait) + "." : "You are talking too fast.",
+        ChatReasons.NotOnline => (to is { Length: > 0 } ? to : "That character") + " is not online.",
+        ChatReasons.InvalidTarget => "You cannot do that to yourself.",
+        ChatReasons.Empty => "There is nothing to send.",
+        ChatReasons.TooLong => "That line is too long.",
+        ChatReasons.InvalidChannel => "You cannot talk there.",
+        ChatReasons.UnknownCharacter => "Nobody has that name.",
+        ChatReasons.AlreadyBlocked => (to ?? "That character") + " is blocked already.",
+        ChatReasons.NotBlocked => (to ?? "That character") + " is not blocked.",
+        ChatReasons.BlockLimit => "You block as many characters as you can.",
+        ChatReasons.UnknownLine => "That line can no longer be reported.",
+        ChatReasons.AlreadyReported => "You reported that line already.",
+        _ => "Chat is not available right now. Try again later.",   // unavailable, and anything newer
+    };
+
+    private static string BanTimeSeconds(long seconds) => seconds < 60 ? (seconds == 1 ? "a second" : seconds.ToString(CultureInfo.InvariantCulture) + " seconds") : BanTime(seconds);
+
+    /// <summary>The longest speaker the log may show, for the layout check: a whisper between two names of the longest length.</summary>
+    public static string LongestChatSpeaker => ChatSpeaker(ChatChannels.Whisper, new string('W', Game.Shared.Accounts.CharacterNameRules.LongestAllowed), new string('W', Game.Shared.Accounts.CharacterNameRules.LongestAllowed));
+
     // ---- sign-in and character select (T-701) ----
 
     /// <summary>The sign-in screen's title.</summary>
