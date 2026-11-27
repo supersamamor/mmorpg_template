@@ -71,9 +71,12 @@ public sealed class GuildStorageDatabaseTests(DatabaseFixture fixture) : IClassF
     }
 
     /// <summary>A save as the store gets it: <paramref name="items"/>, <paramref name="currency"/> and the notes.</summary>
-    private sealed class Saver(PostgresCharacterStore store, CharacterTicket ticket)
+    private sealed class Saver(PostgresCharacterStore store, CharacterTicket ticket, long run)
     {
         public PostgresCharacterStore Store { get; } = store;
+
+        /// <summary>The server run that holds the character.</summary>
+        public long Run { get; } = run;
 
         public Task<SaveResult> SaveAsync(IReadOnlyList<InventoryEntry> items, long currency, params StaffNote[] notes)
         {
@@ -90,7 +93,8 @@ public sealed class GuildStorageDatabaseTests(DatabaseFixture fixture) : IClassF
         var store = new PostgresCharacterStore(Database);
         var run = await store.StartRunAsync(default);
         var claim = await store.ClaimAsync(character, run, default);
-        var saver = new Saver(store, new CharacterTicket(character) { Claim = claim.Claim, TakenVersion = claim.Version, LandedVersion = claim.Version });
+        claim.Outcome.ShouldBe(ClaimOutcome.Claimed);
+        var saver = new Saver(store, new CharacterTicket(character) { Claim = claim.Claim, TakenVersion = claim.Version, LandedVersion = claim.Version }, run);
         (await saver.SaveAsync(items, currency)).ShouldBeOfType<SaveResult.Saved>();
         return saver;
     }
@@ -147,7 +151,8 @@ public sealed class GuildStorageDatabaseTests(DatabaseFixture fixture) : IClassF
         (await CarriedAsync(leader)).ShouldBe([draughts.Id]);
         (await HoldsAsync(guild)).ShouldBe(1);
 
-        // The server is gone; the character is claimed again (by any server): the hold is undone, as no save of the old stay can land now.
+        // The server is gone (its run ended); the character is claimed again (by any server): the hold is undone, as no save of the old stay can land now.
+        await saver.Store.EndRunAsync(saver.Run, default);
         saver = await ClaimAsync(leader, [draughts], 300);
         (await HoldsAsync(guild)).ShouldBe(0);
 
