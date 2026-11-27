@@ -161,4 +161,58 @@ namespace Game.Shared.Protocol
         /// <inheritdoc />
         public override string Type => MessageTypes.GuildTags;
     }
+    // ---- guild storage (T-905) -----------------------------------------------------------------------------------------------------------------
+
+    /// <summary><c>guild_storage_open</c> (T-905): <c>{"type":"guild_storage_open"}</c>. Asks for the storage (<see cref="GuildStorageMessage"/>); any member may look.</summary>
+    public sealed record GuildStorageOpenMessage : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.GuildStorageOpen;
+    }
+
+    /// <summary>
+    /// <c>guild_deposit</c> (T-905, <c>storage_deposit</c>): an entry of the bag, whole or part of a stack (<c>{"type":"guild_deposit","entry":981,"quantity":5}</c>), or currency
+    /// (<c>{"type":"guild_deposit","currency":300}</c>): exactly one of the two. Worn items and items content marks not tradeable stay in the bag.
+    /// </summary>
+    /// <param name="Entry">The bag entry's id, or null for currency.</param>
+    /// <param name="Quantity">Units of that entry (all of it, or part of a stack).</param>
+    /// <param name="Currency">Currency, when no entry is named.</param>
+    public sealed record GuildDepositMessage(long? Entry, int Quantity, long Currency) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.GuildDeposit;
+    }
+
+    /// <summary>
+    /// <c>guild_withdraw</c> (T-905): a storage entry, whole or part of a stack (<c>{"type":"guild_withdraw","entry":981,"quantity":5}</c>, <c>storage_items</c>), or currency
+    /// (<c>{"type":"guild_withdraw","currency":300}</c>, <c>storage_currency</c>): exactly one of the two.
+    /// </summary>
+    /// <param name="Entry">The storage entry's id, or null for currency.</param>
+    /// <param name="Quantity">Units of that entry.</param>
+    /// <param name="Currency">Currency, when no entry is named.</param>
+    public sealed record GuildWithdrawMessage(long? Entry, int Quantity, long Currency) : ClientMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.GuildWithdraw;
+    }
+
+    /// <summary>
+    /// One move in the storage's log (T-905): when (unix seconds), by whom (the character's name now; empty when that character no longer exists), which "Guild storage moves" term, the item,
+    /// its entry id and quantity, or currency. Nothing else about the person is kept.
+    /// </summary>
+    public sealed record GuildStorageLogRecord(long At, string Name, string Move, string? Item, long? Entry, int Quantity, long Currency);
+
+    /// <summary>
+    /// <c>guild_storage</c> (T-905, own only): <c>{"type":"guild_storage","size":50,"currency":1200,"entries":[{"id":981,"item":"item.herb","quantity":5}],"log":[...]}</c>, the answer to
+    /// <see cref="GuildStorageOpenMessage"/> and to every move that landed. <c>log</c> is there only for a rank with <c>storage_log</c>.
+    /// </summary>
+    /// <param name="Size">Most entries the storage holds (<c>guild.storage.max_entries</c>).</param>
+    /// <param name="Currency">The storage's currency.</param>
+    /// <param name="Entries">Its entries, oldest first.</param>
+    /// <param name="Log">The newest moves first, or null when this character's rank may not read the log.</param>
+    public sealed record GuildStorageMessage(int Size, long Currency, IReadOnlyList<InventoryEntryRecord> Entries, IReadOnlyList<GuildStorageLogRecord>? Log) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.GuildStorage;
+    }
 }

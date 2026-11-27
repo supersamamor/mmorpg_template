@@ -363,6 +363,48 @@ public static class UiText
     /// <summary>The longest guild name the layout check shows.</summary>
     public static readonly string LongestGuildNameSample = new string('W', 20);
 
+    // ---- guild storage (T-905) ----
+
+    /// <summary>The guild panel's button that opens the storage, and the storage window's tab of its entries.</summary>
+    public const string GuildStorage = "Storage";
+
+    /// <summary>The storage window's tab of the bag (what can be put in).</summary>
+    public const string GuildStorageBag = "Bag";
+
+    /// <summary>The storage window's tab of the log.</summary>
+    public const string GuildStorageLog = "Log";
+
+    /// <summary>Take an entry (or coins) out.</summary>
+    public const string GuildStorageTake = "Take";
+
+    /// <summary>Put an entry (or coins) in.</summary>
+    public const string GuildStoragePut = "Put";
+
+    /// <summary>The amount field for coins.</summary>
+    public const string GuildStorageAmountHint = "Amount";
+
+    /// <summary>An empty list.</summary>
+    public const string GuildStorageEmpty = "Nothing here.";
+
+    /// <summary>The window's heading, e.g. <c>Storage 12/50 · Crowns: 1200</c>.</summary>
+    public static string GuildStorageTitle(int entries, int size, string currencyName, long currency) =>
+        "Storage " + entries.ToString(CultureInfo.InvariantCulture) + "/" + size.ToString(CultureInfo.InvariantCulture) + " · " + Currency(currencyName, currency);
+
+    /// <summary>One log line, e.g. <c>11-28 09:14 Ada put Healing Draught x5</c> or <c>11-28 09:15 (gone) took 300 crowns</c>. The time is the device's local time.</summary>
+    public static string GuildStorageLogLine(long at, string name, string move, string? itemName, int quantity, string currencyName, long currency)
+    {
+        var when = DateTimeOffset.FromUnixTimeSeconds(at).ToLocalTime().ToString("MM-dd HH:mm", CultureInfo.InvariantCulture);
+        var who = name.Length > 0 ? name : "(gone)";
+        var verb = move == Game.Shared.Vocabulary.GuildStorageMoves.Deposit ? " put " : " took ";
+        var what = itemName is not null ? itemName + (quantity > 1 ? " " + QuantityLabel(quantity) : string.Empty)
+            : currency.ToString(CultureInfo.InvariantCulture) + " " + (currencyName.Length > 0 ? currencyName : "money");
+        return when + " " + who + verb + what;
+    }
+
+    /// <summary>The longest log line the window shows (the layout check).</summary>
+    public static string LongestGuildStorageLogLine => GuildStorageLogLine(0, new string('W', Game.Shared.Accounts.CharacterNameRules.LongestAllowed), Game.Shared.Vocabulary.GuildStorageMoves.Withdraw,
+        new string('W', 24), 99, string.Empty, 0);
+
     /// <summary>The words of a "Guild news" term, e.g. <c>Bo joined the guild.</c></summary>
     public static string GuildNews(string news, string? name) => news switch
     {
@@ -401,6 +443,14 @@ public static class UiText
         GuildReasons.CannotAfford => "You cannot pay for a guild.",
         GuildReasons.Busy => "Your guild is being founded.",
         GuildReasons.RateLimited => retryAfterSeconds is { } wait ? "Too fast. Wait " + BanTimeSeconds(wait) + "." : "Too fast.",
+        GuildReasons.ItemGone => "That is not there any more.",
+        GuildReasons.ItemEquipped => "Take it off first.",
+        GuildReasons.NotTradeable => "That cannot go into the storage.",
+        GuildReasons.StorageFull => "The guild storage is full.",
+        GuildReasons.InventoryFull => "Your bag is full.",
+        GuildReasons.TooHeavy => "That is too heavy to carry.",
+        GuildReasons.CurrencyFull => "You cannot carry that much money.",
+        GuildReasons.StorageNotEmpty => "Empty the guild storage first.",
         _ => "Guilds are not available right now.",
     };
 
@@ -701,6 +751,7 @@ public static class UiText
             case AccountErrors.NoFreeSlot: return "You have no free character slot.";
             case AccountErrors.UnknownCharacter: return "That character no longer exists.";
             case AccountErrors.CharacterInUse: return "That character is still in the world. Please try again in a minute.";
+            case AccountErrors.GuildStorageNotEmpty: return "That character is the last of its guild. Empty the guild storage first.";
             case AccountErrors.Unavailable: return "The server is busy. Please try again.";
             default: return "The server could not use that. Please try again.";
         }

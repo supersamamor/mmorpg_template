@@ -18,8 +18,20 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>set_rank</c>: give a member of a lower rank another rank, also below one's own.</summary>
         public const string SetRank = "set_rank";
 
+        /// <summary><c>storage_deposit</c> (T-905): put items and currency into the guild's storage.</summary>
+        public const string StorageDeposit = "storage_deposit";
+
+        /// <summary><c>storage_items</c> (T-905): take items out of the guild's storage.</summary>
+        public const string StorageItems = "storage_items";
+
+        /// <summary><c>storage_currency</c> (T-905): take currency out of the guild's storage.</summary>
+        public const string StorageCurrency = "storage_currency";
+
+        /// <summary><c>storage_log</c> (T-905): read the storage's log of moves.</summary>
+        public const string StorageLog = "storage_log";
+
         /// <summary>Every permission, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(Invite, Kick, EditNotice, SetRank);
+        public static readonly VocabularySet All = new VocabularySet(Invite, Kick, EditNotice, SetRank, StorageDeposit, StorageItems, StorageCurrency, StorageLog);
     }
 
     /// <summary>Why the server refused a guild intent (T-904, VOCABULARY.md "Guild reasons"): the <c>reason</c> of a <c>guild_refused</c>.</summary>
@@ -81,7 +93,45 @@ namespace Game.Shared.Vocabulary
 
         /// <summary>Every reason, in documentation order.</summary>
         public static readonly VocabularySet All = new VocabularySet(NotOnline, InvalidTarget, InvalidName, NameTaken, InvalidEmblem, AlreadyInGuild, NotInGuild, InvitePending, NoInvite,
-            Full, NotAllowed, RankTooHigh, InvalidRanks, TooLong, CannotAfford, Busy, RateLimited, Unavailable);
+            Full, NotAllowed, RankTooHigh, InvalidRanks, TooLong, CannotAfford, Busy, RateLimited, Unavailable, ItemGone, ItemEquipped, NotTradeable, StorageFull, InventoryFull, TooHeavy,
+            CurrencyFull, StorageNotEmpty);
+
+        /// <summary><c>item_gone</c> (T-905): the entry is not there (any more), or not in that quantity: in the bag for a deposit, in the storage for a withdrawal.</summary>
+        public const string ItemGone = "item_gone";
+
+        /// <summary><c>item_equipped</c> (T-905): a worn item cannot be deposited.</summary>
+        public const string ItemEquipped = "item_equipped";
+
+        /// <summary><c>not_tradeable</c> (T-905): content marks the item not tradeable; it cannot be deposited.</summary>
+        public const string NotTradeable = "not_tradeable";
+
+        /// <summary><c>storage_full</c> (T-905): the storage holds <c>guild.storage.max_entries</c> entries, or would hold more than <c>guild.storage.max_currency</c>.</summary>
+        public const string StorageFull = "storage_full";
+
+        /// <summary><c>inventory_full</c> (T-905): the bag has <c>inventory.max_entries</c> entries.</summary>
+        public const string InventoryFull = "inventory_full";
+
+        /// <summary><c>too_heavy</c> (T-905): the withdrawal would take the character over its weight limit.</summary>
+        public const string TooHeavy = "too_heavy";
+
+        /// <summary><c>currency_full</c> (T-905): the bag would hold more currency than a bag holds.</summary>
+        public const string CurrencyFull = "currency_full";
+
+        /// <summary><c>storage_not_empty</c> (T-905): the last member cannot leave (and so disband the guild) while its storage holds anything.</summary>
+        public const string StorageNotEmpty = "storage_not_empty";
+    }
+
+    /// <summary>What a guild storage log line records (T-905, VOCABULARY.md "Guild storage moves").</summary>
+    public static class GuildStorageMoves
+    {
+        /// <summary><c>deposit</c>: into the storage.</summary>
+        public const string Deposit = "deposit";
+
+        /// <summary><c>withdraw</c>: out of the storage.</summary>
+        public const string Withdraw = "withdraw";
+
+        /// <summary>Every move, in documentation order.</summary>
+        public static readonly VocabularySet All = new VocabularySet(Deposit, Withdraw);
     }
 
     /// <summary>What a <c>guild_news</c> tells (T-904, VOCABULARY.md "Guild news"): news the <c>guild</c> message alone does not carry.</summary>

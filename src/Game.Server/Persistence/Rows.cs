@@ -496,6 +496,9 @@ public sealed class GuildRow
 
     /// <summary>When the founding landed with the cost (UTC); null while under way.</summary>
     public DateTime? FoundedAt { get; set; }
+
+    /// <summary>The currency in the guild's storage (T-905); withdrawals under way are out of it already.</summary>
+    public long StorageCurrency { get; set; }
 }
 
 /// <summary>Table <c>guild_ranks</c> (T-904): one rank of a guild by place (0 the leader's), its name and its "Guild permissions" terms.</summary>
@@ -534,4 +537,105 @@ public sealed class GuildMemberRow
 
     /// <summary>When it joined (UTC).</summary>
     public DateTime JoinedAt { get; set; }
+}
+
+/// <summary>
+/// Table <c>guild_storage_items</c> (T-905): one entry in a guild's storage, under its permanent item id (the id it had in a bag, or a new one for part of a stack), with its cards and
+/// refine level. An entry being withdrawn is not here but in <c>guild_storage_holds</c> until the withdrawer's save lands (or never does, and it comes back).
+/// </summary>
+public sealed class GuildStorageItemRow
+{
+    /// <summary>The permanent item id.</summary>
+    public long Id { get; set; }
+
+    /// <summary>The guild.</summary>
+    public long GuildId { get; set; }
+
+    /// <summary>The item (content id).</summary>
+    public string ItemId { get; set; } = string.Empty;
+
+    /// <summary>Units; at least 1.</summary>
+    public int Quantity { get; set; }
+
+    /// <summary>Card items in its sockets.</summary>
+    public string[] Cards { get; set; } = [];
+
+    /// <summary>Refine level.</summary>
+    public int Refine { get; set; }
+}
+
+/// <summary>
+/// Table <c>guild_storage_holds</c> (T-905): a move under way between a character and its guild's storage, made (permission and room checked) before the tick moves the bag's side, and
+/// settled in the transaction of the character's save that has that side (<see cref="PostgresGuildStorageStore.LandAsync"/>). A deposit's hold keeps a place (and its currency under
+/// <c>max_currency</c>); a withdrawal's hold holds the entry (or currency) taken out. A hold whose save never lands is undone: by the server when it knows, else when the character is next
+/// claimed (no older stay of it can save then).
+/// </summary>
+public sealed class GuildStorageHoldRow
+{
+    /// <summary>The hold's token.</summary>
+    public Guid Id { get; set; }
+
+    /// <summary>The guild.</summary>
+    public long GuildId { get; set; }
+
+    /// <summary>The character moving.</summary>
+    public Guid CharacterId { get; set; }
+
+    /// <summary>A "Guild storage moves" term.</summary>
+    public string Move { get; set; } = string.Empty;
+
+    /// <summary>The entry: for a withdrawal, the one taken out; for a deposit of an item, null (the hold keeps a place when <see cref="ItemId"/> is set).</summary>
+    public long? EntryId { get; set; }
+
+    /// <summary>The item; for a deposit of an item an empty string (a place kept); null when only currency moves.</summary>
+    public string? ItemId { get; set; }
+
+    /// <summary>Units of the entry.</summary>
+    public int Quantity { get; set; }
+
+    /// <summary>Cards of the entry.</summary>
+    public string[] Cards { get; set; } = [];
+
+    /// <summary>Refine level of the entry.</summary>
+    public int Refine { get; set; }
+
+    /// <summary>Currency moving.</summary>
+    public long Currency { get; set; }
+
+    /// <summary>When it was made (UTC).</summary>
+    public DateTime CreatedAt { get; set; }
+}
+
+/// <summary>
+/// Table <c>guild_storage_log</c> (T-905): one move that landed: who (character id; null once that account is erased), which move, the item, entry id and units, or currency, and when.
+/// Nothing else about the person. Kept <c>guild.storage.log_days</c>; goes with its guild.
+/// </summary>
+public sealed class GuildStorageLogRow
+{
+    /// <summary>The line's number.</summary>
+    public long Id { get; set; }
+
+    /// <summary>The guild.</summary>
+    public long GuildId { get; set; }
+
+    /// <summary>The character that moved; null after its account was erased.</summary>
+    public Guid? CharacterId { get; set; }
+
+    /// <summary>A "Guild storage moves" term.</summary>
+    public string Move { get; set; } = string.Empty;
+
+    /// <summary>The item, or null for currency.</summary>
+    public string? ItemId { get; set; }
+
+    /// <summary>The entry's permanent id (in the storage for a deposit, in the bag for a withdrawal), or null.</summary>
+    public long? EntryId { get; set; }
+
+    /// <summary>Units.</summary>
+    public int Quantity { get; set; }
+
+    /// <summary>Currency.</summary>
+    public long Currency { get; set; }
+
+    /// <summary>When it landed (UTC).</summary>
+    public DateTime At { get; set; }
 }

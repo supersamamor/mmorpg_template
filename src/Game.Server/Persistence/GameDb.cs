@@ -82,6 +82,15 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
     /// <summary>Guilds' members (T-904).</summary>
     public DbSet<GuildMemberRow> GuildMembers => Set<GuildMemberRow>();
 
+    /// <summary>Guild storage entries (T-905).</summary>
+    public DbSet<GuildStorageItemRow> GuildStorageItems => Set<GuildStorageItemRow>();
+
+    /// <summary>Guild storage moves under way (T-905).</summary>
+    public DbSet<GuildStorageHoldRow> GuildStorageHolds => Set<GuildStorageHoldRow>();
+
+    /// <summary>Guild storage log (T-905).</summary>
+    public DbSet<GuildStorageLogRow> GuildStorageLog => Set<GuildStorageLogRow>();
+
     /// <summary>The unique index on guild names' keys (T-904).</summary>
     public const string GuildNameIndex = "ux_guilds_name_key";
 
@@ -344,6 +353,7 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
             e.Property(g => g.Version).HasColumnName("version");
             e.Property(g => g.CreatedAt).HasColumnName("created_at");
             e.Property(g => g.FoundedAt).HasColumnName("founded_at");
+            e.Property(g => g.StorageCurrency).HasColumnName("storage_currency").HasDefaultValue(0L);
             e.HasIndex(g => g.NameKey).IsUnique().HasDatabaseName(GuildNameIndex);
         });
         model.Entity<GuildRankRow>(e =>
@@ -369,6 +379,55 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
             e.HasIndex(m => m.GuildId).HasDatabaseName("ix_guild_members_guild");
             e.HasOne<GuildRow>().WithMany().HasForeignKey(m => m.GuildId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<CharacterRow>().WithMany().HasForeignKey(m => m.CharacterId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<GuildStorageItemRow>(e =>
+        {
+            e.ToTable("guild_storage_items", t => t.HasCheckConstraint("ck_guild_storage_items_quantity", "quantity > 0"));
+            e.HasKey(i => i.Id);
+            e.Property(i => i.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(i => i.GuildId).HasColumnName("guild_id");
+            e.Property(i => i.ItemId).HasColumnName("item_id").HasMaxLength(128);
+            e.Property(i => i.Quantity).HasColumnName("quantity");
+            e.Property(i => i.Cards).HasColumnName("cards");
+            e.Property(i => i.Refine).HasColumnName("refine");
+            e.HasIndex(i => i.GuildId).HasDatabaseName("ix_guild_storage_items_guild");
+            e.HasOne<GuildRow>().WithMany().HasForeignKey(i => i.GuildId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<GuildStorageHoldRow>(e =>
+        {
+            e.ToTable("guild_storage_holds", t => t.HasCheckConstraint("ck_guild_storage_holds_amounts", "quantity >= 0 AND currency >= 0"));
+            e.HasKey(h => h.Id);
+            e.Property(h => h.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(h => h.GuildId).HasColumnName("guild_id");
+            e.Property(h => h.CharacterId).HasColumnName("character_id");
+            e.Property(h => h.Move).HasColumnName("move").HasMaxLength(16);
+            e.Property(h => h.EntryId).HasColumnName("entry_id");
+            e.Property(h => h.ItemId).HasColumnName("item_id").HasMaxLength(128);
+            e.Property(h => h.Quantity).HasColumnName("quantity");
+            e.Property(h => h.Cards).HasColumnName("cards");
+            e.Property(h => h.Refine).HasColumnName("refine");
+            e.Property(h => h.Currency).HasColumnName("currency");
+            e.Property(h => h.CreatedAt).HasColumnName("created_at");
+            e.HasIndex(h => h.GuildId).HasDatabaseName("ix_guild_storage_holds_guild");
+            e.HasIndex(h => h.CharacterId).HasDatabaseName("ix_guild_storage_holds_character");
+            e.HasOne<GuildRow>().WithMany().HasForeignKey(h => h.GuildId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<GuildStorageLogRow>(e =>
+        {
+            e.ToTable("guild_storage_log");
+            e.HasKey(l => l.Id);
+            e.Property(l => l.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(l => l.GuildId).HasColumnName("guild_id");
+            e.Property(l => l.CharacterId).HasColumnName("character_id");
+            e.Property(l => l.Move).HasColumnName("move").HasMaxLength(16);
+            e.Property(l => l.ItemId).HasColumnName("item_id").HasMaxLength(128);
+            e.Property(l => l.EntryId).HasColumnName("entry_id");
+            e.Property(l => l.Quantity).HasColumnName("quantity");
+            e.Property(l => l.Currency).HasColumnName("currency");
+            e.Property(l => l.At).HasColumnName("at");
+            e.HasIndex(l => new { l.GuildId, l.At }).HasDatabaseName("ix_guild_storage_log_guild_at");
+            e.HasIndex(l => l.CharacterId).HasDatabaseName("ix_guild_storage_log_character");
+            e.HasOne<GuildRow>().WithMany().HasForeignKey(l => l.GuildId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

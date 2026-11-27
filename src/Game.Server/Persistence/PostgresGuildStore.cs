@@ -110,8 +110,9 @@ public sealed class PostgresGuildStore(GameDatabase database) : IGuildStore
     public Task<GuildOutcome> LeaveAsync(Guid character, CancellationToken cancellation) => RunAsync(async db =>
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellation).ConfigureAwait(false);
-        var outcome = await RemoveCharacterAsync(db, character, GuildNews.Left, cancellation).ConfigureAwait(false);
+        var outcome = await RemoveCharacterAsync(db, character, GuildNews.Left, cancellation, keepStorage: true).ConfigureAwait(false);
         if (outcome is null) return GuildOutcome.Refused(GuildReasons.NotInGuild);
+        if (outcome.Refusal is not null) return outcome;
         await transaction.CommitAsync(cancellation).ConfigureAwait(false);
         return outcome;
     });
@@ -179,8 +180,10 @@ public sealed class PostgresGuildStore(GameDatabase database) : IGuildStore
     /// <summary>
     /// Takes <paramref name="character"/> out of its guild, in the caller's transaction (leaving, and T-703's erasing and deleting, which hold the character's row already): a reserved guild goes
     /// whole; a leader hands over to <see cref="GuildRules.Successor"/>; the last member disbands the guild, its name free. Null when it is in none.
+    /// <para>T-905: with <paramref name="keepStorage"/> (leaving, deleting a character) the last member is refused (<c>storage_not_empty</c>) while the storage holds anything, so nothing in it is
+    /// ever deleted unasked; erasing an account (T-703) cannot be refused, and the storage goes with the guild and the account's data.</para>
     /// </summary>
-    internal static async Task<GuildOutcome?> RemoveCharacterAsync(GameDb db, Guid character, string news, CancellationToken cancellation)
+    internal static async Task<GuildOutcome?> RemoveCharacterAsync(GameDb db, Guid character, string news, CancellationToken cancellation, bool keepStorage = false)
     {
         var mine = await db.GuildMembers.AsNoTracking().SingleOrDefaultAsync(m => m.CharacterId == character, cancellation).ConfigureAwait(false);
         if (mine is null) return null;
@@ -196,6 +199,7 @@ public sealed class PostgresGuildStore(GameDatabase database) : IGuildStore
         var rest = members.Where(m => m != me).ToList();
         if (rest.Count == 0)
         {
+            if (keepStorage && await PostgresGuildStorageStore.HoldsAnythingAsync(db, row, cancellation).ConfigureAwait(false)) return GuildOutcome.Refused(GuildReasons.StorageNotEmpty);
             await DeleteGuildAsync(db, row.Id, cancellation).ConfigureAwait(false);
             return new GuildOutcome(null, row.Id, [], character, new GuildNewsMessage(GuildNews.Disbanded), Disbanded: true);
         }
@@ -273,6 +277,7 @@ public sealed class PostgresGuildStore(GameDatabase database) : IGuildStore
 
     private static async Task DeleteGuildAsync(GameDb db, long guild, CancellationToken cancellation)
     {
+        await PostgresGuildStorageStore.DeleteOfAsync(db, guild, cancellation).ConfigureAwait(false);   // T-905
         await db.GuildMembers.Where(m => m.GuildId == guild).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.GuildRanks.Where(r => r.GuildId == guild).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);
         await db.Guilds.Where(g => g.Id == guild).ExecuteDeleteAsync(cancellation).ConfigureAwait(false);

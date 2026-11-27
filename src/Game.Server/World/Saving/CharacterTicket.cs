@@ -195,9 +195,17 @@ public sealed record CharacterSave(CharacterTicket Ticket, long Version, Charact
 /// with the unsaved time, as after a crash).
 /// <para>T-904 uses the same road for a guild founding (<see cref="ForGuild"/>): the save that first lacks the founding cost also turns the reserved guild into a founded one, so the cost and the
 /// guild land together. Such a note has no audit row.</para>
+/// <para>T-905 too (<see cref="ForStorage"/>): the save that first has the bag's side of a guild storage move lands the storage's side and its log line in the same transaction.</para>
 /// </summary>
-public sealed class StaffNote(Game.Server.Admin.AuditDraft? audit, IReadOnlyList<(long Id, string ItemId, int Quantity)>? made = null, long? foundsGuild = null)
+public sealed class StaffNote(Game.Server.Admin.AuditDraft? audit, IReadOnlyList<(long Id, string ItemId, int Quantity)>? made = null, long? foundsGuild = null,
+    Game.Server.Guild.StorageMove? storage = null)
 {
+    /// <summary>The note of a guild storage move (T-905): the save that has the bag's side lands the storage's side.</summary>
+    public static StaffNote ForStorage(Game.Server.Guild.StorageMove move) => new(null, null, null, move ?? throw new ArgumentNullException(nameof(move)));
+
+    /// <summary>The guild storage move this save lands (T-905), or null.</summary>
+    public Game.Server.Guild.StorageMove? Storage { get; } = storage;
+
     private readonly TaskCompletionSource<bool> _landed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private long _auditId;
 

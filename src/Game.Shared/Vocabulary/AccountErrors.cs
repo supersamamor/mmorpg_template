@@ -54,9 +54,12 @@ namespace Game.Shared.Vocabulary
         /// <summary>Staff banned the account (T-806): told only to someone who has its password, with <c>retry_after</c> (seconds until the ban ends; none when it never does).</summary>
         public const string AccountBanned = "account_banned";
 
+        /// <summary>The character is the last member of a guild whose storage holds something (T-905): it cannot be deleted until the storage is empty.</summary>
+        public const string GuildStorageNotEmpty = "guild_storage_not_empty";
+
         /// <summary>Every account error.</summary>
         public static readonly VocabularySet All = new VocabularySet(
             InvalidRequest, InvalidUsername, InvalidPassword, SamePassword, UsernameTaken, InvalidCredentials, AccountDeleting, InvalidSession, RateLimited, InvalidName, InvalidAppearance, NameTaken,
-            NoFreeSlot, UnknownCharacter, CharacterInUse, Unavailable, AccountBanned);
+            NoFreeSlot, UnknownCharacter, CharacterInUse, Unavailable, AccountBanned, GuildStorageNotEmpty);
     }
 }

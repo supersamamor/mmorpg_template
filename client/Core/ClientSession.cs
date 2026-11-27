@@ -563,6 +563,10 @@ public sealed class ClientSession
                 Ui.OnParty(Guild.Apply(guildRefused), viewNow);
                 GuildReceived?.Invoke(guildRefused);
                 break;
+            case GuildStorageMessage guildStorage:   // T-905
+                Guild.Apply(guildStorage);
+                GuildReceived?.Invoke(guildStorage);
+                break;
             case GuildTagsMessage guildTags:
                 Guild.Apply(guildTags);
                 break;
@@ -778,6 +782,36 @@ public sealed class ClientSession
     public void HandGuildLead(long member)
     {
         if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild) Send(new GuildLeadMessage(member));
+    }
+
+    /// <summary>Asks for the guild's storage (T-905).</summary>
+    public void OpenGuildStorage()
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild) Send(new GuildStorageOpenMessage());
+    }
+
+    /// <summary>Puts <paramref name="quantity"/> units of bag entry <paramref name="entry"/> into the guild's storage (the server checks the rank, the room and the bag).</summary>
+    public void DepositToGuild(long entry, int quantity)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild && quantity > 0) Send(new GuildDepositMessage(entry, quantity, 0));
+    }
+
+    /// <summary>Puts coins into the guild's storage.</summary>
+    public void DepositCurrencyToGuild(long amount)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild && amount > 0) Send(new GuildDepositMessage(null, 0, amount));
+    }
+
+    /// <summary>Takes <paramref name="quantity"/> units of storage entry <paramref name="entry"/> out.</summary>
+    public void WithdrawFromGuild(long entry, int quantity)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild && quantity > 0) Send(new GuildWithdrawMessage(entry, quantity, 0));
+    }
+
+    /// <summary>Takes coins out of the guild's storage.</summary>
+    public void WithdrawCurrencyFromGuild(long amount)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild && amount > 0) Send(new GuildWithdrawMessage(null, 0, amount));
     }
 
     /// <summary>Writes the guild's notice (the server cleans it and checks the rank).</summary>

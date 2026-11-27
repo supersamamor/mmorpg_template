@@ -330,6 +330,7 @@ public sealed class AccountService
         {
             DeleteCharacterOutcome.Deleted => Logged(account, $"deleted character {character}", Done.Value),
             DeleteCharacterOutcome.InUse => AccountResult<Done>.Fail(AccountErrors.CharacterInUse), // another server's
+            DeleteCharacterOutcome.GuildStorageNotEmpty => AccountResult<Done>.Fail(AccountErrors.GuildStorageNotEmpty),   // T-905
             _ => AccountResult<Done>.Fail(AccountErrors.UnknownCharacter),
         };
     }, cancellation);

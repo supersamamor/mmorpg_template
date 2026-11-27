@@ -100,6 +100,9 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
         _emblems = new HashSet<string>(balance.Emblems, StringComparer.Ordinal);
     }
 
+    /// <summary>The guilds' shared storage (T-905); null without one (its messages are refused as <c>unavailable</c>). Set before sessions arrive.</summary>
+    public GuildStorage? Storage { get; set; }
+
     /// <summary>Starts the pulse.</summary>
     public void Start() => _loop ??= Task.Run(() => LoopAsync(_stop.Token));
 
@@ -155,6 +158,9 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
                     break;
                 case GuildLeadMessage lead:
                     await ApplyAsync(peer, message.Type, await _store.LeadAsync(me, lead.Member, cancellation).ConfigureAwait(false), outbox, cancellation).ConfigureAwait(false);
+                    break;
+                case GuildStorageOpenMessage or GuildDepositMessage or GuildWithdrawMessage:
+                    await StorageAsync(peer, me, message, outbox, cancellation).ConfigureAwait(false);
                     break;
                 case GuildNoticeMessage notice:
                     if (Notice(notice.Text) is { Refusal: { } badNotice })
@@ -263,6 +269,30 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
         {
             lock (_lock) _foundings.Remove(me);
         }
+    }
+
+    /// <summary>T-905: opening the storage, a deposit or a withdrawal; after a move that landed, the mover gets the storage as it is now.</summary>
+    private async Task StorageAsync(ChatPeer peer, Guid me, ClientMessage message, Outbox outbox, CancellationToken cancellation)
+    {
+        if (Storage is not { } storage)
+        {
+            outbox.Refuse(peer.Character, message.Type, GuildReasons.Unavailable);
+            return;
+        }
+        var refusal = message switch
+        {
+            GuildDepositMessage deposit => await storage.DepositAsync(me, peer.Character, deposit, cancellation).ConfigureAwait(false),
+            GuildWithdrawMessage withdraw => await storage.WithdrawAsync(me, peer.Character, withdraw, cancellation).ConfigureAwait(false),
+            _ => null,
+        };
+        if (refusal is not null)
+        {
+            outbox.Refuse(peer.Character, message.Type, refusal);
+            return;
+        }
+        var (closed, view) = await storage.OpenAsync(me, CancellationToken.None).ConfigureAwait(false);
+        if (closed is not null) outbox.Refuse(peer.Character, message.Type, closed);
+        else outbox.Add(peer.Character, view!);
     }
 
     /// <summary>Waits for the tick to take the cost; gives it up when the tick has not started it in time (nothing is taken then). Null when paid.</summary>

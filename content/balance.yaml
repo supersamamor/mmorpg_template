@@ -227,10 +227,17 @@ guild:
   # A new guild's ranks, the leader's first; new members join at the last. Permissions are the "Guild permissions" terms (VOCABULARY.md).
   default_ranks:
     - name: Leader
-      permissions: [invite, kick, edit_notice, set_rank]
+      permissions: [invite, kick, edit_notice, set_rank, storage_deposit, storage_items, storage_currency, storage_log]
     - name: Officer
-      permissions: [invite, kick, edit_notice, set_rank]
+      permissions: [invite, kick, edit_notice, set_rank, storage_deposit, storage_items, storage_currency, storage_log]
     - name: Member
-      permissions: []
+      permissions: [storage_deposit]
   # The emblems a founder picks from: asset keys of the theme (themes/<theme>/asset-manifest.json), never uploaded.
   emblems: [icon.emblem.oak, icon.emblem.star, icon.emblem.wave, icon.emblem.flame]
+  # T-905: the guild's shared storage. Fifty entries fill two screens of the storage window on a phone; a move stays in the log for thirty days and the window shows the newest fifty.
+  # No daily withdrawal limit: who may take out is the rank's permission (storage_items, storage_currency), and every move is in the log the leader reads.
+  storage:
+    max_entries: 50
+    max_currency: 1000000000
+    log_days: 30
+    log_shown: 50
