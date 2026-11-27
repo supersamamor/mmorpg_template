@@ -494,7 +494,7 @@ public sealed class ClientSession : IViewSink, IChatSink
                 Chat(message);
                 break;
             case GuildFoundMessage or GuildInviteMessage or GuildAnswerMessage or GuildLeaveMessage or GuildKickMessage or GuildRankMessage or GuildRanksMessage or GuildLeadMessage
-                or GuildNoticeMessage:
+                or GuildNoticeMessage or GuildStorageOpenMessage or GuildDepositMessage or GuildWithdrawMessage:   // T-905: storage too
                 Guild(message);
                 break;
             case PartyInviteMessage or PartyAnswerMessage or PartyLeaveMessage or PartyKickMessage or PartyLeadMessage:

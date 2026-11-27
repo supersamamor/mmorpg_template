@@ -40,7 +40,7 @@ namespace Game.Server.World.Inventory;
 public sealed class InventorySystem : ITickSystem
 {
     private static readonly IReadOnlyCollection<Type> Owned =
-        [typeof(PickUp), typeof(UseItem), typeof(Equip), typeof(Unequip), typeof(DropItem), typeof(InsertCard), typeof(RefineItem), typeof(ShopBuy), typeof(ShopSell), typeof(Admin.StaffItemChange), typeof(Guild.GuildFoundingPayment)];
+        [typeof(PickUp), typeof(UseItem), typeof(Equip), typeof(Unequip), typeof(DropItem), typeof(InsertCard), typeof(RefineItem), typeof(ShopBuy), typeof(ShopSell), typeof(Admin.StaffItemChange), typeof(Guild.GuildFoundingPayment), typeof(Guild.GuildStorageTransfer)];
     private static readonly int WeightLimitStat = StatIndex.IndexOf(DerivedStats.WeightLimit);
     private const int PickupGraceTicks = 3;   // a pick-up whose walk never started within this many ticks has no way there
 
@@ -115,6 +115,7 @@ public sealed class InventorySystem : ITickSystem
             {
                 if (intents[i] is Admin.StaffItemChange lost && lost.TryStart()) lost.Complete(Admin.AdminStepResult.Refused(AdminErrors.UnknownTarget));   // T-806: say so at once
                 if (intents[i] is Guild.GuildFoundingPayment gone && gone.TryStart()) gone.Refuse(GuildReasons.Unavailable);   // T-904
+                if (intents[i] is Guild.GuildStorageTransfer away && away.TryStart()) away.Refuse(GuildReasons.Unavailable);   // T-905
                 continue;
             }
             switch (intents[i])
@@ -130,6 +131,7 @@ public sealed class InventorySystem : ITickSystem
                 case ShopBuy buy: BuyFromShop(context, holder, buy.ItemId, buy.Quantity); break;
                 case ShopSell sell: SellToShop(context, holder, sell.EntryId, sell.Quantity); break;
                 case Guild.GuildFoundingPayment pay: PayFounding(context, holder, pay); break;
+                case Guild.GuildStorageTransfer transfer: MoveStorage(context, holder, transfer); break;
             }
         }
         UnequipForNewJob(context);
@@ -804,6 +806,39 @@ public sealed class InventorySystem : ITickSystem
         var note = Saving.StaffNote.ForGuild(pay.Guild);
         ticket.Note(note);
         pay.Paid(note);
+    }
+
+    /// <summary>
+    /// T-905: the bag's side of a guild storage move, all or nothing (<see cref="Game.Shared.Guild.GuildStorageRules"/>), and the note that lands the storage's side with the save. A character
+    /// that is not saved has no guild storage.
+    /// </summary>
+    private void MoveStorage(TickContext context, Holder holder, Guild.GuildStorageTransfer transfer)
+    {
+        if (!transfer.TryStart()) return;   // the guild service gave up waiting: change nothing
+        if (holder.Entity.Save is not { } ticket)
+        {
+            transfer.Refuse(GuildReasons.Unavailable);
+            return;
+        }
+        _delta.Clear();
+        InventoryEntry? entry;
+        string? reason;
+        if (transfer.Move == GuildStorageMoves.Deposit)
+            reason = Game.Shared.Guild.GuildStorageRules.TryTake(_rules, holder.State, transfer.EntryId, transfer.Quantity, transfer.Currency, _newId, _delta, out entry);
+        else
+        {
+            entry = transfer.Entry;
+            reason = Game.Shared.Guild.GuildStorageRules.TryGive(_rules, holder.State, entry, transfer.Currency, holder.State.WeightLimit, _delta);
+        }
+        if (reason is not null)
+        {
+            transfer.Refuse(reason);
+            return;
+        }
+        Changed(context, holder, InventoryChanges.GuildStorage, entry?.ItemId);
+        var note = Saving.StaffNote.ForStorage(transfer.ToMove(entry));
+        ticket.Note(note);
+        transfer.Moved(note);
     }
 
     private static long Carried(InventoryState state, string itemId)

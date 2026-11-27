@@ -206,8 +206,11 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>guild_founded</c> (T-904): founding a guild took its cost (<c>guild.found_cost</c>); the guild and the change land in one transaction.</summary>
         public const string GuildFounded = "guild_founded";
 
+        /// <summary><c>guild_storage</c> (T-905): items or currency went into or came out of the guild's storage; the storage's side lands in the same transaction.</summary>
+        public const string GuildStorage = "guild_storage";
+
         /// <summary>Every term in this category, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined, Exchanged, Quest, ShopBuy, ShopSell, Staff, Traded, GuildFounded);
+        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined, Exchanged, Quest, ShopBuy, ShopSell, Staff, Traded, GuildFounded, GuildStorage);
     }
 
     /// <summary>What a failed refine does to the equipment, per level of <c>refine.yaml</c> (<c>failure</c>; ARCHITECTURE §6.8). VOCABULARY.md: "Refine failures".</summary>

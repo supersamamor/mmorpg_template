@@ -188,6 +188,9 @@ await using var guilds = database is null ? null : new Game.Server.Guild.GuildSe
     TimeProvider.System, log);
 if (guilds is not null)
 {
+    // T-905: the guild storage's moves are held in the database, moved on the tick and landed with the character's save.
+    guilds.Storage = new Game.Server.Guild.GuildStorage(content.Balance.Guild.Storage, new PostgresGuildStorageStore(database!), saves!.NextItemId,
+        i => gateway.Enqueue(i) == EnqueueResult.Accepted, guildOptions.PaymentWaitMs, TimeProvider.System, log);
     chat.Register(Game.Shared.Vocabulary.ChatChannels.Guild, guilds);
     gateway.Guild = guilds;
     guilds.Start();

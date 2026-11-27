@@ -177,6 +177,12 @@ public static class ProtocolJson
                 MessageTypes.GuildRanks => hasRanks ? new GuildRanksMessage(ReadGuildRanks(ref ranksAt)) : null,
                 MessageTypes.GuildLead => member is { } newLeader ? new GuildLeadMessage(newLeader) : null,
                 MessageTypes.GuildNotice => text is { } noticeText ? new GuildNoticeMessage(noticeText) : null,
+                // T-905: the shape only (an entry with its quantity, or currency); the storage and the database decide the rest
+                MessageTypes.GuildStorageOpen => new GuildStorageOpenMessage(),
+                MessageTypes.GuildDeposit => entry is not null ? (quantity is { } deposited ? new GuildDepositMessage(entry, deposited, 0) : null)
+                    : currency is { } paidIn ? new GuildDepositMessage(null, 0, paidIn) : null,
+                MessageTypes.GuildWithdraw => entry is not null ? (quantity is { } withdrawn ? new GuildWithdrawMessage(entry, withdrawn, 0) : null)
+                    : currency is { } takenOut ? new GuildWithdrawMessage(null, 0, takenOut) : null,
                 null => null,
                 _ => throw new UnknownTypeException(),
             };
@@ -356,6 +362,12 @@ public static class ProtocolJson
                 break;
             case GuildNoticeMessage guildNotice:
                 w.WriteString("text", guildNotice.Text);
+                break;
+            case GuildDepositMessage guildDeposit:
+                WriteStorageMove(w, guildDeposit.Entry, guildDeposit.Quantity, guildDeposit.Currency);
+                break;
+            case GuildWithdrawMessage guildWithdraw:
+                WriteStorageMove(w, guildWithdraw.Entry, guildWithdraw.Quantity, guildWithdraw.Currency);
                 break;
         }
         w.WriteEndObject();
@@ -748,6 +760,30 @@ public static class ProtocolJson
                 if (guildRefused.RetryAfterSeconds is { } guildWait) w.WriteNumber("retry_after", guildWait);
                 if (guildRefused.Name is not null) w.WriteString("name", guildRefused.Name);
                 break;
+            case GuildStorageMessage guildStorage:
+                w.WriteNumber("size", guildStorage.Size);
+                w.WriteNumber("currency", guildStorage.Currency);
+                w.WriteStartArray("entries");
+                foreach (var e in guildStorage.Entries) WriteEntry(w, e);
+                w.WriteEndArray();
+                if (guildStorage.Log is { } storageLog)
+                {
+                    w.WriteStartArray("log");
+                    foreach (var l in storageLog)
+                    {
+                        w.WriteStartObject();
+                        w.WriteNumber("at", l.At);
+                        w.WriteString("name", l.Name);
+                        w.WriteString("move", l.Move);
+                        if (l.Item is not null) w.WriteString("item", l.Item);
+                        if (l.Entry is { } logEntry) w.WriteNumber("entry", logEntry);
+                        if (l.Quantity != 0) w.WriteNumber("quantity", l.Quantity);
+                        if (l.Currency != 0) w.WriteNumber("currency", l.Currency);
+                        w.WriteEndObject();
+                    }
+                    w.WriteEndArray();
+                }
+                break;
             case GuildTagsMessage guildTags:
                 w.WriteStartArray("tags");
                 foreach (var tag in guildTags.Tags)
@@ -925,6 +961,8 @@ public static class ProtocolJson
             GuildMessage? guildState = null;   // guilds (T-904)
             string? title = null, emblem = null, news = null;
             List<GuildTagRecord>? tags = null;
+            int storageSize = 0;   // guild storage (T-905)
+            List<GuildStorageLogRecord>? storageLog = null;
             long? partner = null;   // trade (T-903)
             TradeSideRecord? mine = null, theirs = null;
             bool own = false;
@@ -1039,6 +1077,8 @@ public static class ProtocolJson
                     case "emblem": emblem = String(ref reader); break;
                     case "news": news = String(ref reader); break;
                     case "tags": tags = ReadGuildTags(ref reader); break;
+                    case "size": storageSize = reader.GetInt32(); break;
+                    case "log": storageLog = ReadStorageLog(ref reader); break;
                     case "mine": mine = ReadTradeSide(ref reader); break;
                     case "theirs": theirs = ReadTradeSide(ref reader); break;
                     case "own": own = reader.GetBoolean(); break;
@@ -1105,6 +1145,7 @@ public static class ProtocolJson
                 MessageTypes.GuildNews => news is null ? null : new GuildNewsMessage(news, name),
                 MessageTypes.GuildRefused => intent is null || reason is null ? null : new GuildRefusedMessage(intent, reason, retryAfter, name),
                 MessageTypes.GuildTags => new GuildTagsMessage((IReadOnlyList<GuildTagRecord>?)tags ?? Array.Empty<GuildTagRecord>()),
+                MessageTypes.GuildStorage => new GuildStorageMessage(storageSize, currency, (IReadOnlyList<InventoryEntryRecord>?)inventoryEntries ?? Array.Empty<InventoryEntryRecord>(), storageLog),
                 MessageTypes.Bye => reason is null ? null : new ByeMessage(reason, retryAfter),
                 null => null,
                 _ => throw new UnknownTypeException(),
@@ -1585,6 +1626,48 @@ public static class ProtocolJson
         }
         if (id is null || name is null || emblem is null) throw Bad();
         return new GuildMessage(id, name, emblem, notice ?? string.Empty, own, (IReadOnlyList<GuildRankRecord>?)ranks ?? Array.Empty<GuildRankRecord>(), members);
+    }
+
+    private static void WriteStorageMove(Utf8JsonWriter w, long? entry, int quantity, long currency)
+    {
+        if (entry is { } moved)
+        {
+            w.WriteNumber("entry", moved);
+            w.WriteNumber("quantity", quantity);
+        }
+        else w.WriteNumber("currency", currency);
+    }
+
+    private static List<GuildStorageLogRecord> ReadStorageLog(ref Utf8JsonReader reader)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("log");
+        var list = new List<GuildStorageLogRecord>();
+        while (reader.Read() && reader.TokenType == JsonTokenType.StartObject)
+        {
+            long at = 0, currency = 0;
+            string name = string.Empty, move = string.Empty;
+            string? item = null;
+            long? entry = null;
+            var quantity = 0;
+            while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+            {
+                var key = reader.GetString();
+                reader.Read();
+                switch (key)
+                {
+                    case "at": at = reader.GetInt64(); break;
+                    case "name": name = reader.GetString() ?? string.Empty; break;
+                    case "move": move = reader.GetString() ?? string.Empty; break;
+                    case "item": item = reader.GetString(); break;
+                    case "entry": entry = reader.GetInt64(); break;
+                    case "quantity": quantity = reader.GetInt32(); break;
+                    case "currency": currency = reader.GetInt64(); break;
+                    default: reader.Skip(); break;
+                }
+            }
+            list.Add(new GuildStorageLogRecord(at, name, move, item, entry, quantity, currency));
+        }
+        return list;
     }
 
     private static List<GuildTagRecord> ReadGuildTags(ref Utf8JsonReader reader)
