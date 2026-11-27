@@ -48,9 +48,9 @@ public sealed class GuildStoragePanel
     private readonly List<Label> _logLines = new();
     private readonly HBoxContainer _quantityRow = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
     private readonly Label _quantityItem = new() { ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
-    private readonly Button _less = new() { Text = "−" };
+    private readonly Button _less = new() { Text = UiText.TradeLess };
     private readonly Label _quantity = new() { HorizontalAlignment = HorizontalAlignment.Center };
-    private readonly Button _more = new() { Text = "+" };
+    private readonly Button _more = new() { Text = UiText.TradeMore };
     private readonly Button _move = new() { Text = UiText.GuildStorageTake };
     private readonly HBoxContainer _coins = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly LineEdit _amount = new() { PlaceholderText = UiText.GuildStorageAmountHint, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill, MaxLength = 12 };
@@ -193,8 +193,9 @@ public sealed class GuildStoragePanel
         _samples = true;
         _area.Visible = true;
         _tab = log ? Tab.Log : Tab.Storage;
-        var lines = Enumerable.Range(0, 50).Select(i => new InventoryEntryRecord(i + 1, "item.sample", 99, null, ["a", "b", "c", "d"], 10)).ToList();
-        var entries = new GuildStorageLogRecord(0, new string('W', Game.Shared.Accounts.CharacterNameRules.LongestAllowed), GuildStorageMoves.Withdraw, "item.sample", 1, 99, 0);
+        var sample = new string('W', 24);   // any id: samples show the longest name whatever it is
+        var lines = Enumerable.Range(0, 50).Select(i => new InventoryEntryRecord(i + 1, sample, 99, null, ["a", "b", "c", "d"], 10)).ToList();
+        var entries = new GuildStorageLogRecord(0, new string('W', Game.Shared.Accounts.CharacterNameRules.LongestAllowed), GuildStorageMoves.Withdraw, sample, 1, 99, 0);
         Draw(new GuildStorageMessage(50, long.MaxValue, lines, Enumerable.Repeat(entries, 50).ToList()), leaderView: true);
         _title.Text = UiText.GuildStorageTitle(500, 500, _bundle?.CurrencyName ?? string.Empty, long.MaxValue);
         if (!log)

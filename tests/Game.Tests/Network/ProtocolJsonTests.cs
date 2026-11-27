@@ -91,6 +91,9 @@ public class ProtocolJsonTests
             """{"type":"guild_ranks","ranks":[{"name":"Officer","permissions":["invite","kick"]},{"name":"Member","permissions":[]}]}""" },
         { "guild_lead", new GuildLeadMessage(12), """{"type":"guild_lead","member":12}""" },
         { "guild_notice", new GuildNoticeMessage("Meet at the well"), """{"type":"guild_notice","text":"Meet at the well"}""" },
+        { "guild_storage_open", new GuildStorageOpenMessage(), """{"type":"guild_storage_open"}""" },
+        { "guild_deposit", new GuildDepositMessage(981, 5, 0), """{"type":"guild_deposit","entry":981,"quantity":5}""" },
+        { "guild_withdraw", new GuildWithdrawMessage(null, 0, 300), """{"type":"guild_withdraw","currency":300}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -345,6 +348,12 @@ public class ProtocolJsonTests
         { "guild_news notice", new GuildNewsMessage("notice"), """{"type":"guild_news","news":"notice"}""" },
         { "guild_refused", new GuildRefusedMessage("guild_invite", "not_online", null, "Bo"), """{"type":"guild_refused","intent":"guild_invite","reason":"not_online","name":"Bo"}""" },
         { "guild_tags", new GuildTagsMessage([new GuildTagRecord(42, "icon.emblem.oak")]), """{"type":"guild_tags","tags":[{"entity":42,"emblem":"icon.emblem.oak"}]}""" },
+        {
+            "guild_storage", new GuildStorageMessage(50, 1200, [new InventoryEntryRecord(981, "item.healing_draught", 5)],
+                [new GuildStorageLogRecord(1764320000, "Ada", "deposit", "item.healing_draught", 981, 5, 0), new GuildStorageLogRecord(1764320060, "", "withdraw", null, null, 0, 300)]),
+            """{"type":"guild_storage","size":50,"currency":1200,"entries":[{"id":981,"item":"item.healing_draught","quantity":5}],"log":[""" +
+            """{"at":1764320000,"name":"Ada","move":"deposit","item":"item.healing_draught","entry":981,"quantity":5},{"at":1764320060,"name":"","move":"withdraw","currency":300}]}"""
+        },
     };
 
     [Theory]

@@ -195,7 +195,7 @@ public class BalanceTests : IDisposable
     [Fact]
     public void A_guild_rank_permission_that_is_not_a_term_is_an_error()
     {
-        Edit("      permissions: []", "      permissions: [ban]");
+        Edit("      permissions: [storage_deposit]", "      permissions: [ban]");
         Validate().Issues.ShouldContain(i => i.Code == ValidationCodes.RefMissing && i.Path == "guild.default_ranks");
     }
 
