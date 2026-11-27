@@ -80,6 +80,17 @@ public class ProtocolJsonTests
         { "trade_unlock", new TradeUnlockMessage(), """{"type":"trade_unlock"}""" },
         { "trade_confirm", new TradeConfirmMessage(7), """{"type":"trade_confirm","version":7}""" },
         { "trade_cancel", new TradeCancelMessage(), """{"type":"trade_cancel"}""" },
+        { "guild_found", new GuildFoundMessage("Iron Oaks", "icon.emblem.oak"), """{"type":"guild_found","name":"Iron Oaks","emblem":"icon.emblem.oak"}""" },
+        { "guild_invite by name", new GuildInviteMessage("Bo", null), """{"type":"guild_invite","name":"Bo"}""" },
+        { "guild_invite by tap", new GuildInviteMessage(null, 43), """{"type":"guild_invite","target":43}""" },
+        { "guild_answer", new GuildAnswerMessage(true), """{"type":"guild_answer","accept":true}""" },
+        { "guild_leave", new GuildLeaveMessage(), """{"type":"guild_leave"}""" },
+        { "guild_kick", new GuildKickMessage(12), """{"type":"guild_kick","member":12}""" },
+        { "guild_rank", new GuildRankMessage(12, 1), """{"type":"guild_rank","member":12,"rank":1}""" },
+        { "guild_ranks", new GuildRanksMessage([new GuildRankRecord("Officer", ["invite", "kick"]), new GuildRankRecord("Member", [])]),
+            """{"type":"guild_ranks","ranks":[{"name":"Officer","permissions":["invite","kick"]},{"name":"Member","permissions":[]}]}""" },
+        { "guild_lead", new GuildLeadMessage(12), """{"type":"guild_lead","member":12}""" },
+        { "guild_notice", new GuildNoticeMessage("Meet at the well"), """{"type":"guild_notice","text":"Meet at the well"}""" },
     };
 
     public static TheoryData<string, ServerMessage, string> ServerGolden => new()
@@ -325,6 +336,15 @@ public class ProtocolJsonTests
         { "trade_closed", new TradeClosedMessage("too_far", "Bo", true), """{"type":"trade_closed","reason":"too_far","name":"Bo","own":true}""" },
         { "trade_closed done", new TradeClosedMessage("done", "Bo"), """{"type":"trade_closed","reason":"done","name":"Bo"}""" },
         { "trade_refused", new TradeRefusedMessage("trade_ask", "rate_limited", 10), """{"type":"trade_refused","intent":"trade_ask","reason":"rate_limited","retry_after":10}""" },
+        { "guild", new GuildMessage(3, "Iron Oaks", "icon.emblem.oak", "Meet at the well", 12, [new GuildRankRecord("Leader", ["invite"]), new GuildRankRecord("Member", [])],
+                [new GuildMemberRecord(12, "Ada", 0, 7, true), new GuildMemberRecord(13, "Bo", 1, 3, false)]),
+            """{"type":"guild","guild":{"id":3,"name":"Iron Oaks","emblem":"icon.emblem.oak","notice":"Meet at the well","own":12,"ranks":[{"name":"Leader","permissions":["invite"]},{"name":"Member","permissions":[]}],"members":[{"member":12,"name":"Ada","rank":0,"level":7,"online":true},{"member":13,"name":"Bo","rank":1,"level":3}]}}""" },
+        { "guild none", GuildMessage.None, """{"type":"guild"}""" },
+        { "guild_invited", new GuildInvitedMessage("Ada", "Iron Oaks", "icon.emblem.oak", 30), """{"type":"guild_invited","name":"Ada","title":"Iron Oaks","emblem":"icon.emblem.oak","expires_in":30}""" },
+        { "guild_news", new GuildNewsMessage("joined", "Bo"), """{"type":"guild_news","news":"joined","name":"Bo"}""" },
+        { "guild_news notice", new GuildNewsMessage("notice"), """{"type":"guild_news","news":"notice"}""" },
+        { "guild_refused", new GuildRefusedMessage("guild_invite", "not_online", null, "Bo"), """{"type":"guild_refused","intent":"guild_invite","reason":"not_online","name":"Bo"}""" },
+        { "guild_tags", new GuildTagsMessage([new GuildTagRecord(42, "icon.emblem.oak")]), """{"type":"guild_tags","tags":[{"entity":42,"emblem":"icon.emblem.oak"}]}""" },
     };
 
     [Theory]

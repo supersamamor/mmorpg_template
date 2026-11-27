@@ -621,6 +621,128 @@ namespace Game.Server.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Game.Server.Persistence.GuildMemberRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<Guid>("CharacterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("character_id");
+
+                    b.Property<long>("GuildId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("guild_id");
+
+                    b.Property<DateTime>("JoinedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("joined_at");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("integer")
+                        .HasColumnName("rank");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CharacterId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_guild_members_character");
+
+                    b.HasIndex("GuildId")
+                        .HasDatabaseName("ix_guild_members_guild");
+
+                    b.ToTable("guild_members", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_guild_members_rank", "rank >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.GuildRankRow", b =>
+                {
+                    b.Property<long>("GuildId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("guild_id");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("name");
+
+                    b.PrimitiveCollection<string[]>("Permissions")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("permissions");
+
+                    b.HasKey("GuildId", "Position");
+
+                    b.ToTable("guild_ranks", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_guild_ranks_position", "position >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.GuildRow", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Emblem")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("emblem");
+
+                    b.Property<DateTime?>("FoundedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("founded_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NameKey")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("name_key");
+
+                    b.Property<string>("Notice")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("notice");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NameKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_guilds_name_key");
+
+                    b.ToTable("guilds", (string)null);
+                });
+
             modelBuilder.Entity("Game.Server.Persistence.ItemRow", b =>
                 {
                     b.Property<long>("Id")
@@ -880,6 +1002,30 @@ namespace Game.Server.Persistence.Migrations
                     b.HasOne("Game.Server.Persistence.CharacterRow", null)
                         .WithMany()
                         .HasForeignKey("SenderCharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.GuildMemberRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.CharacterRow", null)
+                        .WithMany()
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Game.Server.Persistence.GuildRow", null)
+                        .WithMany()
+                        .HasForeignKey("GuildId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Game.Server.Persistence.GuildRankRow", b =>
+                {
+                    b.HasOne("Game.Server.Persistence.GuildRow", null)
+                        .WithMany()
+                        .HasForeignKey("GuildId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

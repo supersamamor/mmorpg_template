@@ -105,6 +105,9 @@ public sealed class ClientSession
     /// <summary>The party of this session (T-902): what the server last said, in memory only, emptied at every new login and back on the login screen.</summary>
     public Game.Client.Core.Party.PartyBook Party { get; } = new Game.Client.Core.Party.PartyBook();
 
+    /// <summary>The guild of this session (T-904): what the server last said, in memory only, emptied at every new login and back on the login screen.</summary>
+    public Game.Client.Core.Guild.GuildBook Guild { get; } = new Game.Client.Core.Guild.GuildBook();
+
     /// <summary>The trade (T-903): the ask, both offers as the server holds them, how the last one ended.</summary>
     public Game.Client.Core.Trade.TradeBook Trade { get; } = new Game.Client.Core.Trade.TradeBook();
 
@@ -143,6 +146,7 @@ public sealed class ClientSession
         Wardrobe.Reset();
         Chat.Clear();
         Party.Clear();
+        Guild.Clear();
         Trade.Clear();
         Numbers.Clear();
         Connection.Login(name, wallNow);
@@ -161,6 +165,7 @@ public sealed class ClientSession
             Autopilot.Reset();   // a run belongs to the session that ended
             Chat.Clear();        // T-901: no chat outlives its session on the device
             Party.Clear();       // T-902: nor a party
+            Guild.Clear();       // T-904: nor a guild
             Trade.Clear();       // T-903: nor a trade
         }
         if (_characterId is not null && Connection.Phase == ConnectionPhase.LoginScreen) Accounts.Refresh();
@@ -384,6 +389,7 @@ public sealed class ClientSession
         RunCommands();
         WatchLogin();
         Party.Expire(wallNow);   // T-902: an invite past its end is no longer offered
+        Guild.Expire(wallNow);   // T-904: nor a guild's
         Trade.Expire(wallNow);   // T-903: nor an ask
         Accounts.Update();
         _lastViewNow = viewNow;
@@ -540,6 +546,26 @@ public sealed class ClientSession
                 Ui.OnParty(UiText.PartyRefused(partyRefused.Reason, partyRefused.RetryAfterSeconds, partyRefused.Name), viewNow);
                 PartyRefusedReceived?.Invoke(partyRefused);
                 break;
+            case GuildMessage guild:   // T-904
+                if (Guild.Apply(guild) is { } notice) Ui.OnParty(notice, viewNow);   // the notice once, at sign-in and when it changed
+                if (!Guild.InGuild && Chat.Channel == Game.Shared.Vocabulary.ChatChannels.Guild) Chat.SetChannel(Game.Shared.Vocabulary.ChatChannels.Map);
+                GuildReceived?.Invoke(guild);
+                break;
+            case GuildInvitedMessage guildInvited:
+                Guild.Apply(guildInvited, wallNow);
+                GuildReceived?.Invoke(guildInvited);
+                break;
+            case GuildNewsMessage guildNews:
+                Ui.OnParty(Guild.Apply(guildNews), viewNow);
+                GuildReceived?.Invoke(guildNews);
+                break;
+            case GuildRefusedMessage guildRefused:
+                Ui.OnParty(Guild.Apply(guildRefused), viewNow);
+                GuildReceived?.Invoke(guildRefused);
+                break;
+            case GuildTagsMessage guildTags:
+                Guild.Apply(guildTags);
+                break;
             case TradeAskedMessage tradeAsked:
                 Trade.Apply(tradeAsked, wallNow);
                 TradeReceived?.Invoke(tradeAsked);
@@ -691,6 +717,73 @@ public sealed class ClientSession
         if (Connection.Phase != ConnectionPhase.Online || Party.Invite is null) return;
         Send(new PartyAnswerMessage(accept));
         Party.Answered();
+    }
+
+    /// <summary>Raised for every guild message but the tags (T-904; for the scripted run).</summary>
+    public event Action<ServerMessage>? GuildReceived;
+
+    /// <summary>Founds a guild (T-904); the server checks the name, the emblem and the cost.</summary>
+    public void FoundGuild(string name, string emblem)
+    {
+        var trimmed = (name ?? string.Empty).Trim();
+        if (Connection.Phase == ConnectionPhase.Online && trimmed.Length > 0 && !Guild.InGuild) Send(new GuildFoundMessage(trimmed, emblem));
+    }
+
+    /// <summary>Invites a character into the guild by name.</summary>
+    public void InviteToGuild(string name)
+    {
+        var trimmed = (name ?? string.Empty).Trim();
+        if (Connection.Phase == ConnectionPhase.Online && trimmed.Length > 0 && Guild.InGuild) Send(new GuildInviteMessage(trimmed, null));
+    }
+
+    /// <summary>Invites a player tapped in the world.</summary>
+    public void InviteToGuild(long entity)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && entity > 0 && Guild.InGuild) Send(new GuildInviteMessage(null, entity));
+    }
+
+    /// <summary>Answers the guild invite.</summary>
+    public void AnswerGuild(bool accept)
+    {
+        if (Connection.Phase != ConnectionPhase.Online || Guild.Invite is null) return;
+        Send(new GuildAnswerMessage(accept));
+        Guild.Answered();
+    }
+
+    /// <summary>Leaves the guild.</summary>
+    public void LeaveGuild()
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild) Send(new GuildLeaveMessage());
+    }
+
+    /// <summary>Takes a member out (the server checks the rank).</summary>
+    public void KickFromGuild(long member)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild) Send(new GuildKickMessage(member));
+    }
+
+    /// <summary>Gives a member another rank (the server checks both ranks).</summary>
+    public void SetGuildRank(long member, int rank)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild) Send(new GuildRankMessage(member, rank));
+    }
+
+    /// <summary>The leader names and orders the ranks below its own.</summary>
+    public void SetGuildRanks(IReadOnlyList<GuildRankRecord> ranks)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild) Send(new GuildRanksMessage(ranks));
+    }
+
+    /// <summary>The leader hands the leader rank to a member.</summary>
+    public void HandGuildLead(long member)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild) Send(new GuildLeadMessage(member));
+    }
+
+    /// <summary>Writes the guild's notice (the server cleans it and checks the rank).</summary>
+    public void WriteGuildNotice(string text)
+    {
+        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild) Send(new GuildNoticeMessage(text ?? string.Empty));
     }
 
     /// <summary>Leaves the party.</summary>

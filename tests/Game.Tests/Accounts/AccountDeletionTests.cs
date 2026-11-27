@@ -227,6 +227,19 @@ public sealed class AccountErasureDatabaseTests(DatabaseFixture fixture) : IClas
         await Accounts.TryAddSessionAsync(account, "hash", null, Token(), Now, Now.AddHours(1), 10, default);
         var othersRows = await RowsAsync(other, othersCharacter);
         await using (var before = Database.Open()) (await before.Outfits.CountAsync(o => o.CharacterId == character)).ShouldBe(2, "the character owns outfits (T-708), so erasing must take them");
+        // T-904: it leads a guild alone (erased with it, and its name with it); the other account leads a guild that stays.
+        var guilds = new PostgresGuildStore(Database);
+        var guildName = "Erased " + char.ToUpperInvariant(UniqueName()[0]) + UniqueName()[..6];
+        var (_, own) = await guilds.ReserveAsync(character, guildName, CharacterNameRules.Key(guildName), "icon.emblem.oak", [new("Leader", []), new("Member", [])], [], Now, default);
+        var othersGuildName = "Kept " + char.ToUpperInvariant(UniqueName()[0]) + UniqueName()[..6];
+        var (_, others) = await guilds.ReserveAsync(othersCharacter, othersGuildName, CharacterNameRules.Key(othersGuildName), "icon.emblem.oak", [new("Leader", []), new("Member", [])], [], Now,
+            default);
+        await using (var found = Database.Open())
+        {
+            await PostgresGuildStore.FoundAsync(found, own, character, default);
+            await PostgresGuildStore.FoundAsync(found, others, othersCharacter, default);
+        }
+        (await guilds.JoinAsync(others, othersCharacter, gone.Id, 30, Now, default)).Refusal.ShouldBe(Game.Shared.Vocabulary.GuildReasons.Unavailable, "a deleted character joins nothing");
 
         (await Accounts.TryRequestErasureAsync(account, "hash", Now, Now.AddDays(14), default))!.Count.ShouldBe(1);
         (await Accounts.EraseAsync(account, Now.AddDays(14).AddSeconds(-1), default)).ShouldBe(EraseOutcome.Nothing, "not due");
@@ -240,7 +253,8 @@ public sealed class AccountErasureDatabaseTests(DatabaseFixture fixture) : IClas
         var record = await db.AccountDeletions.AsNoTracking().SingleAsync(d => d.AccountId == account);
         (record.RequestedAt, record.ErasedAt).ShouldBe((Now, (DateTime?)Now.AddDays(14)));
         var everything = await EverythingAsync(db);
-        foreach (var text in new[] { name, deleted, username, character.ToString(), gone.Id.ToString() }) everything.ShouldNotContain(text, Case.Insensitive);
+        foreach (var text in new[] { name, deleted, username, character.ToString(), gone.Id.ToString(), guildName }) everything.ShouldNotContain(text, Case.Insensitive);
+        everything.ShouldContain(othersGuildName, Case.Sensitive, "the other account's guild stays");
         (await Accounts.EraseAsync(account, Now.AddDays(15), default)).ShouldBe(EraseOutcome.Nothing);
         (await Accounts.CreateCharacterAsync(other, Guid.NewGuid(), name, CharacterNameRules.Key(name), "job.wanderer", 3, null, Now, default)).Outcome.ShouldBe(CreateCharacterOutcome.Created);
     }

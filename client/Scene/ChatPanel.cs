@@ -54,6 +54,7 @@ public sealed class ChatPanel
     private readonly Button _report = new() { Text = UiText.ChatReport };
     private readonly Button _block = new() { Text = UiText.ChatBlock };
     private readonly Button _party = new() { Text = UiText.Party };   // T-902: opens the party panel while no line is selected
+    private readonly Button _guild = new() { Text = UiText.Guild };   // T-904: opens the guild panel, beside Party
     private readonly RichTextLabel _log = Log();
 
     private int _shownVersion = -1;
@@ -101,6 +102,7 @@ public sealed class ChatPanel
         _actions.AddChild(_report);
         _actions.AddChild(_block);
         _actions.AddChild(_party);
+        _actions.AddChild(_guild);
         _actions.AddChild(_close);   // the second row: with the keyboard up only the input row has to stay above it (the keyboard's own key hides it)
         SetActions(false);
         _box.AddChild(_actions);
@@ -113,11 +115,17 @@ public sealed class ChatPanel
         _channel.Pressed += () =>
         {
             _tap();
-            // Map, whisper, then (T-902) party while in one, and round again.
-            _chat.SetChannel(_chat.Channel == ChatChannels.Map ? ChatChannels.Whisper
-                : _chat.Channel == ChatChannels.Whisper && _session.Party.InParty ? ChatChannels.Party : ChatChannels.Map);
+            // Map, whisper, then (T-902) party and (T-904) guild while in them, and round again.
+            var channel = _chat.Channel;
+            string next;
+            if (channel == ChatChannels.Map) next = ChatChannels.Whisper;
+            else if (channel == ChatChannels.Whisper && _session.Party.InParty) next = ChatChannels.Party;
+            else if ((channel == ChatChannels.Whisper || channel == ChatChannels.Party) && _session.Guild.InGuild) next = ChatChannels.Guild;
+            else next = ChatChannels.Map;
+            _chat.SetChannel(next);
         };
         _party.Pressed += () => { _tap(); OpenParty?.Invoke(); };
+        _guild.Pressed += () => { _tap(); OpenGuild?.Invoke(); };
         _to.TextChanged += name => _chat.SetWhisperTo(name);
         _text.TextSubmitted += _ => Send();
         _send.Pressed += () => { _tap(); Send(); };
@@ -149,11 +157,17 @@ public sealed class ChatPanel
             }
             Select(-1);
         };
-        foreach (var control in new Control[] { _open, _panel, _channel, _to, _text, _send, _close, _whisper, _report, _block, _party, _log }) _interactive.Add(control);
+        foreach (var control in new Control[] { _open, _panel, _channel, _to, _text, _send, _close, _whisper, _report, _block, _party, _guild, _log }) _interactive.Add(control);
     }
 
     /// <summary>What the Party button does (T-902): the HUD closes this panel and opens the party's.</summary>
     public Action? OpenParty { get; set; }
+
+    /// <summary>What the Guild button does (T-904): the HUD closes this panel and opens the guild's.</summary>
+    public Action? OpenGuild { get; set; }
+
+    /// <summary>The Guild button (T-904).</summary>
+    public Button GuildButton => _guild;
 
     /// <summary>The Party button (T-902).</summary>
     public Button PartyButton => _party;
@@ -321,7 +335,7 @@ public sealed class ChatPanel
         _channel.CustomMinimumSize = new Vector2(dp(80), target);
         _to.CustomMinimumSize = new Vector2(dp(80), target);
         _text.CustomMinimumSize = new Vector2(dp(80), target);
-        foreach (var button in new[] { _send, _close, _whisper, _report, _block, _party }) button.CustomMinimumSize = new Vector2(dp(76), target);
+        foreach (var button in new[] { _send, _close, _whisper, _report, _block, _party, _guild }) button.CustomMinimumSize = new Vector2(dp(76), target);
         _keyboard = -1;
         _shownVersion = -1;
         Place();
@@ -386,7 +400,7 @@ public sealed class ChatPanel
     private void SetActions(bool shown)
     {
         _selected.Visible = _whisper.Visible = _report.Visible = _block.Visible = shown;
-        _party.Visible = !shown;   // T-902: the row has room for the line's actions or the Party button, not both
+        _party.Visible = _guild.Visible = !shown;   // T-902, T-904: the row has room for the line's actions or the Party and Guild buttons, not both
     }
 
     private void Send()

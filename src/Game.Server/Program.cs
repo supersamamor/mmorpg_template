@@ -25,6 +25,7 @@ if (options is null)
     Console.Error.WriteLine(ChatOptions.Usage);
     Console.Error.WriteLine(PartyOptions.Usage);
     Console.Error.WriteLine(Game.Server.Trade.TradeOptions.Usage);
+    Console.Error.WriteLine(Game.Server.Guild.GuildOptions.Usage);
     return 2;
 }
 
@@ -70,6 +71,14 @@ if (tradeOptions is null)
     return 2;
 }
 
+var guildOptions = Game.Server.Guild.GuildOptions.Parse(options.GuildArgs, Environment.GetEnvironmentVariable, out var guildError);   // T-904
+if (guildOptions is null)
+{
+    Console.Error.WriteLine(guildError);
+    Console.Error.WriteLine(Game.Server.Guild.GuildOptions.Usage);
+    return 2;
+}
+
 var log = new CountingLog(new ConsoleLog()); // the admin API's status reports its counts
 var startedAt = DateTime.UtcNow;
 log.Info($"Environment: {environmentName}{(development ? " (development: ws:// on loopback, dev login enabled)" : "")}");
@@ -94,7 +103,8 @@ catch (DatabaseException e)
 if (options.Migrate) return 0;
 
 var netProblems = netOptions.Problems().Concat(chatOptions.Problems(netOptions.MaxMessageBytes).Select(p => "chat: " + p))
-    .Concat(partyOptions.Problems().Select(p => "party: " + p)).Concat(tradeOptions.Problems().Select(p => "trade: " + p)).ToList();
+    .Concat(partyOptions.Problems().Select(p => "party: " + p)).Concat(tradeOptions.Problems().Select(p => "trade: " + p))
+    .Concat(guildOptions.Problems(netOptions.MaxMessageBytes).Select(p => "guild: " + p)).ToList();
 if (netProblems.Count > 0)
 {
     foreach (var problem in netProblems) log.Error("Gateway: " + problem);
@@ -172,6 +182,16 @@ chat.Register(Game.Shared.Vocabulary.ChatChannels.Party, party);
 gateway.Party = party;
 party.Start();
 // T-903: trade asks are rate-limited per account and blocked like chat before the tick decides the rest; the trades themselves live on the tick.
+// T-904: guilds are the database's; without one (development's dev login) there are none, and guild messages are ignored.
+await using var guilds = database is null ? null : new Game.Server.Guild.GuildService(content.Balance.Guild, content.Balance.Characters, guildOptions,
+    new PostgresGuildStore(database), new Game.Server.Guild.GatewayGuildDirectory(gateway, chat), i => gateway.Enqueue(i) == EnqueueResult.Accepted, chatOptions.MarksPerLetter,
+    TimeProvider.System, log);
+if (guilds is not null)
+{
+    chat.Register(Game.Shared.Vocabulary.ChatChannels.Guild, guilds);
+    gateway.Guild = guilds;
+    guilds.Start();
+}
 gateway.Trade = new Game.Server.Trade.TradeGate(tradeOptions, new GatewayPartyDirectory(gateway, chat), i => gateway.Enqueue(i), TimeProvider.System);
 GatewayHost host;
 try

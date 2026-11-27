@@ -63,6 +63,9 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
     /// <summary>The <c>--trade-</c> options and their values, in order, for <see cref="Game.Server.Trade.TradeOptions.Parse"/> (T-903).</summary>
     public IReadOnlyList<string> TradeArgs { get; init; } = NoArgs;
 
+    /// <summary>The <c>--guild-</c> options and their values, in order, for <see cref="Game.Server.Guild.GuildOptions.Parse"/> (T-904).</summary>
+    public IReadOnlyList<string> GuildArgs { get; init; } = NoArgs;
+
     /// <summary>The environment name in effect: <see cref="Environment"/>, else <paramref name="environmentVariable"/>, else <c>Production</c>.</summary>
     public string EnvironmentName(string? environmentVariable) =>
         Environment ?? (string.IsNullOrWhiteSpace(environmentVariable) ? "Production" : environmentVariable);
@@ -85,6 +88,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         var chat = new List<string>();
         var party = new List<string>();
         var trade = new List<string>();
+        var guild = new List<string>();
         error = null;
         for (var i = 0; i < args.Length; i++)
         {
@@ -128,6 +132,10 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                         trade.Add(arg);
                         trade.Add(Value());
                         break;
+                    case var _ when arg.StartsWith(Game.Server.Guild.GuildOptions.ArgPrefix, StringComparison.Ordinal):
+                        guild.Add(arg);
+                        guild.Add(Value());
+                        break;
                     default:
                         if (arg.StartsWith("--", StringComparison.Ordinal) || content is not null) throw new FormatException($"unexpected argument '{arg}'");
                         content = arg;
@@ -153,6 +161,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
             ChatArgs = chat.Count == 0 ? NoArgs : chat,
             PartyArgs = party.Count == 0 ? NoArgs : party,
             TradeArgs = trade.Count == 0 ? NoArgs : trade,
+            GuildArgs = guild.Count == 0 ? NoArgs : guild,
         };
     }
 

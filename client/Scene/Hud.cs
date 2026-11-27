@@ -65,6 +65,13 @@ public sealed class Hud
     private readonly Label _banner = Wrapped(HorizontalAlignment.Center);
     private readonly PanelContainer _targetFrame = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
     private readonly Label _target = Wrapped(HorizontalAlignment.Center);
+    private readonly TextureRect _targetEmblem = new()   // T-904: the target's guild emblem, before its name
+    {
+        ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered, MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false,
+        SizeFlagsVertical = Control.SizeFlags.ShrinkCenter,
+    };
+    private int _guildTagsShown = -1;
+    private long? _emblemTarget;
     private readonly ProgressBar _targetBar = Bar(new Color(0.9f, 0.35f, 0.3f));
     private readonly Label _flash = Wrapped(HorizontalAlignment.Center);
     private readonly Label _announcement = Wrapped(HorizontalAlignment.Center);   // T-806: staff's announcement, with the bottom's whole width to wrap in
@@ -82,6 +89,7 @@ public sealed class Hud
     private ShopPanel? _shopPanel;
     private QuestPanel? _questPanel;
     private ChatPanel? _chatPanel;   // T-901: the strip above the flash line, and the panel at the top
+    private GuildPanel? _guildPanel;   // T-904: opened from the chat panel beside Party; the invite prompt
     private PartyPanel? _partyPanel;   // T-902: opened from the chat panel; the invite prompt and the marks of members off the screen
     private TradePanel? _tradePanel;   // T-903: the trade window while a trade is open, and the ask prompt
     private WardrobePanel? _wardrobe;   // T-708: opened from the bag, as the stats are from the skills: the phone HUD has no room for another button
@@ -194,7 +202,11 @@ public sealed class Hud
         _flash.Visible = false;
         _announcement.Visible = false;
         var targetBox = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
-        targetBox.AddChild(_target);
+        var targetLine = new HBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore, Alignment = BoxContainer.AlignmentMode.Center };
+        _target.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        targetLine.AddChild(_targetEmblem);
+        targetLine.AddChild(_target);
+        targetBox.AddChild(targetLine);
         targetBox.AddChild(_targetBar);
         _targetBar.Visible = false;
         _targetFrame.AddChild(targetBox);
@@ -281,9 +293,11 @@ public sealed class Hud
         if (session is not null && bundle is not null) _questPanel = new QuestPanel(_safe, session, bundle, _interactive, Tap);
         if (session is not null) _partyPanel = new PartyPanel(_safe, session, bundle, _interactive, Tap);
         if (session is not null) _tradePanel = new TradePanel(_safe, session, bundle, _interactive, Tap);
+        if (session is not null) _guildPanel = new GuildPanel(_safe, session, bundle?.GuildEmblems ?? [], _interactive, Tap);   // T-904
         if (session is not null) _chatPanel = new ChatPanel(_safe, _trackerRow, _bottom, _flash, session, _interactive, Tap)
         {
             OpenParty = () => { _chatPanel?.SetOpen(false); _partyPanel?.SetOpen(true); },   // T-902
+            OpenGuild = () => { _chatPanel?.SetOpen(false); _guildPanel?.SetOpen(true); },   // T-904
         };
         if (session is not null)
         {
@@ -381,6 +395,8 @@ public sealed class Hud
         SetText(_flash, SampleAnnouncement ? string.Empty : UiText.HitYou(longName, 123456, HitResults.Crit));
         _target.Text = longName;
         _targetFrame.Visible = true;
+        _targetEmblem.Visible = true;   // T-904: a guild member's emblem beside the longest name
+        _guildTagsShown = -1;
         _levels.Text = UiText.Exp(99, 123456789, 987654321);
         _hpText.Text = UiText.Hp(99999, 99999);
         _spText.Text = UiText.Sp(99999, 99999);
@@ -410,6 +426,12 @@ public sealed class Hud
     public bool SampleChatLines { get; set; }
 
     private long _tappedShown;
+
+    /// <summary>The guild panel (T-904), or null without a session.</summary>
+    public GuildPanel? Guild => _guildPanel;
+
+    /// <summary>The target frame's emblem (T-904): shown when the target is a guild member.</summary>
+    public TextureRect TargetEmblem => _targetEmblem;
 
     /// <summary>The party panel (T-902), or null without a session.</summary>
     public PartyPanel? Party => _partyPanel;
@@ -550,6 +572,8 @@ public sealed class Hud
             if (_wardrobe is not null) _wardrobe.IconLoader = value;
             if (_skillPanel is not null) _skillPanel.IconLoader = value;
             if (_dialoguePanel is not null) _dialoguePanel.IconLoader = value;
+            if (_guildPanel is not null) _guildPanel.IconLoader = value;   // T-904: emblems
+            _guildTagsShown = -1;
         }
     }
 
@@ -701,6 +725,8 @@ public sealed class Hud
         _skillPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _questPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _theme.DefaultFontSize);
         _partyPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
+        _guildPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
+        _targetEmblem.CustomMinimumSize = new Vector2(Dp(18), Dp(18));
         _tradePanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
         _chatPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _window.Size.Y > 0 ? (float)(metrics.CanvasHeight / _window.Size.Y) : 1f,
             (float)metrics.CanvasHeight);
@@ -794,6 +820,7 @@ public sealed class Hud
                 _statsPanel?.SetOpen(false);
                 _wardrobe?.SetOpen(false);
                 _partyPanel?.SetOpen(false);
+                _guildPanel?.SetOpen(false);
             }
         }
         if (_uiVersion != ui.Version)
@@ -847,10 +874,23 @@ public sealed class Hud
         if (_session.Party.Tapped != 0 && _partyPanel is { Open: false } && _tappedShown != _session.Party.Tapped) _partyPanel.SetOpen(true);   // T-902: a player was tapped
         _tappedShown = _session.Party.Tapped;
         _partyPanel?.Refresh(connection.Phase);
+        _guildPanel?.Refresh(connection.Phase);
+        RefreshTargetEmblem(ui);
         var trading = _tradePanel?.Open ?? false;
         _tradePanel?.Refresh(connection.Phase);
         if (_tradePanel is { Open: true } && !trading) _partyPanel?.SetOpen(false);   // T-903: the trade window takes the party panel's place when a trade opens
         RefreshAutopilot();
+    }
+
+    /// <summary>T-904: the target's guild emblem before its name, when the server's tags say it is in a guild; redrawn when the target or the tags change.</summary>
+    private void RefreshTargetEmblem(UiState ui)
+    {
+        if (_session is null || (_guildTagsShown == _session.Guild.TagsVersion && _emblemTarget == ui.Target)) return;
+        _guildTagsShown = _session.Guild.TagsVersion;
+        _emblemTarget = ui.Target;
+        var key = ui.Target is { } id ? _session.Guild.TagOf(id) : null;
+        _targetEmblem.Texture = key is null ? null : _iconLoader?.Invoke(key);
+        _targetEmblem.Visible = key is not null;
     }
 
     /// <summary>The banner line (how a connection is being got back) and, while playing, the latest announcement above the flash line (T-806).</summary>

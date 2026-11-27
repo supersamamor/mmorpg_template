@@ -203,8 +203,11 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>traded</c> (T-903): a trade swapped both sides' offers; items and currency moved in the same change.</summary>
         public const string Traded = "traded";
 
+        /// <summary><c>guild_founded</c> (T-904): founding a guild took its cost (<c>guild.found_cost</c>); the guild and the change land in one transaction.</summary>
+        public const string GuildFounded = "guild_founded";
+
         /// <summary>Every term in this category, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined, Exchanged, Quest, ShopBuy, ShopSell, Staff, Traded);
+        public static readonly VocabularySet All = new VocabularySet(PickedUp, Used, Equipped, Unequipped, Dropped, Weight, CardInserted, Refined, Exchanged, Quest, ShopBuy, ShopSell, Staff, Traded, GuildFounded);
     }
 
     /// <summary>What a failed refine does to the equipment, per level of <c>refine.yaml</c> (<c>failure</c>; ARCHITECTURE §6.8). VOCABULARY.md: "Refine failures".</summary>

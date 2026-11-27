@@ -63,6 +63,7 @@ public sealed class ClientSession : IViewSink, IChatSink
     private bool _autopilotTold;             // tick thread: the autopilot's status went out with this session's first snapshot (T-604)
     private string? _sessionKey;
     private volatile bool _unacknowledged;   // resumed, and the client has not spoken since: the redeemed token still works
+    private Task _guild = Task.CompletedTask; // T-904: the last guild message's handling, chained like chat's (receive loop only)
     private Task _chat = Task.CompletedTask;  // T-901: the last chat message's handling; the next waits for it, so a player's lines keep their order (receive loop only)
 
     internal ClientSession(Gateway gateway, WebSocket socket, string peer, long nowMs)
@@ -492,6 +493,10 @@ public sealed class ClientSession : IViewSink, IChatSink
             case ChatMessage or BlockMessage or UnblockMessage or ReportMessage:
                 Chat(message);
                 break;
+            case GuildFoundMessage or GuildInviteMessage or GuildAnswerMessage or GuildLeaveMessage or GuildKickMessage or GuildRankMessage or GuildRanksMessage or GuildLeadMessage
+                or GuildNoticeMessage:
+                Guild(message);
+                break;
             case PartyInviteMessage or PartyAnswerMessage or PartyLeaveMessage or PartyKickMessage or PartyLeadMessage:
                 // T-902: decided at once, in memory, off the tick; ignored before the welcome and on a server without parties
                 if (_gateway.Party is { } party && State == SessionState.Joined && _gateway.ChatPeerOf(this) is { } member) party.Handle(member, message);
@@ -545,6 +550,25 @@ public sealed class ClientSession : IViewSink, IChatSink
             await previous.ConfigureAwait(false);
             if (Closing || _gateway.ChatPeerOf(this) is not { } speaker) return;   // the session ended or its character left meanwhile
             await chat.HandleAsync(speaker, message, token).ConfigureAwait(false);   // never throws for what the client sent
+        }
+    }
+
+    /// <summary>
+    /// A guild message (T-904): handed to the guild service after this session's previous one (each reads the database), off the receive loop. Ignored before the welcome and on a server
+    /// without guilds (no database).
+    /// </summary>
+    private void Guild(ClientMessage message)
+    {
+        if (_gateway.Guild is not { } guild || State != SessionState.Joined) return;
+        var token = _abort.Token;
+        var previous = _guild;
+        _guild = RunAsync();
+
+        async Task RunAsync()
+        {
+            await previous.ConfigureAwait(false);
+            if (Closing || _gateway.ChatPeerOf(this) is not { } member) return;
+            await guild.HandleAsync(member, message, token).ConfigureAwait(false);   // never throws for what the client sent
         }
     }
 

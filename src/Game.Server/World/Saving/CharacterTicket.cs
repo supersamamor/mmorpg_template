@@ -193,14 +193,22 @@ public sealed record CharacterSave(CharacterTicket Ticket, long Version, Charact
 /// A staff change to a saved character in the world (T-806): its audit row and the items it made (<c>source = admin</c>), written in the transaction of the save that first has the change, so the
 /// change and its row land together or not at all (rule 10). <see cref="Landed"/> says which: true once that save is in the database, false when the stay ended without it (the change is gone
 /// with the unsaved time, as after a crash).
+/// <para>T-904 uses the same road for a guild founding (<see cref="ForGuild"/>): the save that first lacks the founding cost also turns the reserved guild into a founded one, so the cost and the
+/// guild land together. Such a note has no audit row.</para>
 /// </summary>
-public sealed class StaffNote(Game.Server.Admin.AuditDraft audit, IReadOnlyList<(long Id, string ItemId, int Quantity)>? made = null)
+public sealed class StaffNote(Game.Server.Admin.AuditDraft? audit, IReadOnlyList<(long Id, string ItemId, int Quantity)>? made = null, long? foundsGuild = null)
 {
     private readonly TaskCompletionSource<bool> _landed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private long _auditId;
 
-    /// <summary>The audit row to write.</summary>
-    public Game.Server.Admin.AuditDraft Audit { get; } = audit;
+    /// <summary>The note of a guild founding (T-904): the save that has the cost taken also founds the reserved guild <paramref name="guild"/>.</summary>
+    public static StaffNote ForGuild(long guild) => new(null, null, guild);
+
+    /// <summary>The audit row to write (null for a guild founding).</summary>
+    public Game.Server.Admin.AuditDraft? Audit { get; } = audit;
+
+    /// <summary>The reserved guild this save founds (T-904), or null.</summary>
+    public long? FoundsGuild { get; } = foundsGuild;
 
     /// <summary>The entries staff made (for <c>admin_items</c>): each one's id, item and quantity when it was made.</summary>
     public IReadOnlyList<(long Id, string ItemId, int Quantity)> Made { get; } = made ?? [];

@@ -465,3 +465,73 @@ public sealed class ChatReportRow
     /// <summary>The audit row that closed it, or null.</summary>
     public long? ClosedAuditId { get; set; }
 }
+
+/// <summary>
+/// Table <c>guilds</c> (T-904): a guild's name (unique by its key, letter case not counting), emblem (an asset key), notice and a version that every change raises, so other server processes
+/// see a change at their next look. <see cref="FoundedAt"/> is null while the founding is under way: the name is held, nobody can join, and only the founder's next save (with the cost
+/// taken) founds it. Deleted when its last member goes (docs/STORE_COMPLIANCE.md).
+/// </summary>
+public sealed class GuildRow
+{
+    /// <summary>The guild's number.</summary>
+    public long Id { get; set; }
+
+    /// <summary>Its name, as the founder wrote it (normalised).</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>The name's key (lower case): unique.</summary>
+    public string NameKey { get; set; } = string.Empty;
+
+    /// <summary>The emblem's asset key (<c>guild.emblems</c>).</summary>
+    public string Emblem { get; set; } = string.Empty;
+
+    /// <summary>The notice (empty when none), cleaned like a chat line.</summary>
+    public string Notice { get; set; } = string.Empty;
+
+    /// <summary>Raised by every change of the guild, its ranks or its members.</summary>
+    public long Version { get; set; }
+
+    /// <summary>When the founding was asked for (UTC).</summary>
+    public DateTime CreatedAt { get; set; }
+
+    /// <summary>When the founding landed with the cost (UTC); null while under way.</summary>
+    public DateTime? FoundedAt { get; set; }
+}
+
+/// <summary>Table <c>guild_ranks</c> (T-904): one rank of a guild by place (0 the leader's), its name and its "Guild permissions" terms.</summary>
+public sealed class GuildRankRow
+{
+    /// <summary>The guild.</summary>
+    public long GuildId { get; set; }
+
+    /// <summary>The place: 0 the leader, 1 the highest below it.</summary>
+    public int Position { get; set; }
+
+    /// <summary>The rank's name.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Its permissions.</summary>
+    public string[] Permissions { get; set; } = [];
+}
+
+/// <summary>
+/// Table <c>guild_members</c> (T-904): a character in a guild (one guild per character: its id is unique), at a rank place, since a time. <see cref="Id"/> is the member's number in the
+/// protocol (players never see character ids) and orders members by when they joined. Goes when the character leaves, is kicked, deleted or erased.
+/// </summary>
+public sealed class GuildMemberRow
+{
+    /// <summary>The member's number.</summary>
+    public long Id { get; set; }
+
+    /// <summary>The character (permanent id): unique.</summary>
+    public Guid CharacterId { get; set; }
+
+    /// <summary>The guild.</summary>
+    public long GuildId { get; set; }
+
+    /// <summary>The rank place.</summary>
+    public int Rank { get; set; }
+
+    /// <summary>When it joined (UTC).</summary>
+    public DateTime JoinedAt { get; set; }
+}

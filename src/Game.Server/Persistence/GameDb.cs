@@ -73,6 +73,21 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
     /// <summary>Players' reports of chat lines (T-901).</summary>
     public DbSet<ChatReportRow> ChatReports => Set<ChatReportRow>();
 
+    /// <summary>Guilds (T-904).</summary>
+    public DbSet<GuildRow> Guilds => Set<GuildRow>();
+
+    /// <summary>Guilds' ranks (T-904).</summary>
+    public DbSet<GuildRankRow> GuildRanks => Set<GuildRankRow>();
+
+    /// <summary>Guilds' members (T-904).</summary>
+    public DbSet<GuildMemberRow> GuildMembers => Set<GuildMemberRow>();
+
+    /// <summary>The unique index on guild names' keys (T-904).</summary>
+    public const string GuildNameIndex = "ux_guilds_name_key";
+
+    /// <summary>The unique index that keeps a character in one guild (T-904).</summary>
+    public const string GuildMemberIndex = "ux_guild_members_character";
+
     /// <summary>The trigger function that refuses changing or deleting audit rows.</summary>
     public const string AuditGuard = "admin_audit_append_only";
 
@@ -316,6 +331,44 @@ public sealed class GameDb(DbContextOptions<GameDb> options) : DbContext(options
             e.HasOne<AccountRow>().WithMany().HasForeignKey(r => r.SenderAccountId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<CharacterRow>().WithMany().HasForeignKey(r => r.ReporterCharacterId).OnDelete(DeleteBehavior.Restrict);
             e.HasOne<CharacterRow>().WithMany().HasForeignKey(r => r.SenderCharacterId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<GuildRow>(e =>
+        {
+            e.ToTable("guilds");
+            e.HasKey(g => g.Id);
+            e.Property(g => g.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(g => g.Name).HasColumnName("name").HasMaxLength(CharacterNameRules.LongestAllowed);
+            e.Property(g => g.NameKey).HasColumnName("name_key").HasMaxLength(CharacterNameRules.LongestAllowed);
+            e.Property(g => g.Emblem).HasColumnName("emblem").HasMaxLength(128);
+            e.Property(g => g.Notice).HasColumnName("notice");   // no fixed width: the longest notice is server configuration
+            e.Property(g => g.Version).HasColumnName("version");
+            e.Property(g => g.CreatedAt).HasColumnName("created_at");
+            e.Property(g => g.FoundedAt).HasColumnName("founded_at");
+            e.HasIndex(g => g.NameKey).IsUnique().HasDatabaseName(GuildNameIndex);
+        });
+        model.Entity<GuildRankRow>(e =>
+        {
+            e.ToTable("guild_ranks", t => t.HasCheckConstraint("ck_guild_ranks_position", "position >= 0"));
+            e.HasKey(r => new { r.GuildId, r.Position });
+            e.Property(r => r.GuildId).HasColumnName("guild_id");
+            e.Property(r => r.Position).HasColumnName("position");
+            e.Property(r => r.Name).HasColumnName("name").HasMaxLength(CharacterNameRules.LongestAllowed);
+            e.Property(r => r.Permissions).HasColumnName("permissions");
+            e.HasOne<GuildRow>().WithMany().HasForeignKey(r => r.GuildId).OnDelete(DeleteBehavior.Restrict);
+        });
+        model.Entity<GuildMemberRow>(e =>
+        {
+            e.ToTable("guild_members", t => t.HasCheckConstraint("ck_guild_members_rank", "rank >= 0"));
+            e.HasKey(m => m.Id);
+            e.Property(m => m.Id).HasColumnName("id").UseIdentityAlwaysColumn();
+            e.Property(m => m.CharacterId).HasColumnName("character_id");
+            e.Property(m => m.GuildId).HasColumnName("guild_id");
+            e.Property(m => m.Rank).HasColumnName("rank");
+            e.Property(m => m.JoinedAt).HasColumnName("joined_at");
+            e.HasIndex(m => m.CharacterId).IsUnique().HasDatabaseName(GuildMemberIndex);
+            e.HasIndex(m => m.GuildId).HasDatabaseName("ix_guild_members_guild");
+            e.HasOne<GuildRow>().WithMany().HasForeignKey(m => m.GuildId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne<CharacterRow>().WithMany().HasForeignKey(m => m.CharacterId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

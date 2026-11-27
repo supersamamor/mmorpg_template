@@ -195,6 +195,11 @@ public sealed class DisplayBundle
     /// <summary>What a job adds to a character's body (T-706); <see cref="JobLook.None"/> for an id the bundle does not have or a job that adds nothing.</summary>
     public JobLook JobLookOf(string? jobId) => jobId is not null && _jobLooks.TryGetValue(jobId, out var look) ? look : JobLook.None;
 
+    private readonly List<string> _guildEmblems = new();
+
+    /// <summary>The emblems a guild founder picks from (T-904): asset keys of the theme, in content order.</summary>
+    public IReadOnlyList<string> GuildEmblems => _guildEmblems;
+
     /// <summary>The outfits (T-708), in id order.</summary>
     public IReadOnlyList<ClientOutfit> Outfits => _outfitList;
 
@@ -267,6 +272,9 @@ public sealed class DisplayBundle
             }
             ReadRefine(result, root);
             ReadOutfits(result, root);
+            if (root.TryGetProperty("guild_emblems", out var emblems) && emblems.ValueKind == JsonValueKind.Array)   // T-904
+                foreach (var emblem in emblems.EnumerateArray())
+                    if (emblem.GetString() is { Length: > 0 } key) result._guildEmblems.Add(key);
             result.Appearance = ReadAppearance(root);
             result.CurrencyName = OptionalText(root, "currency_name") ?? string.Empty;
             bundle = result;
