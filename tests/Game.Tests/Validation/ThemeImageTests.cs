@@ -140,6 +140,20 @@ public class ThemeImageTests : IClassFixture<ThemeImageTests.Pack>
         ThemeCheck.Check(_pack.Database, _pack.Themes, "default").ShouldBeEmpty();
 
     [Fact]
+    public void An_untextured_part_with_other_material_settings_on_an_untextured_body_is_not_the_atlas_rule()
+    {
+        var folder = Path.Combine(_pack.Themes, Theme);
+        var model = Path.Combine(folder, "models", "equip", "wooden_buckler.glb");
+        Directory.CreateDirectory(Path.GetDirectoryName(model)!);
+        var file = GltfFile.FromGlb(File.ReadAllBytes(Path.Combine(_pack.Themes, "default", "models", "equip", "wooden_buckler.glb")));
+        foreach (var m in file.Array("materials").OfType<JsonObject>()) m["pbrMetallicRoughness"]!["metallicFactor"] = 1.0; // a metal shield
+        File.WriteAllBytes(model, file.ToGlb());
+        var defaults = JsonNode.Parse(File.ReadAllText(Path.Combine(_pack.Themes, "default", "asset-manifest.json")))!.AsObject();
+        File.WriteAllText(Path.Combine(folder, "asset-manifest.json"), new JsonObject { ["model.equip.wooden_buckler"] = defaults["model.equip.wooden_buckler"]!.DeepClone() }.ToJsonString());
+        ThemeCheck.Check(_pack.Database, _pack.Themes, Theme).Where(i => i.Code == ValidationCodes.WarnThemeLook).ShouldBeEmpty();
+    }
+
+    [Fact]
     public void The_textured_theme_keeps_the_vertex_colours_and_only_adds_texture_coordinates()
     {
         var source = GltfFile.Load(Path.Combine(_pack.Themes, "default", "models", "char", "body_male.glb"));

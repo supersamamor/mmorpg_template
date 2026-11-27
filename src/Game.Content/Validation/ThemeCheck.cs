@@ -351,7 +351,8 @@ public static class ThemeCheck
     /// <summary>
     /// Every part a character of a gender merges into its body (its faces and hairstyles, the jobs' pieces, the outfits' pieces for that gender, worn equipment)
     /// must draw the same image as the body, with the same shading, or it stays a surface of its own: one more draw call for every character that has it (§9). One
-    /// warning per part, naming the bodies it splits from. A body with more than one material is the budget's error, so it is left out here.
+    /// warning per part, naming the bodies it splits from. A body with more than one material is the budget's error, so it is left out here. An untextured part
+    /// on an untextured body is left out too: other material settings there (a metal blade) cost what they did before T-711, and the rule is about the atlas.
     /// </summary>
     private static void CheckCharacterImages(ContentDatabase database, List<Manifest> chain, ContractPass contract, List<ValidationIssue> issues)
     {
@@ -376,6 +377,7 @@ public static class ThemeCheck
                 if (contract.ChainFacts(key) is not { Body0: { } part } facts) continue;
                 var other = Groups(facts, part).Where(g => g != reference).ToList();
                 if (other.Count == 0) continue;
+                if (ModelFacts.ImageOf(reference) == "none" && other.All(g => ModelFacts.ImageOf(g) == "none")) continue; // untextured on untextured: not the atlas rule
                 var shading = ModelFacts.ImageOf(other[0]) == ModelFacts.ImageOf(reference); // the same image, other material settings: say which
                 if (!splits.TryGetValue(key, out var split)) splits[key] = split = (Describe(other[0], shading), new SortedSet<string>(StringComparer.Ordinal), Describe(reference, shading));
                 split.Bodies.Add(bodyKey);

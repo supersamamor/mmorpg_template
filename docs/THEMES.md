@@ -138,7 +138,7 @@ see-through veil). It still draws, as one more surface on every character that h
 
 **What `validate --theme <theme>` checks** (warnings, `warn.theme_look`, at the part's manifest line): for each gender, every part above whose `Body_LOD0` materials differ from its body's, naming the
 part's key, the bodies it splits from, and what differs (the image, by its hash; "no texture"; the settings; "a material of its own"). It compares the image's bytes in the file, so the same
-pixels encoded twice differently are a warning the client does not need (it compares the imported pixels); the same bytes are never missed. A body with more than one material is the budget's error (§1.1).
+pixels encoded twice differently are a warning the client does not need (it compares the imported pixels); the same bytes are never missed. A body with more than one material is the budget's error (§1.1). An untextured part on an untextured body is not checked: other settings there (a metal blade) cost the surface they did before T-711, and this rule is about the atlas.
 
 **Why a rule and not an atlas built at load:** packing the parts' textures into one atlas on the phone would need a texture as big as all of them (up to 1024² per part, so 4 MB each uncompressed,
 more than the 1024² §9 allows a character), re-written texture coordinates in every part, mipmaps that bleed between neighbours, and the GPU-compressed formats (ETC2, ASTC) decompressed and
