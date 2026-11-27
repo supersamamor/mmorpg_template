@@ -316,6 +316,7 @@ public sealed class TradePanel
     {
         _picker.Visible = picking;
         _columns.Visible = !picking;
+        _foot.Visible = !picking;   // one row fewer, so the list keeps a row on the smallest phone at the largest scale
         _quantityRow.Visible = false;
         _picked = 0;
         _shownTrade = _shownBag = -1;

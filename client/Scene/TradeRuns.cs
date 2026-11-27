@@ -137,7 +137,7 @@ public sealed class TradeRuns(Main main, string draught, string tonic, string me
         while (Session.Trade.Open is null)
         {
             if (clock.Elapsed.TotalSeconds > 150) throw new TimeoutException("no trade opened: " + Session.Ui.Flash);
-            var partner = World.Entities.FirstOrDefault(e => e.Kind == EntityKinds.Player && !e.Mine);
+            var partner = World.Entities.FirstOrDefault(e => e.Kind == EntityKinds.Player && e.Id != World.OwnId);
             if (partner is null)
             {
                 await SecondsAsync(1);
