@@ -353,16 +353,32 @@ public sealed class UiRuns
                     }
                     // The quest tracker, long and one-line, must lie over no other HUD button or the target frame (T-406, T-408): a failure, not a note.
                     foreach (var name in Hud.TrackerOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the long quest tracker covers {name}");
-                    // The autopilot indicator (T-605), paused with its longest line, must lie over nothing; the plain running one is shorter and trimmed the same way.
-                    foreach (var name in Hud.AutopilotOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the autopilot indicator covers {name}");
+                    // The autopilot indicator (T-605) shows only online: it is checked in the "playing" pass below, without the offline banner.
                     if (what == "playing")
                     {
-                        // T-811: the Auto toggle and its longest fight choice in the indicator's place (they never show together), held to the same rules.
-                        Hud.ShowAutoBattleSample(true);
+                        // Online (no banner then; ShowSamples is the offline state): the paused indicator with its longest line (T-605) lies over nothing and passes every rule.
+                        Hud.ShowAutopilotSample(Hud.AutopilotSample.Indicator);
                         await FramesAsync(2);
-                        foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}, Auto toggle shown: {problem}");
-                        foreach (var name in Hud.AutoBattleOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the Auto toggle: {name}");
-                        Hud.ShowAutoBattleSample(false);
+                        foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}, the autopilot indicator shown: {problem}");
+                        foreach (var covered in Hud.AutopilotOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the autopilot indicator covers {covered}");
+                        // T-811: and as a real run draws it, online with a run on: the client takes a running status (quest autopilot, then auto-battle) as the server's message
+                        // would come, and the HUD's own refresh shows the indicator. Nothing in the HUD's samples holds it, so this can never pass with the indicator hidden.
+                        foreach (var status in new[]
+                                 {
+                                     new Game.Shared.Protocol.AutopilotMessage(AutopilotModes.Running, LongName + " of the Far Northern Reaches", AutopilotActivities.Travelling, null),
+                                     new Game.Shared.Protocol.AutopilotMessage(AutopilotModes.Running, null, AutopilotActivities.Returning, null),
+                                 })
+                        {
+                            Session.Autopilot.Apply(status);
+                            await FramesAsync(2);
+                            var kind = status.Quest is null ? "auto-battle" : "quest autopilot";
+                            if (!Hud.Autopilot.IsVisibleInTree()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the {kind} indicator is not shown while a run is on");
+                            foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}, {kind} running: {problem}");
+                            foreach (var covered in Hud.AutopilotOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the {kind} indicator covers {covered}");
+                        }
+                        Session.Autopilot.Apply(new Game.Shared.Protocol.AutopilotMessage(AutopilotModes.Off, null, null, AutopilotStops.Stopped));
+                        Hud.ShowAutopilotSample(Hud.AutopilotSample.Offline);
+                        await FramesAsync(1);
                     }
                     // T-901: the chat strip lies over no other part of the HUD, and with the keyboard up the open panel's field and buttons stay above it.
                     foreach (var name in Hud.ChatStripOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the chat strip: {name}");

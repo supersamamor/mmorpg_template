@@ -1006,12 +1006,13 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   **Only the server's word:** the state is the last `autopilot` message, reset at a new login and told again after a resume; the client never ends, pauses or restarts a run. It sends no message of its own that
   counts as manual input (the dialogue and shop panels send `dialogue_close` only from their Close buttons); the dialogue a turn-in opens stays down while a run plays, so it cannot cover the indicator or be
   pressed by mistake (a paused run shows it).
-- **Auto-battle** (T-811, §6.4.3; the same `AutopilotModel` and indicator). **Toggle:** while no run is on, the indicator's place shows two 48 dp buttons: **Auto**, which sends `start_autopilot` with no
-  quests, the skill bar as for a quest run and `battle` (the fight choice), and the **fight choice** beside it ("Nearby", "Attackers", "+ Bosses"), whose tap picks the next one; the choice is kept in memory
-  only, like the ticks. Sharing the indicator's place means the toggle takes no room of its own and the two never show together. **Indicator:** a status without a quest is auto-battle: "Stop auto-battle:
-  fighting" / "returning" / "waiting" (or "gathering") over "Around where it started"; a tap sends `stop_autopilot`. Ends and refusals go on the flash line in auto-battle's words ("Auto-battle stopped: your HP is
-  low.", "... you left the area.", "... nothing to fight here.", "Auto-battle is switched off here."): a refusal is told as auto-battle's when the last start sent was one. Only the server's word decides what the
-  indicator shows. In the `-Run ui` matrix (the toggle with its longest choice in the indicator's place, held to the indicator's rule: it covers nothing); the `battle` e2e run measures its draw calls and allocations.
+- **Auto-battle** (T-811, §6.4.3; the same `AutopilotModel`, quest log and indicator). **Start:** in the quest log, a second row under Start and Stop: **Auto-battle here**, which sends `start_autopilot`
+  with no quests, the skill bar as for a quest run and `battle` (the fight choice), and closes the log so the fight is in view; and the **fight choice** ("Fight: Nearby" / "Attackers" / "+ Bosses"), whose tap
+  picks the next one, kept in memory only like the ticks. Both 140 x 48 dp; enabled with nothing ticked, disabled while dead or offline. Not on the HUD: the only free place is the indicator's, and at
+  scale 1.5 on a 360 dp-tall phone it overlaps the flash line and the hotbar (ADR-002 row 526). **Indicator:** a status without a quest is auto-battle: "Stop auto-battle: fighting" / "returning" / "waiting"
+  (or "gathering") over "Around where it started"; a tap sends `stop_autopilot`. Ends and refusals go on the flash line in auto-battle's words ("Auto-battle stopped: your HP is low.", "... you left the area.",
+  "... nothing to fight here.", "Auto-battle is switched off here."): a refusal is told as auto-battle's when the last start sent was one. Only the server's word decides what the indicator shows. The new row
+  is in the `-Run ui` matrix with the quest log open (longest choice); the HUD gets no new node, so its draw calls and per-frame work are T-605's.
 - **Where the client's own words live (ADR-002 row 120).** In `client/Core/UiText.cs`: one static class of constants and small formatting functions in English, and nowhere
   else (a test fails on a literal assigned to a text property in `client/Scene`). Why: the refusal and update screens must read even when the bundle, theme or any data
   file is missing or broken, which rules out loading them; the pure core and its tests can use them; a typo or a missing word is a compile error; and the number of

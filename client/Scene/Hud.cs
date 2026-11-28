@@ -25,8 +25,8 @@ public sealed class Hud
     private const double EdgeMarginDp = 8;
     private const double LeftColumnDp = 150;
     private const double RightColumnDp = 104;
+    private const double CompactCentreDp = 260;   // T-811: a safe area shorter than this, in dp divided by the UI scale, gets the compact centre column
     private const double AutopilotMaxWidthDp = 260;   // the longest fixed line of the indicator at scale 1; wider would take the world's taps
-    private const double AutoFilterMaxWidthDp = 96;   // T-811: the longest fight choice ("Attackers") at scale 1
     private const double BodyFontDp = 16;
     private const double SlotFontDp = 13;      // a skill bar slot's name, before fitting (T-222)
     private const double SlotFontMinDp = 9;
@@ -116,16 +116,12 @@ public sealed class Hud
         SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter,
     };
     private int _autopilotVersion = -1;
+    // T-811 (ADR-002 row 528): on a short screen at a large scale (under CompactCentreDp tall in scaled dp: 360 dp at 1.5x) the centre column has no room for a two-line indicator
+    // under a wrapped target name above the flash line; there the indicator is one line at the touch minimum and the target's name one line with an ellipsis.
+    private bool _compactCentre;
+    private string _indicatorText = string.Empty;
     private int _autopilotQuestVersion = -1;
     private bool _autopilotOnline;
-    // The Auto toggle (T-811): in the indicator's place while no run is on, so the two never show together and the toggle takes no room of its own. A tap starts auto-battle
-    // where the character stands; the button beside it shows what it will fight and picks the next choice.
-    private readonly HBoxContainer _autoRow = new() { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false, SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter };
-    private readonly Button _autoButton = new() { Text = UiText.AutoBattleStart };
-    private readonly Button _autoFilter = new()
-    {
-        AutowrapMode = TextServer.AutowrapMode.Off, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
-    };
     private readonly Button _skillsButton = new() { Text = UiText.Skills, Visible = false };
     private readonly List<ColorRect> _sweeps = new();   // one cooldown overlay per hotbar slot (T-502)
     private string? _pendingShown;
@@ -227,11 +223,6 @@ public sealed class Hud
         _center.AddChild(_targetFrame);
         _center.AddChild(_autopilot);
         _autopilot.Pressed += () => { Tap(); _session?.StopAutopilot(); };
-        _center.AddChild(_autoRow);
-        _autoRow.AddChild(_autoButton);
-        _autoRow.AddChild(_autoFilter);
-        _autoButton.Pressed += () => { Tap(); _session?.StartAutoBattle(); };
-        _autoFilter.Pressed += () => { Tap(); _session?.Autopilot.CycleBattleFilter(); };
 
         _right.AddChild(_connection);
         _right.AddChild(_uiSize);
@@ -331,8 +322,6 @@ public sealed class Hud
         _interactive.Add(_skillsButton);
         _interactive.Add(_tracker);
         _interactive.Add(_autopilot);
-        _interactive.Add(_autoButton);
-        _interactive.Add(_autoFilter);
 
         _infoTitle.HorizontalAlignment = HorizontalAlignment.Left;
         var infoBox = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -430,9 +419,12 @@ public sealed class Hud
         _tracker.Text = longName + " of the Far Northern Reaches\n" + UiText.QuestHeld(QuestReasons.InventoryFull) + "\n"
             + string.Join("\n", Enumerable.Range(0, QuestBook.MaxTrackerLines - 2).Select(i => UiText.QuestObjective(QuestObjectiveTypes.Kill, longName, 99999, 99999)));
         _tracker.Visible = true;
-        _autopilot.Text = UiText.AutopilotPausedTitle + "\n" + UiText.AutopilotPause(AutopilotPauses.NeedsEquip, longName + " of the Far Northern Reaches");
-        _autopilot.Visible = true;
-        _autoRow.Visible = false;   // T-811: never beside the indicator; the layout check shows it in the indicator's place by itself (ShowAutoBattleSample)
+        // The banner shows only while the connection is being got back, the indicator only online: these samples are the offline state, and ShowAutopilotSample shows the
+        // online one (no banner, the paused indicator). The refresh is held so it does not undo a sample: before T-811 the next refresh hid the sampled indicator (no run on),
+        // so the layout check never saw it.
+        _sampleLongName = longName;
+        _autopilot.Visible = false;
+        HoldAutopilotRefresh();
         if (SampleChatLines)   // T-901: the last chat lines in the flash line's place, which they take only while no flash or announcement shows
         {
             SetText(_flash, string.Empty);
@@ -764,14 +756,14 @@ public sealed class Hud
         _tracker.SizeFlagsHorizontal = _chatPanel is null ? Control.SizeFlags.ShrinkBegin : Control.SizeFlags.ExpandFill;
         // Compact, and never wider than the centre column (a wider minimum would push the right column off the safe area).
         var column = (float)safe.Width - 4 * margin - Dp(LeftColumnDp) - Dp(RightColumnDp);
-        _autopilot.CustomMinimumSize = new Vector2(Mathf.Clamp(column, 0, Dp(AutopilotMaxWidthDp)), buttonHeight);
+        _compactCentre = safe.Height / unit / scale < CompactCentreDp;
+        var indicatorHeight = _compactCentre ? (float)(TouchTargetRules.MinTarget(metrics.Platform) * unit) : buttonHeight;
+        _autopilot.CustomMinimumSize = new Vector2(Mathf.Clamp(column, 0, Dp(AutopilotMaxWidthDp)), indicatorHeight);
+        _target.AutowrapMode = _compactCentre ? TextServer.AutowrapMode.Off : TextServer.AutowrapMode.WordSmart;
+        _target.ClipText = _compactCentre;
+        _target.TextOverrunBehavior = _compactCentre ? TextServer.OverrunBehavior.TrimEllipsis : TextServer.OverrunBehavior.NoTrimming;
+        SetIndicator(_indicatorText);
         _autopilot.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(Dp(TrackerFontDp))));
-        // T-811: the Auto toggle and its fight choice share the indicator's width; each is at least a touch target, the choice takes what is left up to its longest word.
-        var autoGap = Dp(4);
-        _autoRow.AddThemeConstantOverride("separation", Mathf.RoundToInt(autoGap));
-        _autoButton.CustomMinimumSize = new Vector2(buttonHeight, buttonHeight);
-        _autoFilter.CustomMinimumSize = new Vector2(Mathf.Clamp(Mathf.Min(column, Dp(AutopilotMaxWidthDp)) - buttonHeight - autoGap, buttonHeight, Dp(AutoFilterMaxWidthDp)), buttonHeight);
-        foreach (var auto in new[] { _autoButton, _autoFilter }) auto.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(Dp(TrackerFontDp))));
         _autopilotVersion = -1;
         _skillsButton.OffsetTop = -buttonHeight;
         // The status lines of the left column stop growing with the UI scale at 1 (T-408): they are read-outs, not touch targets, and at 1.25-1.5 on a 360 dp phone their wrapped
@@ -950,56 +942,60 @@ public sealed class Hud
         _autopilotQuestVersion = _session.Quests.Version;
         _autopilotOnline = online;
         _autopilot.Visible = online && autopilot.On;
-        _autoRow.Visible = online && !autopilot.On;   // T-811: the Auto toggle in its place while nothing runs
-        _autoFilter.Text = UiText.AutoBattleFilter(autopilot.BattleFilter);
         if (!_autopilot.Visible) return;
         if (autopilot.Battle)
         {
             // T-811: auto-battle has no quest; what it does is the server's word.
-            _autopilot.Text = autopilot.Paused
+            SetIndicator(autopilot.Paused
                 ? UiText.AutoBattlePausedTitle + "\n" + UiText.AutopilotPause(autopilot.Reason, null)
-                : UiText.AutoBattleRunning(autopilot.Doing) + "\n" + UiText.AutoBattleArea;
+                : UiText.AutoBattleRunning(autopilot.Doing) + "\n" + UiText.AutoBattleArea);
             return;
         }
         var quest = autopilot.Quest is { } id ? _bundle.Quest(id)?.Name ?? id : string.Empty;
-        _autopilot.Text = autopilot.Paused
+        SetIndicator(autopilot.Paused
             ? UiText.AutopilotPausedTitle + "\n" + UiText.AutopilotPause(autopilot.Reason, autopilot.PauseDetail(_bundle, _session.Quests))
-            : UiText.AutopilotRunning(autopilot.Doing) + "\n" + quest;
+            : UiText.AutopilotRunning(autopilot.Doing) + "\n" + quest);
     }
 
-    /// <summary>The Auto toggle (T-811): shown in the indicator's place while no run is on; a tap starts auto-battle.</summary>
-    public Button AutoBattle => _autoButton;
-
-    /// <summary>The fight choice beside the Auto toggle (T-811): a tap picks the next one.</summary>
-    public Button AutoBattleFilter => _autoFilter;
-
-    /// <summary>
-    /// For the layout check (T-811): with <paramref name="on"/>, the samples' indicator gives way to the Auto toggle with its longest fight choice, as when no run is on;
-    /// off, the indicator comes back.
-    /// </summary>
-    public void ShowAutoBattleSample(bool on)
+    /// <summary>The indicator's words: both lines where they fit, else only the first (what it does, and that a tap stops it), trimmed with an ellipsis.</summary>
+    private void SetIndicator(string text)
     {
-        _autopilot.Visible = !on;
-        _autoRow.Visible = on;
-        _autoFilter.Text = on ? UiText.AutoBattleLongestFilter : UiText.AutoBattleFilter(_session?.Autopilot.BattleFilter ?? AutoBattleFilters.Nearby);
+        _indicatorText = text;
+        var newline = text.IndexOf('\n');
+        _autopilot.Text = _compactCentre && newline >= 0 ? text[..newline] : text;
     }
 
-    /// <summary>What the Auto toggle and its fight choice (T-811) lie over now, held to the indicator's rule: nothing. Empty while they are hidden.</summary>
-    public List<string> AutoBattleOverlaps()
+    /// <summary>True when the centre column is compact (T-811): the indicator shows one line at the touch minimum, the target's name one line.</summary>
+    public bool CompactCentre => _compactCentre;
+
+    /// <summary>The online sample of the layout check (what <see cref="ShowAutopilotSample"/> shows).</summary>
+    public enum AutopilotSample
     {
-        var found = new List<string>();
-        if (!_autoRow.IsVisibleInTree()) return found;
-        foreach (var mine in new Control[] { _autoButton, _autoFilter })
-        {
-            var rect = mine.GetGlobalRect().Grow(-0.6f);
-            foreach (var control in _slots.Cast<Control>().Concat([_skillsButton, _bagButton, _uiSize, _soundButton, _logout, _tracker, _levels, _hpText, _spText, _hpBar, _spBar, _expBar,
-                         _statusRow, _targetFrame, _banner, _announcement, _flash, _connection]).Concat(_chatPanel?.StripControls ?? []))
-            {
-                if (!control.IsVisibleInTree()) continue;
-                if (rect.Intersects(control.GetGlobalRect())) found.Add($"{(mine as Button)!.Text} covers {control.GetType().Name}\"{(control as Button)?.Text ?? (control as Label)?.Text}\" {Describe(control.GetGlobalRect())}");
-            }
-        }
-        return found;
+        /// <summary>Back to <see cref="ShowSamples"/>' offline state: the banner, no indicator.</summary>
+        Offline,
+
+        /// <summary>Online with a paused run: the indicator with its longest line, no banner (T-605).</summary>
+        Indicator,
+    }
+
+    /// <summary>For the layout check, after <see cref="ShowSamples"/>: the indicator as it shows online (the banner never does then).</summary>
+    public void ShowAutopilotSample(AutopilotSample sample)
+    {
+        SetText(_banner, sample == AutopilotSample.Offline ? UiText.Notice(ConnectionNotice.Reconnecting) : string.Empty);
+        SetIndicator(UiText.AutopilotPausedTitle + "\n" + UiText.AutopilotPause(AutopilotPauses.NeedsEquip, _sampleLongName + " of the Far Northern Reaches"));
+        _autopilot.Visible = sample == AutopilotSample.Indicator;
+        HoldAutopilotRefresh();
+    }
+
+    private string _sampleLongName = string.Empty;
+
+    /// <summary>Marks the indicator as drawn for the model's current state, so the next refresh leaves a sample alone; <see cref="ForceRefresh"/> undoes it.</summary>
+    private void HoldAutopilotRefresh()
+    {
+        if (_session is null) return;
+        _autopilotVersion = _session.Autopilot.Version;
+        _autopilotQuestVersion = _session.Quests.Version;
+        _autopilotOnline = _session.Connection.Phase == ConnectionPhase.Online;
     }
 
     /// <summary>The autopilot indicator (T-605), for the scripted run: shown only while a run is on or paused.</summary>

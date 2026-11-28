@@ -1679,7 +1679,8 @@ public sealed class AutoRun
 
     /// <summary>
     /// T-811's run, against the battle content copy (weak monsters with 60 HP worth 3000 EXP, so one kill brings skill points, and support skills cast whenever HP is missing):
-    /// one kill by hand, learn the first job's supportive skill (it lands on the skill bar), stand next to the slimes, pick a fight choice and press the HUD's Auto toggle. The server fights on its
+    /// one kill by hand, learn the first job's supportive skill (it lands on the skill bar), stand next to the slimes, open the quest log, pick a fight choice and press
+    /// "Auto-battle here" (the log closes). The server fights on its
     /// own: at least two kills, the skill used at least once (its cooldown), never farther from where it started than the area; then a tap on the ground ends it by manual input.
     /// </summary>
     private async Task AutoBattleRunAsync()
@@ -1689,10 +1690,9 @@ public sealed class AutoRun
         var hud = _main.Hud!;
         var auto = Session.Autopilot;
         var book = Session.Skills;
+        var log = hud.Quests!;
         await FramesAsync(3);
-        Check(hud.AutoBattle.IsVisibleInTree() && hud.AutoBattleFilter.IsVisibleInTree(), "the Auto toggle and its fight choice show while nothing runs");
         Check(!hud.Autopilot.Visible, "the indicator is hidden while nothing runs");
-        Check(hud.AutoBattle.Size.Y >= hud.Metrics.UnitsPerDp * 48 - 1 && hud.AutoBattleFilter.Size.X >= hud.Metrics.UnitsPerDp * 48 - 1, "both are 48 dp touch targets");
 
         // Skill points from one kill by hand, then the heal on the bar.
         var clock = Stopwatch.StartNew();
@@ -1725,18 +1725,22 @@ public sealed class AutoRun
         var anchor = Own().Cell;
         Check(NearestMonster() is { } near && GridDistance.Chebyshev(near.Cell, anchor) <= 4, "a monster within the area before the start");
 
-        // The fight choice: a tap picks the next, round again to Nearby.
-        Check(hud.AutoBattleFilter.Text == UiText.AutoBattleFilter(AutoBattleFilters.Nearby), "the fight choice starts at Nearby");
-        Press(hud.AutoBattleFilter);
+        // The quest log, where the autopilot is started: the fight choice (a tap picks the next, round again to Nearby) and Start.
+        if (!log.Open) Press(hud.Tracker);
+        await FramesAsync(3);
+        Check(log.Open, "the quest log is open");
+        var (battle, filter) = log.BattleButtons;
+        Check(!battle.Disabled, "auto-battle can be started with no quest ticked");
+        Check(battle.Size.Y >= hud.Metrics.UnitsPerDp * 48 - 1 && filter.Size.Y >= hud.Metrics.UnitsPerDp * 48 - 1, "both are 48 dp touch targets");
+        Check(filter.Text == UiText.AutoBattleFilterButton(AutoBattleFilters.Nearby), "the fight choice starts at Nearby");
+        Press(filter);
         await FramesAsync(2);
-        Check(hud.AutoBattleFilter.Text == UiText.AutoBattleFilter(AutoBattleFilters.Attackers), "a tap shows the next choice");
-        Press(hud.AutoBattleFilter);
-        Press(hud.AutoBattleFilter);
+        Check(filter.Text == UiText.AutoBattleFilterButton(AutoBattleFilters.Attackers), "a tap shows the next choice");
+        Press(filter);
         await FramesAsync(2);
-        Check(hud.AutoBattleFilter.Text == UiText.AutoBattleFilter(AutoBattleFilters.Nearby), "round again to Nearby");
-
-        // The budget (ARCHITECTURE section 9) with the toggle on: draw calls with it showing and hidden, and what the frame path allocates while nothing arrives.
-        await MeasureAutoToggleAsync(hud);
+        Press(filter);
+        await FramesAsync(2);
+        Check(filter.Text == UiText.AutoBattleFilterButton(AutoBattleFilters.Nearby), "round again to Nearby");
 
         var kills = 0;
         var hit = new HashSet<long>();
@@ -1746,11 +1750,12 @@ public sealed class AutoRun
             if (impact.Attacker == World.OwnId && impact.Kind is HitKind.Hit or HitKind.Crit) hit.Add(impact.Target);
         };
         Print($"battle: Auto at {anchor}, fight choice {auto.BattleFilter}");
-        Press(hud.AutoBattle);
+        Press(battle);
         await UntilAsync(() => auto.On, 10, "the server's auto-battle status");
         await FramesAsync(2);
+        Check(!log.Open, "the log closed, so the fight is in view");
         Check(auto.Battle && auto.Quest is null, "the run is auto-battle: its status names no quest");
-        Check(hud.Autopilot.Visible && !hud.AutoBattle.IsVisibleInTree(), "the indicator takes the toggle's place");
+        Check(hud.Autopilot.Visible, "the indicator shows while it runs");
         Print($"battle: running; indicator \"{hud.Autopilot.Text.Replace('\n', '|')}\"");
 
         var states = new List<string>();
@@ -1788,45 +1793,9 @@ public sealed class AutoRun
         await FramesAsync(2);
         Check(auto.Reason == AutopilotStops.ManualInput, $"walking ends it by manual input (the server said {auto.Reason})");
         Check(Session.Ui.Flash == UiText.AutoBattleEnded(AutopilotStops.ManualInput), "the flash says the player took over");
-        Check(!hud.Autopilot.Visible && hud.AutoBattle.IsVisibleInTree(), "the toggle is back when the run is over");
+        Check(!hud.Autopilot.Visible, "the indicator is gone when the run is over");
         Print($"battle: manual input; flash \"{Session.Ui.Flash}\"");
         Print("battle: learned a skill, chose, started, fought, healed, stayed in the area and ended by walking");
-    }
-
-    private async Task MeasureAutoToggleAsync(Hud hud)
-    {
-        OS.LowProcessorUsageMode = false;
-        await SecondsAsync(1);
-        double With = 0, Without = 0;
-        var frames = 0;
-        _main.CountAllocations = true;
-        var clock = Stopwatch.StartNew();
-        while (clock.Elapsed.TotalSeconds < 3)
-        {
-            await FrameAsync();
-            With += Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
-            frames++;
-        }
-        _main.CountAllocations = false;
-        var (bytes, quietFrames, _, _) = _main.Allocations;
-        hud.AutoBattle.Visible = false;
-        hud.AutoBattleFilter.Visible = false;
-        await FramesAsync(3);
-        var framesOff = 0;
-        clock.Restart();
-        while (clock.Elapsed.TotalSeconds < 2)
-        {
-            await FrameAsync();
-            Without += Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
-            framesOff++;
-        }
-        hud.AutoBattle.Visible = true;
-        hud.AutoBattleFilter.Visible = true;
-        await FramesAsync(2);
-        OS.LowProcessorUsageMode = true;
-        Print($"battle: measure: draw calls, toggle shown {With / frames:0.0}, hidden {Without / framesOff:0.0}");
-        Print($"battle: measure: {bytes} bytes in {quietFrames} quiet frames ({(quietFrames > 0 ? bytes / (double)quietFrames : 0):0.0}/frame)");
-        Print($"battle: measure: {hud.NodeCount} UI nodes");
     }
 
     private async Task MeasureIndicatorAsync(Hud hud)

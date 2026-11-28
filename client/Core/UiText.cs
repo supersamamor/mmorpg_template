@@ -1348,10 +1348,13 @@ public static class UiText
 
     // ---- auto-battle (T-811) ----
 
-    /// <summary>The HUD's toggle that starts auto-battle where the character stands.</summary>
-    public const string AutoBattleStart = "Auto";
+    /// <summary>The quest log's button that starts auto-battle where the character stands.</summary>
+    public const string AutoBattleStart = "Auto-battle here";
 
-    /// <summary>The HUD button beside it: what the next auto-battle fights (an "Auto-battle filters" term); a tap picks the next choice.</summary>
+    /// <summary>The button beside it: what the next auto-battle fights; a tap picks the next choice.</summary>
+    public static string AutoBattleFilterButton(string filter) => "Fight: " + AutoBattleFilter(filter);
+
+    /// <summary>A fight choice by itself (an "Auto-battle filters" term).</summary>
     public static string AutoBattleFilter(string filter) => filter switch
     {
         AutoBattleFilters.Nearby => "Nearby",
