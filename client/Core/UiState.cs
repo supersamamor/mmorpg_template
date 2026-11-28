@@ -147,7 +147,10 @@ public sealed class UiState
     }
 
     /// <summary>An <c>autopilot</c> message ended a run (T-605): the flash line says why, so a stop is never a surprise.</summary>
-    public void OnAutopilotEnded(string? reason, double now) => SetFlash(UiText.AutopilotEnded(reason), now);
+    public void OnAutopilotEnded(string? reason, double now, bool battle = false) => SetFlash(battle ? UiText.AutoBattleEnded(reason) : UiText.AutopilotEnded(reason), now);
+
+    /// <summary>T-811: true while the last start sent was auto-battle's, so its refusal is told as auto-battle's. Set by the session.</summary>
+    public Func<bool>? StartedBattle { get; set; }
 
     /// <summary>A party notice or refusal, as words (T-902).</summary>
     public void OnParty(string words, double now) => SetFlash(words, now);
@@ -162,6 +165,11 @@ public sealed class UiState
     /// <summary><c>rejected</c>: quietly take back what the tap showed; a refused item intent says why on the flash line.</summary>
     public void OnRejected(RejectedMessage rejected, double now = 0)
     {
+        if (rejected.Intent == MessageTypes.StartAutopilot && (StartedBattle?.Invoke() ?? false))
+        {
+            SetFlash(UiText.AutoBattleRefused(rejected.Reason, rejected.Skill is { } battleSkill ? _bundle.Skill(battleSkill)?.Name ?? battleSkill : null), now);   // T-811
+            return;
+        }
         if (rejected.Intent == MessageTypes.StartAutopilot)
         {
             SetFlash(UiText.AutopilotRefused(rejected.Reason, rejected.Quest is { } q ? _bundle.Quest(q)?.Name ?? q : rejected.Skill is { } sk ? _bundle.Skill(sk)?.Name ?? sk : null), now);   // nothing changed: a run in progress goes on

@@ -91,7 +91,7 @@ public sealed partial class AutopilotSystem
         run.Attacking = false;
         run.AttackMs = 0;
         run.Goal = null;
-        Doing(run, AutopilotActivities.Hunting);
+        Doing(run, Fighting(run));
         Fight(run, state, target);
     }
 
@@ -108,7 +108,7 @@ public sealed partial class AutopilotSystem
     /// <summary>Steps out of a safe zone (nothing can be attacked from one), casts the first shortcut skill that can be cast, or keeps the auto-attack going.</summary>
     private void Fight(AutopilotRun run, ProgressionState state, Entity target)
     {
-        Doing(run, AutopilotActivities.Hunting);
+        Doing(run, Fighting(run));
         if (_content.IsSafe(_instance!.Grid, run.Player.Cell))
         {
             StepOut(run, target);
@@ -261,13 +261,19 @@ public sealed partial class AutopilotSystem
             _cells.Add(entity.Cell);
             _ids.Add(entity.Id);
         }
+        return FetchNearest(run);
+    }
+
+    /// <summary>Walks to and picks up the nearest of the items in <c>_cells</c> / <c>_ids</c> (a quest's wanted ones, or auto-battle's own drops). True when it is on it (or waits for a search).</summary>
+    private bool FetchNearest(AutopilotRun run)
+    {
         if (_cells.Count == 0) return false;
         if (!TakeSearch())
         {
             run.Wake = true;
             return true;
         }
-        if (_pathfinder.FindNearest(_instance.Grid, run.Player.Cell, _cells, _content.Limits, _path, out var nearest) != PathStatus.Found) return false;
+        if (_pathfinder.FindNearest(_instance!.Grid, run.Player.Cell, _cells, _content.Limits, _path, out var nearest) != PathStatus.Found) return false;
         if (!Stand(run)) return true;
         // As the gateway does for a player's pick-up: the auto-attack stops first, so combat's walk does not end the walk to the item.
         if (!Send(new StopAttack(run.Player.Id)) || !Send(new PickUp(run.Player.Id, _ids[nearest]))) return true;
@@ -332,6 +338,9 @@ public sealed partial class AutopilotSystem
     }
 
     // ---- helpers -------------------------------------------------------------------------------------------------------------------------------
+
+    /// <summary>What a fight is called to its owner: <c>hunting</c> for a quest, <c>fighting</c> for auto-battle (T-811).</summary>
+    private static string Fighting(AutopilotRun run) => run.Battle is null ? AutopilotActivities.Hunting : AutopilotActivities.Fighting;
 
     /// <summary>Rules out, without a search, what no walk leads to and what is farther than a path may be long (a step covers one cell).</summary>
     private bool InReach(Entity player, Entity other) =>

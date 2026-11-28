@@ -30,7 +30,8 @@ namespace Game.Shared.Autopilot
     }
 
     /// <summary>
-    /// What the quest autopilot decides from data alone (T-604, ARCHITECTURE §6.4.2): whether a run may start, which objective is next, and which dialogue choice it may pick. Pure and
+    /// What the quest autopilot decides from data alone (T-604, ARCHITECTURE §6.4.2): whether a run may start, which objective is next, and which dialogue choice it may pick; and
+    /// for auto-battle (T-811, §6.4.3) whether it may start and what it may fight. Pure and
     /// deterministic: no clock, no randomness, no state. The server's <c>AutopilotSystem</c> asks here and then queues the intents a player would send.
     /// </summary>
     public static class AutopilotRules
@@ -63,6 +64,40 @@ namespace Game.Shared.Autopilot
                     if (string.Equals(questIds[j], id, StringComparison.Ordinal)) return new AutopilotRefusal(AutopilotReasons.DuplicateQuest, quest: id);
                 if (!state.ActiveQuests.ContainsKey(id)) return new AutopilotRefusal(AutopilotReasons.NotActive, quest: id);
             }
+            return CheckSkills(balance, state, skillOf, skills);
+        }
+
+        /// <summary>
+        /// Why an auto-battle run (T-811) may not start, or null when it may: <c>battle_disabled</c>, <c>dead</c>, <c>time_limit</c> (the quest autopilot's daily limit, shared),
+        /// <c>quests_given</c>, <c>unknown_filter</c>, then the skill bar exactly as for a quest run.
+        /// </summary>
+        public static AutopilotRefusal? CheckBattleStart(AutoBattleBalanceDef battle, AutopilotBalanceDef balance, bool dead, long usedMs, ProgressionState state,
+            Func<string, SkillDef?> skillOf, string filter, IReadOnlyList<string> questIds, IReadOnlyList<SkillLevelRecord> skills)
+        {
+            if (battle == null) throw new ArgumentNullException(nameof(battle));
+            if (!battle.Enabled) return new AutopilotRefusal(AutoBattleReasons.BattleDisabled);
+            if (dead) return new AutopilotRefusal(AutopilotReasons.Dead);
+            if (usedMs >= DailyLimitMs(balance)) return new AutopilotRefusal(AutopilotReasons.TimeLimit);
+            if (questIds.Count > 0) return new AutopilotRefusal(AutoBattleReasons.QuestsGiven);
+            if (!AutoBattleFilters.All.Contains(filter)) return new AutopilotRefusal(AutoBattleReasons.UnknownFilter);
+            return CheckSkills(balance, state, skillOf, skills);
+        }
+
+        /// <summary>
+        /// Whether auto-battle may fight a monster (T-811): it is at most <c>auto_battle.max_levels_above</c> above the character, is no boss unless the filter is
+        /// <c>with_bosses</c>, and under <c>attackers</c> it hit the character lately (<paramref name="hitMe"/>). Retaliation is held to the same rule: the run never fights what the
+        /// filter refuses.
+        /// </summary>
+        public static bool Fights(AutoBattleBalanceDef battle, string filter, int baseLevel, int monsterLevel, bool boss, bool hitMe)
+        {
+            if (battle == null) throw new ArgumentNullException(nameof(battle));
+            if (monsterLevel - baseLevel > battle.MaxLevelsAbove) return false;
+            if (boss && filter != AutoBattleFilters.WithBosses) return false;
+            return filter != AutoBattleFilters.Attackers || hitMe;
+        }
+
+        private static AutopilotRefusal? CheckSkills(AutopilotBalanceDef balance, ProgressionState state, Func<string, SkillDef?> skillOf, IReadOnlyList<SkillLevelRecord> skills)
+        {
             if (skills.Count > balance.MaxSkills) return new AutopilotRefusal(AutopilotReasons.TooManySkills);
             for (var i = 0; i < skills.Count; i++)
             {

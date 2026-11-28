@@ -353,4 +353,91 @@ public sealed class AutopilotClientTests
         Hear(session, socket, new AutopilotMessage(AutopilotModes.Off, null, null, AutopilotStops.ManualInput), 3);
         session.Ui.Flash.ShouldBe(UiText.AutopilotEnded(AutopilotStops.ManualInput));
     }
+
+    // ---- auto-battle (T-811) ----
+
+    [Fact]
+    public void Auto_sends_a_battle_start_with_the_bar_and_the_fight_choice_and_no_quests()
+    {
+        var (session, socket) = Playing(FirstHunt);
+        Hear(session, socket, new SkillsMessage("job.wanderer", 0, [new SkillLevelRecord("skill.second_wind", 1), new SkillLevelRecord("skill.tough_body", 1)], [], []));
+        session.Autopilot.Toggle(FirstHunt, session.Quests);   // ticks are the quest run's: auto-battle ignores them
+
+        session.StartAutoBattle().ShouldBeTrue();
+        var start = LastSent<StartAutopilotMessage>(socket);
+        start.Quests.ShouldBeEmpty();
+        start.Battle.ShouldBe(AutoBattleFilters.Nearby);
+        start.Skills.Select(s => s.Skill).ShouldBe(["skill.second_wind"]);
+        session.Autopilot.On.ShouldBeFalse();   // only the server's word turns it on
+
+        var version = session.Autopilot.Version;
+        session.Autopilot.CycleBattleFilter();
+        session.Autopilot.Version.ShouldBeGreaterThan(version);
+        session.Autopilot.BattleFilter.ShouldBe(AutoBattleFilters.Attackers);
+        session.Autopilot.CycleBattleFilter();
+        session.Autopilot.CycleBattleFilter();
+        session.Autopilot.BattleFilter.ShouldBe(AutoBattleFilters.Nearby);   // round again
+        session.Autopilot.CycleBattleFilter();
+        session.StartAutoBattle().ShouldBeTrue();
+        LastSent<StartAutopilotMessage>(socket).Battle.ShouldBe(AutoBattleFilters.Attackers);
+    }
+
+    [Fact]
+    public void A_status_without_a_quest_is_auto_battle_and_its_end_is_told_as_such()
+    {
+        var (session, socket) = Playing(FirstHunt);
+        session.StartAutoBattle();
+        Hear(session, socket, new AutopilotMessage(AutopilotModes.Running, null, AutopilotActivities.Fighting, null));
+        session.Autopilot.Battle.ShouldBeTrue();
+        session.Autopilot.Doing.ShouldBe(AutopilotActivities.Fighting);
+        UiText.AutoBattleRunning(session.Autopilot.Doing).ShouldBe("Stop auto-battle: fighting");
+        UiText.AutoBattleRunning(AutopilotActivities.Returning).ShouldBe("Stop auto-battle: returning");
+        UiText.AutoBattleRunning(AutopilotActivities.Waiting).ShouldBe("Stop auto-battle: waiting");
+
+        session.StopAutopilot().ShouldBeTrue();
+        LastSent<StopAutopilotMessage>(socket);
+        foreach (var stop in AutopilotStops.All)
+        {
+            Hear(session, socket, new AutopilotMessage(AutopilotModes.Running, null, AutopilotActivities.Waiting, null), 2);
+            Hear(session, socket, new AutopilotMessage(AutopilotModes.Off, null, null, stop), 3);
+            session.Ui.Flash.ShouldBe(UiText.AutoBattleEnded(stop));
+        }
+        UiText.AutoBattleEnded(AutopilotStops.LowHp).ShouldNotBe(UiText.AutoBattleEnded("something_new"));
+        UiText.AutoBattleEnded(AutopilotStops.LeftArea).ShouldNotBe(UiText.AutoBattleEnded("something_new"));
+        UiText.AutoBattleEnded(AutopilotStops.NothingToFight).ShouldNotBe(UiText.AutoBattleEnded("something_new"));
+
+        // A quest run afterwards is a quest run again.
+        Hear(session, socket, new AutopilotMessage(AutopilotModes.Running, FirstHunt, AutopilotActivities.Hunting, null), 4);
+        session.Autopilot.Battle.ShouldBeFalse();
+        Hear(session, socket, new AutopilotMessage(AutopilotModes.Off, null, null, AutopilotStops.Stopped), 5);
+        session.Ui.Flash.ShouldBe(UiText.AutopilotEnded(AutopilotStops.Stopped));
+    }
+
+    [Fact]
+    public void A_refused_battle_start_says_why_in_auto_battles_words()
+    {
+        var (session, socket) = Playing(FirstHunt);
+        session.StartAutoBattle();
+        foreach (var reason in AutoBattleReasons.All.Concat([AutopilotReasons.Dead, AutopilotReasons.TimeLimit]))
+        {
+            Hear(session, socket, new RejectedMessage(MessageTypes.StartAutopilot, reason, null));
+            session.Ui.Flash.ShouldBe(UiText.AutoBattleRefused(reason));
+        }
+        UiText.AutoBattleRefused(AutoBattleReasons.BattleDisabled).ShouldNotBe(UiText.AutopilotRefused(AutopilotReasons.Disabled));
+        Hear(session, socket, new RejectedMessage(MessageTypes.StartAutopilot, AutopilotReasons.NotLearned, null, Skill: "skill.ember_bolt"));
+        session.Ui.Flash.ShouldContain(Bundle().Skill("skill.ember_bolt")!.Name);
+
+        // After a quest start, a refusal is the quest autopilot's again.
+        session.Autopilot.Toggle(FirstHunt, session.Quests);
+        session.StartAutopilot().ShouldBeTrue();
+        Hear(session, socket, new RejectedMessage(MessageTypes.StartAutopilot, AutopilotReasons.Dead, null));
+        session.Ui.Flash.ShouldBe(UiText.AutopilotRefused(AutopilotReasons.Dead));
+    }
+
+    [Fact]
+    public void The_fight_choices_have_short_words_of_their_own()
+    {
+        AutoBattleFilters.All.Select(UiText.AutoBattleFilter).Distinct().Count().ShouldBe(AutoBattleFilters.All.Count);
+        AutoBattleFilters.All.Select(UiText.AutoBattleFilter).ShouldAllBe(text => text.Length <= UiText.AutoBattleLongestFilter.Length && text.Length <= 10);
+    }
 }

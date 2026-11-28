@@ -21,6 +21,9 @@ namespace Game.Shared.Definitions
         /// <summary>Base level (formula variable <c>t_level</c> / <c>base_level</c>).</summary>
         public int Level { get; init; } = 1;
 
+        /// <summary>A boss (T-811): auto-battle fights it only when the player asked (<c>with_bosses</c>). Server only.</summary>
+        public bool Boss { get; init; }
+
         /// <summary>Race (<see cref="MonsterRaces"/>).</summary>
         public string Race { get; init; } = string.Empty;
 

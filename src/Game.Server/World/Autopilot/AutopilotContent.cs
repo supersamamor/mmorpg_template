@@ -44,6 +44,7 @@ public sealed class AutopilotContent
     private readonly Dictionary<string, bool[]> _safe = new(StringComparer.Ordinal);
     private readonly Dictionary<(string Map, int Spawn), TravelTarget> _grounds = new();
     private readonly List<MapGrid> _grids;
+    private readonly Dictionary<string, (int Level, bool Boss)> _monsters = new(StringComparer.Ordinal);
 
     /// <summary>Works the content out. Throws <see cref="ArgumentOutOfRangeException"/> for unusable numbers (the validator reports them first).</summary>
     public AutopilotContent(BalanceDef balance, IEnumerable<QuestDef> quests, IEnumerable<MonsterDef> monsters, IEnumerable<DropTableDef> drops, IEnumerable<SkillDef> skills,
@@ -60,6 +61,9 @@ public sealed class AutopilotContent
         Limits = new PathLimits(balance.Movement.MaxPathLength, balance.Movement.MaxNodesExpanded);
         TalkRange = balance.Dialogue.TalkRange;
         Sight = balance.Aoi.ViewRadius * balance.Aoi.BucketSize;
+        Battle = balance.AutoBattle;
+        Check(Battle.RadiusCells >= 1 && Battle.RadiusCells * 2 <= Sight, "auto_battle.radius_cells must be from 1 to half of aoi.view_radius x aoi.bucket_size.");
+        Check(Battle.RetaliateExtraCells >= 0 && Battle.RetaliateExtraCells <= Battle.RadiusCells, "auto_battle.retaliate_extra_cells must be from 0 to radius_cells.");
         var questList = quests.ToList();
         Quests = new QuestRules(questList, balance.Quests.MaxActive);
         _dialogues = dialogues.ToDictionary(d => d.Id, StringComparer.Ordinal);
@@ -70,6 +74,7 @@ public sealed class AutopilotContent
 
         var tables = drops.ToDictionary(d => d.Id, StringComparer.Ordinal);
         var monsterList = monsters.OrderBy(m => m.Id, StringComparer.Ordinal).ToList();
+        foreach (var monster in monsterList) _monsters[monster.Id] = (monster.Level, monster.Boss);
         foreach (var objective in questList.SelectMany(q => q.Steps).SelectMany(s => s.Objectives))
         {
             switch (objective)
@@ -101,6 +106,18 @@ public sealed class AutopilotContent
 
     /// <summary>The <c>autopilot</c> section of <c>balance.yaml</c>.</summary>
     public AutopilotBalanceDef Balance { get; }
+
+    /// <summary>The <c>auto_battle</c> section of <c>balance.yaml</c> (T-811).</summary>
+    public AutoBattleBalanceDef Battle { get; }
+
+    /// <summary>A monster's level and boss flag, as auto-battle's filter needs them (T-811); false for an unknown id.</summary>
+    public bool TryGetMonster(string id, out int level, out bool boss)
+    {
+        var found = _monsters.TryGetValue(id, out var monster);
+        level = monster.Level;
+        boss = monster.Boss;
+        return found;
+    }
 
     /// <summary>The path search limits of <c>movement</c>.</summary>
     public PathLimits Limits { get; }
@@ -192,6 +209,6 @@ public sealed class AutopilotContent
 
     private static void Check(bool ok, string message)
     {
-        if (!ok) throw new ArgumentOutOfRangeException(nameof(AutopilotBalanceDef), "autopilot." + message);
+        if (!ok) throw new ArgumentOutOfRangeException(nameof(AutopilotBalanceDef), message.StartsWith("auto_battle.", StringComparison.Ordinal) ? message : "autopilot." + message);
     }
 }

@@ -1,6 +1,7 @@
 using Game.Shared.Autopilot;
 using Game.Shared.Definitions;
 using Game.Shared.Effects;
+using Game.Shared.Protocol;
 using Game.Shared.Vocabulary;
 using Game.Shared.World;
 using Game.Tests.World;
@@ -28,6 +29,37 @@ public class AutopilotRulesTests
         AutopilotRules.NextObjective(step, [0, 10, 2, 3]).ShouldBe(0);
         AutopilotRules.NextObjective(step, [1, 10, 2, 3]).ShouldBe(-1);
         AutopilotRules.NextObjective([Reach, Kill], [0, 0]).ShouldBe(0);
+    }
+
+    [Theory]
+    [InlineData(AutoBattleFilters.Nearby, 10, 15, false, false, true)]
+    [InlineData(AutoBattleFilters.Nearby, 10, 16, false, false, false)]
+    [InlineData(AutoBattleFilters.Nearby, 10, 1, false, false, true)]       // lower ones always
+    [InlineData(AutoBattleFilters.Nearby, 10, 10, true, true, false)]       // a boss, even one that hits
+    [InlineData(AutoBattleFilters.WithBosses, 10, 10, true, false, true)]
+    [InlineData(AutoBattleFilters.WithBosses, 10, 16, true, false, false)]
+    [InlineData(AutoBattleFilters.Attackers, 10, 10, false, false, false)]
+    [InlineData(AutoBattleFilters.Attackers, 10, 10, false, true, true)]
+    [InlineData(AutoBattleFilters.Attackers, 10, 10, true, true, false)]
+    public void Auto_battle_fights_within_the_level_band_bosses_only_when_asked_and_attackers_only_when_they_hit(string filter, int level, int monster, bool boss, bool hit, bool fights) =>
+        AutopilotRules.Fights(new AutoBattleBalanceDef { MaxLevelsAbove = 5 }, filter, level, monster, boss, hit).ShouldBe(fights);
+
+    [Fact]
+    public void An_auto_battle_start_is_checked_in_order()
+    {
+        var state = new Game.Shared.Progression.ProgressionState();
+        SkillDef? None(string id) => null;
+        AutopilotRefusal? Check(AutoBattleBalanceDef battle, bool dead = false, long used = 0, string filter = AutoBattleFilters.Nearby, string[]? quests = null, SkillLevelRecord[]? skills = null) =>
+            AutopilotRules.CheckBattleStart(battle, new AutopilotBalanceDef { DailyLimitMinutes = 1 }, dead, used, state, None, filter, quests ?? [], skills ?? []);
+        var on = new AutoBattleBalanceDef();
+        Check(on with { Enabled = false }, dead: true)!.Value.Reason.ShouldBe(AutoBattleReasons.BattleDisabled);
+        Check(on, dead: true, used: 60_000)!.Value.Reason.ShouldBe(AutopilotReasons.Dead);
+        Check(on, used: 60_000)!.Value.Reason.ShouldBe(AutopilotReasons.TimeLimit);
+        Check(on, filter: "x", quests: ["quest.a"])!.Value.Reason.ShouldBe(AutoBattleReasons.QuestsGiven);
+        Check(on, filter: "x")!.Value.Reason.ShouldBe(AutoBattleReasons.UnknownFilter);
+        var unknown = Check(on, skills: [new("skill.x", 0)])!.Value;
+        (unknown.Reason, unknown.Skill).ShouldBe((AutopilotReasons.UnknownSkill, "skill.x"));
+        Check(on).ShouldBeNull();
     }
 
     [Fact]

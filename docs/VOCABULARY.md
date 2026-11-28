@@ -227,13 +227,16 @@ What the client shows over an NPC for the player (T-602; in `quest_log` `offer` 
 
 ## Autopilot
 The quest autopilot (T-604, ARCHITECTURE §6.4.2) plays a player's ticked quests on the server. **Run**: one list of quests, from its start until it ends.
+**Auto-battle** (T-811, ARCHITECTURE §6.4.3): the autopilot's second mode, a run with no quest that fights the monsters around its **anchor** (the cell it was started on) within its **area**
+(`auto_battle.radius_cells` of the anchor). A **boss** is a monster with `boss: true` (server only): auto-battle fights one only when asked (`with_bosses`).
 
 ## Autopilot modes
 The `mode` of an `autopilot` message: `running`, `paused` (it waits; it goes on by itself when the quest moves), `off` (the run is over).
 
 ## Autopilot activities
 The `doing` of an `autopilot` message while `running`: `travelling` (to a hunting ground, an NPC, a cell or a warp), `hunting` (after a monster, or fighting it), `gathering` (picking a
-wanted item up), `talking` (with the NPC, or turning the step in), `waiting` (at the hunting ground, nothing left to hunt until it respawns).
+wanted item up; auto-battle: its own drops), `talking` (with the NPC, or turning the step in), `waiting` (at the hunting ground, nothing left to hunt until it respawns; auto-battle: at the anchor),
+`fighting` (auto-battle: after a monster in the area, or fighting it), `returning` (auto-battle: walking back to the anchor).
 
 ## Autopilot reasons
 Why a `start_autopilot` was refused, in `AutopilotRefused` and on the wire as `rejected` (`intent` `start_autopilot`, with the `quest` or `skill` it is about). Nothing changed: a run in
@@ -249,7 +252,16 @@ dialogue offers nothing the autopilot may pick).
 ## Autopilot stops
 The `reason` of an `autopilot` message with `mode` `off`: `finished` (every quest of the list is done), `stopped` (`stop_autopilot`), `manual_input` (the player's own order), `died`, `logout` (the
 character left the world), `disconnected` (the connection ended, or another took the character over), `bag_full` (a wanted item or a turn-in does not fit, or the load is too heavy to fight),
-`time_limit`, `quest_abandoned` (the player dropped the quest it was playing).
+`time_limit`, `quest_abandoned` (the player dropped the quest it was playing), and for auto-battle (T-811) `low_hp` (below `auto_battle.stop_below_hp_percent` with no heal left to cast),
+`left_area` (it arrived somewhere else: a warp, another map), `nothing_to_fight` (no kill for `auto_battle.idle_stop_ms`).
+
+## Auto-battle filters
+The `battle` of an auto-battle `start_autopilot` (T-811): what it fights, always within `auto_battle.max_levels_above` of the character's base level. `nearby` (every monster in the area but bosses),
+`attackers` (only one that hit the character within `autopilot.retaliate_ms`, no boss), `with_bosses` (every monster in the area, bosses too).
+
+## Auto-battle reasons
+Why an auto-battle start was refused, beside the "Autopilot reasons" it shares (`dead`, `time_limit`, the skill ones); on the wire as `rejected` with `intent` `start_autopilot`. Checked in this order:
+`battle_disabled` (`auto_battle.enabled` is false), then `dead`, `time_limit`, then `quests_given` (a start is quests or a battle, not both), `unknown_filter`, then the skill bar's.
 
 ## Dialogue condition types
 The `type` of a choice's `conditions` entry (T-601); a choice is shown only when every condition holds (ARCHITECTURE §6.4).

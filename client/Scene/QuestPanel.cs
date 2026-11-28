@@ -38,6 +38,14 @@ public sealed class QuestPanel
     private readonly HBoxContainer _autoButtons = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly Button _start = new() { Text = UiText.AutopilotStart };
     private readonly Button _stop = new() { Text = UiText.AutopilotStop };
+    // Auto-battle (T-811): a second row under Start and Stop, where the autopilot is already started. The HUD has no room for a toggle on a 360 dp phone at 1.5x (ADR-002 row 526);
+    // the indicator stops either kind of run. Start fights around where the character stands and closes the log; the button beside it picks what it fights.
+    private readonly HBoxContainer _battleButtons = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
+    private readonly Button _battle = new() { Text = UiText.AutoBattleStart };
+    private readonly Button _battleFilter = new()
+    {
+        AutowrapMode = TextServer.AutowrapMode.Off, ClipText = true, TextOverrunBehavior = TextServer.OverrunBehavior.TrimEllipsis,
+    };
     private readonly List<(Button Tick, Button? Earlier, Button? Later, string Quest)> _autopilotRows = new();
     private int _shownAutopilot = -1;
     private bool _shownDead;
@@ -82,6 +90,17 @@ public sealed class QuestPanel
         _stop.Pressed += () => { _tap(); _session.StopAutopilot(); };
         _interactive.Add(_start);
         _interactive.Add(_stop);
+        _autoBox.AddChild(_battleButtons);
+        _battleButtons.AddChild(_battle);
+        _battleButtons.AddChild(_battleFilter);
+        _battle.Pressed += () =>
+        {
+            _tap();
+            if (_session.StartAutoBattle()) SetOpen(false);   // the fight is around the character: the log would hide it
+        };
+        _battleFilter.Pressed += () => { _tap(); _session.Autopilot.CycleBattleFilter(); };
+        _interactive.Add(_battle);
+        _interactive.Add(_battleFilter);
         _box.AddChild(_scroll);
         _scroll.AddChild(_content);
         _close.Pressed += () => { _tap(); SetOpen(false); };
@@ -101,6 +120,9 @@ public sealed class QuestPanel
 
     /// <summary>The Start and Stop buttons of the autopilot (for the scripted run).</summary>
     public (Button Start, Button Stop) AutopilotButtons => (_start, _stop);
+
+    /// <summary>Auto-battle's Start and its fight choice (T-811, for the scripted run).</summary>
+    public (Button Start, Button Filter) BattleButtons => (_battle, _battleFilter);
 
     /// <summary>Each active quest's autopilot tick and its order buttons (the order buttons exist only while the quest is ticked).</summary>
     public IReadOnlyList<(Button Tick, Button? Earlier, Button? Later, string Quest)> AutopilotRows => _autopilotRows;
@@ -141,6 +163,9 @@ public sealed class QuestPanel
         _autoButtons.AddThemeConstantOverride("separation", gap);
         _start.CustomMinimumSize = new Vector2(dp(140), target);
         _stop.CustomMinimumSize = new Vector2(dp(140), target);
+        _battleButtons.AddThemeConstantOverride("separation", gap);
+        _battle.CustomMinimumSize = new Vector2(dp(140), target);
+        _battleFilter.CustomMinimumSize = new Vector2(dp(140), target);
         _safeSize = safeSize;
         _center.Position = Vector2.Zero;
         _center.Size = safeSize;
@@ -209,6 +234,8 @@ public sealed class QuestPanel
             : UiText.AutopilotQueue(string.Join(", ", autopilot.Ticked.Select(id => _bundle.Quest(id)?.Name ?? id)));
         _start.Disabled = autopilot.Ticked.Count == 0 || dead || _session.Connection.Phase != Game.Client.Core.Net.ConnectionPhase.Online;
         _stop.Disabled = !autopilot.On;
+        _battle.Disabled = dead || _session.Connection.Phase != Game.Client.Core.Net.ConnectionPhase.Online;
+        _battleFilter.Text = UiText.AutoBattleFilterButton(autopilot.BattleFilter);
     }
 
     // The tick, and while ticked the two order buttons. Order buttons rather than dragging: a drag inside a scrolling list competes with the scroll on a phone and needs a
@@ -261,6 +288,8 @@ public sealed class QuestPanel
         _autoLine.Text = UiText.AutopilotQueue(string.Join(", ", Enumerable.Repeat(_sampleName + " of the Far Northern Reaches", 3)));
         _start.Disabled = false;
         _stop.Disabled = false;
+        _battle.Disabled = false;
+        _battleFilter.Text = AutoBattleFilters.All.Ordered.Select(UiText.AutoBattleFilterButton).OrderByDescending(t => t.Length).First();
         Heading(UiText.ActiveQuests);
         for (var q = 0; q < 4; q++)
         {

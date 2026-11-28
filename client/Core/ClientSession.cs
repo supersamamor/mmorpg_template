@@ -38,7 +38,7 @@ public sealed class ClientSession
         _socket = socket;
         Connection = new ConnectionMachine(config, random);
         World = new WorldView(config);
-        Ui = new UiState(config, bundle);
+        Ui = new UiState(config, bundle) { StartedBattle = () => Autopilot.StartedBattle };   // T-811: a refused auto-battle start is told as such
         Skills = new SkillBook(bundle);
         Stats = new StatBook();
         Wardrobe = new WardrobeBook(bundle);
@@ -250,6 +250,17 @@ public sealed class ClientSession
         Autopilot.Prune(Quests);
         if (Autopilot.BuildStart(Skills, Hotbar.SlotCount) is not { } start) return false;
         Send(start);
+        return true;
+    }
+
+    /// <summary>
+    /// The HUD's Auto toggle (T-811): starts auto-battle where the character stands, with the skill bar and the fight choice. Replaces a quest run in progress. Does nothing
+    /// offline; the server decides everything else (a refusal comes back as a flash line). Returns true when it was sent.
+    /// </summary>
+    public bool StartAutoBattle()
+    {
+        if (Connection.Phase != ConnectionPhase.Online) return false;
+        Send(Autopilot.BuildBattleStart(Skills, Hotbar.SlotCount));
         return true;
     }
 
@@ -483,7 +494,7 @@ public sealed class ClientSession
                 ServiceOpened?.Invoke(service);
                 break;
             case AutopilotMessage autopilot:
-                if (Autopilot.Apply(autopilot)) Ui.OnAutopilotEnded(autopilot.Reason, viewNow);
+                if (Autopilot.Apply(autopilot)) Ui.OnAutopilotEnded(autopilot.Reason, viewNow, Autopilot.Battle);
                 break;
             case RejectedMessage rejected:
                 if (rejected.Intent == MessageTypes.Refine && rejected.Reason == Game.Shared.Vocabulary.ItemReasons.ServiceRequired) Dialogue.ServiceClosed();

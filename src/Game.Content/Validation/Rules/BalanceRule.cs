@@ -207,6 +207,19 @@ public sealed class BalanceRule : IValidationRule
             Range(context, "autopilot.retaliate_ms", "must not be negative.");
         if (a.AvoidMs < 0)
             Range(context, "autopilot.avoid_ms", "must not be negative.");
+
+        // T-811: auto-battle's area is seen whole from anywhere in it.
+        var b = balance.AutoBattle;
+        if (b.RadiusCells < 1 || (sight > 0 && b.RadiusCells * 2 > sight))
+            Range(context, "auto_battle.radius_cells", $"must be from 1 to half of what every player is sure to see (aoi.view_radius x aoi.bucket_size, {sight}).");
+        if (b.RetaliateExtraCells < 0 || b.RetaliateExtraCells > Math.Max(0, b.RadiusCells))
+            Range(context, "auto_battle.retaliate_extra_cells", "must be from 0 to radius_cells.");
+        if (b.MaxLevelsAbove < 0)
+            Range(context, "auto_battle.max_levels_above", "must not be negative.");
+        if (b.StopBelowHpPercent < 0 || b.StopBelowHpPercent > 100)
+            Range(context, "auto_battle.stop_below_hp_percent", "must be from 0 to 100.");
+        if (b.IdleStopMs < 0)
+            Range(context, "auto_battle.idle_stop_ms", "must not be negative.");
     }
 
     /// <summary>There is a slot, the name lengths are ordered and fit the database column, and every letter and separator entry can be read.</summary>

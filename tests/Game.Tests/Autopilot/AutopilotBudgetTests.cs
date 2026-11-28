@@ -59,7 +59,8 @@ public class AutopilotBudgetTests(ITestOutputHelper output)
     /// <param name="start">Where they start.</param>
     /// <param name="content">The content.</param>
     /// <param name="keepAt">Put the players back there every tick, so they never get nearer.</param>
-    private (Timed Timed, MapInstance Instance) Run(int runs, string monster, GridCell start, ContentDatabase content, GridCell? keepAt = null)
+    /// <param name="battle">An auto-battle filter (T-811): the players fight around <paramref name="start"/> instead of playing the quest.</param>
+    private (Timed Timed, MapInstance Instance) Run(int runs, string monster, GridCell start, ContentDatabase content, GridCell? keepAt = null, string? battle = null)
     {
         var quest = AutopilotContentKit.Quest("quest.endless", new Game.Shared.Definitions.KillObjective { MonsterId = monster, Count = 1_000_000 });
         var db = new ContentDatabase(content.Jobs, content.Skills, content.Items, content.Monsters, content.Statuses, new Registry<Game.Shared.Definitions.QuestDef>([quest]), content.Npcs,
@@ -96,7 +97,7 @@ public class AutopilotBudgetTests(ITestOutputHelper output)
         {
             progressions.TryGet(player, out var state).ShouldBeTrue();
             state.ActiveQuests[quest.Id] = new QuestProgress(quest.Id, 1);
-            world.TryEnqueue(new StartAutopilot(player, [quest.Id], []));
+            world.TryEnqueue(battle is null ? new StartAutopilot(player, [quest.Id], []) : new StartAutopilot(player, [], [], battle));
         }
         for (var i = 0; i < Warmup; i++) instance.Tick();
         timed!.Measure = true;
@@ -167,6 +168,20 @@ public class AutopilotBudgetTests(ITestOutputHelper output)
             content.Balance with { Movement = content.Balance.Movement with { MaxPathLength = 20 }, Autopilot = content.Balance.Autopilot with { LegCells = 12, NoProgressMs = int.MaxValue } }), keepAt: new GridCell(24, 18));
         Report("around a wall", far, 100).ShouldBeLessThan(20_000);
         far.MaxSearches.ShouldBe(content.Balance.Autopilot.SearchesPerTick);
+    }
+
+    [Fact]
+    public void One_and_a_hundred_auto_battle_runs_in_a_crowd()
+    {
+        // T-811: a hundred characters on one spot of the slimes' meadow, all fighting around the same anchor: most of them wait for what the others killed to respawn.
+        var content = TestGrids.SampleContent;
+        var (one, _) = Run(1, "monster.gel_slime", new GridCell(20, 20), content, battle: AutoBattleFilters.Nearby);
+        Report("auto-battle", one, 1).ShouldBeLessThan(500);
+        var (hundred, instance) = Run(100, "monster.gel_slime", new GridCell(20, 20), content, battle: AutoBattleFilters.Nearby);
+        Report("auto-battle", hundred, 100).ShouldBeLessThan(5_000);
+        hundred.MaxSearches.ShouldBeLessThanOrEqualTo(content.Balance.Autopilot.SearchesPerTick);
+        instance.Counters.SystemErrors.ShouldBe(0);
+        instance.Players.ShouldAllBe(p => GridDistance.Chebyshev(p.Cell, new GridCell(20, 20)) <= content.Balance.AutoBattle.RadiusCells + content.Balance.AutoBattle.RetaliateExtraCells + 1);
     }
 
     [Fact]

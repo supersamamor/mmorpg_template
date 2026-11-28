@@ -44,7 +44,7 @@ public sealed class AutoRun
     /// <summary>True if the command line asks for a scripted run.</summary>
     public static bool Wanted(string[] args) =>
         Array.IndexOf(args, "--e2e") >= 0 || Array.IndexOf(args, "--e2e-death") >= 0 || Array.IndexOf(args, "--e2e-warp") >= 0 || Array.IndexOf(args, "--e2e-hill") >= 0 ||
-        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-autopilot") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 || Array.IndexOf(args, "--e2e-appearance") >= 0 || Array.IndexOf(args, "--e2e-appearance-watch") >= 0 ||
+        Array.IndexOf(args, "--e2e-bye") >= 0 || Array.IndexOf(args, "--e2e-ui") >= 0 || Array.IndexOf(args, "--e2e-items") >= 0 || Array.IndexOf(args, "--e2e-statuses") >= 0 || Array.IndexOf(args, "--e2e-skills") >= 0 || Array.IndexOf(args, "--e2e-stats") >= 0 || Array.IndexOf(args, "--e2e-dialogue") >= 0 || Array.IndexOf(args, "--e2e-quests") >= 0 || Array.IndexOf(args, "--e2e-autopilot") >= 0 || Array.IndexOf(args, "--e2e-battle") >= 0 || Array.IndexOf(args, "--e2e-account") >= 0 || Array.IndexOf(args, "--e2e-saving") >= 0 || Array.IndexOf(args, "--e2e-appearance") >= 0 || Array.IndexOf(args, "--e2e-appearance-watch") >= 0 ||
         Array.IndexOf(args, "--e2e-wardrobe") >= 0 || Array.IndexOf(args, "--e2e-wardrobe-watch") >= 0 || Array.IndexOf(args, "--e2e-kick") >= 0 || Array.IndexOf(args, "--e2e-moderation") >= 0 || Array.IndexOf(args, "--e2e-textured") >= 0 ||
         Array.IndexOf(args, "--e2e-chat") >= 0 || Array.IndexOf(args, "--e2e-chat-listen") >= 0 ||
         Array.IndexOf(args, "--e2e-party") >= 0 || Array.IndexOf(args, "--e2e-party-join") >= 0 ||
@@ -93,6 +93,7 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-dialogue") >= 0) await DialogueRunAsync();
             else if (Array.IndexOf(_args, "--e2e-quests") >= 0) await QuestsRunAsync();
             else if (Array.IndexOf(_args, "--e2e-autopilot") >= 0) await AutopilotRunAsync();
+            else if (Array.IndexOf(_args, "--e2e-battle") >= 0) await AutoBattleRunAsync();
             else if (Array.IndexOf(_args, "--e2e-account") >= 0) await AccountRunAsync();
             else if (Array.IndexOf(_args, "--e2e-saving") >= 0) await SavingRunAsync();
             else if (Array.IndexOf(_args, "--e2e-kick") >= 0) await KickRunAsync();
@@ -1674,6 +1675,127 @@ public sealed class AutoRun
         Check(Session.Ui.Flash == UiText.AutopilotEnded(AutopilotStops.ManualInput), "the flash says the player took over");
         Print($"autopilot: manual input; flash \"{Session.Ui.Flash}\"");
         Print("autopilot: ticked, started, played, turned in, finished, stopped by a tap and ended by walking");
+    }
+
+    /// <summary>
+    /// T-811's run, against the battle content copy (weak monsters with 60 HP worth 3000 EXP, so one kill brings skill points, and support skills cast whenever HP is missing):
+    /// one kill by hand, learn the first job's supportive skill (it lands on the skill bar), stand next to the slimes, open the quest log, pick a fight choice and press
+    /// "Auto-battle here" (the log closes). The server fights on its
+    /// own: at least two kills, the skill used at least once (its cooldown), never farther from where it started than the area; then a tap on the ground ends it by manual input.
+    /// </summary>
+    private async Task AutoBattleRunAsync()
+    {
+        const int Area = 6 + 1;   // the content's auto_battle.radius_cells, and the one cell combat stands beside a target in it
+        await LoginAsync();
+        var hud = _main.Hud!;
+        var auto = Session.Autopilot;
+        var book = Session.Skills;
+        var log = hud.Quests!;
+        await FramesAsync(3);
+        Check(!hud.Autopilot.Visible, "the indicator is hidden while nothing runs");
+
+        // Skill points from one kill by hand, then the heal on the bar.
+        var clock = Stopwatch.StartNew();
+        while (book.Points < 1 && clock.Elapsed.TotalSeconds < 120)
+        {
+            await HuntOneAsync(60);
+            await SecondsAsync(1);
+        }
+        Check(book.Points >= 1, $"skill points after a kill (points {book.Points})");
+        // The first job's supportive skill (a heal in the sample): the autopilot casts it on the character, so the run uses a skill whatever the monsters do.
+        var heal = book.Rows.FirstOrDefault(r => r.State == SkillState.Learnable && _main.Bundle!.Skill(r.SkillId) is { Passive: false, Friendly: true, Ground: false })?.SkillId;
+        Check(heal is not null, "a learnable supportive skill");
+        var Heal = heal!;
+        Session.LearnSkill(Heal);
+        await UntilAsync(() => book.Level(Heal) >= 1, 10, "the supportive skill learned");
+        await FramesAsync(3);
+        var slot = book.ActiveSkills.ToList().IndexOf(Heal);
+        Check(slot >= 0 && slot < hud.HotbarSlots.Count && hud.HotbarSlots[slot].Text.Contains(_main.Bundle!.NameOf(Heal), StringComparison.Ordinal), "the supportive skill is on the skill bar");
+
+        // Next to the slimes, standing still.
+        for (var step = 0; step < 20; step++)
+        {
+            var monster = NearestMonster();
+            if (monster is not null && GridDistance.Chebyshev(monster.Cell, Own().Cell) <= 3 && !Own().IsWalking) break;
+            if (monster is null) await WalkTowardMapMiddleAsync();
+            else await TapCellAsync(StepToward(monster.Cell));
+            await SecondsAsync(1);
+        }
+        await UntilAsync(() => !Own().IsWalking, 10, "standing still");
+        var anchor = Own().Cell;
+        Check(NearestMonster() is { } near && GridDistance.Chebyshev(near.Cell, anchor) <= 4, "a monster within the area before the start");
+
+        // The quest log, where the autopilot is started: the fight choice (a tap picks the next, round again to Nearby) and Start.
+        if (!log.Open) Press(hud.Tracker);
+        await FramesAsync(3);
+        Check(log.Open, "the quest log is open");
+        var (battle, filter) = log.BattleButtons;
+        Check(!battle.Disabled, "auto-battle can be started with no quest ticked");
+        Check(battle.Size.Y >= hud.Metrics.UnitsPerDp * 48 - 1 && filter.Size.Y >= hud.Metrics.UnitsPerDp * 48 - 1, "both are 48 dp touch targets");
+        Check(filter.Text == UiText.AutoBattleFilterButton(AutoBattleFilters.Nearby), "the fight choice starts at Nearby");
+        Press(filter);
+        await FramesAsync(2);
+        Check(filter.Text == UiText.AutoBattleFilterButton(AutoBattleFilters.Attackers), "a tap shows the next choice");
+        Press(filter);
+        await FramesAsync(2);
+        Press(filter);
+        await FramesAsync(2);
+        Check(filter.Text == UiText.AutoBattleFilterButton(AutoBattleFilters.Nearby), "round again to Nearby");
+
+        var kills = 0;
+        var hit = new HashSet<long>();
+        var counted = new HashSet<long>();
+        World.Combat.Impact += (in HitImpact impact) =>
+        {
+            if (impact.Attacker == World.OwnId && impact.Kind is HitKind.Hit or HitKind.Crit) hit.Add(impact.Target);
+        };
+        Print($"battle: Auto at {anchor}, fight choice {auto.BattleFilter}");
+        Press(battle);
+        await UntilAsync(() => auto.On, 10, "the server's auto-battle status");
+        await FramesAsync(2);
+        Check(!log.Open, "the log closed, so the fight is in view");
+        Check(auto.Battle && auto.Quest is null, "the run is auto-battle: its status names no quest");
+        Check(hud.Autopilot.Visible, "the indicator shows while it runs");
+        Print($"battle: running; indicator \"{hud.Autopilot.Text.Replace('\n', '|')}\"");
+
+        var states = new List<string>();
+        var skillUsed = false;
+        var farthest = 0;
+        var shot = false;
+        clock.Restart();
+        while (auto.On && clock.Elapsed.TotalSeconds < 240 && !(kills >= 2 && skillUsed))
+        {
+            var line = $"{auto.Mode}/{auto.Doing ?? auto.Reason}";
+            if (states.Count == 0 || states[^1] != line) states.Add(line);
+            if (book.CooldownLeft(Heal) > 0) skillUsed = true;
+            farthest = Math.Max(farthest, GridDistance.Chebyshev(anchor, Own().Cell));
+            foreach (var id in hit)
+                if (!counted.Contains(id) && World.Find(id) is null or { Dead: true }) { counted.Add(id); kills++; }
+            if (!shot && auto.Doing == AutopilotActivities.Fighting)
+            {
+                shot = true;
+                await ShotAsync("-auto-battle");
+            }
+            Check(hud.Autopilot.Text.StartsWith(UiText.AutoBattleRunning(auto.Doing), StringComparison.Ordinal) || !auto.Running, "the indicator shows the server's word");
+            await FrameAsync();
+        }
+        Print($"battle: {kills} kills, skill used {skillUsed}, farthest {farthest} cells from {anchor}");
+        Print($"battle: went through {string.Join(" -> ", states.Select(x => x.Replace("running/", string.Empty)))}");
+        Check(auto.On, $"the run went on by itself (it ended with {auto.Reason})");
+        Check(kills >= 2, $"at least two kills on its own ({kills})");
+        Check(skillUsed, $"{_main.Bundle!.NameOf(Heal)} was cast at least once");
+        Check(farthest <= Area, $"it never left the area ({farthest} cells, at most {Area})");
+        Check(states.Any(s => s.EndsWith(AutopilotActivities.Fighting, StringComparison.Ordinal)), "it said fighting");
+
+        var open = NearestOpenCellOutsideSafeZones(CurrentMap(), new GridCell(Own().Cell.X + 2, Own().Cell.Y));
+        await TapCellAsync(open);   // the player's own order
+        await UntilAsync(() => !auto.On, 10, "the manual input to end the run");
+        await FramesAsync(2);
+        Check(auto.Reason == AutopilotStops.ManualInput, $"walking ends it by manual input (the server said {auto.Reason})");
+        Check(Session.Ui.Flash == UiText.AutoBattleEnded(AutopilotStops.ManualInput), "the flash says the player took over");
+        Check(!hud.Autopilot.Visible, "the indicator is gone when the run is over");
+        Print($"battle: manual input; flash \"{Session.Ui.Flash}\"");
+        Print("battle: learned a skill, chose, started, fought, healed, stayed in the area and ended by walking");
     }
 
     private async Task MeasureIndicatorAsync(Hud hud)

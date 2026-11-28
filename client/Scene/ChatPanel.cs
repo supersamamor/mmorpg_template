@@ -226,6 +226,9 @@ public sealed class ChatPanel
     /// <summary>The share of the screen's height the layout check pretends the keyboard takes; null: ask the engine.</summary>
     public float? SimulatedKeyboard { get; set; }
 
+    /// <summary>True while the last lines show in the flash line's place (T-811: the cramped HUD's autopilot indicator steps aside then).</summary>
+    public bool RecentShown => _recent.IsVisibleInTree();
+
     /// <summary>The Chat button and the last lines (for the overlap checks).</summary>
     public IEnumerable<Control> StripControls => [_open, _recent];
 

@@ -162,8 +162,10 @@ namespace Game.Shared.Protocol
     /// <c>start_autopilot</c> (T-604): the server plays the active quests <see cref="Quests"/>, in this order, casting <see cref="Skills"/> (the shortcut slots, in slot order) as their
     /// rules allow. Replaces a run in progress. May come back <see cref="RejectedMessage"/> with an "Autopilot reasons" term and the <c>quest</c> or <c>skill</c> it is about.
     /// <c>{"type":"start_autopilot","quests":["quest.first_hunt"],"skills":[["skill.twin_strike",2]]}</c>.
+    /// <para>With <see cref="Battle"/> (T-811), an "Auto-battle filters" term, it starts <b>auto-battle</b> instead: no quests (an empty or missing <c>quests</c>), the monsters around
+    /// the cell it starts on. <c>{"type":"start_autopilot","quests":[],"skills":[["skill.bash",0]],"battle":"nearby"}</c>; refusals may also carry an "Auto-battle reasons" term.</para>
     /// </summary>
-    public sealed record StartAutopilotMessage(IReadOnlyList<string> Quests, IReadOnlyList<SkillLevelRecord> Skills) : ClientMessage
+    public sealed record StartAutopilotMessage(IReadOnlyList<string> Quests, IReadOnlyList<SkillLevelRecord> Skills, string? Battle = null) : ClientMessage
     {
         /// <inheritdoc />
         public override string Type => MessageTypes.StartAutopilot;
@@ -714,7 +716,7 @@ namespace Game.Shared.Protocol
     /// <c>{"type":"autopilot","mode":"running","quest":"quest.first_hunt","doing":"hunting"}</c>, <c>{"type":"autopilot","mode":"off","reason":"finished"}</c>.
     /// </summary>
     /// <param name="Mode">An "Autopilot modes" term.</param>
-    /// <param name="Quest">The quest it plays, while running or paused.</param>
+    /// <param name="Quest">The quest it plays, while running or paused. None while running or paused means the run is auto-battle (T-811).</param>
     /// <param name="Doing">An "Autopilot activities" term, while running.</param>
     /// <param name="Reason">An "Autopilot pauses" term while paused, an "Autopilot stops" term when off.</param>
     public sealed record AutopilotMessage(string Mode, string? Quest, string? Doing, string? Reason) : ServerMessage

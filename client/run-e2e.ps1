@@ -23,6 +23,9 @@
 #                                                         (T-602; content copy: weak monsters, every slime drops a glob; quests and drops are server-only, the bundle hash is unchanged)
 #   .\client\run-e2e.ps1 -Run autopilot                 tick First Hunt in the quest log, Start, watch the HUD indicator while the server plays it to the turn-in with no input from the client and says
 #                                                         finished; then start another quest, stop it with a tap on the indicator, start again and end it by walking (T-605; the quests content copy)
+#   .\client\run-e2e.ps1 -Run battle                      T-811: one kill by hand for skill points, learn Second Wind, stand by the slimes, pick a fight choice and press the HUD's Auto toggle;
+#                                                         the server fights on its own (two kills, the heal cast, never out of the area) until a tap on the ground ends it (content copy: weak
+#                                                         monsters with 60 HP worth 3000 EXP, support skills cast whenever HP is missing)
 #   .\client\run-e2e.ps1 -Run account                     register, create a character, enter the world, drop and resume, log out, sign out, sign in again and enter the world with
 #                                                         the same character (T-701); another device changes the password: put out, signed in with the new one, changed back (T-710); delete the account, keep it, delete it again (T-703). Needs PostgreSQL: $env:GAME_TEST_DB_CONNECTION; it uses its own database, mmo_e2e, on that server
 #   .\client\run-e2e.ps1 -Run saving                      a new account's character changes stats, quest, items, currency, gear, EXP and place; its server stops (and saves) and the next one has it
@@ -48,13 +51,13 @@
 #   .\client\run-e2e.ps1 -Run reload                      a development server with --hot-reload on its own content copy (weak monsters); the client plays, the script changes a
 #                                                         monster's display name in the copy, the server swaps the content in between ticks and says content_changed; the client shows
 #                                                         "Content changed on the server. Restart the game to see it." and still plays (T-801)
-#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, kick, moderation, textured, chat, bye, release (account,
+#   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, battle, account, saving, appearance, wardrobe, kick, moderation, textured, chat, bye, release (account,
 #                                                         saving, appearance, wardrobe, kick and moderation are skipped, and said so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "reload", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "battle", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "reload", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -179,6 +182,25 @@ function Get-SkillsContent {
     return (Join-Path $script:skillsTemp "content")
 }
 
+# The battle run's copy (T-811): the skills run's monsters (60 HP, 3000 EXP: one kill brings skill points), without their own skills, and the autopilot casts a
+# supportive skill whenever any HP is missing, so the heal on the bar is used within the run. Monster AI, EXP and balance are server-only data: the bundle hash does not change.
+$script:battleTemp = $null
+function Get-BattleContent {
+    if ($script:battleTemp) { return (Join-Path $script:battleTemp "content") }
+    $script:battleTemp = Join-Path ([IO.Path]::GetTempPath()) ("t811-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $script:battleTemp | Out-Null
+    Copy-Item (Get-SkillsContent) (Join-Path $script:battleTemp "content") -Recurse
+    Copy-Item (Join-Path $root "themes") (Join-Path $script:battleTemp "themes") -Recurse
+    foreach ($file in Get-ChildItem (Join-Path $script:battleTemp "content/monsters") -Filter *.yaml) {
+        $text = [IO.File]::ReadAllText($file.FullName) -replace '(?m)^  skills:\r?\n(    .*\r?\n)+', ''
+        [IO.File]::WriteAllText($file.FullName, $text)
+    }
+    $balance = Join-Path $script:battleTemp "content/balance.yaml"
+    $text = [IO.File]::ReadAllText($balance) -replace 'support_below_percent: \d+', 'support_below_percent: 100'
+    [IO.File]::WriteAllText($balance, $text)
+    return (Join-Path $script:battleTemp "content")
+}
+
 # The quests run's copy (T-602): the weak monsters, and every Gel Slime drops one or two Gel Globs, so First Hunt's kill-and-collect takes a few minutes at
 # most. Drops are server-only data: the bundle hash does not change.
 $script:questsTemp = $null
@@ -227,11 +249,12 @@ function Get-E2EConnection {
     return $builder.get_ConnectionString()
 }
 
-function Start-GameServer([switch] $Reload, [switch] $Easy, [switch] $Items, [switch] $Statuses, [switch] $Skills, [switch] $Quests, [switch] $Wardrobe, [string[]] $Extra = @()) {
+function Start-GameServer([switch] $Reload, [switch] $Easy, [switch] $Items, [switch] $Statuses, [switch] $Skills, [switch] $Quests, [switch] $Wardrobe, [switch] $Battle, [string[]] $Extra = @()) {
     $log = [IO.Path]::GetTempFileName()
     $arguments = @("run", "--no-build", "--project", "src/Game.Server", "--")
     if ($Reload) { $arguments += @((Get-ReloadContent), "--hot-reload") }
     elseif ($Wardrobe) { $arguments += (Get-WardrobeContent) }
+    elseif ($Battle) { $arguments += (Get-BattleContent) }
     elseif ($Quests) { $arguments += (Get-QuestsContent) }
     elseif ($Items) { $arguments += (Get-ItemsContent) }
     elseif ($Statuses) { $arguments += (Get-StatusesContent) }
@@ -432,6 +455,13 @@ function Invoke-Scenario([string] $Name) {
                 $extra = @(); if (-not $Monster) { $extra += @("--e2e-monster", "monster.gel_slime") }
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-autopilot" $extra) -EngineArgs $engineArgs
                 return (Wait-GodotClient $run 900).Code
+            }
+            "battle" {
+                # T-811: the battle content copy; the server fights, the client only starts it, shows it and ends it.
+                $server = Start-GameServer -Battle
+                $extra = @(); if (-not $Monster) { $extra += @("--e2e-monster", "monster.gel_slime") }
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-battle" $extra) -EngineArgs $engineArgs
+                return (Wait-GodotClient $run 600).Code
             }
             "account" {
                 # T-701: needs PostgreSQL. The server gets a database of its own (mmo_e2e), which it creates and migrates, so the developer's data is untouched.
@@ -915,7 +945,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "reload", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "battle", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "reload", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 # The account, saving and appearance runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.
@@ -951,6 +981,7 @@ finally {
     if ($script:temp) { Remove-Item $script:temp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:itemsTemp) { Remove-Item $script:itemsTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:skillsTemp) { Remove-Item $script:skillsTemp -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($script:battleTemp) { Remove-Item $script:battleTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:statusesTemp) { Remove-Item $script:statusesTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:wardrobeTemp) { Remove-Item $script:wardrobeTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:questsTemp) { Remove-Item $script:questsTemp -Recurse -Force -ErrorAction SilentlyContinue }
