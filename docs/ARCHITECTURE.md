@@ -1068,8 +1068,8 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   display bundle (an NPC the server marks with a quest "!" is gold, or green to turn in: the quest markers it already sends; no objective areas), monsters and other players only while in the area of
   interest, party members on this map (as seen, else where `party_members` says), the player last with its facing. North is up, as the camera looks. Shapes differ as well as colours (ring, square, dot,
   diamond, arrow). **Option:** "Minimap on/off" in the options panel (the Sound button became **Options**), kept in `user://preferences.json` (`minimap`). **Cost (§9):** no camera or viewport: one
-  texture rectangle and a few primitives a mark, redrawn only when a mark or the window moved by a pixel; every frame the marks are collected (no allocation) and compared. Measured in the `ui` run:
-  see the §9 entry. The layout check holds the corner map to every other part of the HUD (nothing under it), runs the full map at every screen, notch and scale, and prints where the corner shows.
+  texture rectangle and one triangle array for all the marks (3 draw calls), redrawn only when a mark or the window moved by a pixel; every frame the marks are collected (no allocation) and compared
+  (7.9 µs measured); see the §9 entry. The layout check holds the corner map to every other part of the HUD (nothing under it), runs the full map at every screen, notch and scale, and prints where the corner shows.
 - **Trade** (T-903, §6.10; `TradePanel`): the **ask prompt** (who asks, seconds left, Trade and No) at the top of the safe area; while a trade is open the **window** fills the safe area: the
   heading (whom with, the state line, Cancel), two columns (what this side gives, each line a button that takes it out, with **Add** opening the bag's tradeable carried entries in the columns'
   place, with a quantity picker for stacks; what the other side gives), and a footer (currency field, Set, Lock or Unlock, Confirm). Both columns are the server's last `trade`; Confirm sends the
@@ -1522,6 +1522,11 @@ not count what a phone pays for each surface, so the surfaces are the budget's m
 thread over the run (once per texture). The job models are no longer preloaded: none is loaded before the first phase; the first character drawn by one waited 0.52 s for it, hidden, with no frame over 35 ms
 (`run-e2e.ps1 -Run textured`, headless, where loading runs on the main thread: 0.06 s). The 80 ms worst frames are outside the changes (the crowd moving in, as in earlier runs); 30 fps throughout.
 A headless run of the same (no draw calls or triangles without a renderer) gave the same surfaces and 64.7 MB static memory dressed in outfits against 75.7 MB merged by file. Not run on a phone (ADR-002 row 112).
+
+**Minimap (T-812, §7.4), measured** on the same machine, windowed 1280x720 off the screen (`run-e2e.ps1 -Run minimap -Windowed`): **3 draw calls** for the corner map (54 with it, 51 without, 30 fps):
+the background, the picture (one texture rectangle) and every mark with the border as one triangle array; drawing each mark with its own primitive had cost 22 (the Mobile renderer did not batch them).
+Headless (`-Run ui`): the per-frame refresh 7.9 µs with 19 marks, redrawn only when a mark or the window moved by a pixel (29 redraws in 61 frames with monsters walking in view); collecting the marks
+allocates nothing (a test). No camera, viewport or second render of the world: the picture is drawn once by the map export (§5.3); the meadow's is 192x128 pixels, 96 KB as RGBA8. Not run on a phone (ADR-002 row 112).
 
 ## 10. Networking on mobile
 
