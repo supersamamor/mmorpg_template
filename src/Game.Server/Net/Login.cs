@@ -112,11 +112,23 @@ public sealed class AccountLogin(AccountService accounts, DevLogin dev) : ILogin
 /// </summary>
 public sealed class NewCharacters
 {
-    private readonly BalanceSimulator _simulator;
+    private readonly Func<ContentDatabase> _live;   // T-801: the content in effect (a hot reload swaps it)
+    private ContentDatabase _built;
+    private BalanceSimulator _simulator;
 
     /// <summary>Reads the start from validated content.</summary>
-    public NewCharacters(ContentDatabase content)
+    public NewCharacters(ContentDatabase content) : this(() => content)
     {
+    }
+
+    /// <summary>
+    /// T-801: reads the content in effect through <paramref name="live"/>; each stat sheet is built from one snapshot of it. The start (map, cell, facing, job,
+    /// looks) is read once: a reload that changes <c>new_character</c> or <c>appearance.yaml</c> needs a restart, so every login sees the same start.
+    /// </summary>
+    public NewCharacters(Func<ContentDatabase> live)
+    {
+        _live = live ?? throw new ArgumentNullException(nameof(live));
+        var content = _built = live();
         _simulator = new BalanceSimulator(content);
         var start = content.Balance.NewCharacter;
         MapId = start.StartMapId;
@@ -144,16 +156,25 @@ public sealed class NewCharacters
     /// <summary>The stat sheet of a loaded character (T-702): its levels, stats and job, the way a new character's is built; equipment and passives come as it enters.</summary>
     public StatSheet CreateStats(ProgressionState state)
     {
-        lock (_simulator) return _simulator.Player(state.JobId, state.BaseLevel, state.JobLevel, state.Stats, state.StatPoints, weapon: null).Sheet;
+        lock (_live) return Simulator().Player(state.JobId, state.BaseLevel, state.JobLevel, state.Stats, state.StatPoints, weapon: null).Sheet;
     }
 
     /// <summary>A fresh stat sheet for a new character (base and job level 1, starting stat values, the start job's bonuses).</summary>
     public StatSheet CreateStats()
     {
-        lock (_simulator)
+        lock (_live)
         {
-            var state = _simulator.Progression.NewCharacter(JobId);
-            return _simulator.Player(JobId, state.BaseLevel, state.JobLevel, state.Stats, state.StatPoints, weapon: null).Sheet;
+            var simulator = Simulator();
+            var state = simulator.Progression.NewCharacter(JobId);
+            return simulator.Player(JobId, state.BaseLevel, state.JobLevel, state.Stats, state.StatPoints, weapon: null).Sheet;
         }
+    }
+
+    /// <summary>The simulator over one snapshot of the content in effect, built again when the content changed. Call under the lock.</summary>
+    private BalanceSimulator Simulator()
+    {
+        var content = _live();
+        if (!ReferenceEquals(content, _built)) (_built, _simulator) = (content, new BalanceSimulator(content));
+        return _simulator;
     }
 }

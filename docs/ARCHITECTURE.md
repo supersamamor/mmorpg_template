@@ -329,9 +329,12 @@ without a restart. How to use it: [CONTENT_EDITING.md](CONTENT_EDITING.md).
   logged as `validate` prints them and the running content stays. A set whose content is the same (a comment, white space) does nothing.
 - **What cannot reload (v1)** refuses the whole reload with a plain `NEEDS A RESTART` line naming it, so what runs is always one validated set, never a mix
   (`HotReloadRules`): map grids and map definitions (instances are built on them at start); removing an item, skill, job, quest or outfit (a playing character may
-  hold it, and only a load sets such things aside, §3 "Loading"); changes to jobs, skills, quests, EXP tables, outfits and `appearance.yaml`, and the
-  `balance.yaml` sections `aoi`, `characters`, `guild`, `inventory`, `new_character`, `party`, `progression` and `quests` (read once at start outside the tick:
-  the AOI grids, the account, guild and party services, and the gateway's own-player messages and new characters, which `Net/**` builds at start).
+  hold it, and only a load sets such things aside, §3 "Loading"); `appearance.yaml` and the `balance.yaml` sections `aoi`, `characters`, `guild`, `inventory`,
+  `new_character` and `party` (read once at start outside the tick: the AOI grids, the account, guild and party services, the gateway's own inventory messages,
+  and the new characters' start, which every login must see the same).
+- **The gateway reads the live set** (`LiveContent`; scope widened by the lead on 2026-11-28): its own-player `exp`, `skills`, `stats`, `quest_log` and `wardrobe`
+  messages (`OwnProgress`) and the stat sheets of logins (`NewCharacters`) take one snapshot of the content in effect per message or login, so jobs, skills,
+  quests, EXP tables and outfits reload live and no answer mixes two sets.
 - **The swap** (`MapInstance.ApplyReload`): the new set is handed to every instance, and each swaps it in at the start of its next tick, before that tick's intents,
   all at once for the instance (instances may be up to one tick apart). Per kind:
 
@@ -350,7 +353,7 @@ without a restart. How to use it: [CONTENT_EDITING.md](CONTENT_EDITING.md).
   next sign-in, as at boot) and sends every playing session one `content_changed` with the new hash (§10; the one `Net/**` change of T-801). v1 does not take a
   bundle while it plays: the client's HUD says "Content changed on the server. Restart the game to see it." on the announcement line until the game is restarted.
   A change to server-only data (monster stats, drops, formulas) keeps the hash and sends nothing. The bundle is still built by the same whitelist (§5.4, hard rule 11).
-- **Not reloaded:** what outside the tick read content at start (the admin API's checks in `Admin/**`, the account service, the gateway's own-player messages);
+- **Not reloaded:** what outside the tick read content at start (the admin API's checks in `Admin/**`, the account service, the gateway's own inventory messages);
   the rules above refuse what would make them disagree with the tick.
 
 ### 5.6 The content editor (T-801)

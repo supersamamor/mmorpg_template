@@ -17,37 +17,74 @@ namespace Game.Server.Net;
 public sealed class OwnProgress
 {
     private readonly IPlayerProgressionStore _store;
-    private readonly IProgressionContent _content;
-    private readonly ExpTableDef _baseTable;
-    private readonly ContentDatabase _database;
-    private readonly ProgressionRules _rules;
-    private readonly QuestRules _quests;
-    private readonly Game.Shared.Wardrobe.WardrobeRules _wardrobe;
+    private readonly Func<ContentDatabase> _live;   // T-801: the content in effect (a hot reload swaps it)
+    private volatile Snapshot _snapshot;
     private readonly SortedSet<string> _offer = new(StringComparer.Ordinal);
     private readonly SortedSet<string> _turnIn = new(StringComparer.Ordinal);
 
     /// <summary>Reads the EXP tables from validated content; <paramref name="store"/> is the one the combat systems use.</summary>
-    public OwnProgress(ContentDatabase content, IPlayerProgressionStore store)
+    public OwnProgress(ContentDatabase content, IPlayerProgressionStore store) : this(() => content, store)
     {
         ArgumentNullException.ThrowIfNull(content);
+    }
+
+    /// <summary>
+    /// T-801: reads the content in effect through <paramref name="live"/>. Each message is built from one snapshot of it (the rules derived from one content set),
+    /// so an answer never mixes an old set with a new one.
+    /// </summary>
+    public OwnProgress(Func<ContentDatabase> live, IPlayerProgressionStore store)
+    {
+        _live = live ?? throw new ArgumentNullException(nameof(live));
         _store = store ?? throw new ArgumentNullException(nameof(store));
-        _database = content;
-        _rules = new ProgressionRules(content.Balance, new ContentProgression(content));
-        _content = new ContentProgression(content);
-        _quests = new QuestRules(content.Quests.All, content.Balance.Quests.MaxActive);
-        _wardrobe = new Game.Shared.Wardrobe.WardrobeRules(content.Outfits.All);
-        var id = content.Balance.Progression.BaseExpTableId;
-        if (!_content.TryGetExpTable(id, out var table) || table is null) throw new ArgumentException($"Base EXP table '{id}' not found.", nameof(content));
-        _baseTable = table;
+        _snapshot = new Snapshot(live());
+    }
+
+    /// <summary>The rules of the content in effect, built again when it changed.</summary>
+    private Snapshot Now()
+    {
+        var snapshot = _snapshot;
+        var content = _live();
+        if (ReferenceEquals(content, snapshot.Database)) return snapshot;
+        return _snapshot = new Snapshot(content);
+    }
+
+    /// <summary>Everything a message reads, derived from one content set.</summary>
+    private sealed class Snapshot
+    {
+        public Snapshot(ContentDatabase content)
+        {
+            ArgumentNullException.ThrowIfNull(content);
+            Database = content;
+            Rules = new ProgressionRules(content.Balance, new ContentProgression(content));
+            Content = new ContentProgression(content);
+            Quests = new QuestRules(content.Quests.All, content.Balance.Quests.MaxActive);
+            Wardrobe = new Game.Shared.Wardrobe.WardrobeRules(content.Outfits.All);
+            var id = content.Balance.Progression.BaseExpTableId;
+            if (!Content.TryGetExpTable(id, out var table) || table is null) throw new ArgumentException($"Base EXP table '{id}' not found.", nameof(content));
+            BaseTable = table;
+        }
+
+        public ContentDatabase Database { get; }
+
+        public ProgressionRules Rules { get; }
+
+        public IProgressionContent Content { get; }
+
+        public QuestRules Quests { get; }
+
+        public Game.Shared.Wardrobe.WardrobeRules Wardrobe { get; }
+
+        public ExpTableDef BaseTable { get; }
     }
 
     /// <summary>The player's <c>exp</c> message, or null when combat has not seen it yet (it has no progression).</summary>
     public ExpMessage? For(EntityId player)
     {
         if (!_store.TryGet(player, out var state)) return null;
+        var now = Now();
         ExpTableDef? jobTable = null;
-        if (_content.TryGetJob(state.JobId, out var job) && job is not null) _content.TryGetExpTable(job.JobExpTableId, out jobTable);
-        return new ExpMessage(state.BaseLevel, state.BaseExp, Next(_baseTable, state.BaseLevel), state.JobLevel, state.JobExp, Next(jobTable, state.JobLevel));
+        if (now.Content.TryGetJob(state.JobId, out var job) && job is not null) now.Content.TryGetExpTable(job.JobExpTableId, out jobTable);
+        return new ExpMessage(state.BaseLevel, state.BaseExp, Next(now.BaseTable, state.BaseLevel), state.JobLevel, state.JobExp, Next(jobTable, state.JobLevel));
     }
 
     /// <summary>
@@ -60,7 +97,8 @@ public sealed class OwnProgress
         var levels = state.Skills.Where(p => p.Value > 0).OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => new SkillLevelRecord(p.Key, p.Value)).ToList();
         var cooldowns = (player.Cooldowns?.Running() ?? [])
             .Select(c => new SkillCooldownRecord(c.Key, (int)Math.Min(c.Value, int.MaxValue))).ToList();
-        var jobs = _database.Jobs.All.Where(j => _rules.CanChangeJob(state, j.Id).Allowed).Select(j => j.Id).ToList();
+        var now = Now();
+        var jobs = now.Database.Jobs.All.Where(j => now.Rules.CanChangeJob(state, j.Id).Allowed).Select(j => j.Id).ToList();
         return new SkillsMessage(state.JobId, state.SkillPoints, levels, cooldowns, jobs);
     }
 
@@ -71,12 +109,13 @@ public sealed class OwnProgress
     public StatsMessage? StatsFor(Entity player)
     {
         if (!_store.TryGet(player.Id, out var state) || player.Stats is not { } sheet) return null;
-        var max = _database.Balance.Progression.MaxStatValue;
+        var now = Now();
+        var max = now.Database.Balance.Progression.MaxStatValue;
         var stats = PrimaryStats.All.Ordered
             .Select(s =>
             {
                 var value = state.StatValue(s);
-                return new StatRecord(s, value, value >= max ? 0 : _rules.StatRaiseCost(value));
+                return new StatRecord(s, value, value >= max ? 0 : now.Rules.StatRaiseCost(value));
             }).ToList();
         var derived = DerivedStats.Panel.Ordered.Select(d => new DerivedRecord(d, sheet.GetInt(d))).ToList();
         return new StatsMessage(state.StatPoints, stats, derived);
@@ -89,19 +128,23 @@ public sealed class OwnProgress
     public QuestLogMessage? QuestsFor(EntityId player)
     {
         if (!_store.TryGet(player, out var state)) return null;
-        var active = state.ActiveQuests.Values.OrderBy(p => p.QuestId, StringComparer.Ordinal).Where(p => _quests.TryGet(p.QuestId, out _)).Select(_quests.Entry).ToList();
+        var quests = Now().Quests;
+        var active = state.ActiveQuests.Values.OrderBy(p => p.QuestId, StringComparer.Ordinal).Where(p => quests.TryGet(p.QuestId, out _)).Select(quests.Entry).ToList();
         var completed = state.CompletedQuests.OrderBy(q => q, StringComparer.Ordinal).ToList();
         lock (_offer)
         {
-            _quests.Markers(state, _offer, _turnIn);
+            quests.Markers(state, _offer, _turnIn);
             return new QuestLogMessage(active, completed, _offer.ToList(), _turnIn.ToList());
         }
     }
 
     /// <summary>The player's <c>wardrobe</c> (T-708): the outfits it owns that the content has, and what is chosen. Null without a progression.</summary>
-    public WardrobeMessage? WardrobeFor(Entity player) =>
-        _store.TryGet(player.Id, out var state)
-            ? new WardrobeMessage(_wardrobe.Owned(state.Wardrobe), _wardrobe.Chosen(state.Wardrobe, player.Appearance?.Gender), state.Wardrobe.Hidden) : null;
+    public WardrobeMessage? WardrobeFor(Entity player)
+    {
+        if (!_store.TryGet(player.Id, out var state)) return null;
+        var wardrobe = Now().Wardrobe;
+        return new WardrobeMessage(wardrobe.Owned(state.Wardrobe), wardrobe.Chosen(state.Wardrobe, player.Appearance?.Gender), state.Wardrobe.Hidden);
+    }
 
     /// <summary>EXP level <paramref name="level"/> needs to level up (entry <c>level - 1</c>); 0 at the cap or without a table.</summary>
     private static long Next(ExpTableDef? table, int level) => table is not null && level >= 1 && level <= table.Exp.Count ? table.Exp[level - 1] : 0;

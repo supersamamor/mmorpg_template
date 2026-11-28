@@ -42,12 +42,12 @@ public static class HotReloadRules
 {
     /// <summary>
     /// <c>balance.yaml</c> sections (YAML keys) read once at start by something outside the tick: the AOI grid of each instance (<c>aoi</c>), the accounts and
-    /// the guild service (<c>characters</c>, <c>guild</c>), the party service (<c>party</c>), and the gateway's own-player messages and new characters
-    /// (<c>new_character</c>, <c>progression</c>, <c>quests</c>, <c>inventory</c>; Net/** builds them at start).
+    /// the guild service (<c>characters</c>, <c>guild</c>), the party service (<c>party</c>), the gateway's own inventory messages (<c>inventory</c>) and new
+    /// characters' start (<c>new_character</c>, which every login must see the same). The gateway's own-player progress messages read the live content (T-801).
     /// </summary>
     public static readonly IReadOnlySet<string> RestartSections = new SortedSet<string>(StringComparer.Ordinal)
     {
-        "aoi", "characters", "guild", "inventory", "new_character", "party", "progression", "quests",
+        "aoi", "characters", "guild", "inventory", "new_character", "party",
     };
 
     /// <summary>
@@ -55,13 +55,6 @@ public static class HotReloadRules
     /// only a load sets such a thing aside (ARCHITECTURE §3 "Loading") and a playing character may hold it. Adding and changing them reloads.
     /// </summary>
     public static readonly IReadOnlyList<Type> HeldKinds = [typeof(ItemDef), typeof(SkillDef), typeof(JobDef), typeof(QuestDef), typeof(OutfitDef)];
-
-    /// <summary>
-    /// Definition types and root files the gateway's own-player messages and new characters read (Net/**, built at start): the EXP tables, jobs, skills, quests
-    /// and outfits behind the player's <c>exp</c>, <c>skills</c>, <c>stats</c>, <c>quest_log</c> and <c>wardrobe</c>, and <c>appearance.yaml</c>. A change to them
-    /// needs a restart in v1.
-    /// </summary>
-    public static readonly IReadOnlyList<Type> GatewayKinds = [typeof(ExpTableDef), typeof(JobDef), typeof(SkillDef), typeof(QuestDef), typeof(OutfitDef)];
 
     /// <summary>Every reason <paramref name="diff"/> cannot be swapped into a running server; empty when it can.</summary>
     public static IReadOnlyList<string> RestartReasons(ContentDiff diff)
@@ -77,8 +70,6 @@ public static class HotReloadRules
         {
             if (HeldKinds.Contains(kind.DefinitionType) && kind.Removed.Count > 0)
                 reasons.Add($"removing {string.Join(", ", kind.Removed)} needs a restart: a playing character may hold it, and only a load sets it aside");
-            if (GatewayKinds.Contains(kind.DefinitionType))
-                reasons.Add($"{kind.Kind} cannot hot-reload in v1 (the gateway's own-player messages read them from the content it started with): {string.Join(", ", kind.Added.Concat(kind.Removed).Concat(kind.Changed).Order(StringComparer.Ordinal))}");
         }
         if (diff.RootFiles.Contains(ContentLayout.AppearanceFile))
             reasons.Add($"{ContentLayout.AppearanceFile} cannot hot-reload in v1 (accounts and new characters read it at start)");
@@ -87,6 +78,21 @@ public static class HotReloadRules
             reasons.Add($"{ContentLayout.BalanceFile} {string.Join(", ", sections)} cannot hot-reload in v1 (read once at start outside the tick)");
         return reasons;
     }
+}
+
+/// <summary>
+/// The content in effect for readers outside the tick (T-801): the gateway's own-player messages and new characters' stat sheets. A reader takes
+/// <see cref="Current"/> once per message or login and uses that one snapshot throughout. Thread-safe.
+/// </summary>
+public sealed class LiveContent(ContentDatabase content)
+{
+    private volatile ContentDatabase _current = content ?? throw new ArgumentNullException(nameof(content));
+
+    /// <summary>The content in effect now.</summary>
+    public ContentDatabase Current => _current;
+
+    /// <summary>Sets the content in effect (after a reload was handed to the world).</summary>
+    public void Set(ContentDatabase next) => _current = next ?? throw new ArgumentNullException(nameof(next));
 }
 
 /// <summary>How one reload attempt ended.</summary>
