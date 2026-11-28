@@ -1013,6 +1013,11 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   (or "gathering") over "Around where it started"; a tap sends `stop_autopilot`. Ends and refusals go on the flash line in auto-battle's words ("Auto-battle stopped: your HP is low.", "... you left the area.",
   "... nothing to fight here.", "Auto-battle is switched off here."): a refusal is told as auto-battle's when the last start sent was one. Only the server's word decides what the indicator shows. The new row
   is in the `-Run ui` matrix with the quest log open (longest choice); the HUD gets no new node, so its draw calls and per-frame work are T-605's.
+- **Short screens at a large scale** (T-811, ADR-002 row 528). Where the safe area is under 260 dp divided by the UI scale (360 dp at 1.5x) the centre column is compact: the autopilot indicator
+  is one line at the 48 dp touch minimum and the target's name one line with an ellipsis (the label keeps the whole name; the long-press info shows it). Where that centre column is also under
+  120 dp divided by the scale (640x360 dp with a notch at 1.5x) the flash line wraps up to just under the target frame, so the indicator steps aside while the flash area is in use (a flash or
+  announcement line, or the chat strip's lines) and comes back when it is free; the run is still stopped by any manual order or by Stop in the quest log. The `-Run ui` matrix checks the
+  indicator online, as a real run's status draws it, and offline (no indicator, the reconnecting banner).
 - **Where the client's own words live (ADR-002 row 120).** In `client/Core/UiText.cs`: one static class of constants and small formatting functions in English, and nowhere
   else (a test fails on a literal assigned to a text property in `client/Scene`). Why: the refusal and update screens must read even when the bundle, theme or any data
   file is missing or broken, which rules out loading them; the pure core and its tests can use them; a typo or a missing word is a compile error; and the number of

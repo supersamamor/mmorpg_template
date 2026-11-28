@@ -361,20 +361,26 @@ public sealed class UiRuns
                         await FramesAsync(2);
                         foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}, the autopilot indicator shown: {problem}");
                         foreach (var covered in Hud.AutopilotOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the autopilot indicator covers {covered}");
-                        // T-811: and as a real run draws it, online with a run on: the client takes a running status (quest autopilot, then auto-battle) as the server's message
-                        // would come, and the HUD's own refresh shows the indicator. Nothing in the HUD's samples holds it, so this can never pass with the indicator hidden.
-                        foreach (var status in new[]
-                                 {
-                                     new Game.Shared.Protocol.AutopilotMessage(AutopilotModes.Running, LongName + " of the Far Northern Reaches", AutopilotActivities.Travelling, null),
-                                     new Game.Shared.Protocol.AutopilotMessage(AutopilotModes.Running, null, AutopilotActivities.Returning, null),
-                                 })
+                        // T-811: and as a real run draws it, online with a run on: the client takes a running status as the server's message would come, and the HUD's own refresh
+                        // shows the indicator. Nothing in the HUD's samples holds it, so this can never pass with the indicator hidden. One status is enough: the indicator clips its text
+                        // to its fixed size, and auto-battle's lines ("Stop auto-battle: returning" over "Around where it started") go on the same control.
+                        foreach (var status in new[] { new Game.Shared.Protocol.AutopilotMessage(AutopilotModes.Running, LongName + " of the Far Northern Reaches", AutopilotActivities.Travelling, null) })
                         {
                             Session.Autopilot.Apply(status);
                             await FramesAsync(2);
                             var kind = status.Quest is null ? "auto-battle" : "quest autopilot";
-                            if (!Hud.Autopilot.IsVisibleInTree()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the {kind} indicator is not shown while a run is on");
-                            foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}, {kind} running: {problem}");
-                            foreach (var covered in Hud.AutopilotOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the {kind} indicator covers {covered}");
+                            // Where the layout is cramped the indicator steps aside while the flash line shows (ADR-002 row 528): checked again with the flash area free.
+                            foreach (var clear in Hud.IndicatorCramped ? new[] { false, true } : new[] { false })
+                            {
+                                Hud.ClearFlashSample(clear);
+                                await FramesAsync(2);
+                                var shown = !Hud.IndicatorCramped || clear;
+                                if (Hud.Autopilot.IsVisibleInTree() != shown)
+                                    failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the {kind} indicator is {(shown ? "not shown" : "shown over the flash line")}");
+                                foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}, {kind} running: {problem}");
+                                foreach (var covered in Hud.AutopilotOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the {kind} indicator covers {covered}");
+                            }
+                            Hud.ClearFlashSample(false);
                         }
                         Session.Autopilot.Apply(new Game.Shared.Protocol.AutopilotMessage(AutopilotModes.Off, null, null, AutopilotStops.Stopped));
                         Hud.ShowAutopilotSample(Hud.AutopilotSample.Offline);

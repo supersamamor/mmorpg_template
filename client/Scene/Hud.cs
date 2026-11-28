@@ -25,6 +25,7 @@ public sealed class Hud
     private const double EdgeMarginDp = 8;
     private const double LeftColumnDp = 150;
     private const double RightColumnDp = 104;
+    private const double NarrowCentreDp = 120;   // T-811: a compact centre column narrower than this, in dp divided by the UI scale, has no room for the indicator
     private const double CompactCentreDp = 260;   // T-811: a safe area shorter than this, in dp divided by the UI scale, gets the compact centre column
     private const double AutopilotMaxWidthDp = 260;   // the longest fixed line of the indicator at scale 1; wider would take the world's taps
     private const double BodyFontDp = 16;
@@ -119,6 +120,11 @@ public sealed class Hud
     // T-811 (ADR-002 row 528): on a short screen at a large scale (under CompactCentreDp tall in scaled dp: 360 dp at 1.5x) the centre column has no room for a two-line indicator
     // under a wrapped target name above the flash line; there the indicator is one line at the touch minimum and the target's name one line with an ellipsis.
     private bool _compactCentre;
+    // And where even that centre column is too narrow (under NarrowCentreDp scaled dp: 640x360 dp with a notch at 1.5x), the flash line wraps up to just under the target frame
+    // and the left column has the Skills button under it: there the indicator steps aside while the flash area is in use (a flash or announcement line, or the chat strip's
+    // lines), and comes back when it is free. A run is still stopped by any manual order or by Stop in the quest log.
+    private bool _indicatorCramped;
+    private bool _indicatorWanted;
     private string _indicatorText = string.Empty;
     private int _autopilotQuestVersion = -1;
     private bool _autopilotOnline;
@@ -758,6 +764,7 @@ public sealed class Hud
         var column = (float)safe.Width - 4 * margin - Dp(LeftColumnDp) - Dp(RightColumnDp);
         _compactCentre = safe.Height / unit / scale < CompactCentreDp;
         var indicatorHeight = _compactCentre ? (float)(TouchTargetRules.MinTarget(metrics.Platform) * unit) : buttonHeight;
+        _indicatorCramped = _compactCentre && column < Dp(NarrowCentreDp);
         _autopilot.CustomMinimumSize = new Vector2(Mathf.Clamp(column, 0, Dp(AutopilotMaxWidthDp)), indicatorHeight);
         _target.AutowrapMode = _compactCentre ? TextServer.AutowrapMode.Off : TextServer.AutowrapMode.WordSmart;
         _target.ClipText = _compactCentre;
@@ -907,6 +914,28 @@ public sealed class Hud
         _tradePanel?.Refresh(connection.Phase);
         if (_tradePanel is { Open: true } && !trading) _partyPanel?.SetOpen(false);   // T-903: the trade window takes the party panel's place when a trade opens
         RefreshAutopilot();
+        if (_indicatorCramped && _indicatorWanted) _autopilot.Visible = !FlashAreaBusy();   // T-811: a bool or two a frame, only in the cramped layout
+    }
+
+    /// <summary>
+    /// True when the cramped layout's indicator must step aside (T-811): a flash or announcement line shows, or the chat strip's lines take the flash line's place. Always false
+    /// elsewhere.
+    /// </summary>
+    private bool FlashAreaBusy()
+    {
+        if (!_indicatorCramped) return false;
+        if (_flash.Visible || _announcement.Visible) return true;
+        return _chatPanel?.RecentShown ?? false;
+    }
+
+    /// <summary>True in the cramped layout (T-811), where the indicator steps aside while the flash area is in use.</summary>
+    public bool IndicatorCramped => _indicatorCramped;
+
+    /// <summary>For the layout check (T-811): clears the flash and announcement samples (true) or puts the longest flash back (false).</summary>
+    public void ClearFlashSample(bool clear)
+    {
+        SetText(_flash, clear ? string.Empty : UiText.HitYou(_sampleLongName, 123456, HitResults.Crit));
+        if (clear) SetText(_announcement, string.Empty);
     }
 
     /// <summary>T-904: the target's guild emblem before its name, when the server's tags say it is in a guild; redrawn when the target or the tags change.</summary>
@@ -941,8 +970,9 @@ public sealed class Hud
         _autopilotVersion = autopilot.Version;
         _autopilotQuestVersion = _session.Quests.Version;
         _autopilotOnline = online;
-        _autopilot.Visible = online && autopilot.On;
-        if (!_autopilot.Visible) return;
+        _indicatorWanted = online && autopilot.On;
+        _autopilot.Visible = _indicatorWanted && !FlashAreaBusy();
+        if (!_indicatorWanted) return;
         if (autopilot.Battle)
         {
             // T-811: auto-battle has no quest; what it does is the server's word.
@@ -983,7 +1013,8 @@ public sealed class Hud
     {
         SetText(_banner, sample == AutopilotSample.Offline ? UiText.Notice(ConnectionNotice.Reconnecting) : string.Empty);
         SetIndicator(UiText.AutopilotPausedTitle + "\n" + UiText.AutopilotPause(AutopilotPauses.NeedsEquip, _sampleLongName + " of the Far Northern Reaches"));
-        _autopilot.Visible = sample == AutopilotSample.Indicator;
+        _indicatorWanted = sample == AutopilotSample.Indicator;
+        _autopilot.Visible = _indicatorWanted && !FlashAreaBusy();
         HoldAutopilotRefresh();
     }
 
