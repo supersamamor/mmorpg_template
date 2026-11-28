@@ -60,12 +60,16 @@ public sealed class DatabaseFixture : IAsyncLifetime
         await Database.MigrateAsync();
     }
 
+    /// <summary>
+    /// Drops the class's databases. T-808: the pool is closed first, so no connection of this class is still busy, and a drop may take up to <see cref="DropTimeoutSeconds"/>:
+    /// a drop waits for a checkpoint, and on a loaded machine with other classes writing that overran Npgsql's 30 s default (a class clean-up error).
+    /// </summary>
     public async Task DisposeAsync()
     {
-        if (Database is not null) await Database.DisposeAsync();
+        if (Database is not null) await Database.DisposeAsync();   // the data source: its connections close (ClearAllPools does not reach a data source's pool)
         if (DatabaseFactAttribute.Connection is not { } server) return;
         NpgsqlConnection.ClearAllPools();
-        await using var admin = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(server) { Database = "postgres", Pooling = false }.ConnectionString);
+        await using var admin = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(server) { Database = "postgres", Pooling = false, CommandTimeout = DropTimeoutSeconds }.ConnectionString);
         await admin.OpenAsync();
         foreach (var name in _names)
         {
@@ -73,6 +77,9 @@ public sealed class DatabaseFixture : IAsyncLifetime
             await drop.ExecuteNonQueryAsync();
         }
     }
+
+    /// <summary>Longest one database drop may take.</summary>
+    public const int DropTimeoutSeconds = 300;
 }
 
 /// <summary>T-701 against a real PostgreSQL: the migration, the schema checks, what the unique indexes decide under concurrency, and the sessions' transactions.</summary>
@@ -293,12 +300,10 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
         for (var round = 0; round < 20; round++)
         {
             var account = await AccountAsync("old");
-            var signIns = Enumerable.Range(0, 8).Select(_ => Store.TryAddSessionAsync(account, "old", null, Token(), Now, Now.AddHours(1), 100, default)).ToList();
-            var change = Store.TryChangePasswordAsync(account, "old", "new", Now, default);
-            await Task.WhenAll(signIns);
-            (await change)!.Count.ShouldBe(signIns.Count(s => s.Result is not null), "every session that was accepted first is named as ended"); // T-710
-            await using var db = fixture.Database.Open();
-            (await db.Sessions.CountAsync(s => s.AccountId == account)).ShouldBe(0, $"round {round}: {signIns.Count(s => s.Result is not null)} of 8 sign-ins were accepted first");
+            await RacingSignIns.CheckAsync(fixture.Database, account,
+                token => Store.TryAddSessionAsync(account, "old", null, token, Now, Now.AddHours(1), 100, default),
+                () => Store.TryChangePasswordAsync(account, "old", "new", Now, default),
+                async () => (await Store.FindAccountAsync(account, default))!.PasswordHash == "new", $"round {round}");
         }
     }
 
@@ -431,5 +436,55 @@ public sealed class DatabaseTests(DatabaseFixture fixture) : IClassFixture<Datab
         await using var migrate = fixture.Database.OpenForMigrations();
         play.Database.GetCommandTimeout().ShouldBe(GameDatabase.CommandTimeoutSeconds);
         migrate.Database.GetCommandTimeout().ShouldBe(GameDatabase.MigrationTimeoutSeconds);
+    }
+}
+
+/// <summary>
+/// Sign-ins racing a change that ends every session of the account (a password change, an erasure request), and what must hold afterwards. T-808: the eight sign-ins and the change
+/// queue on the account row's lock, and on a loaded machine the last in line waited longer than the store's statement limit (<see cref="GameDatabase.CommandTimeoutSeconds"/>), so the
+/// call threw <see cref="StoreUnavailableException"/> (the player sees "try again"). Nothing was left behind then, so that is not a session surviving. Here such a sign-in counts as
+/// refused, and an unanswered change is tried again, as the player would. A timed-out commit may still have landed: a sign-in's session is then ended too, and a change's retry
+/// names only the sessions left by then, so the list of ended sessions is checked only when the first try answered, and its exact size only when every sign-in was answered too.
+/// </summary>
+internal static class RacingSignIns
+{
+    public static async Task CheckAsync(GameDatabase database, Guid account, Func<byte[], Task<IReadOnlyList<byte[]>?>> signIn, Func<Task<IReadOnlyList<byte[]>?>> change,
+        Func<Task<bool>> changed, string round)
+    {
+        var tokens = Enumerable.Range(0, 8).Select(_ => SessionTokens.HashOf(SessionTokens.New())!).ToList();
+        var signIns = tokens.Select(t => AnsweredAsync(signIn(t))).ToList();
+        var ending = AnsweredAsync(change());
+        var answers = await Task.WhenAll(signIns);
+        var (changeAnswered, ended) = await ending;
+        if (!changeAnswered)
+        {
+            await change();   // the try again; it names only the sessions there are now, so the list is not checked
+            ended = null;
+        }
+        (await changed()).ShouldBeTrue($"{round}: the change landed");
+
+        var accepted = tokens.Where((_, i) => answers[i] is (true, not null)).Select(Convert.ToHexString).ToList();
+        var unanswered = answers.Count(a => !a.Answered);
+        if (ended is not null)
+        {
+            var names = ended.Select(Convert.ToHexString).ToList();
+            names.ShouldBeSubsetOf(tokens.Select(Convert.ToHexString), $"{round}: only this round's sessions are ended");
+            accepted.ShouldBeSubsetOf(names, $"{round}: every session that was accepted first is named as ended");   // T-710
+            if (unanswered == 0) names.Count.ShouldBe(accepted.Count, $"{round}: and no other");
+        }
+        await using var db = database.Open();
+        (await db.Sessions.CountAsync(s => s.AccountId == account)).ShouldBe(0, $"{round}: {accepted.Count} of 8 sign-ins were accepted first, {unanswered} not answered");
+    }
+
+    private static async Task<(bool Answered, IReadOnlyList<byte[]>? Value)> AnsweredAsync(Task<IReadOnlyList<byte[]>?> call)
+    {
+        try
+        {
+            return (true, await call);
+        }
+        catch (StoreUnavailableException)
+        {
+            return (false, null);
+        }
     }
 }

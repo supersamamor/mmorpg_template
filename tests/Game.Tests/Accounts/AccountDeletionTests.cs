@@ -370,12 +370,10 @@ public sealed class AccountErasureDatabaseTests(DatabaseFixture fixture) : IClas
         for (var round = 0; round < 20; round++)
         {
             var (account, _, _, _) = await AccountAsync(Accounts);
-            var signIns = Enumerable.Range(0, 8).Select(_ => Accounts.TryAddSessionAsync(account, "hash", null, Token(), Now, Now.AddHours(1), 100, default)).ToList();
-            var ended = await Accounts.TryRequestErasureAsync(account, "hash", Now, Now.AddDays(14), default);
-            await Task.WhenAll(signIns);
-            ended!.Count.ShouldBe(signIns.Count(s => s.Result is not null), $"round {round}");
-            await using var db = Database.Open();
-            (await db.Sessions.CountAsync(s => s.AccountId == account)).ShouldBe(0, $"round {round}");
+            await RacingSignIns.CheckAsync(Database, account,
+                token => Accounts.TryAddSessionAsync(account, "hash", null, token, Now, Now.AddHours(1), 100, default),
+                () => Accounts.TryRequestErasureAsync(account, "hash", Now, Now.AddDays(14), default),
+                async () => (await Accounts.FindAccountAsync(account, default))!.EraseAfter is not null, $"round {round}");
         }
     }
 
