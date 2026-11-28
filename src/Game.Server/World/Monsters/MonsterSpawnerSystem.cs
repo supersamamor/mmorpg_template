@@ -27,11 +27,11 @@ namespace Game.Server.World.Monsters;
 /// <para>Respawn timers run whether or not anyone is near; the spawner's per-tick cost is one comparison per waiting slot. Allocation after
 /// warm-up: only the entity, its stat sheet and the event when a monster (re)spawns.</para>
 /// </remarks>
-public sealed class MonsterSpawnerSystem : ITickSystem
+public sealed class MonsterSpawnerSystem : ITickSystem, Reload.IContentReloadable
 {
     private static readonly IReadOnlyCollection<Type> Owned = [];
 
-    private readonly MonsterCatalog _catalog;
+    private MonsterCatalog _catalog;
     private readonly Dictionary<long, Slot> _byEntity = new();
     private readonly List<EntityId> _died = new();
     private readonly List<EntityId> _left = new();
@@ -39,7 +39,7 @@ public sealed class MonsterSpawnerSystem : ITickSystem
     private readonly List<SummonRequested> _summonRequests = new();
     private readonly Dictionary<long, Summoned> _summons = new();          // live summons by entity id
     private readonly List<long> _expired = new();
-    private readonly int _corpseMs;
+    private int _corpseMs;
     private SpawnEntry[] _entries = [];
     private MapGrid? _grid;
     private EventBus? _subscribed;
@@ -54,6 +54,24 @@ public sealed class MonsterSpawnerSystem : ITickSystem
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         if (corpseMs < 0) throw new ArgumentOutOfRangeException(nameof(corpseMs), corpseMs, "corpseMs must not be negative.");
         _corpseMs = corpseMs;
+    }
+
+    /// <summary>
+    /// T-801: the instance has removed every monster (corpses and summons too) before this; the slot table is built again from the grid with the
+    /// new definitions, every slot due at once, so the next tick spawns the map's monsters afresh.
+    /// </summary>
+    public void Reload(Reload.ServerContent next)
+    {
+        _catalog = next.Monsters;
+        _corpseMs = Math.Max(0, next.Balance.Death.CorpseMs);
+        _grid = null;   // Setup on the next tick
+        _entries = [];
+        _byEntity.Clear();
+        _summons.Clear();
+        _corpses.Clear();
+        _died.Clear();
+        _left.Clear();
+        _summonRequests.Clear();
     }
 
     /// <inheritdoc />

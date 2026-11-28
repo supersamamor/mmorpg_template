@@ -318,6 +318,9 @@ namespace Game.Shared.Protocol
         /// <summary><c>announcement</c> (server → client, T-806): staff's words, or a coming maintenance, for everyone playing on this server.</summary>
         public const string Announcement = "announcement";
 
+        /// <summary><c>content_changed</c> (server → client, T-801, development servers with hot reload only): the content was reloaded and the display bundle's hash is now <c>content</c>.</summary>
+        public const string ContentChanged = "content_changed";
+
         /// <summary><c>bye</c> (server → client, last message): why the server is closing the connection.</summary>
         public const string Bye = "bye";
 
@@ -325,7 +328,7 @@ namespace Game.Shared.Protocol
         public static readonly VocabularySet ClientToServer = new VocabularySet(Hello, Move, Stop, Attack, StopAttack, Respawn, Ping, Logout, PickUp, UseItem, Equip, Unequip, DropItem, InsertCard, Refine, UseSkill, LearnSkill, ChangeJob, RaiseStat, Talk, DialogueChoice, DialogueClose, AbandonQuest, ShopBuy, ShopSell, StartAutopilot, StopAutopilot, SetOutfit, Chat, Block, Unblock, Report, PartyInvite, PartyAnswer, PartyLeave, PartyKick, PartyLead, TradeAsk, TradeAnswer, TradeOffer, TradeCurrency, TradeLock, TradeUnlock, TradeConfirm, TradeCancel, GuildFound, GuildInvite, GuildAnswer, GuildLeave, GuildKick, GuildRank, GuildRanks, GuildLead, GuildNotice, GuildStorageOpen, GuildDeposit, GuildWithdraw);
 
         /// <summary>Types the server sends.</summary>
-        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Announcement, ChatLine, ChatRefused, ChatState, ChatReported, Party, PartyMembers, PartyInvited, PartyNotice, PartyRefused, TradeAsked, Trade, TradeNotice, TradeClosed, TradeRefused, Guild, GuildInvited, GuildNews, GuildRefused, GuildTags, GuildStorage, Pong, Bye);
+        public static readonly VocabularySet ServerToClient = new VocabularySet(Welcome, Snapshot, Delta, Rejected, AttackStopped, Exp, LevelUp, YouDied, Respawned, Inventory, InventoryChanged, RefineResult, Skills, Stats, Cooldown, Dialogue, DialogueEnded, ServiceOpened, Shop, QuestLog, Quest, Autopilot, Wardrobe, Announcement, ChatLine, ChatRefused, ChatState, ChatReported, Party, PartyMembers, PartyInvited, PartyNotice, PartyRefused, TradeAsked, Trade, TradeNotice, TradeClosed, TradeRefused, Guild, GuildInvited, GuildNews, GuildRefused, GuildTags, GuildStorage, ContentChanged, Pong, Bye);
 
         /// <summary>Every message type, client → server first.</summary>
         public static readonly VocabularySet All = VocabularySet.Union(ClientToServer, ServerToClient);

@@ -618,6 +618,9 @@ public static class ProtocolJson
             case PongMessage pong:
                 w.WriteNumber("seq", pong.Seq);
                 break;
+            case ContentChangedMessage changed:   // T-801
+                w.WriteString("content", changed.Content);
+                break;
             case AnnouncementMessage announcement:
                 w.WriteString("kind", announcement.Kind);
                 if (announcement.Text is { } said) w.WriteString("text", said);
@@ -1125,6 +1128,7 @@ public static class ProtocolJson
                 MessageTypes.Wardrobe => new WardrobeMessage((IReadOnlyList<string>?)owned ?? Array.Empty<string>(), (IReadOnlyList<ShownOutfit>?)chosen ?? Array.Empty<ShownOutfit>(), hidden),
                 MessageTypes.Pong => new PongMessage(seq),
                 MessageTypes.Announcement => kind is null ? null : new AnnouncementMessage(kind, text, inSeconds),
+                MessageTypes.ContentChanged => content is null ? null : new ContentChangedMessage(content),   // T-801
                 MessageTypes.ChatLine => line is null || channel is null || from is null || name is null || text is null ? null
                     : new ChatLineMessage(line.Value, channel, from.Value, name, text, to),
                 MessageTypes.ChatRefused => intent is null || reason is null ? null : new ChatRefusedMessage(intent, reason, retryAfter, channel, to, line),

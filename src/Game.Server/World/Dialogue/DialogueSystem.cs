@@ -33,11 +33,12 @@ namespace Game.Server.World.Dialogue;
 /// <para><b>Services.</b> <c>open_service</c> sets <see cref="Entity.OpenService"/>; it stays until the player leaves talking range, warps, dies, closes
 /// or talks to someone else, even after the graph has finished.</para>
 /// </remarks>
-public sealed class DialogueSystem : ITickSystem
+public sealed class DialogueSystem : ITickSystem, Reload.IContentReloadable
 {
     private static readonly IReadOnlyCollection<Type> Owned = [typeof(TalkTo), typeof(DialogueChoose), typeof(DialogueClose)];
 
-    private readonly DialogueContent _content;
+    private DialogueContent _content;
+    private bool _placeNpcs;   // T-801: the NPCs were removed for a reload; place them again on the next tick
     private readonly ISavePointStore _savePoints;
     private readonly IPlayerProgressionStore? _progressions;
     private readonly IInventoryStore? _inventories;
@@ -46,7 +47,7 @@ public sealed class DialogueSystem : ITickSystem
     private List<DialogueItemsResolved> _resolved = new();
     private List<DialogueItemsResolved> _resolving = new();
     private readonly List<Session> _scratch = new();
-    private readonly PlayerView _view;
+    private PlayerView _view;
     private readonly SortedSet<long> _stale = new();   // players whose quest standing or levels changed: their open node's choices are checked again
     private MapInstance? _instance;
     private TickContext? _context;
@@ -63,6 +64,18 @@ public sealed class DialogueSystem : ITickSystem
         _progressions = progressions;
         _inventories = inventories;
         _view = new PlayerView(new Game.Shared.Quests.QuestRules(content.Quests, content.QuestBalance.MaxActive));
+    }
+
+    /// <summary>
+    /// T-801: the new NPCs, dialogues and talk range. The instance removed the NPC entities and took the players off the map before this (their open
+    /// dialogues ended there, <c>warped</c>), so the next tick places the map's NPCs again with the new definitions.
+    /// </summary>
+    public void Reload(Reload.ServerContent next)
+    {
+        _content = next.Dialogue;
+        _view = new PlayerView(new Game.Shared.Quests.QuestRules(_content.Quests, _content.QuestBalance.MaxActive));
+        _walks.Clear();
+        _placeNpcs = _instance is not null;
     }
 
     /// <inheritdoc />
@@ -85,6 +98,7 @@ public sealed class DialogueSystem : ITickSystem
     {
         _context = context;
         if (!ReferenceEquals(_instance, context.Instance)) Setup(context);
+        else if (_placeNpcs) PlaceNpcs(context);
 
         (_resolved, _resolving) = (_resolving, _resolved);
         for (var i = 0; i < _resolving.Count; i++) OnItemsResolved(_resolving[i]);
@@ -125,8 +139,15 @@ public sealed class DialogueSystem : ITickSystem
         events.Subscribe<QuestAbandoned>(e => _stale.Add(e.Player.Value));
         events.Subscribe<PlayerProgressed>(e => _stale.Add(e.Player.Value));
 
+        PlaceNpcs(context);
+    }
+
+    private void PlaceNpcs(TickContext context)
+    {
+        _placeNpcs = false;
+        NpcCount = 0;
         // A placement of an NPC the content does not have is a boot error (hard rule 5); the validator reports it first.
-        foreach (var placement in _instance.Grid.Npcs)
+        foreach (var placement in _instance!.Grid.Npcs)
         {
             if (!_content.TryGetNpc(placement.NpcId, out _))
                 throw new InvalidOperationException($"Map '{_instance.MapId}' places unknown npc '{placement.NpcId}'.");

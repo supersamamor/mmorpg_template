@@ -45,13 +45,16 @@
 #                                                         one has the swap; a second trade ends when one walks away, and nothing moved (T-903; needs PostgreSQL like account)
 #   .\client\run-e2e.ps1 -Run guild                       a new account's character founds a guild through the guild panel, invites a second (it accepts), they talk on the guild channel,
 #                                                         the leader writes the notice and promotes the second, which leaves; the last member disbands it (T-904; needs PostgreSQL like account)
+#   .\client\run-e2e.ps1 -Run reload                      a development server with --hot-reload on its own content copy (weak monsters); the client plays, the script changes a
+#                                                         monster's display name in the copy, the server swaps the content in between ticks and says content_changed; the client shows
+#                                                         "Content changed on the server. Restart the game to see it." and still plays (T-801)
 #   .\client\run-e2e.ps1 -Run all                         play, warp, hill, ui, items, statuses, skills, stats, dialogue, quests, autopilot, account, saving, appearance, wardrobe, kick, moderation, textured, chat, bye, release (account,
 #                                                         saving, appearance, wardrobe, kick and moderation are skipped, and said so, when no database is configured)
 #   .\client\run-e2e.ps1 -Run death -Monster monster.x    gets killed, drops the socket while dead, sees the death screen again, respawns
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "reload", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -89,6 +92,7 @@ if ($LASTEXITCODE -ne 0) { throw "The textured test theme could not be written."
 Import-GodotProject $godot $client -Force -TimeoutSeconds $ImportTimeoutSeconds
 
 $script:temp = $null
+$script:reloadTemp = $null
 $script:itemsTemp = $null
 $script:statusesTemp = $null
 $script:skillsTemp = $null
@@ -193,6 +197,16 @@ function Get-QuestsContent {
 # The wardrobe run's copy (T-708): the weak monsters, and the first quest's step is only its talk, so a new character earns the outfits by accepting it and talking again.
 # Objectives are server-only data: the bundle hash does not change.
 $script:wardrobeTemp = $null
+# The reload run's copy (T-801): the weak monsters, in a folder of its own, since the run edits it while the server watches it.
+function Get-ReloadContent {
+    if ($script:reloadTemp) { return (Join-Path $script:reloadTemp "content") }
+    $script:reloadTemp = Join-Path ([IO.Path]::GetTempPath()) ("t801-" + [guid]::NewGuid().ToString("N"))
+    New-Item -ItemType Directory -Path $script:reloadTemp | Out-Null
+    Copy-Item (Get-EasyContent) (Join-Path $script:reloadTemp "content") -Recurse
+    Copy-Item (Join-Path $root "themes") (Join-Path $script:reloadTemp "themes") -Recurse
+    return (Join-Path $script:reloadTemp "content")
+}
+
 function Get-WardrobeContent {
     if ($script:wardrobeTemp) { return (Join-Path $script:wardrobeTemp "content") }
     $script:wardrobeTemp = Join-Path ([IO.Path]::GetTempPath()) ("t708-" + [guid]::NewGuid().ToString("N"))
@@ -213,10 +227,11 @@ function Get-E2EConnection {
     return $builder.get_ConnectionString()
 }
 
-function Start-GameServer([switch] $Easy, [switch] $Items, [switch] $Statuses, [switch] $Skills, [switch] $Quests, [switch] $Wardrobe, [string[]] $Extra = @()) {
+function Start-GameServer([switch] $Reload, [switch] $Easy, [switch] $Items, [switch] $Statuses, [switch] $Skills, [switch] $Quests, [switch] $Wardrobe, [string[]] $Extra = @()) {
     $log = [IO.Path]::GetTempFileName()
     $arguments = @("run", "--no-build", "--project", "src/Game.Server", "--")
-    if ($Wardrobe) { $arguments += (Get-WardrobeContent) }
+    if ($Reload) { $arguments += @((Get-ReloadContent), "--hot-reload") }
+    elseif ($Wardrobe) { $arguments += (Get-WardrobeContent) }
     elseif ($Quests) { $arguments += (Get-QuestsContent) }
     elseif ($Items) { $arguments += (Get-ItemsContent) }
     elseif ($Statuses) { $arguments += (Get-StatusesContent) }
@@ -747,6 +762,33 @@ function Invoke-Scenario([string] $Name) {
                     foreach ($one in $holder.Servers) { if (Test-Path $one.Log) { Stop-GameServer $one } }
                 }
             }
+            "reload" {
+                # T-801: the server watches its own content copy; on the client's marker the script renames a monster (a display name, so the bundle hash changes).
+                $server = Start-GameServer -Reload
+                $holder = @{ Edited = $null }
+                $run = Start-GodotClient (Get-RunClientArgs "--e2e-reload" @()) -EngineArgs $engineArgs
+                $result = Wait-GodotClient $run 180 -OnMarker {
+                    param($marker)
+                    if ($marker -eq "reload-edit") {
+                        $file = Get-ChildItem (Join-Path (Get-ReloadContent) "monsters") -Filter *.yaml | Sort-Object Name | Select-Object -First 1
+                        $text = [IO.File]::ReadAllText($file.FullName)
+                        $name = [regex]::Match($text, '(?m)^name:\s*(.+?)\s*$').Groups[1].Value
+                        [IO.File]::WriteAllText($file.FullName, ($text -replace '(?m)^name:.*$', "name: $name Reloaded"))
+                        $holder.Edited = "$($file.Name): '$name' to '$name Reloaded'"
+                        Write-Host "[run-e2e] renamed a monster in the watched copy: $($holder.Edited)"
+                    }
+                }
+                if (-not $holder.Edited) { Write-Host "[run-e2e] the client never asked for the edit"; return 1 }
+                $swapped = @(Select-String -Path $server.Log -Pattern "\[reload\] \[\S+\] content 1 swapped in")
+                $swapped | ForEach-Object { Write-Host "[run-e2e] server: $(($_.Line -split 'INFO  ')[1])" }
+                $told = Select-String -Path $server.Log -Pattern "\[reload\] told 1 session" -Quiet
+                $hash = [regex]::Match((Get-Content $server.Log -Raw), "content 1 validated .* content hash ([0-9a-f]{64})").Groups[1].Value
+                $seen = [regex]::Match($result.Text, "content_changed, new hash ([0-9a-f]{64})").Groups[1].Value
+                Write-Host "[run-e2e] server's new hash $hash; the client was told $seen"
+                if ($swapped.Count -lt 1 -or -not $told -or -not $hash -or $hash -ne $seen) { Write-Host "[run-e2e] the server did not swap, tell or hash as expected"; return 1 }
+                if (Select-String -Path $server.Log -Pattern "\[reload\] (REFUSED|NEEDS A RESTART)" -Quiet) { Write-Host "[run-e2e] the server refused the reload"; return 1 }
+                return $result.Code
+            }
             "hill" {
                 # Weak monsters, so nothing on the way to the hill gets in the way (T-220).
                 $server = Start-GameServer -Easy
@@ -873,7 +915,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "reload", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 # The account, saving and appearance runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.
@@ -912,6 +954,7 @@ finally {
     if ($script:statusesTemp) { Remove-Item $script:statusesTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:wardrobeTemp) { Remove-Item $script:wardrobeTemp -Recurse -Force -ErrorAction SilentlyContinue }
     if ($script:questsTemp) { Remove-Item $script:questsTemp -Recurse -Force -ErrorAction SilentlyContinue }
+    if ($script:reloadTemp) { Remove-Item $script:reloadTemp -Recurse -Force -ErrorAction SilentlyContinue }
 }
 if ($failed.Count -gt 0) { Write-Host "[run-e2e] FAILED: $($failed -join ', ')"; exit 1 }
 Write-Host "[run-e2e] all passed: $($runs -join ', ')$(if ($skipped.Count -gt 0) { "; SKIPPED: $($skipped -join ', ')" })"

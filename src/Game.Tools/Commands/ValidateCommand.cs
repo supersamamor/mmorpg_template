@@ -34,15 +34,20 @@ internal static class ValidateCommand
         return issues.Any(i => i.Severity == ValidationSeverity.Error) ? 1 : 0;
     }
 
-    private static IReadOnlyList<ValidationIssue> Collect(string content, string schemas, string theme)
+    /// <summary>
+    /// Every finding <c>validate</c> prints for <paramref name="content"/>. <paramref name="themes"/> is the themes folder (null: <c>themes/</c> next to the content); the content
+    /// editor (T-801) checks a copy of the content in a temporary folder against the repository's themes.
+    /// </summary>
+    internal static IReadOnlyList<ValidationIssue> Collect(string content, string schemas, string theme, string? themes = null)
     {
         // The same load and checks the server runs at boot; the schema and map scene checks are the tools' extras.
-        var boot = ContentBoot.Check(content, theme);
+        themes = Path.GetFullPath(themes ?? Path.Combine(content, "..", "themes"));
+        var boot = ContentBoot.Check(content, theme, themes);
         if (boot.Database is null) return boot.Issues;
         var issues = boot.Issues.ToList();
         issues.AddRange(SchemaCheck.Check(Path.GetFullPath(content), schemas));
-        issues.AddRange(MapSceneCheck.Check(boot.Database, Path.GetFullPath(content), Path.GetFullPath(Path.Combine(content, "..", "themes")), theme));
-        issues.AddRange(ThemeCheck.Check(boot.Database, Path.GetFullPath(Path.Combine(content, "..", "themes")), theme));
+        issues.AddRange(MapSceneCheck.Check(boot.Database, Path.GetFullPath(content), themes, theme));
+        issues.AddRange(ThemeCheck.Check(boot.Database, themes, theme));
         return issues;
     }
 

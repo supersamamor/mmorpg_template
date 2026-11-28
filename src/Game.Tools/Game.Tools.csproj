@@ -3,6 +3,10 @@
     <OutputType>Exe</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <!-- T-801: the content editor's local web server (Kestrel, loopback only) -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+  <ItemGroup>
     <PackageReference Include="System.CommandLine" />
     <PackageReference Include="JsonSchema.Net" />
   </ItemGroup>

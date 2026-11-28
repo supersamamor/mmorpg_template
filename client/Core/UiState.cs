@@ -122,6 +122,24 @@ public sealed class UiState
 
     private double _announcementEnds;
 
+    /// <summary>
+    /// <c>content_changed</c> (T-801, development servers only): the server reloaded its content and its display bundle differs from the one this build carries. v1 does not
+    /// take a bundle while it plays: the announcement line says so and stays until the game is restarted (or the server's content is back to this build's).
+    /// </summary>
+    public void OnContentChanged(ContentChangedMessage message, string ownHash)
+    {
+        if (string.Equals(message.Content, ownHash, StringComparison.Ordinal))
+        {
+            if (Announcement == UiText.ContentChanged) Announcement = string.Empty;
+        }
+        else
+        {
+            Announcement = UiText.ContentChanged;
+            _announcementEnds = double.MaxValue;
+        }
+        Version++;
+    }
+
     /// <summary>A <c>quest</c> change (T-602): accepted, a step done, completed or abandoned goes on the flash line with the quest's name.</summary>
     public void OnQuest(QuestMessage message, double now)
     {

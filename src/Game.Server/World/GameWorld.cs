@@ -46,6 +46,17 @@ public sealed class GameWorld
     /// <summary>Instances in map id order.</summary>
     public IReadOnlyList<MapInstance> Instances { get; }
 
+    /// <summary>
+    /// T-801: hands a new content set to every instance; each swaps it in between two of its own ticks (<see cref="MapInstance.RequestReload"/>), so
+    /// instances may run different sets for up to one tick. Thread-safe. The world's maps cannot change: the caller refuses a set whose maps differ.
+    /// </summary>
+    public void Reload(Reload.ContentSwap swap)
+    {
+        ArgumentNullException.ThrowIfNull(swap);
+        swap.Expect(Instances.Count);
+        foreach (var instance in Instances) instance.RequestReload(swap);
+    }
+
     /// <summary>The shared entity id source.</summary>
     public EntityIdAllocator Ids { get; } = new();
 

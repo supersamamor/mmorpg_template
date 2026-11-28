@@ -49,7 +49,7 @@ public sealed class AutoRun
         Array.IndexOf(args, "--e2e-chat") >= 0 || Array.IndexOf(args, "--e2e-chat-listen") >= 0 ||
         Array.IndexOf(args, "--e2e-party") >= 0 || Array.IndexOf(args, "--e2e-party-join") >= 0 ||
         Array.IndexOf(args, "--e2e-trade") >= 0 || Array.IndexOf(args, "--e2e-trade-join") >= 0 ||
-        Array.IndexOf(args, "--e2e-guild") >= 0 || Array.IndexOf(args, "--e2e-guild-join") >= 0 ||
+        Array.IndexOf(args, "--e2e-guild") >= 0 || Array.IndexOf(args, "--e2e-guild-join") >= 0 || Array.IndexOf(args, "--e2e-reload") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
 
     /// <summary>For a refused bundle: save a picture of the refusal screen if asked, then quit.</summary>
@@ -112,6 +112,7 @@ public sealed class AutoRun
             else if (Value("--e2e-textured") is { } other) await TexturedRunAsync(other);
             else if (Array.IndexOf(_args, "--e2e-ui") >= 0) await new UiRuns(_main, _screenshot).RunAsync();
             else if (Value("--e2e-bye") is { } bye) await new ByeRuns(_main).RunAsync(bye);
+            else if (Array.IndexOf(_args, "--e2e-reload") >= 0) await new ReloadRuns(_main, () => ShotAsync()).RunAsync();   // T-801
             else await PlayRunAsync();
             Print($"PASS in {clock.Elapsed.TotalSeconds:0.0} s");
         }

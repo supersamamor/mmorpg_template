@@ -13,21 +13,30 @@ public static class ContentBoot
     /// Loads <paramref name="contentDir"/> and validates it against the theme's asset manifest (<c>themes/</c> next to <c>content/</c>).
     /// Returns the database when there are no errors, else null; <paramref name="issues"/> holds every finding, warnings included.
     /// </summary>
-    public static ContentDatabase? Load(string contentDir, string theme, out IReadOnlyList<ValidationIssue> issues)
+    public static ContentDatabase? Load(string contentDir, string theme, out IReadOnlyList<ValidationIssue> issues) => Load(contentDir, theme, null, out issues);
+
+    /// <summary>Like <see cref="Load(string, string, out IReadOnlyList{ValidationIssue})"/> with the themes in <paramref name="themesDir"/> (null: <c>themes/</c> next to the content).</summary>
+    public static ContentDatabase? Load(string contentDir, string theme, string? themesDir, out IReadOnlyList<ValidationIssue> issues)
     {
-        var result = Check(contentDir, theme);
+        var result = Check(contentDir, theme, themesDir);
         issues = result.Issues;
         return result.Issues.Any(i => i.Severity == ValidationSeverity.Error) ? null : result.Database;
     }
 
     /// <summary>Like <see cref="Load"/> but always returns what was loaded (null only when loading itself failed) with the findings.</summary>
-    public static ContentBootResult Check(string contentDir, string theme)
+    public static ContentBootResult Check(string contentDir, string theme) => Check(contentDir, theme, null);
+
+    /// <summary>
+    /// Like <see cref="Check(string, string)"/> with the themes in <paramref name="themesDir"/> (null: <c>themes/</c> next to the content). The content
+    /// editor (T-801) checks a copy of the content in a temporary folder against the repository's themes this way.
+    /// </summary>
+    public static ContentBootResult Check(string contentDir, string theme, string? themesDir)
     {
         var load = ContentLoader.Load(contentDir);
         if (load.Database is null)
             return new ContentBootResult(null, ValidationReportFormatter.FromLoadErrors(load.Errors));
 
-        var themesDir = Path.Combine(Path.GetFullPath(contentDir), "..", "themes");
+        themesDir ??= Path.Combine(Path.GetFullPath(contentDir), "..", "themes");
         var manifest = AssetManifest.PathFor(themesDir, theme);
         IReadOnlySet<string> assetKeys;
         AudioManifest audio;

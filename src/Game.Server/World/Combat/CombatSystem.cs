@@ -42,7 +42,7 @@ namespace Game.Server.World.Combat;
 /// <para><b>Allocation</b> after warm-up: none per resolved hit (one reused <see cref="AttackContext"/>, pooled damage logs); only the events
 /// it raises, the chase <see cref="MoveTo"/> intents, and on a kill the progression results and the ground item entities.</para>
 /// </remarks>
-public sealed partial class CombatSystem : ITickSystem
+public sealed partial class CombatSystem : ITickSystem, Reload.IContentReloadable
 {
     private static readonly IReadOnlyCollection<Type> Owned = [typeof(AttackTarget), typeof(StopAttack), typeof(Respawn), typeof(UseSkill), typeof(LearnSkill), typeof(ChangeJob), typeof(RaiseStat), typeof(Admin.StaffUnstick)];
     private static readonly int AspdStat = StatIndex.IndexOf(DerivedStats.Aspd);
@@ -50,11 +50,11 @@ public sealed partial class CombatSystem : ITickSystem
     private static readonly int SpRegenStat = StatIndex.IndexOf(DerivedStats.SpRegen);
     private const double FloorTolerance = 1e-9;   // as StatSheet: a sum of 0.1 steps that is 4.9999999999 means 5
 
-    private readonly CombatContent _content;
+    private CombatContent _content;
     private readonly IPlayerProgressionStore _progressions;
     private readonly ISavePointStore? _savePoints;
-    private readonly ProgressionRules _progression;
-    private readonly Func<ProgressionState> _newCharacter;
+    private ProgressionRules _progression;
+    private Func<ProgressionState> _newCharacter;
     private readonly AttackContext _attack = new();
     private readonly FormulaContext _jobContext = new();
     private readonly Dictionary<long, Combatant> _combatants = new();
@@ -68,7 +68,7 @@ public sealed partial class CombatSystem : ITickSystem
     private readonly List<RolledDrop> _rolled = new();
     private readonly List<Entity> _eligible = new();
     private readonly Party.PartyRoster? _parties;                     // T-902: who is in which party (the party service writes it)
-    private readonly FormulaContext _partyContext;
+    private FormulaContext _partyContext;
     private long[] _damage = new long[8];
     private long[] _baseShares = new long[8];
     private long[] _jobShares = new long[8];
@@ -107,6 +107,24 @@ public sealed partial class CombatSystem : ITickSystem
         var startJob = content.Balance.NewCharacter.StartJobId;
         _newCharacter = () => _progression.NewCharacter(startJob);
         foreach (var reason in AttackReasons.All.Ordered) _refused[reason] = 0;
+    }
+
+    /// <summary>
+    /// T-801: the new combat content, with the resolver and the effect runner built again over it. Monsters were removed and players taken off the map
+    /// before this, so no combatant, chase or cast of the old content is left; statuses live on their bearers, and the players' end as they come back.
+    /// </summary>
+    public void Reload(Reload.ServerContent next)
+    {
+        var content = next.Combat;
+        _content = content;
+        _partyContext = content.PartyExp.NewContext();
+        _progression = new ProgressionRules(content.Balance, content.Progression);
+        var startJob = content.Balance.NewCharacter.StartJobId;
+        _newCharacter = () => _progression.NewCharacter(startJob);
+        if (_instance is null) return;   // not set up yet: the first tick builds them from the new content
+        _resolver = new CombatResolver(_content.Rules, _instance.Random);
+        _host = new EffectHost(this);
+        _runner = new EffectRunner(_content.Rules, _content.Effects, _host, _instance.Random);
     }
 
     /// <inheritdoc />

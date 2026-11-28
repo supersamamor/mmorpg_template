@@ -313,6 +313,7 @@ public class ProtocolJsonTests
         { "bye banned", new ByeMessage("banned", 3600), """{"type":"bye","reason":"banned","retry_after":3600}""" },
         { "announcement", new AnnouncementMessage("staff", "Noon.", null), """{"type":"announcement","kind":"staff","text":"Noon."}""" },
         { "announcement maintenance", new AnnouncementMessage("maintenance", null, 300), """{"type":"announcement","kind":"maintenance","in":300}""" },
+        { "content_changed", new ContentChangedMessage("f5579e66c2db05f8"), """{"type":"content_changed","content":"f5579e66c2db05f8"}""" },   // T-801
         { "chat_line", new ChatLineMessage(812, "map", 42, "Ada", "hello"), """{"type":"chat_line","line":812,"channel":"map","from":42,"name":"Ada","text":"hello"}""" },
         { "chat_line whisper", new ChatLineMessage(813, "whisper", 42, "Ada", "psst", "Bo"), """{"type":"chat_line","line":813,"channel":"whisper","from":42,"name":"Ada","to":"Bo","text":"psst"}""" },
         { "chat_refused muted", new ChatRefusedMessage("chat", "muted", 240, "map"), """{"type":"chat_refused","intent":"chat","reason":"muted","retry_after":240,"channel":"map"}""" },

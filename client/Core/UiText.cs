@@ -134,6 +134,9 @@ public static class UiText
     /// <summary>The flash line when staff gave or took items or currency (T-806).</summary>
     public const string StaffChangedItems = "A game master changed your items.";
 
+    /// <summary>T-801: a development server reloaded content this build shows differently.</summary>
+    public const string ContentChanged = "Content changed on the server. Restart the game to see it.";
+
     // ---- chat (T-901) ----
 
     /// <summary>The HUD button that opens the chat, and the panel's title.</summary>
