@@ -1679,13 +1679,12 @@ public sealed class AutoRun
 
     /// <summary>
     /// T-811's run, against the battle content copy (weak monsters with 60 HP worth 3000 EXP, so one kill brings skill points, and support skills cast whenever HP is missing):
-    /// one kill by hand, learn Second Wind (it lands on the skill bar), stand next to the slimes, pick a fight choice and press the HUD's Auto toggle. The server fights on its
+    /// one kill by hand, learn the first job's supportive skill (it lands on the skill bar), stand next to the slimes, pick a fight choice and press the HUD's Auto toggle. The server fights on its
     /// own: at least two kills, the skill used at least once (its cooldown), never farther from where it started than the area; then a tap on the ground ends it by manual input.
     /// </summary>
     private async Task AutoBattleRunAsync()
     {
         const int Area = 6 + 1;   // the content's auto_battle.radius_cells, and the one cell combat stands beside a target in it
-        const string Heal = "skill.second_wind";
         await LoginAsync();
         var hud = _main.Hud!;
         var auto = Session.Autopilot;
@@ -1703,11 +1702,15 @@ public sealed class AutoRun
             await SecondsAsync(1);
         }
         Check(book.Points >= 1, $"skill points after a kill (points {book.Points})");
+        // The first job's supportive skill (a heal in the sample): the autopilot casts it on the character, so the run uses a skill whatever the monsters do.
+        var heal = book.Rows.FirstOrDefault(r => r.State == SkillState.Learnable && _main.Bundle!.Skill(r.SkillId) is { Passive: false, Friendly: true, Ground: false })?.SkillId;
+        Check(heal is not null, "a learnable supportive skill");
+        var Heal = heal!;
         Session.LearnSkill(Heal);
-        await UntilAsync(() => book.Level(Heal) >= 1, 10, "Second Wind learned");
+        await UntilAsync(() => book.Level(Heal) >= 1, 10, "the supportive skill learned");
         await FramesAsync(3);
         var slot = book.ActiveSkills.ToList().IndexOf(Heal);
-        Check(slot >= 0 && slot < hud.HotbarSlots.Count && hud.HotbarSlots[slot].Text.Contains(_main.Bundle!.NameOf(Heal), StringComparison.Ordinal), "Second Wind is on the skill bar");
+        Check(slot >= 0 && slot < hud.HotbarSlots.Count && hud.HotbarSlots[slot].Text.Contains(_main.Bundle!.NameOf(Heal), StringComparison.Ordinal), "the supportive skill is on the skill bar");
 
         // Next to the slimes, standing still.
         for (var step = 0; step < 20; step++)
@@ -1775,7 +1778,7 @@ public sealed class AutoRun
         Print($"battle: went through {string.Join(" -> ", states.Select(x => x.Replace("running/", string.Empty)))}");
         Check(auto.On, $"the run went on by itself (it ended with {auto.Reason})");
         Check(kills >= 2, $"at least two kills on its own ({kills})");
-        Check(skillUsed, "Second Wind was cast at least once");
+        Check(skillUsed, $"{_main.Bundle!.NameOf(Heal)} was cast at least once");
         Check(farthest <= Area, $"it never left the area ({farthest} cells, at most {Area})");
         Check(states.Any(s => s.EndsWith(AutopilotActivities.Fighting, StringComparison.Ordinal)), "it said fighting");
 
