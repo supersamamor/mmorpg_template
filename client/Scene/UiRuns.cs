@@ -355,6 +355,15 @@ public sealed class UiRuns
                     foreach (var name in Hud.TrackerOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the long quest tracker covers {name}");
                     // The autopilot indicator (T-605), paused with its longest line, must lie over nothing; the plain running one is shorter and trimmed the same way.
                     foreach (var name in Hud.AutopilotOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the autopilot indicator covers {name}");
+                    if (what == "playing")
+                    {
+                        // T-811: the Auto toggle and its longest fight choice in the indicator's place (they never show together), held to the same rules.
+                        Hud.ShowAutoBattleSample(true);
+                        await FramesAsync(2);
+                        foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}, Auto toggle shown: {problem}");
+                        foreach (var name in Hud.AutoBattleOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the Auto toggle: {name}");
+                        Hud.ShowAutoBattleSample(false);
+                    }
                     // T-901: the chat strip lies over no other part of the HUD, and with the keyboard up the open panel's field and buttons stay above it.
                     foreach (var name in Hud.ChatStripOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the chat strip: {name}");
                     if (Hud.Chat is { Open: true, SimulatedKeyboard: { } share } chat)

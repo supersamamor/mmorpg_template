@@ -531,6 +531,35 @@ Dialogue graphs, NPCs and their services are T-601; quests are T-602. The sectio
   instance share `searches_per_tick` searches, each within `movement`'s limits; a run whose search failed waits 3 s before the next; what no walk leads to is ruled out without a search.
 - **Limits.** Monsters never block and are never avoided on the way; a monster that moves around all the time is only re-chosen when a fight ends; a `collect` hunts the nearest source, however dangerous; parties are not considered.
 
+#### 6.4.3 Auto-battle (T-811)
+The autopilot's second mode: no quest, the server fights the monsters around where the player turned it on, with the skill bar, until it ends. It is the same run on the same system
+(`AutopilotSystem.Battle.cs` beside the hunt), so everything §6.4.2 says about deciding, intents, skills, searches and ending holds; only what differs is here. Numbers: `balance.yaml` `auto_battle`
+(and `autopilot` for the shared ones); terms: VOCABULARY "Auto-battle ...".
+- **One run, either mode.** `start_autopilot` with `battle` (an "Auto-battle filters" term) and no quests starts it; a run in progress of either mode is replaced (a quest run's walk and fight are
+  stopped first, so its journey does not carry the battle away), and a quest start replaces a battle. Refusals: `battle_disabled` (`auto_battle.enabled`), `dead`, `time_limit`, `quests_given` (both at
+  once), `unknown_filter`, then the skill bar's as for a quest run. Its `autopilot` status has **no quest**: that is how the client tells the modes apart (§10). `doing`: `fighting`, `gathering`, `returning`, `waiting`.
+- **The anchor and the area.** The cell it was started on. It fights only monsters within `auto_battle.radius_cells` (Chebyshev) of the anchor, outside safe zones, not avoided (`autopilot.avoid_ms`), within
+  sight of the player and walkable to: the nearest by walking distance (one bounded search, shared `searches_per_tick`). The radius is at most half of what every player is sure to see, so the whole area is in
+  view from anywhere in it. Its own walks (`MoveTo`) only go to the anchor; combat's approach stands it beside a target in the area, so the character is at most one cell outside it, or `retaliate_extra_cells` + 1
+  for a retaliation. A target that leaves the area (or the filter) is let go of with `StopAttack`, so combat never chases it away. With nothing in reach it walks back to the anchor (`returning`) and waits there
+  (`waiting`) for respawns.
+- **Retaliation.** As at a quest's hunting ground: whatever hit it within `autopilot.retaliate_ms` is fought first, up to `auto_battle.retaliate_extra_cells` beyond the radius (3 in the sample: a monster that
+  strikes from just outside is answered, nothing draws it farther). Held to the filter like everything else.
+- **The filter** (`AutopilotRules.Fights`, pure): never more than `auto_battle.max_levels_above` levels above the character's base level (lower ones always); never a boss (`MonsterDef.boss`, server only) unless
+  the filter is `with_bosses`; with `attackers`, only what hit it lately (no proactive search at all). The client offers the three; the server checks the term and never fights what it refuses.
+- **Loot.** With `auto_battle.loot`, between fights it picks up its own kills' drops (`GroundItem.Owner` is the character and the loot priority lets it) lying in the area within `autopilot.gather_range`,
+  through `PickUp` like a player. Others' drops are left alone. A drop that does not fit (`inventory_full`, `too_heavy`) or a load too heavy to fight ends the run `bag_full`, as the quest autopilot does: a
+  bag that cannot take its own loot is the player's to sort out, and going on would leave its drops to others.
+- **Staying alive.** No consumables. Supportive skills on the bar are cast as for a quest run (a heal below `autopilot.support_below_percent`). Below `auto_battle.stop_below_hp_percent` of the maximum HP it first
+  casts a supportive skill that still has a use; when none has, it **stops** (`low_hp`) rather than pausing: a paused character keeps standing in the fight, while a stop hands it back at once and the flash says why.
+- **Ends.** As §6.4.2 (the player's own order, `stop_autopilot`, death, leaving the world, the connection's end, the shared daily limit, a full bag), and: arriving anywhere (a warp, another map, a same-map warp)
+  ends it `left_area`, because the anchor is the place the player chose; no kill for `auto_battle.idle_stop_ms` ends it `nothing_to_fight`, so an empty area does not use up the day. It never pauses.
+- **Daily limit: shared.** Auto-battle counts against `autopilot.daily_limit_minutes` with the quest autopilot, in the same `AutopilotUsage` saved with the character (T-702): both are the server playing for the
+  player, a limit of its own would let a fork's cap be doubled by switching modes, and it needs no new saved state (`Persistence/**`).
+- **Cost** (Release, sample meadow, the system's share of a tick, on a loaded development PC): one run 20 us on average; 100 runs on one spot of the slimes 1.1 ms (10.8 us a run; most wait for respawns,
+  every think looks at every entity), within the 5 ms bound the quest autopilot's test sets. Searches never exceed `searches_per_tick`.
+- **Limits.** Parties are not considered (two party members each fight their own nearest; sharing targets is a follow-up); monsters on the way back to the anchor are not avoided.
+
 ### 6.5 Progression
 Base level + job level, separate EXP tables. Stat points per base level and skill points
 per job level, stat point cost, the stat range and combat clamps come from `balance.yaml`
@@ -977,6 +1006,12 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   **Only the server's word:** the state is the last `autopilot` message, reset at a new login and told again after a resume; the client never ends, pauses or restarts a run. It sends no message of its own that
   counts as manual input (the dialogue and shop panels send `dialogue_close` only from their Close buttons); the dialogue a turn-in opens stays down while a run plays, so it cannot cover the indicator or be
   pressed by mistake (a paused run shows it).
+- **Auto-battle** (T-811, §6.4.3; the same `AutopilotModel` and indicator). **Toggle:** while no run is on, the indicator's place shows two 48 dp buttons: **Auto**, which sends `start_autopilot` with no
+  quests, the skill bar as for a quest run and `battle` (the fight choice), and the **fight choice** beside it ("Nearby", "Attackers", "+ Bosses"), whose tap picks the next one; the choice is kept in memory
+  only, like the ticks. Sharing the indicator's place means the toggle takes no room of its own and the two never show together. **Indicator:** a status without a quest is auto-battle: "Stop auto-battle:
+  fighting" / "returning" / "waiting" (or "gathering") over "Around where it started"; a tap sends `stop_autopilot`. Ends and refusals go on the flash line in auto-battle's words ("Auto-battle stopped: your HP is
+  low.", "... you left the area.", "... nothing to fight here.", "Auto-battle is switched off here."): a refusal is told as auto-battle's when the last start sent was one. Only the server's word decides what the
+  indicator shows. In the `-Run ui` matrix (the toggle with its longest choice in the indicator's place, held to the indicator's rule: it covers nothing); the `battle` e2e run measures its draw calls and allocations.
 - **Where the client's own words live (ADR-002 row 120).** In `client/Core/UiText.cs`: one static class of constants and small formatting functions in English, and nowhere
   else (a test fails on a literal assigned to a text property in `client/Scene`). Why: the refusal and update screens must read even when the bundle, theme or any data
   file is missing or broken, which rules out loading them; the pure core and its tests can use them; a typo or a missing word is a compile error; and the number of
@@ -1526,7 +1561,7 @@ A headless run of the same (no draw calls or triangles without a renderer) gave 
   | `shop_buy` | C→S | `item` (a stock item id), `quantity`: buy from the open shop; the price is the server's. Comes back `inventory_changed` (`shop_buy`, with the new `currency`) or `rejected` (`intent` `shop_buy`, `reason` an "Item reasons" term, `item`) (T-603) |
   | `shop_sell` | C→S | `entry` (a carried inventory entry), `quantity`: sell to the open shop at the item's sell price. Comes back `inventory_changed` (`shop_sell`) or `rejected` (`intent` `shop_sell`, `entry`) (T-603) |
   | `abandon_quest` | C→S | `quest`: drop an active quest, its progress is lost; may come back `rejected` (`not_active`, with `quest`) (T-602) |
-  | `start_autopilot` | C→S | `quests` (active quest ids, in the order to play), `skills` (`[["skill.x",level],...]`: the shortcut slots in order; level 0 = the learned one; may be left out). Replaces a run in progress; may come back `rejected` with an "Autopilot reasons" term and the `quest` or `skill` (T-604) |
+  | `start_autopilot` | C→S | `quests` (active quest ids, in the order to play), `skills` (`[["skill.x",level],...]`: the shortcut slots in order; level 0 = the learned one; may be left out). Replaces a run in progress; may come back `rejected` with an "Autopilot reasons" term and the `quest` or `skill` (T-604). With `battle` (an "Auto-battle filters" term; `quests` then empty or left out) it starts auto-battle around the cell the character stands on; refusals may also carry an "Auto-battle reasons" term (T-811) |
   | `stop_autopilot` | C→S | none: switch it off; ignored when it is off (T-604) |
   | `set_outfit` | C→S | either `slot` (an "Outfit slots" term) and `outfit` (left out: nothing), or `hidden` (true hides every outfit, false shows the choices again); a request, it may come back `rejected` (`intent` `set_outfit`, an "Outfit reasons" term, `slot`, `item` the outfit) (T-708) |
   | `chat` | C→S | `channel` (a "Chat channels" term a player may send on), `to` (a whisper's character name, any letter case), `text`: an intent; the server answers with `chat_line` to everyone it reaches (the sender included) or `chat_refused` (T-901, "Chat" below) |
@@ -1576,7 +1611,7 @@ A headless run of the same (no draw calls or triangles without a renderer) gave 
   | `quest_log` | S→C (owner) | `active` (`[{quest, step, objectives:[{type, target?, have, need}], held?}]`, by id; `step` indexes the bundle's step texts), `completed` (quest ids), `offer`, `turn_in` (NPC ids for the markers). After every snapshot and whenever the markers change; it replaces what the client had (T-602) |
   | `quest` | S→C (owner) | `change` (a "Quest changes" term), `quest`, `state` (the quest as it is now, the shape of an `active` entry; absent for `completed` and `abandoned`) (T-602) |
   | `wardrobe` | S→C (owner) | `owned` (outfit ids the content has, by id), `chosen` (`{"<slot>":"outfit.x"}`, also while hidden), `hidden` (only when true). After every snapshot and every change; it replaces what the client had (T-708) |
-  | `autopilot` | S→C (owner) | `mode` (an "Autopilot modes" term), `quest` (while running or paused), `doing` (an "Autopilot activities" term, while running), `reason` (why it paused or ended). On change only, and once after the first snapshot of a connection that took over a character that has had a run. Never anything about monsters, spawns or routes (T-604) |
+  | `autopilot` | S→C (owner) | `mode` (an "Autopilot modes" term), `quest` (while running or paused; none while running or paused means auto-battle, T-811), `doing` (an "Autopilot activities" term, while running), `reason` (why it paused or ended). On change only, and once after the first snapshot of a connection that took over a character that has had a run. Never anything about monsters, spawns or routes (T-604) |
   | `skills` | S→C (owner) | `job`, `points` (unspent), `levels` (`[["skill.x",2],...]`), `cooldowns` (`[["skill.x",ms left],...]`), `jobs` (the jobs `change_job` would accept now). After every snapshot, a learn, a job change and a level (T-502) |
   | `stats` | S→C (owner) | `points` (unspent stat points), `stats` (`[["str",3,2],...]`: stat id, base value, the cost of its next +1, 0 at the maximum), `derived` (`[["atk",12],...]`: `DerivedStats.Panel`, floored from the sheet). After every snapshot, a raise, a stat reset, a level, a job change, a learned skill, a skill reset and a gear change (T-503). The client never computes a cost or a derived value |
   | `cooldown` | S→C (owner) | `skill`, `ms`: the skill went on cooldown when its cast ended (T-502) |

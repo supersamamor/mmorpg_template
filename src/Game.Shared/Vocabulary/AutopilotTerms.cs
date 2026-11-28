@@ -31,11 +31,17 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>talking</c>: with the NPC, or turning the step in.</summary>
         public const string Talking = "talking";
 
-        /// <summary><c>waiting</c>: at the hunting ground with nothing left to hunt, until it respawns.</summary>
+        /// <summary><c>waiting</c>: at the hunting ground (auto-battle: at the anchor) with nothing left to fight, until something respawns.</summary>
         public const string Waiting = "waiting";
 
+        /// <summary><c>fighting</c> (auto-battle, T-811): after a monster within the area, or fighting it.</summary>
+        public const string Fighting = "fighting";
+
+        /// <summary><c>returning</c> (auto-battle, T-811): walking back to the anchor, with nothing in reach.</summary>
+        public const string Returning = "returning";
+
         /// <summary>Every term in this category, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(Travelling, Hunting, Gathering, Talking, Waiting);
+        public static readonly VocabularySet All = new VocabularySet(Travelling, Hunting, Gathering, Talking, Waiting, Fighting, Returning);
     }
 
     /// <summary>
@@ -149,7 +155,55 @@ namespace Game.Shared.Vocabulary
         /// <summary><c>quest_abandoned</c>: the player dropped the quest it was playing.</summary>
         public const string QuestAbandoned = "quest_abandoned";
 
+        /// <summary><c>low_hp</c> (auto-battle, T-811): HP fell below <c>auto_battle.stop_below_hp_percent</c> and no shortcut skill could heal.</summary>
+        public const string LowHp = "low_hp";
+
+        /// <summary><c>left_area</c> (auto-battle, T-811): the character arrived somewhere else (a warp, a map change), away from the anchor.</summary>
+        public const string LeftArea = "left_area";
+
+        /// <summary><c>nothing_to_fight</c> (auto-battle, T-811): no kill for <c>auto_battle.idle_stop_ms</c>.</summary>
+        public const string NothingToFight = "nothing_to_fight";
+
         /// <summary>Every term in this category, in documentation order.</summary>
-        public static readonly VocabularySet All = new VocabularySet(Finished, Stopped, ManualInput, Died, Logout, Disconnected, BagFull, TimeLimit, QuestAbandoned);
+        public static readonly VocabularySet All = new VocabularySet(Finished, Stopped, ManualInput, Died, Logout, Disconnected, BagFull, TimeLimit, QuestAbandoned, LowHp, LeftArea,
+            NothingToFight);
+    }
+
+    /// <summary>
+    /// What an auto-battle run fights (T-811): the <c>battle</c> of a <c>start_autopilot</c>. Every one also keeps to the level band (<c>auto_battle.max_levels_above</c>).
+    /// VOCABULARY.md: "Auto-battle filters".
+    /// </summary>
+    public static class AutoBattleFilters
+    {
+        /// <summary><c>nearby</c>: every monster in the area that is not a boss.</summary>
+        public const string Nearby = "nearby";
+
+        /// <summary><c>attackers</c>: only a monster that hit the character within <c>autopilot.retaliate_ms</c>, not a boss.</summary>
+        public const string Attackers = "attackers";
+
+        /// <summary><c>with_bosses</c>: every monster in the area, bosses too.</summary>
+        public const string WithBosses = "with_bosses";
+
+        /// <summary>Every term in this category, in documentation order.</summary>
+        public static readonly VocabularySet All = new VocabularySet(Nearby, Attackers, WithBosses);
+    }
+
+    /// <summary>
+    /// Why an auto-battle start was refused (T-811), beside the <see cref="AutopilotReasons"/> it shares (<c>dead</c>, <c>time_limit</c> and the skill ones): on the wire as
+    /// <c>rejected</c> with <c>intent</c> <c>start_autopilot</c>. Nothing changed. VOCABULARY.md: "Auto-battle reasons".
+    /// </summary>
+    public static class AutoBattleReasons
+    {
+        /// <summary><c>battle_disabled</c>: <c>auto_battle.enabled</c> is false.</summary>
+        public const string BattleDisabled = "battle_disabled";
+
+        /// <summary><c>unknown_filter</c>: the <c>battle</c> is not an "Auto-battle filters" term.</summary>
+        public const string UnknownFilter = "unknown_filter";
+
+        /// <summary><c>quests_given</c>: a start is either quests or a battle, not both.</summary>
+        public const string QuestsGiven = "quests_given";
+
+        /// <summary>Every term in this category, in documentation order.</summary>
+        public static readonly VocabularySet All = new VocabularySet(BattleDisabled, UnknownFilter, QuestsGiven);
     }
 }

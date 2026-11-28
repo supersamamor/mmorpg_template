@@ -464,7 +464,7 @@ public sealed class ClientSession : IViewSink, IChatSink
                 if (Entity is { } seller) _gateway.Enqueue(new ShopSell(seller, sell.Entry, sell.Quantity));
                 break;
             case StartAutopilotMessage start:
-                if (Entity is { } starter) _gateway.Enqueue(new StartAutopilot(starter, start.Quests, start.Skills));
+                if (Entity is { } starter) _gateway.Enqueue(new StartAutopilot(starter, start.Quests, start.Skills, start.Battle));
                 break;
             case StopAutopilotMessage:
                 if (Entity is { } stopper) _gateway.Enqueue(new StopAutopilot(stopper, AutopilotStops.Stopped));

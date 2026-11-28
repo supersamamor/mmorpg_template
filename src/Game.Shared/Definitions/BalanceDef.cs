@@ -61,6 +61,9 @@ namespace Game.Shared.Definitions
         /// <summary>Quest autopilot (T-604, ARCHITECTURE §6.4.2).</summary>
         public AutopilotBalanceDef Autopilot { get; init; } = new AutopilotBalanceDef();
 
+        /// <summary>Auto-battle, the autopilot's second mode (T-811, ARCHITECTURE §6.4.3).</summary>
+        public AutoBattleBalanceDef AutoBattle { get; init; } = new AutoBattleBalanceDef();
+
         /// <summary>Parties (T-902, ARCHITECTURE §6.9).</summary>
         public PartyBalanceDef Party { get; init; } = new PartyBalanceDef();
 

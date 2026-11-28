@@ -179,6 +179,21 @@ autopilot:
   retaliate_ms: 3000
   # A monster that could not be reached (or an item that could not be taken) is left alone for 10 seconds.
   avoid_ms: 10000
+auto_battle:
+  # Auto-battle (T-811): the autopilot's second mode fights the monsters around where it was started. Thinking, searches, skills, retaliation and the daily limit are autopilot's above.
+  enabled: true
+  # Six cells around the anchor: half of what every player is sure to see (12), so the whole area is in view from anywhere in it, and about one spawn area of the sample meadow.
+  radius_cells: 6
+  # Whatever hit the character is fought up to three cells beyond that, so a monster that strikes from just outside is answered, but nothing draws the character far away.
+  retaliate_extra_cells: 3
+  # Nothing more than five levels above the character: about where a fresh character's hits start to miss and a fight takes more than one heal.
+  max_levels_above: 5
+  # It picks up its own kills' drops in the area (what the loot priority gives it first); a drop that does not fit ends the run, as the quest autopilot does with a full bag.
+  loot: true
+  # Below a fifth of its HP, with no heal on the skill bar left to cast, it stops and hands the fight back: one more hard hit could kill it.
+  stop_below_hp_percent: 20
+  # Five minutes without a kill: far longer than any respawn (20 s), so an empty area does not use up the day.
+  idle_stop_ms: 300000
 characters:
   # Three characters per account: one per job path to try, and a small list that fits the character-select screen of a phone without scrolling far.
   max_slots: 3

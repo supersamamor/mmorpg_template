@@ -16,7 +16,8 @@ using Game.Shared.World;
 namespace Game.Server.World.Autopilot;
 
 /// <summary>
-/// Plays a player's ticked quests on the server (T-604, ARCHITECTURE §6.4.2): travels, hunts, gathers, walks, talks and turns in, one quest after the other. Owns
+/// Plays a player's ticked quests on the server (T-604, ARCHITECTURE §6.4.2): travels, hunts, gathers, walks, talks and turns in, one quest after the other. Its second mode,
+/// auto-battle (T-811, §6.4.3), fights the monsters around the cell it was started on with the same skills, intents and limits. Owns
 /// <see cref="StartAutopilot"/>, <see cref="StopAutopilot"/> and <see cref="ManualInput"/>. Runs after the quest system, before the AOI.
 /// </summary>
 /// <remarks>
@@ -146,9 +147,11 @@ public sealed partial class AutopilotSystem : ITickSystem, Reload.IContentReload
     private void Start(Entity player, StartAutopilot start)
     {
         if (!_progressions.TryGet(player.Id, out var state)) return;
-        var usage = player.AutopilotUsage ??= new AutopilotUsage();
+        var usage = player.AutopilotUsage ??= new AutopilotUsage();   // auto-battle counts against the same daily limit (T-811)
         usage.Roll(_clock.NowMilliseconds);
-        var refusal = AutopilotRules.CheckStart(_balance, player.Dead, usage.UsedMs, state, _content.Quests, SkillOf, start.Quests, start.Skills);
+        var refusal = start.Battle is { } filter
+            ? AutopilotRules.CheckBattleStart(_content.Battle, _balance, player.Dead, usage.UsedMs, state, SkillOf, filter, start.Quests, start.Skills)
+            : AutopilotRules.CheckStart(_balance, player.Dead, usage.UsedMs, state, _content.Quests, SkillOf, start.Quests, start.Skills);
         if (refusal is { } no)
         {
             _context!.Publish(new AutopilotRefused(player.Id, no.Reason, no.Quest, no.Skill));
@@ -160,9 +163,15 @@ public sealed partial class AutopilotSystem : ITickSystem, Reload.IContentReload
             _content.TryGetSkill(start.Skills[i].Skill, out var skill);
             slots[i] = new AutopilotRun.Slot(start.Skills[i].Skill, start.Skills[i].Level, skill);
         }
-        var run = new AutopilotRun(player, start.Quests.ToArray(), slots, usage);
+        var run = new AutopilotRun(player, start.Battle is null ? start.Quests.ToArray() : [], slots, usage);
+        if (start.Battle is { } fights) run.Battle = new AutopilotRun.AutoBattle(fights, _instance!.MapId, player.Cell);
         run.ResetPlan(_balance.LegCells);
-        if (RunOf(player.Id) is { Talk: not AutopilotRun.TalkState.None }) Send(new DialogueClose(player.Id));   // replaced
+        if (RunOf(player.Id) is { } replaced)
+        {
+            // T-811: between the two modes the old run's walk or fight is not the new one's (a quest journey would carry an auto-battle away from its anchor).
+            if ((replaced.Battle is null) != (run.Battle is null)) Halt(replaced);
+            else if (replaced.Talk != AutopilotRun.TalkState.None) Send(new DialogueClose(player.Id));
+        }
         _runs[player.Id.Value] = run;
         player.Autopilot = run;
         Tell(run, new AutopilotStatus(AutopilotModes.Running, run.QuestId, AutopilotActivities.Waiting, null));
@@ -235,7 +244,7 @@ public sealed partial class AutopilotSystem : ITickSystem, Reload.IContentReload
             Stop(run, AutopilotStops.Died);
             return;
         }
-        if (run.QuestAbandoned)
+        if (run.Battle is null && run.QuestAbandoned)
         {
             Stop(run, AutopilotStops.QuestAbandoned);
             return;
@@ -254,11 +263,16 @@ public sealed partial class AutopilotSystem : ITickSystem, Reload.IContentReload
         CountDown(run, deltaMs);
 
         if (!_progressions.TryGet(run.Player.Id, out var state)) return;
-        if (!state.ActiveQuests.TryGetValue(run.QuestId, out var progress))
+        if (run.Battle is not null)
+        {
+            StepBattle(run, state);
+            return;
+        }
+        if (!state.ActiveQuests.TryGetValue(run.QuestId!, out var progress))
         {
             // The event that says why (completed or abandoned) comes at the end of this tick; without one (it came on another map) the log decides.
             if (!run.QuestDone && ++run.GoneTicks < GoneTicks) return;
-            if (run.QuestDone || state.CompletedQuests.Contains(run.QuestId)) NextQuest(run, state);
+            if (run.QuestDone || state.CompletedQuests.Contains(run.QuestId!)) NextQuest(run, state);
             else Stop(run, AutopilotStops.QuestAbandoned);
             return;
         }
@@ -319,7 +333,7 @@ public sealed partial class AutopilotSystem : ITickSystem, Reload.IContentReload
     {
         if (run.Talk == AutopilotRun.TalkState.Open) CloseTalk(run);
         do run.Index++;
-        while (run.Index < run.Quests.Length && !state.ActiveQuests.ContainsKey(run.QuestId));   // done on the way, or dropped meanwhile
+        while (run.Index < run.Quests.Length && !state.ActiveQuests.ContainsKey(run.QuestId!));   // done on the way, or dropped meanwhile
         if (run.Index >= run.Quests.Length)
         {
             run.Index = run.Quests.Length - 1;
@@ -559,7 +573,15 @@ public sealed partial class AutopilotSystem : ITickSystem, Reload.IContentReload
         events.Subscribe<MonsterKilled>(e =>
         {
             for (var i = 0; i < e.Credited.Count; i++)
-                if (RunOf(e.Credited[i]) is { Plan: { } plan } run && plan.Monsters.Contains(e.MonsterId)) run.IdleMs = 0;
+            {
+                if (RunOf(e.Credited[i]) is not { } run) continue;
+                if (run.Battle is not null)
+                {
+                    run.IdleMs = 0;   // T-811: any credited kill is progress
+                    run.Wake = true;
+                }
+                else if (run.Plan is { } plan && plan.Monsters.Contains(e.MonsterId)) run.IdleMs = 0;
+            }
         });
         events.Subscribe<ItemAcquired>(e =>
         {
@@ -610,6 +632,13 @@ public sealed partial class AutopilotSystem : ITickSystem, Reload.IContentReload
     private void OnEntered(EntityEnteredMap e)
     {
         if (e.Kind != EntityKind.Player || !_instance!.TryGetEntity(e.Entity, out var player) || player.Autopilot is not { Active: true } run) return;
+        if (run.Battle is not null)
+        {
+            // T-811: auto-battle fights around its anchor; somewhere else (a warp, another map) it has nothing to do. Ended, not carried on: the player chose that place.
+            _runs.Remove(e.Entity.Value);
+            Tell(run, new AutopilotStatus(AutopilotModes.Off, null, null, AutopilotStops.LeftArea));
+            return;
+        }
         _runs[e.Entity.Value] = run;
         run.ResetPlan(_balance.LegCells);   // whatever took it here, the next thought starts from here
         if (run.Status is { Mode: AutopilotModes.Paused, Reason: AutopilotPauses.Unreachable }) Resume(run);

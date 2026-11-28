@@ -16,6 +16,10 @@
       "type": "integer",
       "description": "Base level (formula variable t_level / base_level)."
     },
+    "boss": {
+      "type": "boolean",
+      "description": "A boss (T-811): auto-battle fights it only when the player asked (with_bosses). Server only."
+    },
     "race": {
       "type": "string",
       "enum": [

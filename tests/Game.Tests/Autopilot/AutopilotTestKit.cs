@@ -164,7 +164,7 @@ public static class AutopilotContentKit
         TestCombat.Monster(id, maxHp, atk, speed: speed, aggressive: aggressive, aggroRange: aggressive ? 6 : 0, drops: drops);
 
     public static ContentDatabase Build(Func<AutopilotBalanceDef, AutopilotBalanceDef>? autopilot = null, IReadOnlyDictionary<string, MapGrid>? grids = null, int tameHp = 8, double globChance = 1,
-        Func<BalanceDef, BalanceDef>? balance = null, IEnumerable<QuestDef>? quests = null)
+        Func<BalanceDef, BalanceDef>? balance = null, IEnumerable<QuestDef>? quests = null, Func<MonsterDef, MonsterDef>? monster = null)
     {
         var sample = TestGrids.SampleContent;
         grids ??= Grids();
@@ -178,7 +178,7 @@ public static class AutopilotContentKit
         var monsters = new[]
         {
             Monster(Tame, maxHp: tameHp, drops: ["drop.tame"]), Monster(Far), Monster(Near), Monster(Fierce, aggressive: true, maxHp: 60, speed: 5), Monster(Walled), Monster(Nowhere),
-        };
+        }.Select(m => monster is null ? m : monster(m)).ToArray();
         var drops = sample.Drops.All.Append(new DropTableDef
         {
             Id = "drop.tame", Name = "tame",
@@ -306,6 +306,10 @@ public sealed class AutopilotRig
     public void Send(IIntent intent) => World.TryEnqueue(intent).ShouldBe(EnqueueResult.Accepted);
 
     public void Start(EntityId player, params string[] quests) => Send(new StartAutopilot(player, quests, []));
+
+    /// <summary>Starts auto-battle (T-811) where the player stands, with the shortcut skills in slot order.</summary>
+    public void Battle(EntityId player, string filter = AutoBattleFilters.Nearby, params string[] skills) =>
+        Send(new StartAutopilot(player, [], skills.Select(s => new SkillLevelRecord(s, 0)).ToArray(), filter));
 
     public void StartWith(EntityId player, string[] quests, params string[] skills) => Send(new StartAutopilot(player, quests, skills.Select(s => new SkillLevelRecord(s, 0)).ToArray()));
 

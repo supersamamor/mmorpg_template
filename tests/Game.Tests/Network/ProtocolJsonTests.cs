@@ -55,6 +55,10 @@ public class ProtocolJsonTests
             """{"type":"start_autopilot","quests":["quest.first_hunt","quest.gear_up"],"skills":[["skill.twin_strike",2],["skill.second_wind",1]]}"""
         },
         { "start_autopilot without skills", new StartAutopilotMessage(["quest.first_hunt"], []), """{"type":"start_autopilot","quests":["quest.first_hunt"],"skills":[]}""" },
+        {
+            "start_autopilot, auto-battle (T-811)", new StartAutopilotMessage([], [new SkillLevelRecord("skill.twin_strike", 0)], "nearby"),
+            """{"type":"start_autopilot","quests":[],"skills":[["skill.twin_strike",0]],"battle":"nearby"}"""
+        },
         { "stop_autopilot", new StopAutopilotMessage(), """{"type":"stop_autopilot"}""" },
         { "set_outfit", new SetOutfitMessage("head", "outfit.rain_cloak"), """{"type":"set_outfit","slot":"head","outfit":"outfit.rain_cloak"}""" },
         { "set_outfit to nothing", new SetOutfitMessage("head"), """{"type":"set_outfit","slot":"head"}""" },
@@ -148,6 +152,7 @@ public class ProtocolJsonTests
         },
         { "autopilot paused", new AutopilotMessage("paused", "quest.gear_up", null, "needs_equip"), """{"type":"autopilot","mode":"paused","quest":"quest.gear_up","reason":"needs_equip"}""" },
         { "autopilot off", new AutopilotMessage("off", null, null, "finished"), """{"type":"autopilot","mode":"off","reason":"finished"}""" },
+        { "autopilot, auto-battle (T-811)", new AutopilotMessage("running", null, "fighting", null), """{"type":"autopilot","mode":"running","doing":"fighting"}""" },
         {
             "wardrobe", new WardrobeMessage(["outfit.harvest_garland", "outfit.rain_cloak"], [new ShownOutfit("head", "outfit.rain_cloak"), new ShownOutfit("body", "outfit.harvest_garland")], true),
             """{"type":"wardrobe","owned":["outfit.harvest_garland","outfit.rain_cloak"],"chosen":{"head":"outfit.rain_cloak","body":"outfit.harvest_garland"},"hidden":true}"""
@@ -426,6 +431,7 @@ public class ProtocolJsonTests
     [InlineData("""{"type":"start_autopilot"}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"start_autopilot","quests":"quest.first_hunt"}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"start_autopilot","quests":[7]}""", ByeReasons.Malformed)]
+    [InlineData("""{"type":"start_autopilot","battle":7}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"start_autopilot","quests":["quest.a"],"skills":[["skill.a"]]}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"start_autopilot","quests":["quest.a"],"skills":[["skill.a",1.5]]}""", ByeReasons.Malformed)]
     [InlineData("""{"type":"start_autopilot","quests":["quest.a"],"skills":[["skill.a",99999999999]]}""", ByeReasons.Malformed)]
@@ -480,6 +486,18 @@ public class ProtocolJsonTests
         var read = ProtocolJson.ReadClient("""{"skills":[["skill.a",1]],"extra":[],"quests":["quest.a"],"type":"start_autopilot"}"""u8).Message.ShouldBeOfType<StartAutopilotMessage>();
         read.Quests.ShouldBe(["quest.a"]);
         read.Skills.ShouldBe([new SkillLevelRecord("skill.a", 1)]);
+    }
+
+    [Fact]
+    public void An_auto_battle_start_needs_no_quests_and_keeps_a_filter_the_server_does_not_know()
+    {
+        // T-811: the reader takes the shape only; the autopilot refuses an unknown filter (unknown_filter) and quests beside a battle (quests_given).
+        var read = ProtocolJson.ReadClient("""{"battle":"attackers","type":"start_autopilot"}"""u8).Message.ShouldBeOfType<StartAutopilotMessage>();
+        read.Quests.ShouldBeEmpty();
+        read.Skills.ShouldBeEmpty();
+        read.Battle.ShouldBe("attackers");
+        ProtocolJson.ReadClient("""{"type":"start_autopilot","quests":["quest.a"],"battle":"anything"}"""u8).Message.ShouldBeOfType<StartAutopilotMessage>().Battle.ShouldBe("anything");
+        ProtocolJson.ReadClient("""{"type":"start_autopilot","quests":["quest.a"]}"""u8).Message.ShouldBeOfType<StartAutopilotMessage>().Battle.ShouldBeNull();
     }
 
     [Fact]

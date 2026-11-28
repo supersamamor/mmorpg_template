@@ -11,6 +11,8 @@ namespace Game.Client.Core.Autopilot;
 /// run (<c>autopilot</c>: mode, quest, what it does, why it paused or ended). The ticks are this player's own wish and go nowhere until Start; they are never saved. The run state
 /// is only ever what the server said: nothing here decides whether a run goes on, pauses or ends (CLAUDE.md rule 1). <see cref="Version"/> moves on every change, so the
 /// HUD and the log redraw only then.
+/// <para>T-811: the same run may be <b>auto-battle</b> (the HUD's Auto toggle): the server's status then names no quest (<see cref="Battle"/>). The fight choice
+/// (<see cref="BattleFilter"/>) is the player's wish for the next start, like the ticks; the server checks it.</para>
 /// </summary>
 public sealed class AutopilotModel
 {
@@ -39,6 +41,29 @@ public sealed class AutopilotModel
 
     /// <summary>True while it waits for the player.</summary>
     public bool Paused => Mode == AutopilotModes.Paused;
+
+    /// <summary>
+    /// True when the run that is on (or the last one that ended) is auto-battle (T-811): the server's running or paused status named no quest. Kept after the run ends, so its
+    /// end is told as auto-battle's.
+    /// </summary>
+    public bool Battle { get; private set; }
+
+    /// <summary>What the next auto-battle start asks to fight: an "Auto-battle filters" term (T-811). <c>nearby</c> until the player picks another.</summary>
+    public string BattleFilter { get; private set; } = AutoBattleFilters.Nearby;
+
+    /// <summary>True when the last start this client sent was auto-battle's, so a refusal is told as auto-battle's (T-811).</summary>
+    public bool StartedBattle { get; private set; }
+
+    /// <summary>The next fight choice, in the vocabulary's order, round again after the last (T-811).</summary>
+    public void CycleBattleFilter()
+    {
+        var all = AutoBattleFilters.All.Ordered;
+        var at = 0;
+        for (var i = 0; i < all.Count; i++)
+            if (all[i] == BattleFilter) at = i;
+        BattleFilter = all[(at + 1) % all.Count];
+        Version++;
+    }
 
     /// <summary>The ticked quests in run order.</summary>
     public IReadOnlyList<string> Ticked => _ticked;
@@ -95,6 +120,7 @@ public sealed class AutopilotModel
     public bool Apply(AutopilotMessage message)
     {
         var ended = On && message.Mode == AutopilotModes.Off;
+        if (message.Mode != AutopilotModes.Off) Battle = message.Quest is null;
         Mode = message.Mode;
         Quest = message.Mode == AutopilotModes.Off ? null : message.Quest;
         Doing = message.Mode == AutopilotModes.Running ? message.Doing : null;
@@ -131,6 +157,9 @@ public sealed class AutopilotModel
     public void Reset()
     {
         _ticked.Clear();
+        Battle = false;
+        StartedBattle = false;
+        BattleFilter = AutoBattleFilters.Nearby;
         Mode = AutopilotModes.Off;
         Quest = null;
         Doing = null;
@@ -145,9 +174,25 @@ public sealed class AutopilotModel
     public StartAutopilotMessage? BuildStart(SkillBook skills, int slotCount)
     {
         if (_ticked.Count == 0) return null;
+        StartedBattle = false;
+        return new StartAutopilotMessage(_ticked.ToArray(), Bar(skills, slotCount));
+    }
+
+    /// <summary>
+    /// The auto-battle start (T-811): <c>start_autopilot</c> with no quests, the skill bar as for a quest run, and the fight choice. The server fights around where the character
+    /// stands when it arrives.
+    /// </summary>
+    public StartAutopilotMessage BuildBattleStart(SkillBook skills, int slotCount)
+    {
+        StartedBattle = true;
+        return new StartAutopilotMessage([], Bar(skills, slotCount), BattleFilter);
+    }
+
+    private static List<SkillLevelRecord> Bar(SkillBook skills, int slotCount)
+    {
         var bar = new List<SkillLevelRecord>();
         for (var i = 0; i < slotCount; i++)
             if (skills.SkillAt(i) is { } skill) bar.Add(new SkillLevelRecord(skill, 0));
-        return new StartAutopilotMessage(_ticked.ToArray(), bar);
+        return bar;
     }
 }

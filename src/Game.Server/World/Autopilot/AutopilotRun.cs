@@ -33,7 +33,7 @@ public sealed class AutopilotUsage
 }
 
 /// <summary>
-/// One autopilot run of one character (T-604): the ticked quests and shortcut skills, where in them it is, and what it is in the middle of. Changed only by the
+/// One autopilot run of one character (T-604): the ticked quests (or, for auto-battle, T-811, the filter and anchor) and shortcut skills, where in them it is, and what it is in the middle of. Changed only by the
 /// <see cref="AutopilotSystem"/> of the instance that holds the character; it is on <see cref="Entity.Autopilot"/>, so it follows the character through warps.
 /// </summary>
 public sealed class AutopilotRun
@@ -62,6 +62,10 @@ public sealed class AutopilotRun
     internal readonly HashSet<string> Ticked;
     internal readonly Slot[] Skills;
     internal readonly AutopilotUsage Usage;
+
+    /// <summary>Auto-battle (T-811): what it fights and around which cell; null for a quest run.</summary>
+    internal AutoBattle? Battle;
+    internal bool Retaliating;        // auto-battle: its target hit it, so it may stand a little outside the radius
 
     // Where it is in the list, and how far the current quest was when last looked at.
     internal int Index;
@@ -112,7 +116,8 @@ public sealed class AutopilotRun
     internal string? NodeKey;
     internal readonly List<int> Shown = new();
 
-    internal string QuestId => Quests[Index];
+    /// <summary>The quest it plays now; null for auto-battle.</summary>
+    internal string? QuestId => Quests.Length > 0 ? Quests[Index] : null;
 
     /// <summary>Forgets what it was in the middle of (a new quest, a new map, a pause): the next thought starts from what is true then.</summary>
     internal void ResetPlan(int legCells)
@@ -131,6 +136,7 @@ public sealed class AutopilotRun
         AttackMs = 0;
         Casting = false;
         Attacker = null;
+        Retaliating = false;
         Avoid.Clear();
         Picking = null;
         Talk = TalkState.None;
@@ -145,6 +151,9 @@ public sealed class AutopilotRun
         Asked,   // TalkTo is on its way
         Open,    // the dialogue runs
     }
+
+    /// <summary>An auto-battle run's filter (an <see cref="AutoBattleFilters"/> term) and its anchor: the map and cell it was started on.</summary>
+    internal sealed record AutoBattle(string Filter, string MapId, GridCell Anchor);
 
     internal sealed class Slot(string skillId, int level, AutopilotSkillContent content)
     {

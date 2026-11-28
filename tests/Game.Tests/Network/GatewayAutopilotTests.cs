@@ -78,6 +78,23 @@ public class GatewayAutopilotTests
     }
 
     [Fact]
+    public async Task Auto_battle_is_started_reported_without_a_quest_and_refused_over_the_wire()
+    {
+        // T-811: the same message with a battle filter; its status has no quest, and its refusals come as start_autopilot's.
+        await using var rig = await StartAsync();
+        var (client, _) = await JoinAsync(rig, Far);
+        await client.SendAsync(new StartAutopilotMessage([Far], [], AutoBattleFilters.Nearby));
+        (await client.WaitForAsync<RejectedMessage>(r => r.Intent == MessageTypes.StartAutopilot)).Reason.ShouldBe(AutoBattleReasons.QuestsGiven);
+        await client.SendAsync(new StartAutopilotMessage([], [], "everything"));
+        await client.WaitForAsync<RejectedMessage>(r => r.Reason == AutoBattleReasons.UnknownFilter);
+
+        await client.SendAsync(new StartAutopilotMessage([], [], AutoBattleFilters.Nearby));
+        (await StatusAsync(client, m => m.Mode == AutopilotModes.Running)).Quest.ShouldBeNull();
+        await client.SendAsync(new MoveMessage(new GridCell(2, 2)));   // the player's own order
+        (await StatusAsync(client, m => m.Mode == AutopilotModes.Off)).ShouldBe(new AutopilotMessage(AutopilotModes.Off, null, null, AutopilotStops.ManualInput));
+    }
+
+    [Fact]
     public async Task A_disabled_autopilot_refuses()
     {
         await using var rig = await StartAsync(a => a with { Enabled = false });

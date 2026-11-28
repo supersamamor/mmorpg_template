@@ -53,6 +53,7 @@ public static class ProtocolJson
             // start_autopilot's lists (T-604): where they begin; they are read once the type is known, so in any other message they stay unknown fields, ignored whatever they hold
             Utf8JsonReader questsAt = default, skillsAt = default;
             bool hasQuests = false, hasSkills = false;
+            string? battle = null;   // start_autopilot's auto-battle filter (T-811)
             while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
             {
                 var key = reader.GetString();
@@ -86,6 +87,7 @@ public static class ProtocolJson
                     case "job": job = String(ref reader); break;
                     case "stat": stat = String(ref reader); break;
                     case "quest": quest = String(ref reader); break;
+                    case "battle": battle = String(ref reader); break;
                     case "item": itemId = String(ref reader); break;
                     case "outfit": outfit = String(ref reader); break;
                     case "hidden": hidden = reader.TokenType is JsonTokenType.True or JsonTokenType.False ? reader.GetBoolean() : throw Bad(); break;
@@ -142,8 +144,9 @@ public static class ProtocolJson
                 MessageTypes.AbandonQuest => quest is { } dropped ? new AbandonQuestMessage(dropped) : null,
                 MessageTypes.ShopBuy => itemId is { } bought && quantity is { } units ? new ShopBuyMessage(bought, units) : null,
                 MessageTypes.ShopSell => entry is { } sold && quantity is { } amountSold ? new ShopSellMessage(sold, amountSold) : null,
-                MessageTypes.StartAutopilot => hasQuests
-                    ? new StartAutopilotMessage(ReadStrings(ref questsAt), hasSkills ? ReadLevels(ref skillsAt) : []) : null,
+                // T-811: an auto-battle start (battle) needs no quests
+                MessageTypes.StartAutopilot => hasQuests || battle is not null
+                    ? new StartAutopilotMessage(hasQuests ? ReadStrings(ref questsAt) : [], hasSkills ? ReadLevels(ref skillsAt) : [], battle) : null,
                 MessageTypes.StopAutopilot => new StopAutopilotMessage(),
                 // exactly one of slot (with an outfit, or nothing) and hidden
                 MessageTypes.SetOutfit => (slot is null) != (hidden is null) && (outfit is null || slot is not null) ? new SetOutfitMessage(slot, outfit, hidden) : null,
@@ -292,6 +295,7 @@ public static class ProtocolJson
             case StartAutopilotMessage start:
                 WriteStrings(w, "quests", start.Quests);
                 WriteLevels(w, "skills", start.Skills);
+                if (start.Battle is not null) w.WriteString("battle", start.Battle);
                 break;
             case ChatMessage chat:
                 w.WriteString("channel", chat.Channel);

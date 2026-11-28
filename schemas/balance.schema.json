@@ -481,6 +481,41 @@
       "additionalProperties": false,
       "description": "Quest autopilot (T-604, ARCHITECTURE §6.4.2)."
     },
+    "auto_battle": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "False refuses every auto-battle start (battle_disabled); the quest autopilot is not affected."
+        },
+        "radius_cells": {
+          "type": "integer",
+          "description": "Monsters within this many cells (Chebyshev) of the anchor, the cell the run started on, are fought; the run's own walks stay within it. From 1 to half of what every player is sure to see (aoi.view_radius x aoi.bucket_size), so a character anywhere in the area sees the whole of it."
+        },
+        "retaliate_extra_cells": {
+          "type": "integer",
+          "description": "A monster that hit the character (retaliation) is fought up to this many cells beyond the radius. From 0 to the radius."
+        },
+        "max_levels_above": {
+          "type": "integer",
+          "description": "A monster more than this many levels above the character's base level is never fought. 0 or more; lower monsters always are."
+        },
+        "loot": {
+          "type": "boolean",
+          "description": "True: the character picks up what it is first to take (its own kills' drops) within the area. A drop that does not fit ends the run (bag_full)."
+        },
+        "stop_below_hp_percent": {
+          "type": "integer",
+          "description": "Below this share of the maximum HP, in percent, the run stops (low_hp) unless a shortcut skill heals. 0 = never; at most 100."
+        },
+        "idle_stop_ms": {
+          "type": "integer",
+          "description": "A run without a kill for this long stops (nothing_to_fight). 0 = never."
+        }
+      },
+      "additionalProperties": false,
+      "description": "Auto-battle, the autopilot's second mode (T-811, ARCHITECTURE §6.4.3)."
+    },
     "party": {
       "type": "object",
       "properties": {

@@ -1288,6 +1288,8 @@ public static class UiText
         AutopilotActivities.Gathering => "gathering",
         AutopilotActivities.Talking => "talking",
         AutopilotActivities.Waiting => "waiting",
+        AutopilotActivities.Fighting => "fighting",
+        AutopilotActivities.Returning => "returning",
         _ => "playing",
     };
 
@@ -1342,6 +1344,60 @@ public static class UiText
         AutopilotReasons.PassiveSkill => about is null ? "A passive skill cannot be used." : about + " is passive.",
         AutopilotReasons.LevelTooHigh => about is null ? "A skill is above its learned level." : about + " is above its learned level.",
         _ => "Autopilot could not start.",
+    };
+
+    // ---- auto-battle (T-811) ----
+
+    /// <summary>The HUD's toggle that starts auto-battle where the character stands.</summary>
+    public const string AutoBattleStart = "Auto";
+
+    /// <summary>The HUD button beside it: what the next auto-battle fights (an "Auto-battle filters" term); a tap picks the next choice.</summary>
+    public static string AutoBattleFilter(string filter) => filter switch
+    {
+        AutoBattleFilters.Nearby => "Nearby",
+        AutoBattleFilters.Attackers => "Attackers",
+        AutoBattleFilters.WithBosses => "+ Bosses",
+        _ => filter,
+    };
+
+    /// <summary>The longest fight choice, for the layout check.</summary>
+    public static string AutoBattleLongestFilter => AutoBattleFilters.All.Ordered.Select(AutoBattleFilter).OrderByDescending(s => s.Length).First();
+
+    /// <summary>The indicator's first line while auto-battle runs: the tap stops it.</summary>
+    public static string AutoBattleRunning(string? doing) => "Stop auto-battle: " + AutopilotDoing(doing);
+
+    /// <summary>The indicator's second line while auto-battle runs.</summary>
+    public const string AutoBattleArea = "Around where it started";
+
+    /// <summary>The indicator while an auto-battle run waits (none does in this build; the server's word is shown as it comes).</summary>
+    public const string AutoBattlePausedTitle = "Stop auto-battle: paused";
+
+    /// <summary>The flash when an auto-battle run ends (an "Autopilot stops" term): always says why.</summary>
+    public static string AutoBattleEnded(string? reason) => reason switch
+    {
+        AutopilotStops.Stopped => "Auto-battle stopped.",
+        AutopilotStops.ManualInput => "Auto-battle stopped: you took over.",
+        AutopilotStops.Died => "Auto-battle stopped: you died.",
+        AutopilotStops.Logout or AutopilotStops.Disconnected => "Auto-battle stopped: the connection ended.",
+        AutopilotStops.BagFull => "Auto-battle stopped: your bag is full.",
+        AutopilotStops.TimeLimit => "Auto-battle stopped: no autopilot time left today.",
+        AutopilotStops.LowHp => "Auto-battle stopped: your HP is low.",
+        AutopilotStops.LeftArea => "Auto-battle stopped: you left the area.",
+        AutopilotStops.NothingToFight => "Auto-battle stopped: nothing to fight here.",
+        _ => "Auto-battle stopped.",
+    };
+
+    /// <summary>The flash for a refused auto-battle start (an "Auto-battle reasons" or shared "Autopilot reasons" term); <paramref name="about"/> is the skill's name, if any.</summary>
+    public static string AutoBattleRefused(string reason, string? about = null) => reason switch
+    {
+        AutoBattleReasons.BattleDisabled => "Auto-battle is switched off here.",
+        AutoBattleReasons.UnknownFilter => "That fight choice is not known here.",
+        AutoBattleReasons.QuestsGiven => "Auto-battle could not start.",
+        AutopilotReasons.Dead => "You cannot use auto-battle while dead.",
+        AutopilotReasons.TimeLimit => "No autopilot time left today.",
+        AutopilotReasons.TooManySkills or AutopilotReasons.UnknownSkill or AutopilotReasons.NotLearned or AutopilotReasons.PassiveSkill or AutopilotReasons.LevelTooHigh =>
+            AutopilotRefused(reason, about),
+        _ => "Auto-battle could not start.",
     };
 
     /// <summary>The flash for a refused quest start or abandon (a "Quest reasons" term).</summary>
