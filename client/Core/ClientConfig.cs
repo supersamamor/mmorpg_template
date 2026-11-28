@@ -249,6 +249,12 @@ public sealed class ClientConfig
     /// <summary>Gap between hotbar slots, in dp.</summary>
     public double HotbarGapDp { get; set; } = 8;
 
+    /// <summary>T-812: how many cells across the corner minimap shows around the player (a smaller map is shown whole).</summary>
+    public int MinimapCornerCells { get; set; } = 24;
+
+    /// <summary>T-812: the smallest side of the corner minimap, in dp after the UI scale; where the HUD has less room the map is the chat panel's Map button only.</summary>
+    public double MinimapCornerMinDp { get; set; } = 72;
+
     /// <summary>
     /// Pretend the screen has a notch and a home indicator (debug builds only; the engine start-up ignores it in a release build), so the safe area can be
     /// tested on a desktop. The insets below are in dp.
@@ -404,6 +410,8 @@ public sealed class ClientConfig
             case "hotbar_rows": HotbarRows = Math.Max(1, Math.Min(4, (int)Number(value))); break;
             case "hotbar_slot_dp": HotbarSlotDp = Number(value); break;
             case "hotbar_gap_dp": HotbarGapDp = Number(value); break;
+            case "minimap_corner_cells": MinimapCornerCells = Math.Max(4, Math.Min(256, (int)Number(value))); break;
+            case "minimap_corner_min_dp": MinimapCornerMinDp = Math.Max(48, Number(value)); break;
             case "audio_max_voices": AudioMaxVoices = Math.Max(1, Math.Min(64, (int)Number(value))); break;
             case "audio_cooldown_seconds": AudioCooldownSeconds = Math.Max(0, Number(value)); break;
             case "audio_cull_distance": AudioCullDistance = Math.Max(1, Number(value)); break;

@@ -26,6 +26,9 @@
   "hotbar_slot_dp": 56,
   "hotbar_gap_dp": 8,
 
+  "minimap_corner_cells": 24,
+  "minimap_corner_min_dp": 72,
+
   "audio_max_voices": 24,
   "audio_cooldown_seconds": 0.08,
   "audio_cull_distance": 30,

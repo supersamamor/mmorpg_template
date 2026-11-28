@@ -28,13 +28,20 @@ A map is built as a 3D scene in the Godot editor and exported to a logic grid th
    | `npc` | `map_npc_id`, `map_facing` (`n`, `ne`, `e`, ...) |
    | `zone` | `map_zone_kind` (`safe`, `pvp`), `map_w`, `map_h` |
 
-7. **Press Export.** It saves the scene and writes `content/maps/<name>.grid.json`. Problems show in the dock (a marker on a blocked cell, an unknown id); click one to select its node. Nothing is written while there is a problem.
-8. **Connect it to the content.** Add the scene key to `themes/default/asset-manifest.json` (`"scene.map.<name>": { "file": "maps/<name>.tscn" }`) and write `content/maps/<name>.yaml` (`MapDef`: `scene_asset_key`, music, `grid_file: <name>.grid.json`). Do this after the first export: the content does not load with a `grid_file` that does not exist yet. Build the client again, so marker ids and warps to this map are known to the export, and export once more.
-9. **Check it:** `dotnet run --project src/Game.Tools -- validate`. Commit both scenes, the grid and the YAML.
+7. **Press Export.** It saves the scene and writes `content/maps/<name>.grid.json` and the minimap picture `themes/default/maps/<name>.minimap.png` (T-812: drawn from the same cells, one colour per kind of
+   cell, so the game never draws the map a second time). Problems show in the dock (a marker on a blocked cell, an unknown id); click one to select its node. Nothing is written while there is a problem.
+8. **Connect it to the content.** Add the scene key and the minimap key to `themes/default/asset-manifest.json` (`"scene.map.<name>": { "file": "maps/<name>.tscn" }` and `"minimap.map.<name>": { "file":
+   "maps/<name>.minimap.png" }`: `minimap.` and the map's id) and write `content/maps/<name>.yaml` (`MapDef`: `scene_asset_key`, music, `grid_file: <name>.grid.json`). Do this after the first export: the
+   content does not load with a `grid_file` that does not exist yet. Build the client again, so marker ids and warps to this map are known to the export, and export once more.
+9. **Check it:** `dotnet run --project src/Game.Tools -- validate` (it fails while the minimap key is missing). Commit both scenes, the grid, the picture and the YAML. Until the picture exists the game
+   still runs: the minimap hides itself on that map and the chat panel's Map button is disabled.
 
 ## After that
 
 - **Changed collision, paint or a marker?** Export again. `validate` fails with `grid.scene_stale` until you do, and it needs no Godot. A change to meshes, materials or lights does not count.
-- **Headless:** `.\client\export-maps.ps1` exports every map, `-Map <name>` one, and `-Check` writes nothing and fails if a fresh export differs from a committed grid by a byte. The dock's buttons run this same process, so a grid never depends on the editor's camera or selection.
+- **Headless:** `.\client\export-maps.ps1` exports every map, `-Map <name>` one, and `-Check` writes nothing and fails if a fresh export differs from a committed grid or minimap picture by a byte, or a
+  picture is missing.
+- **The minimap picture's look** is the plugin's `config.json` `minimap` section (`pixels_per_cell`, `max_side_px`, and `#rrggbbaa` colours for `walkable`, `blocked`, `blocks_los`); change it and export
+  every map again. A painted picture instead: THEMES.md §1.10. The dock's buttons run this same process, so a grid never depends on the editor's camera or selection.
 - **Instanced art:** an instanced `.tscn` in a theme is read too. A `.glb` or `.res` counts by its file content, so replacing one calls for a new export even if only its look changed. Map scenes themselves must be `.tscn`, because `validate` reads them as text.
 - **A theme that re-skins a map** keeps the layout: use the same collision and markers, and the hash stays the same (§5.3).

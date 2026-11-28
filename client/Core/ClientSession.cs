@@ -205,6 +205,17 @@ public sealed class ClientSession
         Ui.OnMoveSent(cell, viewNow);
     }
 
+    /// <summary>
+    /// A tap on the full map (T-812): always a walk, never a skill's ground target (a far cell picked on a small map is no aim). The same <c>move</c> as a ground tap, checked by the
+    /// server like any other (a path longer than it allows is refused, and said on the flash line).
+    /// </summary>
+    public void WalkTo(GridCell cell, double viewNow)
+    {
+        if (Connection.Phase != ConnectionPhase.Online || Ui.Dead) return;
+        if (Ui.PendingSkill is not null) Ui.ClearPending();
+        TapGround(cell, viewNow);
+    }
+
     /// <summary>A monster tap: ask to attack. The server may refuse; the client checks nothing.</summary>
     public void TapEntity(long id)
     {

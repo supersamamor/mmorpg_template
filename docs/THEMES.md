@@ -148,6 +148,18 @@ compressed again, at every start, on a worker; a texture that changes with every
 image for the keys after `--other`), which ignores itself in Git and is left out of exports; `validate --theme <name>` shows the warnings, `--set theme=<name>` draws it, and `run-e2e.ps1 -Run textured`
 checks it in the engine.
 
+### 1.10 Minimap pictures (T-812)
+
+Every map needs a picture for the minimap, under the key `minimap.<map id>` (`minimap.map.starter_meadow`). The key follows from the map's id and is never written in content; `validate` fails a map whose
+key is not in the manifest (`asset.missing`, path `minimap`) — **checked**. The map export (`client/export-maps.ps1`) draws it from the baked grid into `maps/<name>.minimap.png` beside the map's scenes, so
+a fork's map gets one by exporting it and adding the manifest line beside the scene key; `export-maps.ps1 -Check` fails a missing or stale one. Its colours (walkable, blocked, blocks line of sight, with
+alpha) and pixels per cell are the plugin's `config.json` `minimap` section, so a theme's look is a config change and an export.
+
+**Own art instead** (a painted map): point the key at any PNG that covers the whole map, north at the top, with the map's aspect ratio (its width in pixels divided by the map's width in cells is the
+pixels per cell, the same both ways), at most 2048 pixels a side. The client draws the part around the player from it and never renders the world a second time. It is shown over a dark square, so
+transparent pixels read as "nowhere to walk". `-Check` then reports it as stale (it is not the export's), so keep the export's picture in `default` and put the painted one in the fork's theme, which the
+client looks up first (§7.7). Like any texture, it must show only what every player may see: no spawn areas, no secret rooms the grid does not have (hard rule 11).
+
 ## 2. Variants
 
 One model can serve several keys. A variant entry names another entry's key in `variant_of` and draws that model, optionally changed:

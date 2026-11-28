@@ -1,7 +1,8 @@
-# The headless map export (ARCHITECTURE §5.3, docs/MAP_AUTHORING.md): bakes authoring scenes and writes content/maps/<name>.grid.json. Exit code 0 means every map exported with no problem.
+# The headless map export (ARCHITECTURE §5.3, docs/MAP_AUTHORING.md): bakes authoring scenes and writes content/maps/<name>.grid.json and the minimap picture
+# themes/default/maps/<name>.minimap.png (T-812). Exit code 0 means every map exported with no problem.
 #   .\client\export-maps.ps1                       every map
 #   .\client\export-maps.ps1 -Map starter_meadow   one map
-#   .\client\export-maps.ps1 -Check                writes nothing: fails if a fresh export differs from a byte of the committed grids (needs Godot, unlike `validate`)
+#   .\client\export-maps.ps1 -Check                writes nothing: fails if a fresh export differs from a byte of the committed grids or minimap pictures, or a picture is missing (needs Godot, unlike `validate`)
 #   .\client\export-maps.ps1 -Content C:\temp\c    writes to <dir>/maps instead of content/maps
 param(
     [string] $Map = "",
@@ -32,6 +33,7 @@ if ($Check) {
 $arguments = @("--headless", "--path", "`"$client`"", "res://addons/map_authoring/ExportRunner.tscn", "--")
 $arguments += $(if ($Map) { @("--map", $Map) } else { @("--all") })
 if ($Content) { $arguments += @("--content", "`"$Content`"") }
+if ($Check) { $arguments += @("--pictures", "`"$(Join-Path $temp "pictures")`"") }
 
 # Bounded and retried (godot-path.ps1): a real map problem exits 1 and is not retried; a hang is stopped and retried.
 $export = Invoke-GodotStep -Godot $godotPath -Step "map export" -Arguments $arguments -TimeoutSeconds $TimeoutSeconds
@@ -43,8 +45,14 @@ if ($Check -and $code -eq 0) {
         $committed = Join-Path $root ("content/maps/" + $file.Name)
         $same = (Test-Path $committed) -and ((Get-FileHash $committed).Hash -eq (Get-FileHash $file.FullName).Hash)
         if (-not $same) { Write-Host "[map-export] differs from the committed grid: $($file.Name)"; $code = 1 }
+        # T-812: the minimap picture made from the same grid must be committed, with the same bytes.
+        $stem = $file.Name.Substring(0, $file.Name.Length - ".grid.json".Length)
+        $picture = Join-Path $temp ("pictures/" + $stem + ".minimap.png")
+        $committedPicture = Join-Path $root ("themes/default/maps/" + $stem + ".minimap.png")
+        if (-not (Test-Path $committedPicture)) { Write-Host "[map-export] the minimap picture is missing: themes/default/maps/$stem.minimap.png (export the map again)"; $code = 1 }
+        elseif (-not (Test-Path $picture) -or (Get-FileHash $committedPicture).Hash -ne (Get-FileHash $picture).Hash) { Write-Host "[map-export] the minimap picture is stale: themes/default/maps/$stem.minimap.png (export the map again)"; $code = 1 }
     }
-    if ($code -eq 0) { Write-Host "[map-export] every committed grid matches a fresh export, byte for byte" }
+    if ($code -eq 0) { Write-Host "[map-export] every committed grid and minimap picture matches a fresh export, byte for byte" }
 }
 if ($temp) { Remove-Item $temp -Recurse -Force -ErrorAction SilentlyContinue }
 exit $code

@@ -10,12 +10,14 @@ namespace Game.Client.MapAuthoring;
 /// The headless export (ARCHITECTURE §5.3): <c>godot --headless --path client res://addons/map_authoring/ExportRunner.tscn -- --all</c>, or <c>client/export-maps.ps1</c>. The editor's buttons run this
 /// same process, so a grid never depends on the editor's camera, selection or open scenes. Each map gets its own physics world.
 /// Arguments: <c>--map &lt;stem&gt;</c> or <c>--all</c>; <c>--content &lt;dir&gt;</c> writes there instead of <c>content/</c>; <c>--theme &lt;name&gt;</c>; <c>--report &lt;file&gt;</c>; <c>--preview-dir &lt;dir&gt;</c>
-/// saves the raw bake for the editor's overlay; <c>--bake-only</c> writes no grid. Exit code 0 means every map was exported with no problem.
+/// saves the raw bake for the editor's overlay; <c>--bake-only</c> writes no grid; <c>--pictures &lt;dir&gt;</c> writes the minimap pictures there instead of the theme's <c>maps/</c> (T-812).
+/// Exit code 0 means every map was exported with no problem.
 /// </summary>
 public partial class ExportRunner : Node
 {
     private const string BundlePath = "res://bundle/client-content.json";
     private const string ThemesRoot = "res://themes/";
+    private const string ConfigPath = "res://addons/map_authoring/config.json";
 
     // Frames for new bodies to reach the physics server's space.
     private const int SettleFrames = 3;
@@ -35,9 +37,11 @@ public partial class ExportRunner : Node
             var content = Value(args, "--content") ?? ProjectSettings.GlobalizePath("res://").TrimEnd('/') + "/../content";
             var stems = Stems(args, theme);
             var ids = LoadIds();
+            var pictures = Value(args, "--pictures") ?? ProjectSettings.GlobalizePath(ThemesRoot + theme + "/maps");
+            var style = ReadStyle();
             if (stems.Count == 0) Fail(string.Empty, string.Empty, "nothing to export: pass --map <name> or --all");
             foreach (var stem in stems)
-                if (!await ExportAsync(stem, theme, content, ids, Value(args, "--preview-dir"), Array.IndexOf(args, "--bake-only") >= 0)) failed = true;
+                if (!await ExportAsync(stem, theme, content, ids, Value(args, "--preview-dir"), Array.IndexOf(args, "--bake-only") >= 0, pictures, style)) failed = true;
         }
         catch (Exception e)
         {
@@ -51,7 +55,7 @@ public partial class ExportRunner : Node
         GetTree().Quit(failed ? 1 : 0);
     }
 
-    private async Task<bool> ExportAsync(string stem, string theme, string content, IContentIds ids, string? previewDir, bool bakeOnly)
+    private async Task<bool> ExportAsync(string stem, string theme, string content, IContentIds ids, string? previewDir, bool bakeOnly, string pictures, MinimapStyle style)
     {
         var path = ThemesRoot + theme + "/maps/" + stem + MapSceneHash.AuthoringSuffix;
         if (!Godot.FileAccess.FileExists(path))
@@ -90,7 +94,12 @@ public partial class ExportRunner : Node
             {
                 Directory.CreateDirectory(content + "/maps");
                 File.WriteAllBytes(content + "/maps/" + stem + ".grid.json", GridJsonWriter.WriteBytes(result.File));
-                Report(new ExportReportLine(true, stem, string.Empty, $"exported {settings.Width}x{settings.Height}, {result.File.Spawns.Count} spawns, {result.File.Warps.Count} warps, {result.File.Npcs.Count} npcs, {result.File.Zones.Count} zones, hash {hash.Hash[..12]}"));
+                // T-812: the minimap picture, from the same flags the grid holds (after the paint), once here so the game never draws the world twice.
+                var flags = Convert.FromBase64String(result.File.Cells);
+                Directory.CreateDirectory(pictures);
+                File.WriteAllBytes(pictures + "/" + stem + Game.Content.Maps.MinimapKeys.FileSuffix, MinimapPicture.Draw(flags, settings.Width, settings.Height, style));
+                var perCell = MinimapPicture.PixelsPerCell(settings.Width, settings.Height, style);
+                Report(new ExportReportLine(true, stem, string.Empty, $"exported {settings.Width}x{settings.Height}, {result.File.Spawns.Count} spawns, {result.File.Warps.Count} warps, {result.File.Npcs.Count} npcs, {result.File.Zones.Count} zones, hash {hash.Hash[..12]}, minimap {settings.Width * perCell}x{settings.Height * perCell} px"));
             }
         }
         foreach (var problem in problems) Fail(stem, problem.Path, problem.Message);
@@ -153,6 +162,20 @@ public partial class ExportRunner : Node
     {
         Directory.CreateDirectory(directory);
         File.WriteAllBytes(directory + "/" + stem + ".bake", baked);
+    }
+
+    /// <summary>The plugin's <c>minimap</c> section (T-812): <c>pixels_per_cell</c>, <c>max_side_px</c> and the colours; anything missing or unreadable keeps its default.</summary>
+    private static MinimapStyle ReadStyle()
+    {
+        var style = MinimapStyle.Default;
+        if (!Godot.FileAccess.FileExists(ConfigPath)) return style;
+        using var document = System.Text.Json.JsonDocument.Parse(Godot.FileAccess.GetFileAsString(ConfigPath));
+        if (!document.RootElement.TryGetProperty("minimap", out var section) || section.ValueKind != System.Text.Json.JsonValueKind.Object) return style;
+        int Whole(string name, int fallback) => section.TryGetProperty(name, out var v) && v.TryGetInt32(out var n) && n >= 1 ? n : fallback;
+        uint Color(string name, uint fallback) =>
+            section.TryGetProperty(name, out var v) && v.ValueKind == System.Text.Json.JsonValueKind.String && MinimapStyle.ParseColor(v.GetString()) is { } c ? c : fallback;
+        return new MinimapStyle(Whole("pixels_per_cell", style.PixelsPerCell), Whole("max_side_px", style.MaxSidePx), Color("blocked", style.Blocked), Color("walkable", style.Walkable),
+            Color("blocks_los", style.BlocksLos));
     }
 
     private static byte[]? ReadResource(string path) => Godot.FileAccess.FileExists(path) ? Godot.FileAccess.GetFileAsBytes(path) : null;

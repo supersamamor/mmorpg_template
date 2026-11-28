@@ -83,7 +83,7 @@ public sealed class Hud
     private readonly Label _connection = Wrapped(HorizontalAlignment.Right);
     private readonly Button _uiSize = new();
     private readonly Button _logout = new() { Text = UiText.Logout };
-    private readonly Button _soundButton = new() { Text = UiText.Sound };
+    private readonly Button _soundButton = new() { Text = UiText.Options };
     private readonly Button _bagButton = new() { Text = UiText.Bag, Visible = false, SizeFlagsVertical = Control.SizeFlags.ShrinkEnd };
     private readonly HBoxContainer _hotbarRow = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
     private readonly Control _hotbarSpacer = new() { MouseFilter = Control.MouseFilterEnum.Ignore };
@@ -99,6 +99,12 @@ public sealed class Hud
     private TradePanel? _tradePanel;   // T-903: the trade window while a trade is open, and the ask prompt
     private GuildStoragePanel? _guildStoragePanel;   // T-905: opened from the guild panel's Storage button
     private GuildRanksPanel? _guildRanksPanel;   // T-810: the leader's rank editor, opened from the guild panel
+    private MinimapView? _minimap;   // T-812: the corner map under Log out where it has room, and the full map
+    private Rect2? _cornerPlaced;   // where the corner map was put last (null: hidden), in the safe area's coordinates
+    private readonly Button _minimapSwitch = new();   // T-812: the corner map on or off, in the options panel
+    private float _marginPx = 8;
+    private float _cornerRightPx = 104, _cornerMinPx = 72;
+    private Func<long, bool>? _onCornerMap;
     private WardrobePanel? _wardrobe;   // T-708: opened from the bag, as the stats are from the skills: the phone HUD has no room for another button
     // The quest tracker (T-602): under the bars on the left, the tracked quest's name and counters; a tap opens the quest log. With no active quest it is the
     // "Quests" button, so the log needs no button of its own on a full phone HUD. Each line is trimmed to the column with an ellipsis instead of wrapping (T-406): a long
@@ -276,6 +282,8 @@ public sealed class Hud
         _hotbarRow.AddChild(_bagButton);
         _bottom.AddChild(_hotbarRow);
         _safe.AddChild(_bottom);
+        // T-812: before the panels, so every panel opened over the corner map covers it.
+        if (session is not null && bundle is not null) _minimap = new MinimapView(_safe, session, bundle, config, _interactive, Tap);
         for (var i = 0; _hotbarModel is not null && i < _hotbarModel.SlotCount; i++)
         {
             var slot = new Button { ToggleMode = false, AutowrapMode = TextServer.AutowrapMode.WordSmart, ClipText = false };
@@ -318,6 +326,7 @@ public sealed class Hud
         {
             OpenParty = () => { _chatPanel?.SetOpen(false); _partyPanel?.SetOpen(true); },   // T-902
             OpenGuild = () => { _chatPanel?.SetOpen(false); _guildPanel?.SetOpen(true); },   // T-904
+            OpenMap = () => { _chatPanel?.SetOpen(false); _minimap?.SetOpen(true); },   // T-812
         };
         if (session is not null)
         {
@@ -475,7 +484,7 @@ public sealed class Hud
     public void UpdatePartyMarks(Camera3D camera, Func<double, double, float> groundAt)
     {
         if (_partyPanel is null || _session is null) return;
-        _partyPanel.UpdateMarks(camera, _session.Connection.Phase == ConnectionPhase.Online ? _session.World.MapId : null, _safe.GlobalPosition, groundAt);
+        _partyPanel.UpdateMarks(camera, _session.Connection.Phase == ConnectionPhase.Online ? _session.World.MapId : null, _safe.GlobalPosition, groundAt, _onCornerMap);
     }
 
     /// <summary>Draws everything again from the model on the next <see cref="Refresh"/>.</summary>
@@ -589,6 +598,26 @@ public sealed class Hud
     /// <summary>The button that opens the inventory panel.</summary>
     public Button BagButton => _bagButton;
 
+    /// <summary>The minimap and full map (T-812), or null without a session.</summary>
+    public MinimapView? Minimap => _minimap;
+
+    /// <summary>The options panel's minimap switch (T-812).</summary>
+    public Button MinimapSwitch => _minimapSwitch;
+
+    /// <summary>The player's choice: the corner map shows (T-812), kept in the user preferences.</summary>
+    public bool MinimapWanted => _prefs.Minimap;
+
+    /// <summary>Turns the corner map on or off and stores the choice on the device, as the other preferences (T-812).</summary>
+    public void SetMinimapWanted(bool on)
+    {
+        _prefs.Minimap = on;
+        var stored = UserPrefsStore.Load();   // the sound settings keep their own copy: write only this choice over what is stored
+        stored.Minimap = on;
+        UserPrefsStore.Save(stored);
+        _minimapSwitch.Text = UiText.MinimapSetting(on);
+        _cornerPlaced = new Rect2(-1, -1, -1, -1);   // place again on the next refresh
+    }
+
     /// <summary>Finds an item icon texture by asset key (set once the theme is loaded).</summary>
     public Func<string, Texture2D?>? IconLoader
     {
@@ -603,6 +632,7 @@ public sealed class Hud
             if (_skillPanel is not null) _skillPanel.IconLoader = value;
             if (_dialoguePanel is not null) _dialoguePanel.IconLoader = value;
             if (_guildPanel is not null) _guildPanel.IconLoader = value;   // T-904: emblems
+            if (_minimap is not null) _minimap.PictureLoader = value;   // T-812: the map's picture is a theme texture, as an icon is
             _guildTagsShown = -1;
         }
     }
@@ -633,6 +663,8 @@ public sealed class Hud
         _safe.AddChild(_soundCenter);
         _soundGrid.AddChild(_soundMute);
         _soundGrid.AddChild(_soundClose);
+        _minimapSwitch.Text = UiText.MinimapSetting(_prefs.Minimap);
+        _minimapSwitch.Pressed += () => { Tap(); SetMinimapWanted(!_prefs.Minimap); };
         _soundMute.Pressed += () =>
         {
             Tap();
@@ -662,6 +694,11 @@ public sealed class Hud
             button.Text = UiText.BusVolume(name, 1);
             button.SetMeta("bus_name", name);
         }
+        if (_session is not null && _bundle is not null)
+        {
+            _soundGrid.AddChild(_minimapSwitch);   // T-812: the options panel's last row
+            _interactive.Add(_minimapSwitch);
+        }
         _interactive.Add(_soundMute);
         _interactive.Add(_soundPanel);
         _interactive.Add(_soundClose);
@@ -688,7 +725,9 @@ public sealed class Hud
         if (remember)
         {
             _prefs.UiScale = _scale;
-            UserPrefsStore.Save(_prefs);
+            var stored = UserPrefsStore.Load();   // the sound settings keep their own copy (AudioDriver): write only this choice over what is stored
+            stored.UiScale = _scale;
+            UserPrefsStore.Save(stored);
         }
         ApplyLayout();
     }
@@ -760,6 +799,11 @@ public sealed class Hud
         _guildRanksPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
         _targetEmblem.CustomMinimumSize = new Vector2(Dp(18), Dp(18));
         _tradePanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
+        _minimap?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
+        _marginPx = margin;
+        _cornerRightPx = Dp(RightColumnDp);
+        _cornerMinPx = (float)(_config.MinimapCornerMinDp * unit);
+        _cornerPlaced = new Rect2(-1, -1, -1, -1);   // place again once the containers have settled
         _chatPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _window.Size.Y > 0 ? (float)(metrics.CanvasHeight / _window.Size.Y) : 1f,
             (float)metrics.CanvasHeight);
         // The tracker shares its row with the Chat button (T-901): together they are the left column's width.
@@ -924,6 +968,73 @@ public sealed class Hud
         if (_tradePanel is { Open: true } && !trading) _partyPanel?.SetOpen(false);   // T-903: the trade window takes the party panel's place when a trade opens
         RefreshAutopilot();
         if (_indicatorCramped && _indicatorWanted) _autopilot.Visible = !FlashAreaBusy();   // T-811: a bool or two a frame, only in the cramped layout
+        RefreshMinimap(connection.Phase == ConnectionPhase.Online && !ui.Dead);
+    }
+
+    /// <summary>
+    /// T-812: where the corner map goes, if anywhere: under the right column's last button, as wide as the column, down to the hotbar row with a margin above and below, and only
+    /// when that leaves at least <see cref="ClientConfig.MinimapCornerMinDp"/> (dp after the scale). Null where it has no room, is switched off, offline, dead, or the map has no
+    /// picture. A few rectangles read and compared a frame; the controls move only when the answer changes.
+    /// </summary>
+    private Rect2? CornerRect(bool online)
+    {
+        if (_minimap is null || !online || !_prefs.Minimap || !_minimap.HasPicture || !_hasMetrics) return null;
+        var bottom = float.MinValue;
+        var right = float.MinValue;
+        for (var i = 0; i < _right.GetChildCount(); i++)   // by index: GetChildren would make an array every frame
+            if (_right.GetChild(i) is Control { Visible: true } control)
+            {
+                var rect = control.GetGlobalRect();
+                bottom = Mathf.Max(bottom, rect.End.Y);
+                right = Mathf.Max(right, rect.End.X);
+            }
+        if (bottom == float.MinValue) return null;
+        var top = bottom + _marginPx;
+        var room = _hotbarRow.GetGlobalRect().Position.Y - _marginPx - top;
+        var side = Mathf.Min(_cornerRightPx, room);
+        if (side < _cornerMinPx) return null;
+        var origin = _safe.GlobalPosition;
+        return new Rect2(right - side - origin.X, top - origin.Y, side, side);
+    }
+
+    private void RefreshMinimap(bool online)
+    {
+        if (_minimap is null) return;
+        _minimap.Refresh(online);   // first: a new map's picture decides whether there is a corner map at all
+        var rect = CornerRect(online);
+        if (rect != _cornerPlaced)
+        {
+            _cornerPlaced = rect;
+            _minimap.PlaceCorner(rect);
+            // The flash and announcement lines keep clear of the corner map: as wide as the safe area less a column and two margins on each side (they stay centred).
+            var shown = rect is not null;
+            var width = shown ? Mathf.Max(0, _safe.Size.X - 2 * (2 * _marginPx + rect!.Value.Size.X)) : 0;
+            foreach (var label in new[] { _flash, _announcement })
+            {
+                label.CustomMinimumSize = new Vector2(width, label.CustomMinimumSize.Y);
+                label.SizeFlagsHorizontal = shown ? Control.SizeFlags.ShrinkCenter : Control.SizeFlags.Fill;
+            }
+            _onCornerMap = shown ? _minimap.CornerShows : null;
+        }
+        if (_chatPanel is not null && _chatPanel.MapButton.Disabled == _minimap.HasPicture) _chatPanel.MapButton.Disabled = !_minimap.HasPicture;
+    }
+
+    /// <summary>
+    /// T-812: what the corner map lies over now, as "name (rect)": every other part of the HUD a player reads or touches (buttons, slots, read-outs, bars, the tracker, the target frame,
+    /// the banner, the flash and announcement lines, the autopilot indicator, the chat strip). The layout check wants none. Empty while the corner map is hidden.
+    /// </summary>
+    public List<string> MinimapOverlaps()
+    {
+        var found = new List<string>();
+        if (_minimap is not { CornerShown: true }) return found;
+        var mine = _minimap.Corner.GetGlobalRect().Grow(-0.6f);
+        foreach (var control in _slots.Cast<Control>().Concat([_skillsButton, _bagButton, _uiSize, _soundButton, _logout, _tracker, _levels, _hpText, _spText, _hpBar, _spBar, _expBar,
+                     _statusRow, _targetFrame, _banner, _announcement, _flash, _connection, _autopilot]).Concat(_chatPanel?.StripControls ?? []))
+        {
+            if (!control.IsVisibleInTree()) continue;
+            if (mine.Intersects(control.GetGlobalRect())) found.Add($"{control.GetType().Name}\"{(control as Button)?.Text ?? (control as Label)?.Text}\" {Describe(control.GetGlobalRect())}");
+        }
+        return found;
     }
 
     /// <summary>

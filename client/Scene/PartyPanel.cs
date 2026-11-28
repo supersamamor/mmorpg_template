@@ -233,7 +233,8 @@ public sealed class PartyPanel
     /// Puts a mark at the screen's edge for each member on this map whose cell is off the screen (or behind the camera), pointing toward it. Called every frame after the camera
     /// moved; with nobody to mark it hides what it showed and returns.
     /// </summary>
-    public void UpdateMarks(Camera3D camera, string? mapId, Vector2 safeOrigin, Func<double, double, float> groundAt)
+    /// <param name="onMinimap">T-812: true for a member the corner minimap shows; it gets no edge mark (the minimap already says where it is).</param>
+    public void UpdateMarks(Camera3D camera, string? mapId, Vector2 safeOrigin, Func<double, double, float> groundAt, Func<long, bool>? onMinimap = null)
     {
         var shown = 0;
         if (_party.InParty && mapId is not null && !_samples)
@@ -245,6 +246,7 @@ public sealed class PartyPanel
             {
                 if (shown >= MaxMarks) break;
                 if (member.Mine || !member.Known || member.Away || member.Map != mapId || member.Cell is not { } cell) continue;
+                if (onMinimap?.Invoke(member.Id) == true) continue;
                 var world = new Vector3(cell.X + 0.5f, groundAt(cell.X + 0.5, cell.Y + 0.5) + 0.9f, cell.Y + 0.5f);
                 var behind = camera.IsPositionBehind(world);
                 var at = camera.UnprojectPosition(world) - safeOrigin;

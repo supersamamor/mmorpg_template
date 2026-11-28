@@ -8,7 +8,7 @@ namespace Game.Client.Core.Ui;
 
 /// <summary>
 /// What the player chooses on this device (T-211, T-305): kept in the engine's per-user storage, never in <c>client_settings.json</c> (which ships with the build)
-/// and never on the server. The UI scale, and the sound volumes per bus with the mute switch.
+/// and never on the server. The UI scale, the sound volumes per bus with the mute switch, and whether the corner minimap shows (T-812).
 /// </summary>
 public sealed class UserPreferences
 {
@@ -17,6 +17,9 @@ public sealed class UserPreferences
 
     /// <summary>The player muted all sound.</summary>
     public bool Muted { get; set; }
+
+    /// <summary>T-812: the corner minimap shows (the default); off, the full map is still the chat panel's Map button.</summary>
+    public bool Minimap { get; set; } = true;
 
     /// <summary>The volumes the player chose per bus (0–1), in the order of <see cref="BusMixer.Buses"/>; the mixer's defaults where none was chosen.</summary>
     public double[] Volumes { get; } = DefaultVolumes();
@@ -61,6 +64,11 @@ public sealed class UserPreferences
                     result.Muted = reader.TokenType == JsonTokenType.True;
                     continue;
                 }
+                if (key == "minimap" && reader.TokenType is JsonTokenType.True or JsonTokenType.False)
+                {
+                    result.Minimap = reader.TokenType == JsonTokenType.True;
+                    continue;
+                }
                 if (reader.TokenType != JsonTokenType.Number || !reader.TryGetDouble(out var number) || double.IsNaN(number) || double.IsInfinity(number)) continue;
                 if (key == "ui_scale") result.UiScale = number;
                 else if (key.StartsWith("volume_", StringComparison.Ordinal) && BusMixer.IndexOf(key.Substring(7)) is var bus and >= 0)
@@ -83,6 +91,7 @@ public sealed class UserPreferences
             writer.WriteStartObject();
             writer.WriteNumber("ui_scale", Math.Round(UiScale, 3));
             writer.WriteBoolean("sound_muted", Muted);
+            writer.WriteBoolean("minimap", Minimap);
             for (var i = 0; i < BusMixer.Buses.Length; i++) writer.WriteNumber("volume_" + BusMixer.Buses[i], Math.Round(Volumes[i], 3));
             writer.WriteEndObject();
         }

@@ -65,6 +65,7 @@ public sealed class UiRuns
         await ShopPanelAsync();
         await TapAsync();
         await MeasureAsync();
+        await MinimapAsync();
         await ShotAsync();
 
         Session.Logout(Clocks.Wall());
@@ -324,6 +325,12 @@ public sealed class UiRuns
         Check(shop.Open && shop.Rows.Count >= 12, "the shop panel shows its sample rows");
         Check(Hud.Blocks(shop.Rows[0].Button.GetGlobalRect().GetCenter()), "a touch on a shop row never reaches the world");
         shop.ClearSamples();
+        // T-812: the full map, over the safe area with its title, line and Close, at every screen shape and scale.
+        Hud.Minimap!.SetOpen(true);
+        await FramesAsync(3);
+        Check(Hud.Minimap.Open, "the full map opens on a map with a picture");
+        await LayoutMatrixAsync("full map open");
+        Hud.Minimap.SetOpen(false);
         Hud.SetScale(scaleBefore, false);
         Hud.ForceRefresh();
         await FramesAsync(3);
@@ -350,6 +357,7 @@ public sealed class UiRuns
         for (var i = 0; i < UiScale.StepCount(Config.UiScaleMin, Config.UiScaleMax, Config.UiScaleStep); i++) scales.Add(Config.UiScaleMin + i * Config.UiScaleStep);
         var combinations = 0;
         var failures = new List<string>();
+        var corners = new List<string>();
         foreach (var screen in Screens)
             foreach (var notch in new[] { false, true })
                 foreach (var scale in scales)
@@ -363,6 +371,11 @@ public sealed class UiRuns
                     await FramesAsync(combinations == 0 ? 6 : 3);
                     combinations++;
                     foreach (var problem in Hud.FindProblems()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: {problem}");
+                    // T-812: the corner map lies over no other part of the HUD, and where it shows is printed once (the "playing" pass).
+                    foreach (var name in Hud.MinimapOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the corner map covers {name}");
+                    if (what == "playing")
+                        corners.Add($"{screen.Name} notch {(notch ? "on" : "off")} {scale}: " +
+                            (Hud.Minimap is { CornerShown: true } m ? $"{m.Corner.Size.X / unitsPerDp:0} dp" : "Map button"));
                     if (failures.Count > 0 && Hud.Chat is { Open: true } open && !_chatSizesShown)
                     {
                         _chatSizesShown = true;
@@ -414,6 +427,7 @@ public sealed class UiRuns
                     foreach (var name in Hud.TrackerOverlaps()) failures.Add($"{what}, {screen.Name}, notch {(notch ? "on" : "off")}, scale {scale}: the one-line quest tracker covers {name}");
                     Hud.Tracker.Text = longText;
                 }
+        if (corners.Count > 0) Print("layout: the corner map (T-812): " + string.Join("; ", corners));
         Print($"layout: {what}: {combinations} combinations ({Screens.Length} screens x notch on/off x {scales.Count} scales), {failures.Count} problems");
         foreach (var line in failures.Take(12)) Print("layout: PROBLEM " + line);
         Check(failures.Count == 0, $"{what}: nothing cut off, outside the safe area, or under the touch minimum ({failures.Count} problems)");
@@ -598,6 +612,99 @@ public sealed class UiRuns
         Print($"measure: draw calls with the HUD avg {sumWith / frames:0.0}, max {maxWith:0}; without {sumWithout / framesWithout:0.0}; the UI adds {sumWith / frames - sumWithout / framesWithout:0.0}");
         Print($"measure: the frame path allocated {quietBytes} bytes in {quietFrames} frames with no message ({(quietFrames > 0 ? quietBytes / (double)quietFrames : 0):0.0} bytes per frame, HUD included)");
         Print($"measure: {Hud.NodeCount} UI nodes");
+    }
+
+    /// <summary>
+    /// The minimap (T-812) on the real window: the corner map shows with the player's mark, a tap on it opens the full map, which takes touches, and a tap on the full map sends one
+    /// walk (the server's <c>move</c>) and closes it; the options switch hides the corner map and the choice is stored. What it costs: the per-frame refresh's time, its redraws while
+    /// nothing moves, and (windowed) the draw calls with and without it. Windowed, a picture of each.
+    /// </summary>
+    private async Task MinimapAsync()
+    {
+        var minimap = Hud.Minimap!;
+        Hud.ForceRefresh();
+        await FramesAsync(4);
+        Check(minimap.HasPicture, "the map has its minimap picture (theme key minimap.<map id>)");
+        Check(minimap.CornerShown, $"the corner map shows on this {_main.GetWindow().Size.X}x{_main.GetWindow().Size.Y} window");
+        Check(Hud.MinimapOverlaps().Count == 0, "and lies over nothing: " + string.Join(", ", Hud.MinimapOverlaps()));
+        Check(minimap.CornerMarkOf(Core.Ui.MinimapMarkKind.Own) is not null, "with the player's mark on it");
+        Check(Hud.Blocks(minimap.Corner.GetGlobalRect().GetCenter()), "a touch on the corner map never reaches the world");
+
+        // Cost: the refresh every frame is the marks collected and compared; it redraws only when one moved by a pixel.
+        OS.LowProcessorUsageMode = false;
+        var calls = 2000;
+        var clock = Stopwatch.StartNew();
+        for (var i = 0; i < calls; i++) minimap.Refresh(true);
+        var perCall = clock.Elapsed.TotalMilliseconds * 1000 / calls;
+        var drawsBefore = minimap.Draws.Corner;
+        var frames = 0;
+        clock.Restart();
+        while (clock.Elapsed.TotalSeconds < 2)
+        {
+            await FramesAsync(1);
+            frames++;
+        }
+        var redraws = minimap.Draws.Corner - drawsBefore;
+        Check(redraws <= frames, "the corner map redraws at most once a frame");
+        var drawCalls = await DrawCallsAsync(2);
+        Hud.SetMinimapWanted(false);
+        await FramesAsync(3);
+        var drawCallsOff = await DrawCallsAsync(2);
+        Hud.SetMinimapWanted(true);
+        await FramesAsync(3);
+        Print($"minimap: refresh {perCall:0.0} us a frame ({minimap.Marks.Count} marks), {redraws} redraws in {frames} frames with the world moving around it; draw calls avg {drawCalls:0.0} with the corner map, {drawCallsOff:0.0} without");
+
+        if (_screenshot is not null && DisplayServer.GetName() != "headless")
+            await SaveAsync(System.IO.Path.ChangeExtension(_screenshot, null) + "-minimap" + System.IO.Path.GetExtension(_screenshot), "the corner map");
+        minimap.Corner.EmitSignal(BaseButton.SignalName.Pressed);
+        await FramesAsync(3);
+        Check(minimap.Open, "a tap on the corner map opens the full map");
+        Check(Hud.Blocks(minimap.FullCanvas.GetGlobalRect().GetCenter()), "a touch on the full map never reaches the world");
+        Check(Hud.FindProblems().Count == 0, "the full map fits: " + string.Join(", ", Hud.FindProblems()));
+        if (_screenshot is not null && DisplayServer.GetName() != "headless")
+            await SaveAsync(System.IO.Path.ChangeExtension(_screenshot, null) + "-full-map" + System.IO.Path.GetExtension(_screenshot), "the full map");
+        var own = Session.World.Own!.Cell;
+        var map = _main.Bundle!.TryGetMap(Session.World.MapId!, out var data) ? data! : throw new InvalidOperationException("no map");
+        var goal = own;
+        foreach (var (dx, dy) in new[] { (2, 0), (-2, 0), (0, 2), (0, -2) })
+            if (map.IsWalkable(own.X + dx, own.Y + dy))
+            {
+                goal = new Game.Shared.World.GridCell(own.X + dx, own.Y + dy);
+                break;
+            }
+        Check(!goal.Equals(own), "a walkable cell two away from the player");
+        Check(minimap.TapFull(minimap.FullPointOf(goal.X, goal.Y)), "a tap on the full map is a walk");
+        await FramesAsync(2);
+        Check(Session.Ui.Marker is { } marked && marked.Equals(goal) && !minimap.Open, $"it asks to walk to {goal} (the marker shows) and closes the map");
+        await UntilAsync(() => Session.World.Own!.Cell.Equals(goal), 10, "the walk the full map asked for");
+
+        Hud.SetSoundPanel(true);
+        await FramesAsync(2);
+        Hud.MinimapSwitch.EmitSignal(BaseButton.SignalName.Pressed);
+        await FramesAsync(3);
+        Check(!minimap.CornerShown && !UserPrefsStore.Load().Minimap, "the options switch hides the corner map, and the choice is stored");
+        Hud.MinimapSwitch.EmitSignal(BaseButton.SignalName.Pressed);
+        await FramesAsync(3);
+        Check(UserPrefsStore.Load().Minimap, "and shows it again, stored");
+        Hud.SetSoundPanel(false);
+        await FramesAsync(3);
+        Check(minimap.CornerShown, "the corner map is back");
+        OS.LowProcessorUsageMode = true;
+        Print($"minimap: corner map {minimap.Corner.Size.X / Hud.UnitsPerDp:0} dp on the window; the full map walked to {goal}; the switch hid it and showed it again, stored");
+    }
+
+    private async Task<double> DrawCallsAsync(double seconds)
+    {
+        double sum = 0;
+        var frames = 0;
+        var clock = Stopwatch.StartNew();
+        while (clock.Elapsed.TotalSeconds < seconds)
+        {
+            await FramesAsync(1);
+            sum += Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
+            frames++;
+        }
+        return frames > 0 ? sum / frames : 0;
     }
 
     private async Task ShotAsync()
