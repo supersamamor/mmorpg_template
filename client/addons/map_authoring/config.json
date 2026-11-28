@@ -1,4 +1,11 @@
 {
   "default_slope_limit_degrees": 40.0,
-  "export_runner_scene": "res://addons/map_authoring/ExportRunner.tscn"
+  "export_runner_scene": "res://addons/map_authoring/ExportRunner.tscn",
+  "minimap": {
+    "pixels_per_cell": 4,
+    "max_side_px": 2048,
+    "blocked": "#2a222699",
+    "walkable": "#c9d8a8e6",
+    "blocks_los": "#5b4636f0"
+  }
 }

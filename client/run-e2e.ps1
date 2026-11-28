@@ -44,6 +44,7 @@
 #   .\client\run-e2e.ps1 -Run chat                        two accounts' characters on one map talk and whisper through the chat panel; the second reports a line and blocks the first;
 #                                                         the script reads and closes the report and mutes the first through the admin API, whose next line is refused (T-901). Needs PostgreSQL like account
 #   .\client\run-e2e.ps1 -Run party                       two dev-login characters form a party by name, talk on the party channel, share a slime's EXP by party_exp, and one leaves
+#   .\client\run-e2e.ps1 -Run minimap                     T-812: a walker's mark moves on the corner map, and a second client in its party shows on it; the full map from the chat panel
 #   .\client\run-e2e.ps1 -Run trade                       two new accounts' characters trade a draught and currency for a tonic through the trade window; the server stops itself, the next
 #                                                         one has the swap; a second trade ends when one walks away, and nothing moved (T-903; needs PostgreSQL like account)
 #   .\client\run-e2e.ps1 -Run guild                       a new account's character founds a guild through the guild panel, invites a second (it accepts), they talk on the guild channel,
@@ -57,7 +58,7 @@
 #   .\client\run-e2e.ps1 -EasyMonsters                    play with the whole warp leg on the weak-monster copy, as T-206 did
 #   .\client\run-e2e.ps1 -Windowed -Screenshot shot.png   the same with the real renderer, saving a picture at the drop
 param(
-    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "battle", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "reload", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
+    [ValidateSet("play", "death", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "battle", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "minimap", "trade", "guild", "reload", "resume_failed", "replaced", "shutdown", "grace_expiry", "bye", "release", "all")] [string] $Run = "play",
     [string] $Monster = "",          # the monster to hunt (a content id, so it is an argument); empty means the nearest
     [switch] $Windowed,              # real renderer instead of --headless
     [switch] $AudioTrace,           # log every sound played, skipped, stolen and crossfaded (audio_trace=1)
@@ -753,6 +754,24 @@ function Invoke-Scenario([string] $Name) {
                 if (Select-String -Path $server.Log -Pattern "e2esaid" -Quiet) { Write-Host "[run-e2e] A PLAYER'S LINE IS IN THE SERVER LOG"; return 1 }
                 return $result.Code
             }
+            "minimap" {
+                # T-812: two dev-login clients, no database. The walker sees its mark move on the corner map as it walks, invites the ally and sees it as a party mark; windowed with
+                # -Screenshot, a picture of the corner map and of the full map.
+                $server = Start-GameServer
+                $holder = @{ Second = $null }
+                $run = Start-GodotClient (Get-RunClientArgs @("--e2e-minimap", "e2e-mapally") @()) -EngineArgs $engineArgs
+                $result = Wait-GodotClient $run 240 -OnMarker {
+                    param($marker)
+                    if ($marker -like "minimap-second:*") {
+                        Write-Host "[run-e2e] starting the ally"
+                        $holder.Second = Start-GodotClient @("--e2e-minimap-join", $marker.Substring(15), "--server", "ws://127.0.0.1:$Port/ws", "--name", "e2e-mapally") -EngineArgs $engineArgs -Headless
+                    }
+                }
+                if (-not $holder.Second) { Write-Host "[run-e2e] the walker never asked for the ally"; return 1 }
+                $second = Wait-GodotClient $holder.Second 120
+                if ($second.Code -ne 0) { Write-Host "[run-e2e] the ally failed (exit code $($second.Code))"; return 1 }
+                return $result.Code
+            }
             "trade" {
                 # T-903: a database like account; two servers one after the other, as saving does. The first stops itself (a clean stop: every character is saved) once the trade is
                 # long done; the clients sign in again by themselves on the second, which must have the swap. The trader asks for the partner by a marker naming its character.
@@ -945,7 +964,7 @@ function Invoke-Release {
 
 $runs = switch ($Run) {
     "bye" { @("resume_failed", "replaced", "shutdown", "grace_expiry") }
-    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "battle", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "trade", "guild", "reload", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
+    "all" { @("play", "warp", "hill", "ui", "items", "statuses", "skills", "stats", "dialogue", "quests", "autopilot", "battle", "account", "saving", "appearance", "wardrobe", "kick", "moderation", "textured", "chat", "party", "minimap", "trade", "guild", "reload", "resume_failed", "replaced", "shutdown", "grace_expiry", "release") }
     default { @($Run) }
 }
 # The account, saving and appearance runs need a database. Named alone they fail without one; in `all` they are skipped, and the last line says so: skipped is not passed.

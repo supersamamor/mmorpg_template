@@ -48,6 +48,7 @@ public sealed class AutoRun
         Array.IndexOf(args, "--e2e-wardrobe") >= 0 || Array.IndexOf(args, "--e2e-wardrobe-watch") >= 0 || Array.IndexOf(args, "--e2e-kick") >= 0 || Array.IndexOf(args, "--e2e-moderation") >= 0 || Array.IndexOf(args, "--e2e-textured") >= 0 ||
         Array.IndexOf(args, "--e2e-chat") >= 0 || Array.IndexOf(args, "--e2e-chat-listen") >= 0 ||
         Array.IndexOf(args, "--e2e-party") >= 0 || Array.IndexOf(args, "--e2e-party-join") >= 0 ||
+        Array.IndexOf(args, "--e2e-minimap") >= 0 || Array.IndexOf(args, "--e2e-minimap-join") >= 0 ||
         Array.IndexOf(args, "--e2e-trade") >= 0 || Array.IndexOf(args, "--e2e-trade-join") >= 0 ||
         Array.IndexOf(args, "--e2e-guild") >= 0 || Array.IndexOf(args, "--e2e-guild-join") >= 0 || Array.IndexOf(args, "--e2e-reload") >= 0 ||
         Array.IndexOf(args, "--measure") >= 0;
@@ -100,6 +101,8 @@ public sealed class AutoRun
             else if (Array.IndexOf(_args, "--e2e-moderation") >= 0) await ModerationRunAsync();
             else if (PartyRuns.Args(_args, "--e2e-party-join") is { } join) await new PartyRuns(_main, _monster ?? string.Empty).AllyAsync(join.Name, join.Base, join.Job);   // T-902
             else if (PartyRuns.Args(_args, "--e2e-party") is { } lead) await new PartyRuns(_main, _monster ?? throw new InvalidOperationException("the party run needs --e2e-monster")).LeaderAsync(lead.Name, lead.Base, lead.Job);
+            else if (Value("--e2e-minimap-join") is { } walker) await new MinimapRuns(_main, ShotAsync).AllyAsync(walker);   // T-812
+            else if (Value("--e2e-minimap") is { } ally) await new MinimapRuns(_main, ShotAsync).WalkerAsync(ally);
             else if (Value("--e2e-trade-join") is { } trader) await TradeRunsOf().PartnerAsync(trader);   // T-903
             else if (Array.IndexOf(_args, "--e2e-trade") >= 0) await TradeRunsOf().TraderAsync();
             else if (Value("--e2e-guild-join") is { } founder) await new GuildRuns(_main, () => ShotAsync(), Value("--e2e-guild-ids")).MemberAsync(founder);   // T-904, T-905's merchant

@@ -205,6 +205,12 @@
     "file": "render/toon.tres",
     "render": "toon"
   },
+  "minimap.map.starter_meadow": {
+    "file": "maps/starter_meadow.minimap.png"
+  },
+  "minimap.map.thistle_hollow": {
+    "file": "maps/thistle_hollow.minimap.png"
+  },
   "model.char.spellbinder": {
     "file": "models/char/spellbinder.glb",
     "rig": "humanoid",

@@ -55,6 +55,7 @@ Options defined inside `content/appearance.yaml` (ARCHITECTURE §7.5.1), not reg
 | `music.`    | Music track                                        |
 | `font.`     | Font                                               |
 | `ambience.` | Ambience loop (a map's background sound)           |
+| `minimap.`  | A map's minimap picture (T-812): `minimap.` + the map's id (`minimap.map.starter_meadow`), drawn by the map export; never named in content |
 
 ## World units
 Distances, ranges and AoE sizes are in **cells** (1 cell = 1 world unit, Chebyshev distance).

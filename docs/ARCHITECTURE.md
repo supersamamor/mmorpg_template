@@ -271,6 +271,11 @@ A map has three parts that share its id:
   | `zones[]` | object | `kind` (a `ZoneKinds` term), `area {x, y, w, h}` |
 
   Runtime access is the immutable `MapGrid` (`Game.Shared/World`), exposed by `ContentDatabase.GetGrid(mapId)`.
+- **Minimap picture** (T-812): the export also draws `themes/<theme>/maps/<name>.minimap.png` from the same cells as the grid (after the paint): one colour per kind of cell (walkable, blocked, blocks line
+  of sight, from the plugin's `config.json` `minimap` section), 4 pixels a cell (fewer for a map over 512 cells, at most 2048 a side), north at the top. Canonical bytes (an indexed PNG with stored deflate
+  blocks, `MinimapPicture`), so `export-maps.ps1 -Check` compares them and fails a missing or stale picture; a test compares the committed pictures with the committed grids without Godot. Its asset key is
+  `minimap.` + the map's id (`MinimapKeys`, shared by `validate` and the client), so the display bundle does not change; `validate` fails a map whose key is not in the manifest. The picture shows
+  only what the bundle's cell flags already tell the client. A theme may point the key at painted art instead (THEMES.md §1.10).
 - **Theme caveat:** a theme re-skins maps, it does not re-lay them out. A replacement scene must
   match the existing grid, or the grid must be re-exported (that is a content change). The same collision and markers give the same hash, so a pure re-skin stays valid.
 
@@ -1047,9 +1052,24 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
 - **Party** (T-902, §6.9; `PartyPanel`): the panel opens from the chat panel's **Party** button (the HUD's columns have no button to spare on a 640x360 dp phone at 1.5, as the wardrobe opens
   from the bag): the members in party order with the leader's mark, where each is (here, a map's name, fallen, away) and HP and SP bars, Lead and Kick for the leader, a name field with Invite, the
   invite of a player tapped in the world beside it (a tap on another player opens the panel and sends nothing), and Leave in the heading. The **invite prompt** (who asks, seconds left, Join and No) comes up by itself at
-  the top of the safe area. Members on this map who are off the screen get a **mark at the screen's edge**, an arrow and the name, pushed in from the edge toward them: no minimap, as no corner of
-  the phone HUD is free at the largest scale and a minimap would draw the map a second time every frame; an arrow says which way, which is what a party needs. The layout check runs a full party of
+  the top of the safe area. Members on this map who are off the screen get a **mark at the screen's edge**, an arrow and the name, pushed in from the edge toward them; since T-812 only those the
+  corner minimap does not show (it is hidden, switched off, or the member is outside its square): the minimap says where they are, and an arrow on the same member would say it twice. The layout check runs a full party of
   the longest names with the leader's buttons on every row, the prompt over it and four marks, at every screen, notch and scale.
+- **Minimap** (T-812; `MinimapView`, pure rules in `client/Core/Ui/Minimap.cs`). **Corner map:** a square under Log out in the right column, as wide as the column (104 dp times the scale), down to the
+  hotbar row with a margin above and below, shown where that leaves at least `minimap_corner_min_dp` (72 dp after the scale); it shows `minimap_corner_cells` (24) cells across around the player, kept
+  inside the map (a smaller map is shown whole). While it shows, the flash and announcement lines keep clear of the right column on both sides (they stay centred and wrap in that width). Where it sits,
+  as the `ui` matrix prints it: on every phone at 0.75 (78 dp); at 1.0 on 640x360 (99 dp), 780x360 (94 dp; 73 with the notch), 891x411 and the iPhone (104 dp; 102 with the notch); at 1.25 on 891x411
+  without the notch (76 dp); on both desktop windows at every scale (78 to 156 dp). Everywhere else (640x360 at 1.0 with the notch, and every phone at 1.5, and at 1.25 except that one) it has no room
+  and the full map is the chat panel's **Map** button, beside Party and Guild,
+  as the party and guild panels are; the button is there on every layout. A tap on the corner map opens the **full map**: a panel over the safe area with the map's name, "Tap a place to walk there."
+  and Close, the whole map as large as fits. A tap on it sends one `move` to the cell (the same intent as a ground tap; a path longer than `movement.max_path_length` is the server's refusal, said on the
+  flash line) and closes the map so the walk is in view; never a skill's ground target. No pinch or zoom: the full map already shows the whole map. **Picture:** the theme's `minimap.<map id>`
+  texture, made at map export (§5.3); a map without one has no corner map and the Map button is disabled. **Marks**, only what the client already has (hard rule 11): warps and NPC places from the
+  display bundle (an NPC the server marks with a quest "!" is gold, or green to turn in: the quest markers it already sends; no objective areas), monsters and other players only while in the area of
+  interest, party members on this map (as seen, else where `party_members` says), the player last with its facing. North is up, as the camera looks. Shapes differ as well as colours (ring, square, dot,
+  diamond, arrow). **Option:** "Minimap on/off" in the options panel (the Sound button became **Options**), kept in `user://preferences.json` (`minimap`). **Cost (§9):** no camera or viewport: one
+  texture rectangle and one triangle array for all the marks (3 draw calls), redrawn only when a mark or the window moved by a pixel; every frame the marks are collected (no allocation) and compared
+  (7.9 µs measured); see the §9 entry. The layout check holds the corner map to every other part of the HUD (nothing under it), runs the full map at every screen, notch and scale, and prints where the corner shows.
 - **Trade** (T-903, §6.10; `TradePanel`): the **ask prompt** (who asks, seconds left, Trade and No) at the top of the safe area; while a trade is open the **window** fills the safe area: the
   heading (whom with, the state line, Cancel), two columns (what this side gives, each line a button that takes it out, with **Add** opening the bag's tradeable carried entries in the columns'
   place, with a quantity picker for stacks; what the other side gives), and a footer (currency field, Set, Lock or Unlock, Confirm). Both columns are the server's last `trade`; Confirm sends the
@@ -1502,6 +1522,11 @@ not count what a phone pays for each surface, so the surfaces are the budget's m
 thread over the run (once per texture). The job models are no longer preloaded: none is loaded before the first phase; the first character drawn by one waited 0.52 s for it, hidden, with no frame over 35 ms
 (`run-e2e.ps1 -Run textured`, headless, where loading runs on the main thread: 0.06 s). The 80 ms worst frames are outside the changes (the crowd moving in, as in earlier runs); 30 fps throughout.
 A headless run of the same (no draw calls or triangles without a renderer) gave the same surfaces and 64.7 MB static memory dressed in outfits against 75.7 MB merged by file. Not run on a phone (ADR-002 row 112).
+
+**Minimap (T-812, §7.4), measured** on the same machine, windowed 1280x720 off the screen (`run-e2e.ps1 -Run minimap -Windowed`): **3 draw calls** for the corner map (54 with it, 51 without, 30 fps):
+the background, the picture (one texture rectangle) and every mark with the border as one triangle array; drawing each mark with its own primitive had cost 22 (the Mobile renderer did not batch them).
+Headless (`-Run ui`): the per-frame refresh 7.9 µs with 19 marks, redrawn only when a mark or the window moved by a pixel (29 redraws in 61 frames with monsters walking in view); collecting the marks
+allocates nothing (a test). No camera, viewport or second render of the world: the picture is drawn once by the map export (§5.3); the meadow's is 192x128 pixels, 96 KB as RGBA8. Not run on a phone (ADR-002 row 112).
 
 ## 10. Networking on mobile
 

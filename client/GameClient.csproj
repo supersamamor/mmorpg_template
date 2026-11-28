@@ -15,6 +15,8 @@
     <ProjectReference Include="../src/Game.Shared/Game.Shared.csproj" SetTargetFramework="TargetFramework=netstandard2.1" />
     <!-- The server's own JSON mapping: it depends only on Game.Shared and System.Text.Json (ARCHITECTURE §10). -->
     <Compile Include="../src/Game.Server/Net/ProtocolJson.cs" Link="Linked/ProtocolJson.cs" />
+    <!-- The minimap picture's asset key (T-812): validate and the HUD name the same key. -->
+    <Compile Include="../src/Game.Content/Maps/MinimapKeys.cs" Link="Linked/MinimapKeys.cs" />
   </ItemGroup>
   <!-- The map authoring plugin and its exporter (T-208) are editor tools: no export configuration compiles them, so none of it reaches a phone. Debug is what the editor and the headless export run. -->
   <ItemGroup Condition=" '$(Configuration)' == 'Debug' ">

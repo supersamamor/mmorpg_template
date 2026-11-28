@@ -37,12 +37,18 @@ public readonly struct MapZone
     public GridRect Area { get; }
 }
 
+/// <summary>An NPC's place on a map, from the display bundle (T-812).</summary>
+/// <param name="NpcId">Which NPC (<c>npc.*</c>).</param>
+/// <param name="Cell">Where it stands.</param>
+public sealed record MapNpc(string NpcId, GridCell Cell);
+
 /// <summary>A map's display data: size, cell flags and the cells worth showing.</summary>
 public sealed class MapData
 {
     internal MapData(string id, string name, string sceneKey, int width, int height, byte[] cells, IReadOnlyList<GridCell> warps, IReadOnlyList<MapZone> zones,
-        string? musicKey = null, string? ambienceKey = null)
+        string? musicKey = null, string? ambienceKey = null, IReadOnlyList<MapNpc>? npcs = null)
     {
+        Npcs = npcs ?? Array.Empty<MapNpc>();
         MusicKey = musicKey;
         AmbienceKey = ambienceKey;
         Id = id;
@@ -84,6 +90,9 @@ public sealed class MapData
 
     /// <summary>Zones.</summary>
     public IReadOnlyList<MapZone> Zones { get; }
+
+    /// <summary>Where the map's NPCs stand (T-812: the minimap marks them; the bundle always had them).</summary>
+    public IReadOnlyList<MapNpc> Npcs { get; }
 
     /// <summary>True for a walkable cell inside the map. For drawing only: the server decides where anyone can walk.</summary>
     public bool IsWalkable(int x, int y) => Inside(x, y) && (Cells[y * Width + x] & CellFlagBits.Walkable) != 0;
@@ -435,7 +444,14 @@ public sealed class DisplayBundle
             var area = zone.GetProperty("area");
             zones.Add(new MapZone(Text(zone, "kind"), new GridRect(area[0].GetInt32(), area[1].GetInt32(), area[2].GetInt32(), area[3].GetInt32())));
         }
-        return new MapData(Text(map, "id"), Text(map, "name"), Text(map, "scene"), width, height, cells, warps, zones, OptionalText(map, "music"), OptionalText(map, "ambience"));
+        var npcs = new List<MapNpc>();
+        if (map.TryGetProperty("npcs", out var placed))
+            foreach (var npc in placed.EnumerateArray())
+            {
+                var cell = npc.GetProperty("cell");
+                npcs.Add(new MapNpc(Text(npc, "npc"), new GridCell(cell[0].GetInt32(), cell[1].GetInt32())));
+            }
+        return new MapData(Text(map, "id"), Text(map, "name"), Text(map, "scene"), width, height, cells, warps, zones, OptionalText(map, "music"), OptionalText(map, "ambience"), npcs);
     }
 
     private static string? OptionalText(JsonElement element, string name) =>

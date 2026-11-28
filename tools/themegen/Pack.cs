@@ -38,6 +38,7 @@ public static class Pack
         {
             if (node is not JsonObject entry || key is "audio" or "fallbacks") continue;
             if (key.StartsWith("scene.", StringComparison.Ordinal)) continue; // map scenes are authored in the editor (T-208): the manifest's path stands, and validate checks them
+            if (key.StartsWith("minimap.", StringComparison.Ordinal)) continue; // minimap pictures are made by the map export (T-812): export-maps.ps1 -Check checks them
             if (entry["render"] is not null) continue; // the theme's render resources (T-222: toon material, outline, environment) are authored files too
             if (entry["variant_of"] is not null) continue; // a variant (T-224) draws its base's file: nothing to generate
             var (path, bytes) = Make(key, entry, DefaultStyle, manifest, weaponTypes, palette);

@@ -100,7 +100,10 @@ public sealed class AudioDriver
     public void SavePreferences()
     {
         Preferences.TakeFrom(Director.Mixer);
-        UserPrefsStore.Save(Preferences);
+        // The HUD keeps its own copy (the UI scale, the minimap switch, T-812): write the sound choices over what is stored, not this copy's older others.
+        var stored = UserPrefsStore.Load();
+        stored.TakeFrom(Director.Mixer);
+        UserPrefsStore.Save(stored);
     }
 
     /// <summary>Once a frame, after the session has applied what arrived.</summary>

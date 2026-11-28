@@ -1172,8 +1172,17 @@ public static class UiText
     }
 
     /// <summary>The button that cycles the UI size, showing the current one (a percentage).</summary>
-    /// <summary>The sound settings button.</summary>
-    public const string Sound = "Sound";
+    /// <summary>The settings button (sound and, since T-812, the minimap).</summary>
+    public const string Options = "Options";
+
+    /// <summary>T-812: the settings switch of the corner minimap.</summary>
+    public static string MinimapSetting(bool on) => on ? "Minimap on" : "Minimap off";
+
+    /// <summary>T-812: the chat panel's button that opens the full map (beside Party and Guild).</summary>
+    public const string Map = "Map";
+
+    /// <summary>T-812: the line under the full map's title.</summary>
+    public const string MapTapToWalk = "Tap a place to walk there.";
 
     /// <summary>Closes the sound settings.</summary>
     public const string Close = "Close";
