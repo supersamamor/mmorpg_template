@@ -149,6 +149,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-904 | Guilds: found, invite, ranks with permissions, notice, guild chat through T-901's seam, emblem from the theme's set, erased with the account | Claude Code | Opus 5.5 | [T-904](../tasks/prompts/T-904.md) | T-901, T-902, T-703 | Review | Restricted `Persistence/**` (one migration) and `Net/**` scopes in the prompt's header |
 | T-905 | Guild storage: deposit and withdraw by rank, atomic with the character's save, move log, dupe-safe (rule 10) | Claude Code | Opus 5.5 | [T-905](../tasks/prompts/T-905.md) | T-903, T-904 | Review | Restricted `Persistence/**` (one migration) and `Net/**` scopes in the prompt's header |
 | T-809 | Staff panel pages for moderation, support, server and chat reports (ADR-002 rows 387 (1), 412 (1)) | Claude Code | Sonnet 5.5 | [T-809](../tasks/prompts/T-809.md) | T-805, T-806, T-901 | Review | Built beside T-905; `src/Game.Admin` only |
+| T-801 | Content hot-reload in development (whole set validated, swapped between ticks) and a local schema-driven content editor | Claude Code | Opus 5.5 | [T-801](../tasks/prompts/T-801.md) | T-805, T-807 | Ready | One `Net/**` message (bundle changed) in the prompt's header; Opus instead of Sonnet: swapping content under a live world |
 
 ## Backlog (prompts written when the previous phase is Done)
 
@@ -158,7 +159,6 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-225 | 2 | AI asset pipeline for forks (after T-224): scripts drive a 3D generation API (Meshy, Tripo or Rodin; key from an environment variable, never committed) from an approved brief, then cleanup in headless Blender, rigging or scripted motion, import through the T-224 tool, and an in-game review loop (scripted runs, screenshots at the game camera next to existing art, ThemeCheck and §9 budgets) that adjusts scale, tint, outline and pose for consistency, retrying within a set credit limit. Art is generated in a fork only | Claude Code | Opus 5.5 | Backlog |
 | T-707 | 7 | Appearance art: 2 genders, skin tones, faces, hairstyles in the chosen art style (art direction: ADR-003, storybook toon) | Human / artist | — | Backlog |
 | T-709 | 7 | Cosmetics store: Apple and Google in-app purchases with receipts checked on the server (never trusted from the client), grants outfits from T-708 atomically, refunds revoke, store compliance; the template ships the hook and a sandbox setup, no real products or keys (needs T-701, T-702, T-703, T-708; restricted `Net/**` and `Persistence/**`) | Claude Code | Opus 5.5 | Backlog |
-| T-801 | 8 | Content hot-reload + simple editor | Claude Code | Sonnet 5.5 | Backlog |
 | T-802 | 8 | Mobile build pipeline (Android AAB, iOS on macOS CI, TestFlight / Play internal) | Claude Code | Sonnet 5.5 | Backlog |
 | T-803 | 8 | On-device performance capture vs ARCHITECTURE §9 budgets | Claude Code | Sonnet 5.5 | Backlog |
 
