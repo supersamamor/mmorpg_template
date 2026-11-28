@@ -150,7 +150,7 @@ Rule of thumb: if a bug in it would be silent (balance, concurrency, dupes) → 
 | T-905 | Guild storage: deposit and withdraw by rank, atomic with the character's save, move log, dupe-safe (rule 10) | Claude Code | Opus 5.5 | [T-905](../tasks/prompts/T-905.md) | T-903, T-904 | Review | Restricted `Persistence/**` (one migration) and `Net/**` scopes in the prompt's header |
 | T-809 | Staff panel pages for moderation, support, server and chat reports (ADR-002 rows 387 (1), 412 (1)) | Claude Code | Sonnet 5.5 | [T-809](../tasks/prompts/T-809.md) | T-805, T-806, T-901 | Review | Built beside T-905; `src/Game.Admin` only |
 | T-801 | Content hot-reload in development (whole set validated, swapped between ticks) and a local schema-driven content editor | Claude Code | Opus 5.5 | [T-801](../tasks/prompts/T-801.md) | T-805, T-807 | Ready | One `Net/**` message (bundle changed) in the prompt's header; Opus instead of Sonnet: swapping content under a live world |
-| T-810 | Guild rank editor in the panel and live storage refresh for members with it open (ADR-002 rows 469 (5), 487 (1)) | Claude Code | Sonnet 5.5 | [T-810](../tasks/prompts/T-810.md) | T-904, T-905 | Ready | Built beside T-801 and T-808; one narrow `Net/**` scope in the prompt's header |
+| T-810 | Guild rank editor in the panel and live storage refresh for members with it open (ADR-002 rows 469 (5), 487 (1)) | Claude Code | Sonnet 5.5 | [T-810](../tasks/prompts/T-810.md) | T-904, T-905 | Review | Built beside T-801 and T-808; one narrow `Net/**` scope in the prompt's header |
 
 ## Backlog (prompts written when the previous phase is Done)
 

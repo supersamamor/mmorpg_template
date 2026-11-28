@@ -730,7 +730,7 @@ derived stat `weight_limit` (`formulas.yaml`).
 `20261127125839_Guilds`), `Game.Server/World/Guild/GuildFoundingPayment` (the cost, on the tick, taken by the inventory system), the pure `Game.Shared/Guild/GuildRules`; the client's `GuildBook`
 and `GuildPanel`. Rules from `balance.yaml` `guild` (name lengths and separators, `found_cost`, `max_members` 30, `max_ranks` 6, `rank_name_max_length` 16, `invite_timeout_ms` 30 s,
 `default_ranks`, `emblems`); server configuration `--guild-notice-length` 120, `--guild-intents-per-minute` 20, `--guild-intent-burst` 6, `--guild-pulse-ms` 1000, `--guild-refresh-ms` 5000,
-`--guild-payment-wait-ms` 10000 (or `GAME_GUILD_<NAME>`). A server without a database (development's dev login) has no guilds.
+`--guild-payment-wait-ms` 10000, `--guild-storage-lease-ms` 15000 (T-810; at least 6000) (or `GAME_GUILD_<NAME>`). A server without a database (development's dev login) has no guilds.
 - **The database decides.** Every change is one transaction that locks the guild's row (`FOR UPDATE`), reads its ranks and members, and runs `GuildRules` on what it read: two officers on two
   server processes acting at once are run one after the other, and the second sees the first's change (tested on two connection pools). Whatever adds a member row takes the character's row
   first (`FOR KEY SHARE`), as erasing and deleting take the character and then the guild, so the two never wait on each other in a circle. Every change raises the guild's `version`.
@@ -745,7 +745,7 @@ and `GuildPanel`. Rules from `balance.yaml` `guild` (name lengths and separators
 - **Ranks.** Place 0 is the leader's; the leader names and orders the places below (`guild_ranks`, 1 to `max_ranks` - 1 of them, names cleaned like chat, permissions from "Guild permissions");
   members keep their place, and those on a place the new list no longer has go to its last. `guild_rank` (`set_rank`) moves a member of a lower rank to a rank also below the actor's;
   `guild_kick` (`kick`) takes out a member of a lower rank; nobody acts on the same or a higher rank. `guild_lead` (leader only) gives the leader rank to a member, and the old leader takes that
-  member's old rank.
+  member's old rank. The leader edits the list in the client's rank editor (T-810, §7.4), which sends all of it as one `guild_ranks`.
 - **Leaving and the end.** `guild_leave`; a leader who leaves hands over to the **successor** (the highest rank, the earliest to join among equals); the last member leaving disbands the guild
   (its rows go and its name is free). Erasing an account (T-703) and deleting a character take the character out by the same rule, in their own transactions.
 - **Notice** (`guild_notice`, `edit_notice`): cleaned by chat's text rules (format characters out, spaces folded; over `--guild-notice-length` refused `too_long`; empty clears it). It is in the
@@ -776,6 +776,14 @@ and `GuildPanel`. Rules from `balance.yaml` `guild` (name lengths and separators
   - **Disbanding**: the last member cannot leave (`storage_not_empty`) nor its character be deleted (`guild_storage_not_empty`) while the storage holds an entry, currency or a move under way:
     nothing in it is ever deleted unasked; they take it out first. Erasing an account (T-703) cannot be refused: a guild its last member's erasure ends goes with its storage, as the rest of that
     account's things do.
+  - **Live** (T-810): `guild_storage_open` also gives the member a **lease** of `--guild-storage-lease-ms` (15 s) on this process; the client opens again every 5 s while its window is open,
+    which renews it and reads the database anew. A lease, not an open and a close intent: a close can be lost (a dropped connection, an app put in the background or killed) or never sent (a
+    modified client), so an end by time is needed anyway, and it needs no new message. After a move lands, or a withdrawal is undone (its hold had taken from the storage), every member with a
+    running lease on that guild gets the new `guild_storage`, and so does the mover, whose answer this is. One flush per tick (100 ms) sends them, so **at most one per member per tick** however
+    many moves landed, and none while nothing changes; each is read from the database for that member at that moment: still in that guild, and the log only with `storage_log`. A member who closed
+    the window may still get changes until its lease ends (data it may read anyway). Opening has a rate bucket of its own, with the guild intents' numbers, so renewals do not spend what the
+    other guild intents may. **Other server processes** (v1, as row 466): no push; their moves show when the window is opened again, which the renewal also does, so within 5 s while it is open.
+    Claim-time undos and erasures (made in the database, not by this service) show the same way.
 - **Emblems** (rule 3): asset keys (`icon.emblem.*`) the theme maps to files and `guild.emblems` lists, validated at load (each must be a key of the theme; at least one, none twice); the bundle
   has them as `guild_emblems`; never uploaded. The placeholder theme has four plain ones from `tools/themegen`. Every pulse (`--guild-pulse-ms`), each player gets the emblems of the guild
   members on its map instance when that list changed for it (`guild_tags`); the client shows the emblem beside a member's name in the target frame, and on the guild panel and its invite prompt.
@@ -948,12 +956,23 @@ The HUD is code-built Godot Control nodes (`client/Scene/Hud.cs`) under one `Can
   notice (a field and Save for a rank with `edit_notice`) and the members highest rank first (online dot, name, rank, level; **Up**, **Down**, **Kick** and **Lead** only where this character's
   rank may act on that member); a name field with Invite and the tapped player's invite for a rank with `invite`. In no guild: the name field with **Found** and the theme's emblems as toggle
   buttons. The **invite prompt** (who, which guild with its emblem, seconds left, Join and No) at the top of the safe area. The chat switch goes map, whisper, party, guild while in them. The
-  target frame shows a guild member's emblem before its name (one texture, no extra draw call beyond the frame's). The layout check runs the panel with the longest names, rank names and notice,
+  target frame shows a guild member's emblem before its name (one texture, no extra draw call beyond the frame's). The leader also has **Ranks** at the top of the list, which opens the rank
+  editor (below). The layout check runs the panel with the longest names, rank names and notice,
   every button on every row and the prompt, and the founding form with the picker, at every screen, notch and scale.
 - **Guild storage** (T-905, §6.11; `GuildStoragePanel`): the guild panel's **Storage** button (beside Leave). A heading (entries out of the size, the currency); tabs **Storage** (what it holds;
   a tap takes out, disabled without `storage_items`), **Bag** (carried entries that are not worn and are tradeable, by the bundle; a tap puts in) and **Log** (only with `storage_log`); Close;
   the scroll list; the quantity picker (−, units, +, Take or Put) once a stack is tapped, in the coins row's place (one row under the list at a time); the coins row (an amount, Put, Take).
-  The layout check runs it full (fifty of the longest lines, the largest currency) with the picker, and with fifty of the longest log lines.
+  The layout check runs it full (fifty of the longest lines, the largest currency) with the picker, and with fifty of the longest log lines. While it is open it opens the storage again every
+  5 s and redraws when a `guild_storage` arrives (T-810, §6.11); a picker open on a stack that changed takes the new quantity, and one whose stack went closes.
+- **Guild ranks** (T-810, §6.11; `GuildRanksPanel`, draft `Core/Guild/RankDraft`): the leader's. A heading (**Add**, **Save**, Close); the server's answer to Save in words under it ("Ranks
+  saved.", or the refusal); a scroll list: a text saying that members stay at their **place** (moving or removing a rank changes what the members at that place are called and may do, those past
+  the end go to the last rank, where new members join), then per rank below the leader's its name field with **Up**, **Down** and **Remove** (disabled for the only one), "Place n: m members"
+  (who the server would put there on Save), and a box per "Guild permissions" term, wrapping to the width. Nothing is sent before Save; closing drops the draft; a saved answer reads the names
+  back as the server cleaned them. The client does not know `guild.max_ranks` or the name length: the server refuses (`invalid_ranks`) and the editor shows it. The layout check runs it with five
+  ranks of the longest names, every box ticked and the longest refusal.
+  **§9** (T-810): no 3D draw, and both windows redraw only when the guild, storage or bag version moves (no per-frame work while nothing changes; a renewal redraws the storage once per 5 s). The
+  `ui` run prints the main-thread time of a redraw of the full storage log and the full editor (ADR-002 row 516). Network: only while the storage window is open, one `guild_storage` per 5 s
+  plus one per tick with a change; the largest (50 entries with four cards, 50 log lines, long ids) stays under 5 KB/s at that rate (a test), under half of the 10 KB/s budget.
 
 ### 7.5 Characters & equipment
 Modular 3D characters. Each body type has one shared rig. Equipment is either:
@@ -1495,7 +1514,7 @@ A headless run of the same (no draw calls or triangles without a renderer) gave 
   | `guild_ranks` | C→S | `ranks` (`[{"name":"Officer","permissions":["invite"]},...]`, the places below the leader's), leader only |
   | `guild_lead` | C→S | `member`, leader only |
   | `guild_notice` | C→S | `text` (empty clears it) |
-  | `guild_storage_open` | C→S | none: answered by `guild_storage` (T-905, §6.11) |
+  | `guild_storage_open` | C→S | none: answered by `guild_storage` (T-905, §6.11); also starts or renews the lease under which others' moves are sent (T-810) |
   | `guild_deposit` | C→S | `entry` and `quantity`, or `currency` (exactly one of the two; `storage_deposit`): answered by `guild_storage` once it landed, or `guild_refused` (T-905) |
   | `guild_withdraw` | C→S | `entry` and `quantity` (`storage_items`), or `currency` (`storage_currency`): as `guild_deposit` (T-905) |
   | `welcome` | S→C | `version`, `id` (your entity), `map`, `tick_rate`, `content` (the server's content hash, §5.4), `token` (a new resume token) |

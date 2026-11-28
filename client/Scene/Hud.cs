@@ -93,6 +93,7 @@ public sealed class Hud
     private PartyPanel? _partyPanel;   // T-902: opened from the chat panel; the invite prompt and the marks of members off the screen
     private TradePanel? _tradePanel;   // T-903: the trade window while a trade is open, and the ask prompt
     private GuildStoragePanel? _guildStoragePanel;   // T-905: opened from the guild panel's Storage button
+    private GuildRanksPanel? _guildRanksPanel;   // T-810: the leader's rank editor, opened from the guild panel
     private WardrobePanel? _wardrobe;   // T-708: opened from the bag, as the stats are from the skills: the phone HUD has no room for another button
     // The quest tracker (T-602): under the bars on the left, the tracked quest's name and counters; a tap opens the quest log. With no active quest it is the
     // "Quests" button, so the log needs no button of its own on a full phone HUD. Each line is trimmed to the column with an ellipsis instead of wrapping (T-406): a long
@@ -297,6 +298,8 @@ public sealed class Hud
         if (session is not null) _guildPanel = new GuildPanel(_safe, session, bundle?.GuildEmblems ?? [], _interactive, Tap);   // T-904
         if (session is not null) _guildStoragePanel = new GuildStoragePanel(_safe, session, bundle, _interactive, Tap);   // T-905
         if (_guildPanel is not null) _guildPanel.OpenStorage = () => { _guildPanel.SetOpen(false); _guildStoragePanel?.SetOpen(true); };
+        if (session is not null) _guildRanksPanel = new GuildRanksPanel(_safe, session, _interactive, Tap);   // T-810
+        if (_guildPanel is not null) _guildPanel.OpenRanks = () => { _guildPanel.SetOpen(false); _guildRanksPanel?.SetOpen(true); };
         if (session is not null) _chatPanel = new ChatPanel(_safe, _trackerRow, _bottom, _flash, session, _interactive, Tap)
         {
             OpenParty = () => { _chatPanel?.SetOpen(false); _partyPanel?.SetOpen(true); },   // T-902
@@ -435,6 +438,9 @@ public sealed class Hud
 
     /// <summary>The guild storage window (T-905), or null without a session.</summary>
     public GuildStoragePanel? GuildStorage => _guildStoragePanel;
+
+    /// <summary>The guild's rank editor (T-810), or null without a session.</summary>
+    public GuildRanksPanel? GuildRanks => _guildRanksPanel;
 
     /// <summary>The target frame's emblem (T-904): shown when the target is a guild member.</summary>
     public TextureRect TargetEmblem => _targetEmblem;
@@ -733,6 +739,7 @@ public sealed class Hud
         _partyPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
         _guildPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
         _guildStoragePanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
+        _guildRanksPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
         _targetEmblem.CustomMinimumSize = new Vector2(Dp(18), Dp(18));
         _tradePanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height));
         _chatPanel?.ApplyMetrics(Dp, buttonHeight, new Vector2((float)safe.Width, (float)safe.Height), _window.Size.Y > 0 ? (float)(metrics.CanvasHeight / _window.Size.Y) : 1f,
@@ -829,6 +836,7 @@ public sealed class Hud
                 _partyPanel?.SetOpen(false);
                 _guildPanel?.SetOpen(false);
                 _guildStoragePanel?.SetOpen(false);
+                _guildRanksPanel?.SetOpen(false);
             }
         }
         if (_uiVersion != ui.Version)
@@ -884,6 +892,7 @@ public sealed class Hud
         _partyPanel?.Refresh(connection.Phase);
         _guildPanel?.Refresh(connection.Phase);
         _guildStoragePanel?.Refresh(connection.Phase);
+        _guildRanksPanel?.Refresh(connection.Phase);
         RefreshTargetEmblem(ui);
         var trading = _tradePanel?.Open ?? false;
         _tradePanel?.Refresh(connection.Phase);

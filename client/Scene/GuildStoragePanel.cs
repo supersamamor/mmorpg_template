@@ -12,7 +12,8 @@ namespace Game.Client.Scene;
 /// The guild's storage window on the phone HUD (T-905, ARCHITECTURE §7.4 and §6.11), opened from the guild panel's Storage button: a heading (entries out of the size, the storage's
 /// currency), three tabs (Storage: what it holds, tap to take; Bag: what this character carries and may put in, tap to put; Log: the newest moves, only for a rank with <c>storage_log</c>),
 /// Close; the scroll list; the quantity picker (−, units, +, Take or Put) once a stack is tapped; and a coins row (an amount, Put, Take). The client only hides what the rank cannot do and what
-/// cannot go in (worn, not tradeable); the server checks every move in its database. Words come from <see cref="UiText"/>. It redraws only when the guild or the bag changed.
+/// cannot go in (worn, not tradeable); the server checks every move in its database. Words come from <see cref="UiText"/>. It redraws only when the guild, the storage or the bag changed.
+/// While open, the session opens the storage again every few seconds, so other members' moves arrive without reopening (T-810).
 /// </summary>
 public sealed class GuildStoragePanel
 {
@@ -63,6 +64,7 @@ public sealed class GuildStoragePanel
     private int _chosen = 1;
     private int _shownGuild = -1;
     private int _shownBag = -1;
+    private int _shownStorage = -1;
     private Func<double, float> _dp = dp => (float)dp;
     private float _target = 48;
     private Vector2 _safeSize;
@@ -148,6 +150,7 @@ public sealed class GuildStoragePanel
             _tab = Tab.Storage;
             _session.OpenGuildStorage();
         }
+        else _session.CloseGuildStorage();
         Unpick();
         _shownGuild = -1;
     }
@@ -181,8 +184,9 @@ public sealed class GuildStoragePanel
             SetOpen(false);
             return;
         }
-        if (!Open || (_shownGuild == _guild.Version && _shownBag == _session.Inventory.Version)) return;
+        if (!Open || (_shownGuild == _guild.Version && _shownStorage == _guild.StorageVersion && _shownBag == _session.Inventory.Version)) return;
         _shownGuild = _guild.Version;
+        _shownStorage = _guild.StorageVersion;
         _shownBag = _session.Inventory.Version;
         Draw(_guild.Storage, leaderView: false);
     }
@@ -298,7 +302,18 @@ public sealed class GuildStoragePanel
                     : UiText.GuildStorageLogLine(log[i].At, log[i].Name, log[i].Move, log[i].Item is { } item ? NameOf(item) : null, log[i].Quantity, currencyName, log[i].Currency);
         }
         _empty.Visible = rows.Count == 0 && log.Count == 0;
-        if (_picked != 0 && !rows.Any(r => r.Id == _picked)) Unpick();
+        if (_picked != 0)
+        {
+            var at = rows.FindIndex(r => r.Id == _picked);
+            if (at < 0) Unpick();
+            else if (rows[at].Quantity != _pickedMax)
+            {
+                // T-810: another member's move changed the picked stack while the picker was open.
+                _pickedMax = rows[at].Quantity;
+                _quantityItem.Text = rows[at].Text;
+                Choose(_chosen);
+            }
+        }
     }
 
     private void Pick(int index)

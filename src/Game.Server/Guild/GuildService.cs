@@ -53,6 +53,10 @@ public sealed class GatewayGuildDirectory(Gateway gateway, ChatService? chat) : 
 /// again and every member playing here gets it.</item>
 /// <item><b>Other processes</b>: every <see cref="GuildOptions.RefreshMs"/> the versions of the guilds held here are read; a changed one is read again and sent. Online means playing on this
 /// process: members on another one show offline here (v1).</item>
+/// <item><b>Storage, live</b> (T-810): opening the storage (<c>guild_storage_open</c>) gives that member a lease of <see cref="GuildOptions.StorageLeaseMs"/>; the client renews it by
+/// opening again while its window is open, so a closed window, a lost connection or a modified client simply lets it run out. When a landed or undone move changes a guild's storage,
+/// every member of it with a lease gets <c>guild_storage</c> at the next flush (one per tick, so at most one per member per tick, however many moves), read from the database for that
+/// member: membership and the log's permission are checked then. Only for this process's moves: another process's show when the window opens or renews.</item>
 /// <item><b>Guild chat</b>: this is the <c>guild</c> channel's <see cref="IChannelMembers"/>: the members who play on this process (chat does mute, rate, text, blocks and reports).</item>
 /// <item><b>Tags</b>: every pulse, each player gets the emblems of the guild members on its map instance when that list changed for it (<c>guild_tags</c>).</item>
 /// </list>
@@ -70,6 +74,7 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
     private readonly CharacterNameRules _names;
     private readonly int _marksPerLetter;
     private readonly ChatLimits _limits;
+    private readonly ChatLimits _looks;                                  // T-810: opening the storage (an open window's renewals too) has a bucket of its own
     private readonly HashSet<string> _emblems;
     private readonly object _lock = new();
     private readonly Dictionary<Guid, EntityId> _peers = new();          // characters welcomed here, while the server holds them
@@ -78,9 +83,15 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
     private readonly Dictionary<Guid, Invite> _invites = new();          // by the invited character
     private readonly Dictionary<Guid, long> _foundings = new();          // founders whose founding is under way: the reserved guild (0 before it is reserved)
     private readonly Dictionary<EntityId, string> _tagsSent = new();     // the tag list each player was last sent, as a key
+    private readonly Dictionary<Guid, Lease> _watching = new();          // T-810: who has the storage open, and until when
+    private readonly HashSet<long> _storageChanged = new();              // T-810: guilds whose storage changed since the last flush
+    private readonly Dictionary<Guid, string> _movers = new();           // T-810: members whose move landed since the last flush, with the move's message type
+    private readonly SemaphoreSlim _flushing = new(1, 1);
     private readonly CancellationTokenSource _stop = new();
     private long _lastRefreshMs;
     private Task? _loop;
+    private Task? _storageLoop;
+    private GuildStorage? _storage;
     private int _disposed;
 
     /// <summary>Creates the service. <paramref name="enqueue"/> queues a tick intent for a character (the gateway's); <paramref name="marksPerLetter"/> is chat's text rule.</summary>
@@ -96,15 +107,29 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
         _log = log;
         _names = GuildRules.NameRules(characters, balance);
         _marksPerLetter = marksPerLetter;
-        _limits = new ChatLimits(new ChatOptions { LinesPerMinute = options.IntentsPerMinute, Burst = options.IntentBurst }, time);
+        var rate = new ChatOptions { LinesPerMinute = options.IntentsPerMinute, Burst = options.IntentBurst };
+        _limits = new ChatLimits(rate, time);
+        _looks = new ChatLimits(rate, time);
         _emblems = new HashSet<string>(balance.Emblems, StringComparer.Ordinal);
     }
 
     /// <summary>The guilds' shared storage (T-905); null without one (its messages are refused as <c>unavailable</c>). Set before sessions arrive.</summary>
-    public GuildStorage? Storage { get; set; }
+    public GuildStorage? Storage
+    {
+        get => _storage;
+        set
+        {
+            _storage = value;
+            if (value is not null) value.Changed = StorageChanged;
+        }
+    }
 
-    /// <summary>Starts the pulse.</summary>
-    public void Start() => _loop ??= Task.Run(() => LoopAsync(_stop.Token));
+    /// <summary>Starts the pulse, and the storage's flush once per tick (T-810).</summary>
+    public void Start()
+    {
+        _loop ??= Task.Run(() => LoopAsync(_stop.Token));
+        _storageLoop ??= Task.Run(() => StorageLoopAsync(_stop.Token));
+    }
 
     /// <summary>Guilds held here now (tests, status).</summary>
     public int GuildCount
@@ -131,7 +156,8 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
                 outbox.Refuse(peer.Character, message.Type, GuildReasons.Unavailable);   // a dev login has no stored character
                 return;
             }
-            if (!_limits.TryTake(peer.AccountId is { } account ? ChatLimits.Of(account) : ChatLimits.Of(peer.Character), out var wait))
+            var limits = message is GuildStorageOpenMessage ? _looks : _limits;
+            if (!limits.TryTake(peer.AccountId is { } account ? ChatLimits.Of(account) : ChatLimits.Of(peer.Character), out var wait))
             {
                 outbox.Refuse(peer.Character, message.Type, GuildReasons.RateLimited, wait);
                 return;
@@ -271,12 +297,25 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
         }
     }
 
-    /// <summary>T-905: opening the storage, a deposit or a withdrawal; after a move that landed, the mover gets the storage as it is now.</summary>
+    /// <summary>
+    /// T-905: opening the storage, a deposit or a withdrawal. Opening answers at once and gives (or renews) the member's lease (T-810); a move that landed is answered by the next flush,
+    /// together with everyone else who has the storage open.
+    /// </summary>
     private async Task StorageAsync(ChatPeer peer, Guid me, ClientMessage message, Outbox outbox, CancellationToken cancellation)
     {
         if (Storage is not { } storage)
         {
             outbox.Refuse(peer.Character, message.Type, GuildReasons.Unavailable);
+            return;
+        }
+        if (message is GuildStorageOpenMessage)
+        {
+            var (closed, view, guild) = await storage.OpenAsync(me, cancellation).ConfigureAwait(false);
+            lock (_lock)
+                if (closed is not null) _watching.Remove(me);
+                else _watching[me] = new Lease(guild, Now.AddMilliseconds(_options.StorageLeaseMs));
+            if (closed is not null) outbox.Refuse(peer.Character, message.Type, closed);
+            else outbox.Add(peer.Character, view!);
             return;
         }
         var refusal = message switch
@@ -285,14 +324,90 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
             GuildWithdrawMessage withdraw => await storage.WithdrawAsync(me, peer.Character, withdraw, cancellation).ConfigureAwait(false),
             _ => null,
         };
-        if (refusal is not null)
+        if (refusal is not null) outbox.Refuse(peer.Character, message.Type, refusal);
+    }
+
+    // ---- the open storage windows (T-810) ----------------------------------------------------------------------------------------------------
+
+    /// <summary>The storage's word that a guild's storage changed; <paramref name="mover"/> when its move (<paramref name="intent"/>) landed.</summary>
+    private void StorageChanged(long guild, Guid? mover, string intent)
+    {
+        lock (_lock)
         {
-            outbox.Refuse(peer.Character, message.Type, refusal);
-            return;
+            _storageChanged.Add(guild);
+            if (mover is { } who) _movers[who] = intent;
         }
-        var (closed, view) = await storage.OpenAsync(me, CancellationToken.None).ConfigureAwait(false);
-        if (closed is not null) outbox.Refuse(peer.Character, message.Type, closed);
-        else outbox.Add(peer.Character, view!);
+    }
+
+    /// <summary>
+    /// Sends the storage to whoever must see the changes since the last flush: members of a changed guild whose lease runs, and members whose own move landed. One message each, read for that
+    /// member now (its membership and log permission as the database has them). Run once per tick; a flush that takes longer delays the next, and no two run at once.
+    /// </summary>
+    public async Task FlushStorageAsync(CancellationToken cancellation = default)
+    {
+        await _flushing.WaitAsync(cancellation).ConfigureAwait(false);
+        try
+        {
+            if (Storage is not { } storage) return;
+            var targets = new List<(Guid Character, EntityId Entity, long? Watched, string? Intent)>();
+            lock (_lock)
+            {
+                if (_storageChanged.Count == 0 && _movers.Count == 0) return;
+                var now = Now;
+                var all = new HashSet<Guid>(_movers.Keys);
+                foreach (var (character, lease) in _watching)
+                    if (lease.Until > now && _storageChanged.Contains(lease.Guild)) all.Add(character);
+                foreach (var character in all)
+                    if (_peers.TryGetValue(character, out var entity) && _directory.Playing(entity) is not null)
+                        targets.Add((character, entity, _watching.TryGetValue(character, out var held) && held.Until > now ? held.Guild : null, _movers.GetValueOrDefault(character)));
+                _storageChanged.Clear();
+                _movers.Clear();
+            }
+            foreach (var target in targets)
+            {
+                var outbox = new Outbox();
+                try
+                {
+                    var (closed, view, guild) = await storage.OpenAsync(target.Character, cancellation).ConfigureAwait(false);
+                    if (closed is null && (target.Intent is not null || guild == target.Watched)) outbox.Add(target.Entity, view!);
+                    else
+                    {
+                        lock (_lock) _watching.Remove(target.Character);   // out of that guild
+                        if (closed is not null && target.Intent is not null) outbox.Refuse(target.Entity, target.Intent, closed);
+                    }
+                }
+                catch (StoreUnavailableException e)
+                {
+                    _log.Warn($"[guild] the storage of {target.Character} was not read after a change: {e.Message}.");   // an open window gets it when it renews
+                    if (target.Intent is not null) outbox.Refuse(target.Entity, target.Intent, GuildReasons.Unavailable);
+                }
+                Send(outbox);
+            }
+        }
+        finally
+        {
+            _flushing.Release();
+        }
+    }
+
+    private async Task StorageLoopAsync(CancellationToken stop)
+    {
+        while (!stop.IsCancellationRequested)
+        {
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(TickRate.IntervalMs), stop).ConfigureAwait(false);   // real time, as the ticks are
+                await FlushStorageAsync(stop).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stop.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception e)
+            {
+                _log.Error("[guild] the storage flush failed.", e);
+            }
+        }
     }
 
     /// <summary>Waits for the tick to take the cost; gives it up when the tick has not started it in time (nothing is taken then). Null when paid.</summary>
@@ -377,7 +492,10 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
         }
         if (outcome.Removed is { } removed)
             lock (_lock)
+            {
                 if (_guildOf.TryGetValue(removed, out var of) && of == outcome.Guild) _guildOf.Remove(removed);
+                if (_watching.TryGetValue(removed, out var lease) && lease.Guild == outcome.Guild) _watching.Remove(removed);
+            }
         var members = await RefreshAsync(outcome.Guild, cancellation).ConfigureAwait(false);
         if (outcome.Removed is { } gone && EntityOf(gone) is { } goneEntity)
         {
@@ -494,7 +612,10 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
                 {
                     _peers.Remove(character);
                     _guildOf.Remove(character);
+                    _watching.Remove(character);
                 }
+            foreach (var (character, lease) in _watching.ToList())
+                if (lease.Until <= now) _watching.Remove(character);
             foreach (var (to, invite) in _invites.ToList())
             {
                 if (!_directory.Holds(invite.ToEntity) || !_directory.Holds(invite.FromEntity))
@@ -604,7 +725,9 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         await _stop.CancelAsync().ConfigureAwait(false);
         if (_loop is not null) await _loop.ConfigureAwait(false);
+        if (_storageLoop is not null) await _storageLoop.ConfigureAwait(false);
         _stop.Dispose();
+        _flushing.Dispose();
     }
 
     // ---- helpers -----------------------------------------------------------------------------------------------------------------------------
@@ -651,6 +774,8 @@ public sealed class GuildService : IChannelMembers, IAsyncDisposable
         /// <summary>Who was last shown online, one character per member.</summary>
         public string Online { get; set; } = string.Empty;
     }
+
+    private readonly record struct Lease(long Guild, DateTime Until);
 
     private sealed record Invite(Guid From, EntityId FromEntity, string FromName, long Guild, string Title, string Emblem, Guid To, EntityId ToEntity, string ToName, DateTime ExpiresAt);
 

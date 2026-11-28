@@ -21,6 +21,9 @@ namespace Game.Client.Scene;
 /// T-905 adds the storage: the member (its rank may deposit, not take out) sells a draught at the merchant (<c>--e2e-guild-ids &lt;merchant npc&gt;</c>), puts the first stack of its bag and the
 /// coins into the storage through the window, is refused when it tries to take one out, and tells the founder on the guild channel; the founder takes both out through the window and
 /// reads both moves in the log.
+/// T-810: before inviting, the founder uses the rank editor (an empty name is refused in words; the last rank loses the deposit permission, then is renamed and given it back), so the
+/// member joins at the renamed rank and deposits by it. Later the member keeps the storage open with its renewals stopped, so only the server's push can show it the coin the founder then
+/// puts in.
 /// What is said carries the word <c>e2esaid</c>, which the script looks for in the server's log: it must not be there.
 /// </summary>
 public sealed class GuildRuns
@@ -28,6 +31,9 @@ public sealed class GuildRuns
     private const string Said = ChatRuns.Said;
     private const string Notice = "e2esaid meet at the well";
     private const string Stored = Said + " stored";
+    private const string Seen = Said + " seen";
+    private const string Renamed = "Recruit";
+    private static readonly string OneCoin = 1.ToString(System.Globalization.CultureInfo.InvariantCulture);
 
     private readonly Main _main;
     private readonly Func<Task> _shot;
@@ -53,6 +59,38 @@ public sealed class GuildRuns
         await FramesAsync(2);
         Press(_main.Hud!.Chat!.GuildButton);
         await FramesAsync(2);
+    }
+
+    /// <summary>T-810: the leader's rank editor: a refusal in words, then the last rank without <c>storage_deposit</c>, then renamed and given it.</summary>
+    private async Task EditRanksAsync()
+    {
+        Check(Panel.RanksButton.IsVisibleInTree(), "the leader has the Ranks button");
+        Press(Panel.RanksButton);
+        await FramesAsync(2);
+        var editor = _main.Hud!.GuildRanks!;
+        Check(editor.Open && !Panel.Open && editor.Count == Session.Guild.State.Ranks.Count - 1, "the editor shows the ranks below the leader's");
+        var last = editor.Count - 1;
+        var name = editor.NameFieldOf(last).Text;
+        editor.TypeName(last, " ");
+        Press(editor.SaveButton);
+        var refused = UiText.GuildRefused(GuildReasons.InvalidRanks, null, null);
+        await UntilAsync(() => editor.Status == refused, 15, "the empty name refused in words");
+        Check(Session.Guild.State.Ranks[^1].Name == name, "nothing changed");
+
+        editor.TypeName(last, name);
+        editor.BoxOf(last, GuildPermissions.StorageDeposit).ButtonPressed = false;
+        Press(editor.SaveButton);
+        await UntilAsync(() => editor.Status == UiText.GuildRanksSaved && !Session.Guild.State.Ranks[^1].Permissions.Contains(GuildPermissions.StorageDeposit), 15, "the permission taken");
+
+        editor.TypeName(last, Renamed);
+        editor.BoxOf(last, GuildPermissions.StorageDeposit).ButtonPressed = true;
+        Press(editor.SaveButton);
+        await UntilAsync(() => editor.Status == UiText.GuildRanksSaved && Session.Guild.State.Ranks[^1].Name == Renamed
+            && Session.Guild.State.Ranks[^1].Permissions.Contains(GuildPermissions.StorageDeposit), 15, "the rank renamed with the deposit permission");
+        Print($"guild: the rank editor was refused an empty name, then renamed \"{name}\" to \"{Renamed}\" and gave it storage_deposit");
+        Press(editor.CloseButton);
+        await FramesAsync(2);
+        await OpenGuildPanelAsync();
     }
 
     private async Task OpenStorageAsync()
@@ -82,6 +120,7 @@ public sealed class GuildRuns
         Check(Session.Guild.State.Name == title && Session.Guild.State.Emblem == emblem && Session.Guild.Leading, "founded with its name and emblem, led by the founder: " + Session.Guild.State);
         await FramesAsync(2);
         Check(Panel.Text.Contains(title), "the panel shows the guild: " + Panel.Text);
+        await EditRanksAsync();
         Print($"guild: {name} founded \"{title}\" with {emblem}; asking for the member");
         Print("@ guild-second:" + name);
 
@@ -118,6 +157,17 @@ public sealed class GuildRuns
         Check(Storage.Text.Contains(member + " put") && Storage.Text.Contains(name + " took"), "the log shows the member's deposits and the leader's withdrawals: " + Storage.Text);
         Check(Session.Guild.Storage!.Log!.Count == 4, "four moves in the log: " + Session.Guild.Storage!.Log!.Count);
         Print($"guild: took out {entry.Item} x{entry.Quantity} and {coins} coins; the log has the four moves");
+
+        // T-810: one coin in while the member has the storage open; once it has seen it arrive, the coin comes back out (the guild's end needs an empty storage).
+        Press(Storage.StorageTab);
+        await FramesAsync(2);
+        Storage.AmountField.Text = OneCoin;
+        Press(Storage.PutCoinsButton);
+        await UntilAsync(() => Session.Guild.Storage is { Currency: 1 }, 20, "the leader's coin in the storage");
+        await UntilAsync(() => Session.Chat.Lines.Any(l => l.Channel == ChatChannels.Guild && l.Name == member && l.Text == Seen), 30, "the member saw the coin arrive");
+        Storage.AmountField.Text = OneCoin;
+        Press(Storage.TakeCoinsButton);
+        await UntilAsync(() => Session.Guild.Storage is { Currency: 0 }, 20, "the coin taken back");
         Press(Storage.CloseButton);
         await FramesAsync(2);
         await OpenGuildPanelAsync();
@@ -158,6 +208,7 @@ public sealed class GuildRuns
         Press(Panel.AcceptButton);
         await UntilAsync(() => Session.Guild.InGuild && Session.Guild.State.Members.Count == 2, 30, "in the guild");
         Check(Session.Guild.OwnRank == Session.Guild.State.Ranks.Count - 1, "new members join at the last rank");
+        Check(Session.Guild.State.Ranks[^1].Name == Renamed && !Panel.RanksButton.Visible, "at the rank the founder renamed, without the rank editor");
         Check(Session.Guild.State.Members.Single(m => m.Name == founder).Online, "the founder shows online");
 
         await UntilAsync(() => Session.Chat.Lines.Any(l => l.Channel == ChatChannels.Guild && l.Name == founder && l.Text == Said + " guild hello"), 30, "the founder's guild line");
@@ -186,9 +237,23 @@ public sealed class GuildRuns
         Session.WithdrawFromGuild(Session.Guild.Storage!.Entries[0].Id, 1);   // as a modified client would
         await UntilAsync(() => Session.Guild.Notice == UiText.GuildRefused(GuildReasons.NotAllowed, null, null), 15, "the withdrawal refused");
         Print($"guild: the member put {Session.Guild.Storage!.Entries[0].Item} and {coins} coins in; taking out was refused: not_allowed");
+        // T-810: the window stays open. Opened afresh, then no more renewals: within the lease, only the server's push can change what this client holds.
         Press(Storage.CloseButton);
+        await FramesAsync(2);
+        await OpenStorageAsync();
+        await UntilAsync(() => Session.Guild.Storage is { Entries.Count: 1 }, 15, "the storage opened again");
+        await SecondsAsync(1);
+        Session.CloseGuildStorage();
         Session.Chat.SetChannel(ChatChannels.Guild);
         Check(Session.Say(Stored), "the stored line went out");
+        await UntilAsync(() => Session.Guild.Storage is { Entries.Count: 0, Currency: 1 }, 14, "the founder's coin arriving in the open window");
+        await FramesAsync(2);
+        Check(Storage.Open && Storage.EntryButtons.Count == 0 && Storage.Text.StartsWith(UiText.GuildStorageTitle(0, Session.Guild.Storage!.Size, _main.Bundle!.CurrencyName, 1), StringComparison.Ordinal),
+            "the open window shows it: " + Storage.Text);
+        Check(Session.Guild.Storage!.Log is null, "without the log");
+        Print("guild: the member, its storage open, saw the leader's moves and the coin arrive");
+        Check(Session.Say(Seen), "the seen line went out");
+        Press(Storage.CloseButton);
 
         await UntilAsync(() => Session.Guild.State.Notice == Notice, 90, "the notice");
         await UntilAsync(() => Session.Guild.OwnRank == 1, 30, "the promotion");
