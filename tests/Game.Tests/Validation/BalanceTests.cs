@@ -255,10 +255,10 @@ public class BalanceTests : IDisposable
     [InlineData("part.\n  name_min_length: 3", "part.\n  name_min_length: 0", "characters.name_min_length")]   // the guild section has the same keys (T-904)
     [InlineData("name_max_length: 16\n  # Latin", "name_max_length: 2\n  # Latin", "characters.name_max_length")]
     [InlineData("name_max_length: 16\n  # Latin", "name_max_length: 33\n  # Latin", "characters.name_max_length")]
-    [InlineData("name_letters: [a-z, A-Z]", "name_letters: []", "characters.name_letters")]
-    [InlineData("name_letters: [a-z, A-Z]", "name_letters: [z-a]", "characters.name_letters")]
-    [InlineData("name_letters: [a-z, A-Z]", "name_letters: [abc]", "characters.name_letters")]
-    [InlineData("name_separators: [\"-\", \"'\"]", "name_separators: [\"--\"]", "characters.name_separators")]
+    [InlineData("name_letters: [a-z, A-Z, 0-9]", "name_letters: []", "characters.name_letters")]
+    [InlineData("name_letters: [a-z, A-Z, 0-9]", "name_letters: [z-a]", "characters.name_letters")]
+    [InlineData("name_letters: [a-z, A-Z, 0-9]", "name_letters: [abc]", "characters.name_letters")]
+    [InlineData("name_separators: [\"-\", \"'\", \"_\"]", "name_separators: [\"--\"]", "characters.name_separators")]
     public void Character_slots_and_name_rules_must_be_usable(string from, string to, string path)
     {
         Edit(from, to);

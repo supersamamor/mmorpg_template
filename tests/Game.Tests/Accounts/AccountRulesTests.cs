@@ -49,6 +49,9 @@ public class AccountRulesTests
     [InlineData(" Ada ", "Ada")]
     [InlineData("Anna-Lee", "Anna-Lee")]
     [InlineData("O'Dell", "O'Dell")]
+    [InlineData("Ada9", "Ada9")]          // digits and the underscore: the owner's request (T-814)
+    [InlineData("Sam_01", "Sam_01")]
+    [InlineData("007", "007")]
     public void A_character_name_is_kept_as_typed(string typed, string stored) => Sample().Normalize(typed).ShouldBe(stored);
 
     [Theory]
@@ -59,7 +62,10 @@ public class AccountRulesTests
     [InlineData("Ada-")]
     [InlineData("Ad--a")]
     [InlineData("Ad-'a")]
-    [InlineData("Ada9")]
+    [InlineData("_Sam")]
+    [InlineData("Sam_")]
+    [InlineData("Sa__m")]
+    [InlineData("Sa-_m")]
     [InlineData("Ada Lee")]
     [InlineData("Аdа")]
     [InlineData("Ada​")]
