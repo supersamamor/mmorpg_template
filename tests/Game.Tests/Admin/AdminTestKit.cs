@@ -159,7 +159,9 @@ public sealed class AdminRig : IAsyncDisposable
         var memory = accounts is null ? new MemoryAccountStore() : accounts.Store as MemoryAccountStore;
         var game = await GatewayRig.StartAsync(accounts: accounts ?? new AccountRigOptions(memory!, new FakeHasher(), new AccountLimits(), time));
         store ??= new MemoryAdminStore(memory);
-        var options = new AdminOptions { Development = true, Port = 0, StepTimeoutMs = 3_000 };
+        // T-808: the step timeout runs on a real timer (FakeTime keeps the system's timers), so it is a wait for the instance's next tick on this machine. 3 s was overrun under load,
+        // and the kick was refused with timeout. 8 s stays inside the 10 s request limit; the stalled-world test sets its own 300 ms.
+        var options = new AdminOptions { Development = true, Port = 0, StepTimeoutMs = 8_000 };
         if (configure is not null) options = configure(options);
         var log = new CountingLog(game.Log);
         var events = new AdminEvents(log);

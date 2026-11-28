@@ -540,7 +540,8 @@ public class CharacterSavingTests
     [Fact]
     public async Task Stacks_count_too_and_picking_up_your_own_needs_nothing()
     {
-        await using var rig = SaveRig.Start(new MemoryCharacterStore());
+        var store = new MemoryCharacterStore();
+        await using var rig = SaveRig.Start(store);
         var ada = await rig.EnterAsync(Ada);
         var bob = await rig.EnterAsync(Bob);
         var draughts = rig.Bag(ada).Entries.First(e => e.ItemId == "item.healing_draught").Id;
@@ -550,12 +551,16 @@ public class CharacterSavingTests
         rig.Send(new PickUp(ada, item));
         rig.TickUntil(() => rig.Count(ada, "item.healing_draught") == 3, "taking it back");
         rig.Tickets[ada].Links.ShouldBeEmpty();
+        // T-808: no save lands until the link is checked. Once her drop's save landed, Bob's next save would drop the link it no longer needs, and under load
+        // that could happen before the check below.
+        store.SaveGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         rig.Send(new DropItem(ada, draughts, 2));
         rig.Ticks(1);
         item = rig.On(ada).Entities.Last(e => e.Kind == EntityKind.Item).Id;
         rig.Send(new PickUp(bob, item));
         rig.TickUntil(() => rig.Count(bob, "item.healing_draught") == 5, "bob takes it");
         rig.Tickets[bob].Links.Keys.ShouldBe([rig.Tickets[ada]]);
+        store.SaveGate.SetResult();
     }
 
     [Fact]

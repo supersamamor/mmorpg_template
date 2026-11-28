@@ -254,6 +254,9 @@ public sealed class CharacterDatabaseTests(DatabaseFixture fixture, Xunit.Abstra
         var entered = 0;
         for (var i = 0; i < 40; i++)
         {
+            // T-808: the run says it is alive each round, as a server's heartbeat does. Without it a loaded machine took 21 s, the lease (20 s) ran out, and a delete rightly
+            // treated the claim as a dead run's.
+            await Store.BeatAsync(run, default);
             var (account, character) = await CharacterAsync();
             var claim = Task.Run(() => Store.ClaimAsync(character, run, default));
             var delete = Task.Run(() => Accounts.DeleteCharacterAsync(account, character, Now, default));
