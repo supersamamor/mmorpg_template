@@ -291,6 +291,35 @@ public sealed class HotReloadTests : IDisposable
     }
 }
 
+public sealed class LiveGatewayContentTests : IDisposable
+{
+    private readonly ReloadRig _rig = new();
+
+    public void Dispose() => _rig.Dispose();
+
+    [Fact]
+    public void A_reload_changes_what_the_next_login_and_the_next_own_progress_message_see()
+    {
+        // Wired as Program.cs wires them: the gateway's readers take the content in effect, which the reload sets.
+        var live = new LiveContent(_rig.Boot.Database);
+        _rig.Reloader.Reloaded += (next, _) => live.Set(next.Database);
+        var start = new NewCharacters(() => live.Current);
+        var progress = new OwnProgress(() => live.Current, _rig.Progressions);
+        var player = _rig.Join();
+        var before = progress.For(player)!;
+        var hpBefore = start.CreateStats().GetInt(Game.Shared.Vocabulary.DerivedStats.MaxHp);
+
+        // The base EXP table's first step, and a bonus on the start job (both read by the gateway outside the tick).
+        _rig.Edit("exp_tables.yaml", t => t.Replace("  65, 194,", "  77, 194,", StringComparison.Ordinal));
+        _rig.Edit("jobs/wanderer.yaml", t => t.Replace("stat_bonuses: []", "stat_bonuses:\n  - stat: max_hp\n    op: flat\n    value: \"50\"", StringComparison.Ordinal));
+        _rig.Reloader.TryReload().ShouldBe(ReloadOutcome.Swapped, string.Join("\n", _rig.Log.Lines.TakeLast(10)));
+
+        before.BaseNext.ShouldBe(65);
+        progress.For(player)!.BaseNext.ShouldBe(77);
+        start.CreateStats().GetInt(Game.Shared.Vocabulary.DerivedStats.MaxHp).ShouldBe(hpBefore + 50);
+    }
+}
+
 public sealed class HotReloadGateTests
 {
     [Fact]

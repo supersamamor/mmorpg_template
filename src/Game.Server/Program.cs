@@ -132,6 +132,7 @@ if (content is null)
 }
 
 var built = Game.Server.World.Reload.ServerContent.Build(content);   // what the tick's systems read; a hot reload (T-801) swaps in a new one
+var live = new LiveContent(content);   // T-801: what the gateway reads per message or login; a hot reload sets it
 
 // The seed only feeds the simulation's PCG32 streams; it is logged so a run can be replayed.
 var seed = options.Seed ?? (ulong)Random.Shared.NextInt64();
@@ -169,8 +170,8 @@ var tokens = new ResumeTokens();
 var devLogin = new DevLogin(development, netOptions.MaxNameLength, tokens);
 var accounts = database is null ? null : new AccountService(new PostgresAccountStore(database), new Argon2idHasher(), HashQueue.Default(), new AccountLimits { EraseWait = TimeSpan.FromDays(options.AccountEraseDays) }, content.Balance, content.Appearance, clock,
     TimeProvider.System, log);
-var gateway = new Gateway(world, new NewCharacters(content), netOptions, clock, log, contentHash, accounts is null ? devLogin : new AccountLogin(accounts, devLogin), tokens,
-    progress: new OwnProgress(content, progressions), inventory: new OwnInventory(content.Balance.Inventory, inventories), keeper: keeper); // subscribes to instance events: before ticking
+var gateway = new Gateway(world, new NewCharacters(() => live.Current), netOptions, clock, log, contentHash, accounts is null ? devLogin : new AccountLogin(accounts, devLogin), tokens,
+    progress: new OwnProgress(() => live.Current, progressions), inventory: new OwnInventory(content.Balance.Inventory, inventories), keeper: keeper); // subscribes to instance events: before ticking
 
 // T-806: bans and mutes are the database's, so every server with one asks it (sign-in, hello, the ban watch), admin API or not.
 var moderation = database is null ? null : new PostgresModerationStore(database);
@@ -250,6 +251,7 @@ if (reloader is not null)
     reloader.Reloaded += (next, hash) =>
     {
         loader?.Swap(next.Database);
+        live.Set(next.Database);
         var told = gateway.ContentChanged(hash);
         if (told > 0) log.Info($"[reload] told {told} session(s) that the content changed (hash {hash}).");
     };
