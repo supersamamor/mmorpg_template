@@ -366,6 +366,54 @@ public static class UiText
     /// <summary>The longest guild name the layout check shows.</summary>
     public static readonly string LongestGuildNameSample = new string('W', 20);
 
+    // ---- the rank editor (T-810) ----
+
+    /// <summary>The guild panel's button that opens the rank editor (the leader's), and the editor's heading.</summary>
+    public const string GuildRanks = "Ranks";
+
+    /// <summary>The editor's button for a new rank.</summary>
+    public const string GuildRankAdd = "Add";
+
+    /// <summary>A rank row's button that takes the rank out of the list.</summary>
+    public const string GuildRankRemove = "Remove";
+
+    /// <summary>The editor's Save.</summary>
+    public const string GuildRanksSave = "Save";
+
+    /// <summary>A rank's name field, empty.</summary>
+    public const string GuildRankNameHint = "Rank name";
+
+    /// <summary>The name a new rank starts with.</summary>
+    public const string GuildRankNew = "New rank";
+
+    /// <summary>Under Save while the server has not answered.</summary>
+    public const string GuildRanksSaving = "Saving...";
+
+    /// <summary>The server took the ranks.</summary>
+    public const string GuildRanksSaved = "Ranks saved.";
+
+    /// <summary>What the server does with members when ranks move or go.</summary>
+    public const string GuildRanksHint =
+        "Members stay at their place in this list. If you move or remove a rank, the members at that place get the rank that is there then. Members past the end go to the last rank, where new members join too. Nothing changes until you save.";
+
+    /// <summary>Under a rank's name: who holds that place once saved.</summary>
+    public static string GuildRankMembers(int place, int count) =>
+        "Place " + place.ToString(CultureInfo.InvariantCulture) + ": " + count.ToString(CultureInfo.InvariantCulture) + (count == 1 ? " member" : " members");
+
+    /// <summary>The box's words for a "Guild permissions" term.</summary>
+    public static string GuildPermission(string permission) => permission switch
+    {
+        Game.Shared.Vocabulary.GuildPermissions.Invite => "Invite",
+        Game.Shared.Vocabulary.GuildPermissions.Kick => "Kick",
+        Game.Shared.Vocabulary.GuildPermissions.EditNotice => "Write notice",
+        Game.Shared.Vocabulary.GuildPermissions.SetRank => "Set ranks",
+        Game.Shared.Vocabulary.GuildPermissions.StorageDeposit => "Put in storage",
+        Game.Shared.Vocabulary.GuildPermissions.StorageItems => "Take items",
+        Game.Shared.Vocabulary.GuildPermissions.StorageCurrency => "Take money",
+        Game.Shared.Vocabulary.GuildPermissions.StorageLog => "Read storage log",
+        _ => permission,
+    };
+
     // ---- guild storage (T-905) ----
 
     /// <summary>The guild panel's button that opens the storage, and the storage window's tab of its entries.</summary>
@@ -441,7 +489,7 @@ public static class UiText
         GuildReasons.Full => "The guild is full.",
         GuildReasons.NotAllowed => "Your rank cannot do that.",
         GuildReasons.RankTooHigh => "Their rank is not below yours.",
-        GuildReasons.InvalidRanks => "Those ranks are not allowed.",
+        GuildReasons.InvalidRanks => "Those ranks are not allowed. Each needs a short name, and a guild has only so many ranks.",
         GuildReasons.TooLong => "The notice is too long.",
         GuildReasons.CannotAfford => "You cannot pay for a guild.",
         GuildReasons.Busy => "Your guild is being founded.",

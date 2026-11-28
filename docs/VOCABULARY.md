@@ -563,7 +563,8 @@ cleaned like a chat line, at most `--guild-notice-length`), ranks and members; i
 with a name and "Guild permissions"; a new member joins at the last. **Member number**: a member's id in the protocol (`member`), never the character's permanent id. **Founding**: the name is
 reserved, the tick takes `guild.found_cost` and the founder's next save founds the guild in the same transaction (a **reservation** whose save never lands is dropped). **Successor**: when the
 leader goes, the member of the highest rank, the earliest to join among equals; with nobody left the guild is **disbanded** and its name is free. **Tag**: a guild member's emblem shown where its
-name shows (`guild_tags`). **Online**: playing on this server process (v1). **Storage** (T-905): the guild's shared entries and currency (`guild.storage`). **Hold**: a move under way, made in
+name shows (`guild_tags`). **Online**: playing on this server process (v1). **Storage** (T-905): the guild's shared entries and currency (`guild.storage`). **Storage lease** (T-810): the
+time after `guild_storage_open` during which this server process sends that member the storage's changes. **Hold**: a move under way, made in
 the database before the tick moves the bag's side and settled by the character's save that has it (undone when that save never lands). **Storage log**: the landed moves, by character id.
 
 ## Admin terms

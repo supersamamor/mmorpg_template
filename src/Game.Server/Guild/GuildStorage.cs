@@ -16,6 +16,7 @@ namespace Game.Server.Guild;
 /// (2) the bag's side on the tick (<see cref="GuildStorageTransfer"/>), checked again; (3) the character's save that has that side settles the hold in its transaction. A refusal on the tick,
 /// a tick that never runs it, or a save that never lands undoes the hold; a crash leaves the hold to the character's next claim, which undoes it.</item>
 /// </list>
+/// A change others may see (a landed move, or a withdrawal undone after its hold had taken from the storage) is told to <see cref="Changed"/> (T-810).
 /// Not thread-bound: every call runs in the caller's task.
 /// </summary>
 public sealed class GuildStorage(GuildStorageDef settings, IGuildStorageStore store, Func<long> newId, Func<IIntent, bool> enqueue, int waitMs, TimeProvider time, IServerLog log)
@@ -23,11 +24,17 @@ public sealed class GuildStorage(GuildStorageDef settings, IGuildStorageStore st
     /// <summary>The storage's settings.</summary>
     public GuildStorageDef Settings { get; } = settings;
 
-    /// <summary>The storage of <paramref name="me"/>'s guild as it may see it, or a refusal.</summary>
-    public async Task<(string? Refusal, GuildStorageMessage? Storage)> OpenAsync(Guid me, CancellationToken cancellation)
+    /// <summary>
+    /// Told after a guild's storage changed (T-810): the guild, the member whose move landed (null for a withdrawal that was undone: its units went back) and the move's message type.
+    /// <see cref="GuildService"/> sets it.
+    /// </summary>
+    public Action<long, Guid?, string>? Changed { get; set; }
+
+    /// <summary>The storage of <paramref name="me"/>'s guild as it may see it (and which guild that is), or a refusal.</summary>
+    public async Task<(string? Refusal, GuildStorageMessage? Storage, long Guild)> OpenAsync(Guid me, CancellationToken cancellation)
     {
         var view = await store.ReadAsync(me, Settings.LogShown, Now - TimeSpan.FromDays(Settings.LogDays), cancellation).ConfigureAwait(false);
-        return view is null ? (GuildReasons.NotInGuild, null) : (null, Message(view));
+        return view is null ? (GuildReasons.NotInGuild, null, 0) : (null, Message(view), view.Guild);
     }
 
     /// <summary>A deposit by <paramref name="me"/> (playing as <paramref name="entity"/>): null when it landed, else a "Guild reasons" term (nothing moved then).</summary>
@@ -73,14 +80,18 @@ public sealed class GuildStorage(GuildStorageDef settings, IGuildStorageStore st
             else reason = await done.ConfigureAwait(false);
         }
         if (reason is null && !await transfer.Note!.Landed.ConfigureAwait(false)) reason = GuildReasons.Unavailable;   // the stay ended before the save: neither side moved
+        var intent = transfer.Move == GuildStorageMoves.Deposit ? MessageTypes.GuildDeposit : MessageTypes.GuildWithdraw;
         if (reason is null)
         {
+            Changed?.Invoke(transfer.Guild, me, intent);
             log.Info($"[guild] storage {transfer.Move} by {me} in guild {transfer.Guild} landed (hold {transfer.Hold}).");
             return null;
         }
         try
         {
             await store.ReleaseAsync(transfer.Hold, CancellationToken.None).ConfigureAwait(false);
+            // A deposit's hold shows nowhere; a withdrawal's had taken from the storage, so a window opened meanwhile lacks what is back now.
+            if (transfer.Move == GuildStorageMoves.Withdraw) Changed?.Invoke(transfer.Guild, null, intent);
         }
         catch (StoreUnavailableException e)
         {

@@ -387,7 +387,7 @@ function Invoke-Scenario([string] $Name) {
             "ui" {
                 $server = Start-GameServer -Easy
                 $run = Start-GodotClient (Get-RunClientArgs "--e2e-ui" @()) -EngineArgs $engineArgs
-                return (Wait-GodotClient $run 300).Code
+                return (Wait-GodotClient $run 480).Code   # about 300 s of layout matrix since the rank editor (T-810)
             }
             "items" {
                 $server = Start-GameServer -Items
@@ -689,7 +689,7 @@ function Invoke-Scenario([string] $Name) {
                 if ($lines.Count -ne 2) { Write-Host "[run-e2e] expected a founding and a disbanding on the server log, found $($lines.Count)"; return 1 }
                 $moves = @(Select-String -Path $server.Log -Pattern "\[guild\] storage (deposit|withdraw) by .* landed")
                 Write-Host "[run-e2e] guild storage moves on the server log: $($moves.Count)"
-                if ($moves.Count -ne 4) { Write-Host "[run-e2e] expected two deposits and two withdrawals to land, found $($moves.Count)"; return 1 }
+                if ($moves.Count -ne 6) { Write-Host "[run-e2e] expected three deposits and three withdrawals to land, found $($moves.Count)"; return 1 }
                 if (Select-String -Path $server.Log -Pattern "e2esaid" -Quiet) { Write-Host "[run-e2e] A PLAYER'S LINE IS IN THE SERVER LOG"; return 1 }
                 if (Select-String -Path $server.Log -Pattern "\[guild\].*(failed|could not)" -Quiet) { Write-Host "[run-e2e] the guild service logged a failure"; return 1 }
                 return $result.Code

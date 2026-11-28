@@ -137,6 +137,23 @@ public sealed class UiRuns
         await LayoutMatrixAsync("guild storage log");
         Check(storage.LogTab.IsVisibleInTree() && Hud.Blocks(storage.LogTab.GetGlobalRect().GetCenter()), "the log tab shows and takes its touches");
         storage.ClearSamples();
+        // T-810: the rank editor with five ranks of the longest names, every box ticked, the longest member counts and the longest refusal under the heading; then scrolled to its end.
+        var ranks = Hud.GuildRanks!;
+        ranks.ShowSamples();
+        await FramesAsync(3);
+        await LayoutMatrixAsync("guild rank editor with a refusal");
+        Check(ranks.SaveButton.IsVisibleInTree() && Hud.Blocks(ranks.SaveButton.GetGlobalRect().GetCenter()), "a touch on the rank editor never reaches the world");
+        // T-810, for ARCHITECTURE §9: a second fill of the full storage window and of the full editor (their rows exist then), as a renewal or a change redraws them.
+        storage.ShowSamples(log: true);
+        ranks.ShowSamples();
+        var redraw = System.Diagnostics.Stopwatch.StartNew();
+        storage.ShowSamples(log: true);
+        var storageMs = redraw.Elapsed.TotalMilliseconds;
+        redraw.Restart();
+        ranks.ShowSamples();
+        Print($"guild: redraw of the full storage log {storageMs:0.0} ms, of the full rank editor {redraw.Elapsed.TotalMilliseconds:0.0} ms (main thread, once per change)");
+        storage.ClearSamples();
+        ranks.ClearSamples();
         // T-903: the trade window with both offers full of the longest lines, the longest name and state, the currency field and the footer, the ask prompt over it; then the bag's
         // list of what can be offered with the quantity picker in the columns' place.
         var trade = Hud.Trade!;

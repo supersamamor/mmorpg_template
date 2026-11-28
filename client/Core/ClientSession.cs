@@ -390,6 +390,7 @@ public sealed class ClientSession
         WatchLogin();
         Party.Expire(wallNow);   // T-902: an invite past its end is no longer offered
         Guild.Expire(wallNow);   // T-904: nor a guild's
+        if (Connection.Phase == ConnectionPhase.Online && Guild.StorageRenewalDue(wallNow)) Send(new GuildStorageOpenMessage());   // T-810
         Trade.Expire(wallNow);   // T-903: nor an ask
         Accounts.Update();
         _lastViewNow = viewNow;
@@ -782,7 +783,9 @@ public sealed class ClientSession
     /// <summary>The leader names and orders the ranks below its own.</summary>
     public void SetGuildRanks(IReadOnlyList<GuildRankRecord> ranks)
     {
-        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild) Send(new GuildRanksMessage(ranks));
+        if (Connection.Phase != ConnectionPhase.Online || !Guild.InGuild) return;
+        Guild.AwaitRanks();
+        Send(new GuildRanksMessage(ranks));
     }
 
     /// <summary>The leader hands the leader rank to a member.</summary>
@@ -791,11 +794,16 @@ public sealed class ClientSession
         if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild) Send(new GuildLeadMessage(member));
     }
 
-    /// <summary>Asks for the guild's storage (T-905).</summary>
+    /// <summary>Asks for the guild's storage (T-905), and keeps asking while the window stays open so others' moves arrive (T-810).</summary>
     public void OpenGuildStorage()
     {
-        if (Connection.Phase == ConnectionPhase.Online && Guild.InGuild) Send(new GuildStorageOpenMessage());
+        if (Connection.Phase != ConnectionPhase.Online || !Guild.InGuild) return;
+        Guild.WatchStorage(true);
+        Send(new GuildStorageOpenMessage());
     }
+
+    /// <summary>The storage window closed (T-810): no more renewals, so the server's lease runs out.</summary>
+    public void CloseGuildStorage() => Guild.WatchStorage(false);
 
     /// <summary>Puts <paramref name="quantity"/> units of bag entry <paramref name="entry"/> into the guild's storage (the server checks the rank, the room and the bag).</summary>
     public void DepositToGuild(long entry, int quantity)

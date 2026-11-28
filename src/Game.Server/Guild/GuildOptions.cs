@@ -38,6 +38,12 @@ public sealed record GuildOptions
     /// <summary>How long a founding waits for its tick to take the cost, in milliseconds; then it is given up and nothing is taken.</summary>
     public int PaymentWaitMs { get; init; } = 10_000;
 
+    /// <summary>
+    /// How long opening the guild storage keeps a member told of its changes (T-810), in milliseconds. A client with the window open renews it by opening again every
+    /// <c>GuildBook.StorageRenewSeconds</c> (5 s), so the default outlasts two lost or late renewals; a closed window or a lost connection lets it run out.
+    /// </summary>
+    public int StorageLeaseMs { get; init; } = 15_000;
+
     /// <summary>Usage text.</summary>
     public static string Usage =>
         "guild options (--guild-<name> <value> or env GAME_GUILD_<NAME>): " + string.Join(", ", Settable.Select(p => Kebab(p.Name) + " (" + p.PropertyType.Name.ToLowerInvariant() + ")"));
@@ -80,6 +86,7 @@ public sealed record GuildOptions
         if (!(IntentsPerMinute > 0) || IntentBurst < 1) problems.Add("intents-per-minute and intent-burst must be above 0");
         if (PulseMs < 100 || RefreshMs < PulseMs) problems.Add("pulse-ms must be at least 100 and refresh-ms at least pulse-ms");
         if (PaymentWaitMs < 1_000) problems.Add("payment-wait-ms must be at least 1000");
+        if (StorageLeaseMs < 6_000) problems.Add("storage-lease-ms must be at least 6000: the client renews an open storage window every 5000");
         return problems;
     }
 
