@@ -1011,6 +1011,19 @@ namespace Game.Shared.Protocol
     }
 
     /// <summary>
+    /// <c>content_changed</c> (T-801): a development server with hot reload swapped in new content, and the display bundle it would export now has the hash
+    /// <paramref name="Content"/>. <c>{"type":"content_changed","content":"&lt;sha-256&gt;"}</c>. Sent to every session that plays, only when that hash changed (a change to
+    /// server-only data, such as drops or monster stats, sends nothing). The client cannot take a new bundle while it plays (v1): it says the content changed and that
+    /// the game must be restarted to show it. A server that is not a development one with <c>--hot-reload</c> never sends it.
+    /// </summary>
+    /// <param name="Content">The new bundle hash (lowercase hex).</param>
+    public sealed record ContentChangedMessage(string Content) : ServerMessage
+    {
+        /// <inheritdoc />
+        public override string Type => MessageTypes.ContentChanged;
+    }
+
+    /// <summary>
     /// <c>announcement</c> (T-806): staff speak to everyone playing on this server. <c>{"type":"announcement","kind":"staff","text":"..."}</c>, or
     /// <c>{"type":"announcement","kind":"maintenance","in":300}</c>: the server goes into maintenance and every game ends in <c>in</c> seconds (saved). The client shows it on the HUD.
     /// </summary>

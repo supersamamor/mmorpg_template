@@ -507,6 +507,10 @@ public sealed class ClientSession
                 Ui.OnLevelUp(level, viewNow);
                 LevelUpReceived?.Invoke(level);
                 break;
+            case ContentChangedMessage changed:
+                Ui.OnContentChanged(changed, _bundle.ContentHash);   // T-801: a development server reloaded its content
+                ContentChangedReceived?.Invoke(changed);
+                break;
             case AnnouncementMessage announcement:
                 Ui.OnAnnouncement(announcement, viewNow);   // T-806
                 Chat.Announcement(Ui.Announcement);   // T-901: the log keeps it under "Server" after the banner is gone
@@ -647,6 +651,9 @@ public sealed class ClientSession
 
     /// <summary>Raised when a report is stored (for the scripted run).</summary>
     public event Action<ChatReportedMessage>? ChatReportedReceived;
+
+    /// <summary>Raised for every <c>content_changed</c> (T-801, for the scripted run).</summary>
+    public event Action<ContentChangedMessage>? ContentChangedReceived;
 
     /// <summary>Raised for every announcement (for the scripted run).</summary>
     public event Action<AnnouncementMessage>? AnnouncementReceived;

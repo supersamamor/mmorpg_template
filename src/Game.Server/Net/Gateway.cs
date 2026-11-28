@@ -256,7 +256,9 @@ public sealed class Gateway : IChatDirectory
     public IServerLog Log { get; }
 
     /// <summary>The server's content hash (ARCHITECTURE §5.4): sent in <c>welcome</c>; a client with another hash is told to update.</summary>
-    public string ContentHash { get; }
+    public string ContentHash { get => Volatile.Read(ref _contentHash); private set => Volatile.Write(ref _contentHash, value); }
+
+    private string _contentHash = "";
 
     /// <summary>The login in use (the dev stub unless one was given).</summary>
     public ILoginService Login { get; }
@@ -495,6 +497,28 @@ public sealed class Gateway : IChatDirectory
         foreach (var session in _sessions.Keys)
         {
             if (session.State != SessionState.Joined) continue;   // one still joining has not had its welcome: nothing comes before it
+            session.Post(message);
+            sent++;
+        }
+        return sent;
+    }
+
+    /// <summary>
+    /// T-801 (development servers with hot reload only): the content was reloaded and the display bundle's hash is now <paramref name="contentHash"/>. From now on a
+    /// client must have that bundle to sign in (<c>update_required</c> otherwise, as at boot), and every session that plays is told with one <c>content_changed</c>.
+    /// Returns how many were told. Throws on a server that is not a development one.
+    /// </summary>
+    public int ContentChanged(string contentHash)
+    {
+        if (!Options.Development) throw new InvalidOperationException("Only a development server reloads its content.");
+        ArgumentException.ThrowIfNullOrEmpty(contentHash);
+        if (string.Equals(contentHash, ContentHash, StringComparison.Ordinal)) return 0;
+        ContentHash = contentHash;
+        var message = new ContentChangedMessage(contentHash);
+        var sent = 0;
+        foreach (var session in _sessions.Keys)
+        {
+            if (session.State != SessionState.Joined) continue;
             session.Post(message);
             sent++;
         }

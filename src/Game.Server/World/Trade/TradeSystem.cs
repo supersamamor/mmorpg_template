@@ -26,14 +26,14 @@ namespace Game.Server.World.Trade;
 /// inventory changes under an offer (an offered entry dropped, sold, used, equipped, refined), the offer follows what is carried and both sides are unlocked.</para>
 /// <para><b>Logs.</b> Each swap writes one structured line (<c>[trade] {...}</c>) with both character ids and what moved, and nothing else about the players.</para>
 /// </remarks>
-public sealed class TradeSystem : ITickSystem
+public sealed class TradeSystem : ITickSystem, Reload.IContentReloadable
 {
     private static readonly IReadOnlyCollection<Type> Owned =
         [typeof(TradeAsk), typeof(TradeAnswer), typeof(TradeOfferItem), typeof(TradeOfferCurrency), typeof(TradeLock), typeof(TradeConfirm), typeof(TradeCancel)];
     private static long _lastTrade;
 
-    private readonly TradeBalanceDef _balance;
-    private readonly InventoryRules _rules;
+    private TradeBalanceDef _balance;
+    private InventoryRules _rules;
     private readonly IInventoryStore _store;
     private readonly TimeProvider _time;
     private readonly Dictionary<long, Ask> _asksTo = new();       // by the asked
@@ -53,6 +53,13 @@ public sealed class TradeSystem : ITickSystem
         _rules = rules ?? throw new ArgumentNullException(nameof(rules));
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _time = time ?? TimeProvider.System;
+    }
+
+    /// <summary>T-801: the new trade numbers and item rules (open trades ended when their players left the map for the reload).</summary>
+    public void Reload(Reload.ServerContent next)
+    {
+        _balance = next.Balance.Trade;
+        _rules = next.Items.Rules;
     }
 
     /// <inheritdoc />

@@ -62,11 +62,11 @@ public sealed class QuestContent
 /// asked again. The rewards combat pays are kept the same way until they are paid (<see cref="ProgressionState.OwedRewards"/>).</para>
 /// <para><b>Events are handled on the next tick</b>, in raise order: an event raised in tick N is dispatched in its phase 4 and acted on in this system's tick N + 1.</para>
 /// </remarks>
-public sealed class QuestSystem : ITickSystem
+public sealed class QuestSystem : ITickSystem, Reload.IContentReloadable
 {
     private static readonly IReadOnlyCollection<Type> Owned = [typeof(AbandonQuest)];
 
-    private readonly QuestRules _rules;
+    private QuestRules _rules;
     private readonly IPlayerProgressionStore _progressions;
     private readonly IInventoryStore? _inventories;
     private readonly Dictionary<long, Markers> _markers = new();
@@ -91,6 +91,9 @@ public sealed class QuestSystem : ITickSystem
         _progressions = progressions ?? throw new ArgumentNullException(nameof(progressions));
         _inventories = inventories;
     }
+
+    /// <summary>T-801: the new quests; the players' markers are worked out again as they come back.</summary>
+    public void Reload(Reload.ServerContent next) => _rules = next.Quests.CreateRules();
 
     /// <inheritdoc />
     public string Name => "quest";

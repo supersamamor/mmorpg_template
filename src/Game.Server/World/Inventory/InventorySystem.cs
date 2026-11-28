@@ -37,19 +37,19 @@ namespace Game.Server.World.Inventory;
 /// <para><b>Time:</b> ground items use the instance's simulated time, like combat's drops; cooldowns use the injected server clock, so they hold
 /// across maps. <b>Randomness:</b> a refine draws one value from the instance's seeded random source.</para>
 /// </remarks>
-public sealed class InventorySystem : ITickSystem
+public sealed class InventorySystem : ITickSystem, Reload.IContentReloadable
 {
     private static readonly IReadOnlyCollection<Type> Owned =
         [typeof(PickUp), typeof(UseItem), typeof(Equip), typeof(Unequip), typeof(DropItem), typeof(InsertCard), typeof(RefineItem), typeof(ShopBuy), typeof(ShopSell), typeof(Admin.StaffItemChange), typeof(Guild.GuildFoundingPayment), typeof(Guild.GuildStorageTransfer)];
     private static readonly int WeightLimitStat = StatIndex.IndexOf(DerivedStats.WeightLimit);
     private const int PickupGraceTicks = 3;   // a pick-up whose walk never started within this many ticks has no way there
 
-    private readonly InventoryContent _content;
-    private readonly InventoryRules _rules;
+    private InventoryContent _content;
+    private InventoryRules _rules;
     private readonly IInventoryStore _store;
     private readonly IClock _clock;
     private readonly IPlayerProgressionStore? _progressions;
-    private readonly ShopContent? _shops;
+    private ShopContent? _shops;
     private readonly List<ServiceOpened> _shopOpenings = new();   // shop services opened since the last tick: answered with the priced stock
     private readonly Func<long> _newId;
     private readonly Dictionary<long, Holder> _holders = new();
@@ -78,6 +78,17 @@ public sealed class InventorySystem : ITickSystem
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _newId = store.NextEntryId;
+    }
+
+    /// <summary>
+    /// T-801: the new items, inventory numbers and shops. The players left the map before this (their holders and pending pick-ups went with them) and
+    /// come back after it, when their worn items' modifiers go on their new sheets. Item and quest turn-ins in flight run on with the new rules.
+    /// </summary>
+    public void Reload(Reload.ServerContent next)
+    {
+        _content = next.Items;
+        _rules = _content.Rules;
+        if (_shops is not null) _shops = next.Shops;
     }
 
     /// <inheritdoc />

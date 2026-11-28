@@ -69,10 +69,11 @@ public sealed class LoadedCharacter
 /// </summary>
 public sealed class CharacterLoader
 {
-    private readonly ContentDatabase _content;
-    private readonly InventoryContent _items;
-    private readonly QuestRules _quests;
-    private readonly IReadOnlyDictionary<string, (string MapId, GridCell Cell)> _respawns;
+    private readonly object _gate = new();   // T-801: a load sees one content set whole; a hot reload swaps between loads
+    private ContentDatabase _content;
+    private InventoryContent _items;
+    private QuestRules _quests;
+    private IReadOnlyDictionary<string, (string MapId, GridCell Cell)> _respawns;
     private readonly Func<long> _newItemId;
 
     /// <summary>A loader over <paramref name="content"/>; <paramref name="newItemId"/> numbers the stacks a smaller <c>max_stack</c> splits off.</summary>
@@ -85,8 +86,26 @@ public sealed class CharacterLoader
         _respawns = CombatContent.RespawnPoints(content.Maps.All, content.Grids);
     }
 
+    /// <summary>
+    /// T-801: checks every load from now on against <paramref name="content"/> (a hot reload). A load under way finishes with the content it began with; a character
+    /// that was loaded against the older set and enters after the instances swapped is set up by the new systems as it arrives.
+    /// </summary>
+    public void Swap(ContentDatabase content)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        var items = InventoryContent.From(content);
+        var quests = new QuestRules(content.Quests.All, content.Balance.Quests.MaxActive);
+        var respawns = CombatContent.RespawnPoints(content.Maps.All, content.Grids);
+        lock (_gate) (_content, _items, _quests, _respawns) = (content, items, quests, respawns);
+    }
+
     /// <summary>The character as it enters now. <paramref name="now"/> (UTC) dates the times left.</summary>
     public LoadedCharacter Load(CharacterState saved, DateTime now)
+    {
+        lock (_gate) return LoadNow(saved, now);
+    }
+
+    private LoadedCharacter LoadNow(CharacterState saved, DateTime now)
     {
         ArgumentNullException.ThrowIfNull(saved);
         var notes = new List<string>();

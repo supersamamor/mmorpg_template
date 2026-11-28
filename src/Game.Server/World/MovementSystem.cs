@@ -65,12 +65,12 @@ public static class MovementReasons
 /// reached, so a buff applies from the next cell on. Entities do not block each other. A rejected <see cref="MoveTo"/> leaves
 /// any move in progress running. Allocation after warm-up: only the events (records); path lists and move state are pooled.
 /// </remarks>
-public sealed class MovementSystem : ITickSystem
+public sealed class MovementSystem : ITickSystem, Reload.IContentReloadable
 {
     private static readonly int MoveSpeedStat = StatIndex.IndexOf(DerivedStats.MoveSpeed);
     private static readonly IReadOnlyCollection<Type> Owned = [typeof(MoveTo), typeof(StopMove)];
 
-    private readonly PathLimits _limits;
+    private PathLimits _limits;
     private readonly Pathfinder _pathfinder = new();
     private readonly Dictionary<EntityId, MoveState> _states = new();
     private readonly List<MoveState> _active = new();          // sorted by entity id
@@ -91,6 +91,14 @@ public sealed class MovementSystem : ITickSystem
     /// <summary>Creates a movement system with the limits of <c>balance.yaml</c> <c>movement</c>.</summary>
     public static MovementSystem Create(BalanceDef balance) =>
         new(new PathLimits(balance.Movement.MaxPathLength, balance.Movement.MaxNodesExpanded));
+
+    /// <summary>T-801: the new <c>movement</c> limits apply to the next path search; walks under way keep their path.</summary>
+    public void Reload(Reload.ServerContent next)
+    {
+        var limits = new PathLimits(next.Balance.Movement.MaxPathLength, next.Balance.Movement.MaxNodesExpanded);
+        if (limits.MaxPathLength < 1 || limits.MaxNodesExpanded < 1) throw new ArgumentOutOfRangeException(nameof(next), "movement limits must be at least 1.");
+        _limits = limits;
+    }
 
     /// <inheritdoc />
     public string Name => "movement";

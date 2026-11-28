@@ -105,6 +105,7 @@ if (options.Migrate) return 0;
 var netProblems = netOptions.Problems().Concat(chatOptions.Problems(netOptions.MaxMessageBytes).Select(p => "chat: " + p))
     .Concat(partyOptions.Problems().Select(p => "party: " + p)).Concat(tradeOptions.Problems().Select(p => "trade: " + p))
     .Concat(guildOptions.Problems(netOptions.MaxMessageBytes).Select(p => "guild: " + p)).ToList();
+if (options.HotReload) netProblems.AddRange(HotReloadGate.Problems(HotReloadGate.DebugBuild, development, netOptions.ListenAddress).Select(p => "--hot-reload: " + p));   // T-801
 if (netProblems.Count > 0)
 {
     foreach (var problem in netProblems) log.Error("Gateway: " + problem);
@@ -130,12 +131,15 @@ if (content is null)
     return 1;
 }
 
+var built = Game.Server.World.Reload.ServerContent.Build(content);   // what the tick's systems read; a hot reload (T-801) swaps in a new one
+
 // The seed only feeds the simulation's PCG32 streams; it is logged so a run can be replayed.
 var seed = options.Seed ?? (ulong)Random.Shared.NextInt64();
 var clock = new SystemClock();
 var progressions = new InMemoryProgressionStore(); // combat writes it; the gateway reads it for each player's own exp messages
 // Saved characters (T-702): with a database, accounts' characters are loaded before they enter and saved as they play and leave, and item ids are unique for ever.
 CharacterSaves? saves = null;
+CharacterLoader? loader = null;
 if (database is not null)
 {
     saves = new CharacterSaves(new PostgresCharacterStore(database),
@@ -149,14 +153,14 @@ if (database is not null)
         log.Error($"The server run could not be registered: {e.Message}. Refusing to start.");
         return 1;
     }
-    saves.Open(new CharacterLoader(content, saves.NextItemId));
+    saves.Open(loader = new CharacterLoader(content, saves.NextItemId));
     log.Info($"Saving characters every {options.SaveIntervalSeconds} s; server run {saves.Run}.");
 }
 var inventories = new InMemoryInventoryStore(saves is null ? null : saves.NextItemId); // the inventory writes it; the gateway reads it for each player's own inventory messages
 var savePoints = new InMemorySavePointStore();
 var keeper = saves is null ? null : new CharacterKeeper(saves, progressions, inventories, savePoints, clock, TimeProvider.System);
 var parties = new Game.Server.World.Party.PartyRoster();   // T-902: the party service writes who is in which party; combat and every instance's party system read it
-var pipeline = ServerPipeline.Create(content, progressions, inventories, clock, savePoints, keeper, parties, partyOptions.StatusIntervalTicks); // more systems plug in in ServerPipeline: spawns (T-301), combat, ...
+var pipeline = ServerPipeline.Create(built, progressions, inventories, clock, savePoints, keeper, parties, partyOptions.StatusIntervalTicks); // more systems plug in in ServerPipeline: spawns (T-301), combat, ...
 var world = new GameWorld(content.Grids.Values, pipeline, seed, clock, log) { Keeper = keeper };
 var runners = world.Instances.Select(i => new InstanceRunner(i, clock, log, !options.LegacyTimer)).ToList();
 var contentHash = ClientBundleExporter.Hash(content); // the display bundle's hash: a client packed with another one must update (ARCHITECTURE §5.4)
@@ -235,6 +239,22 @@ if (adminOptions.Enabled)
     }
 }
 
+// T-801: hot reload (development only; refused above otherwise). A valid change swaps in between ticks; clients are told when the display bundle changed.
+using var reloader = options.HotReload ? new ContentReloader(options.ContentDir, options.Theme, world, built, contentHash, next =>
+{
+    var start = new NewCharacters(next);
+    return player => progressions.TryGet(player.Id, out var state) ? start.CreateStats(state) : null;
+}, log) : null;
+if (reloader is not null)
+{
+    reloader.Reloaded += (next, hash) =>
+    {
+        loader?.Swap(next.Database);
+        var told = gateway.ContentChanged(hash);
+        if (told > 0) log.Info($"[reload] told {told} session(s) that the content changed (hash {hash}).");
+    };
+}
+
 using var stop = new ManualResetEventSlim();
 void RequestStop(PosixSignalContext context)
 {
@@ -247,6 +267,7 @@ using var sigterm = PosixSignalRegistration.Create(PosixSignal.SIGTERM, RequestS
 log.Info($"Starting {runners.Count} map instance(s) at {TickRate.Hz} Hz, seed {seed}, {pipeline.Count} system(s): " +
          string.Join(", ", world.Instances.Select(i => $"{i.MapId} {i.Grid.Width}x{i.Grid.Height}")));
 foreach (var runner in runners) runner.Start();
+reloader?.Start();
 gateway.Start();
 chat.Start();
 await using var eraser = database is null ? null : AccountEraser.Start(new PostgresAccountStore(database), TimeProvider.System, log); // T-703

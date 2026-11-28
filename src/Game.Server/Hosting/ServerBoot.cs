@@ -9,6 +9,7 @@ using Game.Server.World.Monsters;
 using Game.Server.World.Quests;
 using Game.Server.World.Saving;
 using Game.Server.World.Outfits;
+using Game.Server.World.Reload;
 
 namespace Game.Server.Hosting;
 
@@ -20,7 +21,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
 {
     /// <summary>Usage text.</summary>
     public const string Usage =
-        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--migrate] [--save-interval <seconds>] [--save-shutdown-wait <seconds>] [--account-erase-days <days>] [--net-<name> <value> ...] [--admin-<name> <value> ...] [--chat-<name> <value> ...] [--party-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
+        "usage: Game.Server [content-dir] [--theme <name>] [--seed <n>] [--duration <seconds>] [--environment <Development|Production>] [--legacy-timer] [--hot-reload] [--migrate] [--save-interval <seconds>] [--save-shutdown-wait <seconds>] [--account-erase-days <days>] [--net-<name> <value> ...] [--admin-<name> <value> ...] [--chat-<name> <value> ...] [--party-<name> <value> ...]; the database connection string is the environment variable GAME_DB_CONNECTION";
 
     /// <summary>The environment name that enables development mode (plain ws:// on loopback, the dev login).</summary>
     public const string DevelopmentName = "Development";
@@ -35,6 +36,9 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
 
     /// <summary><c>--legacy-timer</c>: keep the ordinary wait on Windows too, to measure what the high-resolution timer buys.</summary>
     public bool LegacyTimer { get; init; }
+
+    /// <summary><c>--hot-reload</c> (T-801): watch the content and swap a valid change in between ticks. Development, debug builds and a loopback gateway only (<see cref="HotReloadGate"/>).</summary>
+    public bool HotReload { get; init; }
 
     /// <summary><c>--migrate</c>: apply the database migrations and exit. Development applies them at start; everywhere else this is how it is done (T-701).</summary>
     public bool Migrate { get; init; }
@@ -80,6 +84,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
         string? environment = null;
         var legacyTimer = false;
         var migrate = false;
+        var hotReload = false;
         var saveInterval = 60;
         var saveWait = 20;
         var eraseDays = 14;
@@ -106,6 +111,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
                     case "--environment": environment = Value(); break;
                     case "--legacy-timer": legacyTimer = true; break;
                     case "--migrate": migrate = true; break;
+                    case "--hot-reload": hotReload = true; break;
                     case "--save-interval": saveInterval = Seconds(1, 3_600); break;
                     case "--account-erase-days":
                         eraseDays = int.TryParse(Value(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var days) && days <= 90
@@ -153,6 +159,7 @@ public sealed record ServerOptions(string ContentDir, string Theme, ulong? Seed,
             Environment = environment,
             LegacyTimer = legacyTimer,
             Migrate = migrate,
+            HotReload = hotReload,
             SaveIntervalSeconds = saveInterval,
             SaveShutdownWaitSeconds = saveWait,
             AccountEraseDays = eraseDays,
@@ -200,25 +207,29 @@ public static class ServerPipeline
     /// same stores) saved characters are copied for their saves in phase 5, after the AOI.</remarks>
     public static SystemPipeline Create(ContentDatabase content, IPlayerProgressionStore? progressions = null, IInventoryStore? inventories = null,
         Game.Shared.Time.IClock? clock = null, ISavePointStore? savePoints = null, CharacterKeeper? keeper = null, Game.Server.World.Party.PartyRoster? parties = null,
+        int partyStatusTicks = 10) =>
+        Create(ServerContent.Build(content), progressions, inventories, clock, savePoints, keeper, parties, partyStatusTicks);
+
+    /// <summary>As above, from content already built (T-801: the server keeps it to compare and swap on a hot reload).</summary>
+    public static SystemPipeline Create(ServerContent built, IPlayerProgressionStore? progressions = null, IInventoryStore? inventories = null,
+        Game.Shared.Time.IClock? clock = null, ISavePointStore? savePoints = null, CharacterKeeper? keeper = null, Game.Server.World.Party.PartyRoster? parties = null,
         int partyStatusTicks = 10)
     {
-        var balance = content.Balance;
-        var monsters = MonsterCatalog.From(content);
-        MovementSystem.Create(balance);            // fails now, at boot, if the movement limits are unusable
-        MonsterAiSystem.Create(monsters, balance); // likewise for the AI timings
-        AoiSystem.Create(balance);                 // and the AOI numbers
-        var combat = CombatContent.From(content, monsters);   // and the combat, death and loot numbers
-        var items = InventoryContent.From(content);            // and the inventory numbers and item modifiers
+        // ServerContent.Build has run the boot checks (movement limits, AI timings, AOI, combat, inventory numbers).
+        var balance = built.Balance;
+        var monsters = built.Monsters;
+        var combat = built.Combat;
+        var items = built.Items;
         progressions ??= new InMemoryProgressionStore();
         parties ??= new Game.Server.World.Party.PartyRoster();   // T-902: the party service writes it; without one nobody is ever in a party
         inventories ??= new InMemoryInventoryStore();
         clock ??= new SystemClock();
         savePoints ??= new InMemorySavePointStore();
-        var dialogue = DialogueContent.From(content);   // and the NPCs (a placement of an unknown NPC fails at the first tick)
-        var quests = QuestContent.From(content);         // and the quest numbers
-        var shops = ShopContent.From(content);           // and the shops with their prices resolved
-        var outfits = new Game.Shared.Wardrobe.WardrobeRules(content.Outfits.All);   // and what outfits there are (T-708)
-        var autopilot = AutopilotContent.From(content);  // and the autopilot numbers, with every journey it may have to make worked out
+        var dialogue = built.Dialogue;   // the NPCs (a placement of an unknown NPC fails at the first tick)
+        var quests = built.Quests;
+        var shops = built.Shops;
+        var outfits = built.Outfits;     // T-708
+        var autopilot = built.Autopilot; // with every journey it may have to make worked out
         var pipeline = new SystemPipeline()
             .Add(() => MovementSystem.Create(balance))
             .Add(() => new MonsterSpawnerSystem(monsters, balance.Death.CorpseMs))

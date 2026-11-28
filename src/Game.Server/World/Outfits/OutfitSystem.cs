@@ -12,8 +12,13 @@ namespace Game.Server.World.Outfits;
 /// It sets <see cref="Entity.Outfit"/> for the AOI and nothing else. <b>It must stay that way:</b> no stat, effect, speed or rule may come from an outfit. A quest's outfit rewards are
 /// granted where its other rewards are paid (combat, the progression host), through the same <see cref="WardrobeRules.Grant"/>.
 /// </remarks>
-public sealed class OutfitSystem(WardrobeRules rules, IPlayerProgressionStore progressions) : ITickSystem
+public sealed class OutfitSystem(WardrobeRules rules, IPlayerProgressionStore progressions) : ITickSystem, Reload.IContentReloadable
 {
+    private WardrobeRules _rules = rules;
+
+    /// <summary>T-801: the new outfits; a returning player's look is shown again from them.</summary>
+    public void Reload(Reload.ServerContent next) => _rules = next.Outfits;
+
     private static readonly IReadOnlyCollection<Type> Owned = [typeof(SetOutfit), typeof(HideOutfits), typeof(GrantOutfit)];
     private MapInstance? _instance;
 
@@ -52,7 +57,7 @@ public sealed class OutfitSystem(WardrobeRules rules, IPlayerProgressionStore pr
     private void Set(TickContext context, Entity player, WardrobeState wardrobe, SetOutfit set)
     {
         wardrobe.Chosen.TryGetValue(set.Slot, out var before);
-        if (rules.Choose(wardrobe, set.Slot, set.Outfit, player.Appearance?.Gender) is { } reason)
+        if (_rules.Choose(wardrobe, set.Slot, set.Outfit, player.Appearance?.Gender) is { } reason)
         {
             context.Publish(new OutfitRefused(player.Id, set.Slot, set.Outfit, reason));
             return;
@@ -75,7 +80,7 @@ public sealed class OutfitSystem(WardrobeRules rules, IPlayerProgressionStore pr
     /// <summary>Works out what others see; the object stays the same while it is the same, so the AOI sends a change once.</summary>
     private void Refresh(Entity player, WardrobeState wardrobe)
     {
-        var shown = rules.Shown(wardrobe, player.Appearance?.Gender);
+        var shown = _rules.Shown(wardrobe, player.Appearance?.Gender);
         if (shown.Count == 0)
         {
             if (player.Outfit is { Shown.Count: > 0 }) player.Outfit = OutfitLook.None;

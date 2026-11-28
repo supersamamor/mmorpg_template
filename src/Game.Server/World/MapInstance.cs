@@ -71,6 +71,8 @@ public sealed class MapInstance
     private List<StructuralChange> _inbox = new();
     private List<StructuralChange> _inboxDrained = new();
     private List<IIntent> _drained = new();
+    private Reload.ContentSwap? _reload;   // T-801: a content set waiting for the next tick
+    private long _generation;
 
     internal MapInstance(GameWorld world, MapGrid grid, IReadOnlyList<ITickSystem> systems, IRandom random, IClock clock, IServerLog log, int intentCapacity)
     {
@@ -149,12 +151,22 @@ public sealed class MapInstance
     /// <summary>Queues an intent for the next tick. Thread-safe. Prefer <see cref="GameWorld.TryEnqueue"/>, which finds the instance.</summary>
     public EnqueueResult TryEnqueue(IIntent intent) => _intents.TryEnqueue(intent);
 
+    /// <summary>
+    /// T-801: asks this instance to take a new content set between two ticks: at the start of its next tick, before anything of that tick happens.
+    /// Thread-safe; a later request before then replaces an earlier one (only the newest set is swapped in).
+    /// </summary>
+    public void RequestReload(Reload.ContentSwap swap) => Interlocked.Exchange(ref _reload, swap ?? throw new ArgumentNullException(nameof(swap)));
+
+    /// <summary>The <see cref="Reload.ServerContent.Generation"/> of the content this instance runs (0 until a hot reload).</summary>
+    public long ContentGeneration => Interlocked.Read(ref _generation);
+
     /// <summary>Runs one tick (all five phases). Never throws because of a system or event handler.</summary>
     public void Tick()
     {
         var startedAt = Stopwatch.GetTimestamp();
         var tick = TickNumber;
         _context.TickNumber = tick;
+        if (Interlocked.Exchange(ref _reload, null) is { } swap) ApplyReload(swap, tick);
 
         // Phase 1: take everything that arrived before this tick began.
         _drained = _intents.DrainTo(_drained);
@@ -186,6 +198,81 @@ public sealed class MapInstance
         _context.Intents = [];
         TickNumber = tick + 1;
         Timings.Record((long)Stopwatch.GetElapsedTime(startedAt).TotalMicroseconds);
+    }
+
+    /// <summary>
+    /// T-801: the swap, between ticks, all at once for this instance (ARCHITECTURE §5.5).
+    /// 1. Every monster and NPC is removed (<c>EntityLeftMap</c>, as a despawn) and every player is taken off the map (<c>EntityLeftMap</c>, as a warp):
+    ///    the old systems forget what they built for them from the old content. Ground items stay.
+    /// 2. Every system that reads content (<see cref="Reload.IContentReloadable"/>) takes the new set, in pipeline order.
+    /// 3. The players come back on the cell they stood on (<c>EntityEnteredMap</c>, as a same-map warp) with a stat sheet built from the new content; their HP and SP
+    ///    stand (a dead player stays dead) and their statuses end. The new systems set them up as on any arrival: worn items, passives, markers, a snapshot.
+    /// 4. The spawner and the dialogue system put the map's monsters and NPCs back in this tick.
+    /// Events still waiting from the last tick's handlers are dispatched in step 1, a tick early. A system that throws is logged and the swap goes on.
+    /// </summary>
+    private void ApplyReload(Reload.ContentSwap swap, long tick)
+    {
+        var started = Stopwatch.GetTimestamp();
+        var players = _players.ToList();
+        var removed = 0;
+        foreach (var entity in _ordered.Where(e => e.Kind is EntityKind.Monster or EntityKind.Npc).ToList())
+        {
+            ApplyRemove(entity.Id);
+            removed++;
+        }
+        foreach (var player in players)
+        {
+            Detach(player.Id, out _);   // the world still has it here: systems treat it as a warp, not as leaving the world
+            Events.Publish(new EntityLeftMap(player.Id, player.Kind, MapId, player.Cell, MapChangeReason.Warp));
+        }
+        Events.Dispatch();
+
+        foreach (var system in _systems)
+        {
+            if (system is not Reload.IContentReloadable reloadable) continue;
+            try
+            {
+                reloadable.Reload(swap.Next);
+            }
+            catch (Exception ex)
+            {
+                Counters.SystemErrors++;
+                _log.Error($"[{MapId}] tick {tick}: system '{system.Name}' could not take the reloaded content; it keeps parts of the old.", ex);
+            }
+        }
+
+        foreach (var player in players)
+        {
+            try
+            {
+                if (swap.PlayerSheet(player) is { } sheet)
+                {
+                    var hp = player.Vitals?.Hp ?? 0;
+                    var sp = player.Vitals?.Sp ?? 0;
+                    player.Stats = sheet;
+                    player.Vitals = player.Vitals is null ? null : Combat.Vitals.Restore(sheet, hp, sp);
+                }
+                if (player.Statuses is { } set) set.MapId = null;   // timed on the old content: combat ends them on arrival
+            }
+            catch (Exception ex)
+            {
+                Counters.HandlerErrors++;
+                _log.Error($"[{MapId}] tick {tick}: the new stat sheet of {player.Id} could not be built; it keeps the old one.", ex);
+            }
+            if (!_entities.TryAdd(player.Id, player)) continue;
+            _ordered.Add(player);
+            _players.Add(player);
+            Events.Publish(new EntityEnteredMap(player.Id, player.Kind, MapId, player.Cell, MapChangeReason.Warp));
+        }
+        Events.Dispatch();
+        foreach (var player in players)
+        {
+            if (player.Vitals is not { } vitals) continue;
+            vitals.EndRestore();
+            if (player.Dead) vitals.Hp = 0;
+        }
+        Interlocked.Exchange(ref _generation, swap.Next.Generation);
+        swap.Swapped(this, players.Count, removed, Stopwatch.GetElapsedTime(started));
     }
 
     /// <summary>Posts a structural change from outside the tick (another instance, the world). Thread-safe.</summary>

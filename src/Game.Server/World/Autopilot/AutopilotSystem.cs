@@ -30,7 +30,7 @@ namespace Game.Server.World.Autopilot;
 /// <para><b>Searching.</b> Journeys walk along distance fields worked out at boot (<see cref="TravelMap"/>): no search. Picking the nearest of several targets is one bounded search
 /// (<see cref="Pathfinder.FindNearest"/>, within <c>movement</c>'s limits), and all runs of an instance share <c>autopilot.searches_per_tick</c> of them.</para>
 /// </remarks>
-public sealed partial class AutopilotSystem : ITickSystem
+public sealed partial class AutopilotSystem : ITickSystem, Reload.IContentReloadable
 {
     private const int AnswerMs = 600;        // how long to wait for another system to take an intent up (it takes two ticks) before trying again
     private const int PickUpMs = 10_000;     // a pick-up walks at most gather_range cells
@@ -44,8 +44,8 @@ public sealed partial class AutopilotSystem : ITickSystem
     private const int GoneTicks = 3;         // a quest that left the log says why (completed, abandoned) within this many ticks
     private static readonly IReadOnlyCollection<Type> Owned = [typeof(StartAutopilot), typeof(StopAutopilot), typeof(ManualInput)];
 
-    private readonly AutopilotContent _content;
-    private readonly AutopilotBalanceDef _balance;
+    private AutopilotContent _content;
+    private AutopilotBalanceDef _balance;
     private readonly IPlayerProgressionStore _progressions;
     private readonly IClock _clock;
     private readonly Pathfinder _pathfinder = new();
@@ -68,6 +68,13 @@ public sealed partial class AutopilotSystem : ITickSystem
         _progressions = progressions ?? throw new ArgumentNullException(nameof(progressions));
         _clock = clock ?? throw new ArgumentNullException(nameof(clock));
         _balance = content.Balance;
+    }
+
+    /// <summary>T-801: the new autopilot numbers and journeys. Runs of players who left the map for the reload ended there, as on a map change.</summary>
+    public void Reload(Reload.ServerContent next)
+    {
+        _content = next.Autopilot;
+        _balance = _content.Balance;
     }
 
     /// <inheritdoc />

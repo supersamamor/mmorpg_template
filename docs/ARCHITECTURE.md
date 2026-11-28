@@ -18,12 +18,12 @@ Godot: see [ADR-001](decisions/ADR-001-3d-mobile.md).
                    grid math (cells, directions, LOS), message contracts.
                    No I/O. Referenced by server, tools, client.
   Game.Content     YAML loading, registries, cross-reference validation,
-                   JSON Schema generation, client bundle export. Hot-reload in dev.
+                   JSON Schema generation, client bundle export. Hot-reload in dev (§5.5).
   Game.Server      Host: tick loop, world/map instances, AOI, entity systems,
                    WebSocket gateway, persistence (PostgreSQL), event bus,
                    internal admin API (§12).
   Game.Admin       Internal web panel for live operations (§12). Staff only, never shipped.
-  Game.Tools       CLI: `validate`, `schema`, `stats`, `export-client`.
+  Game.Tools       CLI: `validate`, `schema`, `stats`, `export-client`, `editor` (§5.6).
 /tests
   Game.Tests       Unit + golden-value tests (xUnit).
 /client            Godot 4 .NET project (3D). Renders state, plays effects, sends intents.
@@ -314,6 +314,65 @@ descriptions, asset keys, skill targeting info, UI text. That is the **client bu
 
 The leak tests (`tests/Game.Tests/ClientBundle`) fail if a key names server-only data (`drop`, `chance`, `spawn`, `formula`, `ai`, `exp`, `respawn`, `hp`, `atk`, ...),
 if a server-only value (formula, scene hash, `drop.*` / `exp.*` id) appears, or if server-only fields set to unique values change a byte of the output.
+
+### 5.5 Hot reload in development (T-801)
+
+`Game.Server --hot-reload` (off by default) watches `content/` and the theme's `asset-manifest.json` and swaps a valid change into the running server
+without a restart. How to use it: [CONTENT_EDITING.md](CONTENT_EDITING.md).
+
+- **Who may.** A debug build (`dotnet run`), `--environment Development`, and a gateway on a loopback address. Anything else (a release build, another
+  environment, `--net-bind-address 0.0.0.0`) refuses the option at start, with the reason, and the server does not start (exit code 1; `HotReloadGate`).
+  The option is never on in production, and the server never writes a content file.
+- **Loading.** 300 ms after the files go quiet (`ContentReloader`; an editor's `*.tmp` files are ignored), the whole set is loaded and validated off the tick
+  threads by `ContentBoot`, exactly as at boot: every rule, every cross-reference (hard rule 5), the theme's asset keys. Then the systems' content is built
+  (`ServerContent.Build`, which runs the boot checks of the movement, AI, AOI, combat and inventory numbers). A set with any error is **refused**: the errors are
+  logged as `validate` prints them and the running content stays. A set whose content is the same (a comment, white space) does nothing.
+- **What cannot reload (v1)** refuses the whole reload with a plain `NEEDS A RESTART` line naming it, so what runs is always one validated set, never a mix
+  (`HotReloadRules`): map grids and map definitions (instances are built on them at start); removing an item, skill, job, quest or outfit (a playing character may
+  hold it, and only a load sets such things aside, §3 "Loading"); changes to jobs, skills, quests, EXP tables, outfits and `appearance.yaml`, and the
+  `balance.yaml` sections `aoi`, `characters`, `guild`, `inventory`, `new_character`, `party`, `progression` and `quests` (read once at start outside the tick:
+  the AOI grids, the account, guild and party services, and the gateway's own-player messages and new characters, which `Net/**` builds at start).
+- **The swap** (`MapInstance.ApplyReload`): the new set is handed to every instance, and each swaps it in at the start of its next tick, before that tick's intents,
+  all at once for the instance (instances may be up to one tick apart). Per kind:
+
+  | What | On a swap |
+  |------|-----------|
+  | numbers in definitions, formulas, the other `balance.yaml` sections, drop tables, statuses, dialogue, shops, refine, elements | apply from that tick |
+  | monsters | **every** monster is removed (not killed: no EXP, no drop) and the map's spawns are filled again in the same tick with the new definitions; summons and corpses go. Every monster, not only changed ones: a monster is built from many definitions (skills, statuses, drops, formulas), and respawning all is the one rule that is never half stale. A monster whose definition vanished (only one that no map spawns can) is gone and not spawned again |
+  | NPCs | removed and placed again from the grid with the new definitions; open dialogues end (`warped`) |
+  | players | stay connected and in the world. Each is taken off the map and put back on its cell as a same-map warp (`EntityLeftMap` / `EntityEnteredMap`, reason `warp`), with a stat sheet built from the new content; worn items and passives go back on it from the new definitions, HP and SP stand (a dead player stays dead), statuses end. What belongs to a moment ends as on a map change: a cast or auto-attack, a pending pick-up, an open trade, an autopilot run |
+  | ground items | stay (an item cannot vanish: removing one needs a restart) |
+  | the database | nothing is written by a reload. Saves go on as usual; the character loader checks every later load against the new set |
+
+  Events still waiting from the last tick's handlers are dispatched at the swap, a tick early. On the sample content a swap took 5 ms on the hollow and
+  30 ms on the meadow (40 entities removed and spawned again, one player); the first one in a process also pays the JIT. Development only, so no budget is set.
+- **Clients.** When the display bundle's hash changed, the gateway wants the new hash from then on (a client packed with the old one gets `update_required` at its
+  next sign-in, as at boot) and sends every playing session one `content_changed` with the new hash (§10; the one `Net/**` change of T-801). v1 does not take a
+  bundle while it plays: the client's HUD says "Content changed on the server. Restart the game to see it." on the announcement line until the game is restarted.
+  A change to server-only data (monster stats, drops, formulas) keeps the hash and sends nothing. The bundle is still built by the same whitelist (§5.4, hard rule 11).
+- **Not reloaded:** what outside the tick read content at start (the admin API's checks in `Admin/**`, the account service, the gateway's own-player messages);
+  the rules above refuse what would make them disagree with the tick.
+
+### 5.6 The content editor (T-801)
+
+`dotnet run --project src/Game.Tools -- editor` serves a small local web page for the common kinds: items, monsters, skills, NPCs, dialogue, shops and quests
+(`ContentEditor.FirstKinds`: the kinds a designer touches most, with mostly plain fields; jobs, statuses, drops and outfits are next; maps and the root files are not
+offered). How to use it: [CONTENT_EDITING.md](CONTENT_EDITING.md).
+
+- **Loopback only, no sign-in.** It listens on 127.0.0.1 (or `::1`) and refuses any other `--host` (exit code 2). It answers only requests whose `Host` is a loopback
+  name, and a save must come from its own page (a JSON body with an `X-Editor` header, which a form or another site's page cannot send).
+- **Driven by the schemas.** A kind is a content folder whose generated `schemas/*.schema.json` (matched by title to `ContentLayout.Folders`) exists; the page
+  builds each form from the schema at run time (types, enums, required, descriptions). A string whose pattern names a namespace (`^item\.`) is a reference and offers
+  the ids that exist with that prefix, from the content and from the theme's asset keys. No C# or page code lists a kind's fields (hard rule 2). A document's
+  `id` is shown, not editable (a new id is a removal and an addition), and the editor changes existing documents only.
+- **Every save validates the whole set first**, exactly as `validate` does (every rule, the JSON Schemas, the map scenes), on a copy of `content/` in a temporary
+  folder with the change, and writes nothing when there is an error: the page lists the errors with file, line and path. A file changed on disk since it was opened
+  is not overwritten. A save takes a few seconds on the sample content (the whole check).
+- **Writes.** One file per save, atomically: a temporary file beside it, flushed, then a replace. A save that only changes values edits each value where it stands
+  (YamlDotNet's marks), so comments, key order, quoting and layout are kept byte for byte. A save that changes the shape (a key or list item added or removed) writes
+  the document again: key order is kept and new keys follow, but **comments are lost** (YamlDotNet's model has none), flow lists become block lists, and only the
+  `yaml-language-server` line at the top is kept. The page says which happened.
+- With a server running `--hot-reload` on the same `content/`, a save is live within about a second.
 
 ## 6. Core mechanics model
 

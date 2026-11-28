@@ -75,6 +75,9 @@ public sealed class Hud
     private readonly ProgressBar _targetBar = Bar(new Color(0.9f, 0.35f, 0.3f));
     private readonly Label _flash = Wrapped(HorizontalAlignment.Center);
     private readonly Label _announcement = Wrapped(HorizontalAlignment.Center);   // T-806: staff's announcement, with the bottom's whole width to wrap in
+
+    /// <summary>What the announcement line shows now (T-801's scripted run reads it).</summary>
+    public string AnnouncementText => _announcement.Visible ? _announcement.Text : string.Empty;
     private readonly Label _connection = Wrapped(HorizontalAlignment.Right);
     private readonly Button _uiSize = new();
     private readonly Button _logout = new() { Text = UiText.Logout };

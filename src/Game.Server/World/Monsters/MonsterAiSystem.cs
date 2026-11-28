@@ -42,15 +42,15 @@ public readonly record struct MonsterAiView(string State, EntityId? Target, Grid
 /// <c>prevents_attack</c> requests no attacks, and one held by <c>prevents_skills</c> casts nothing.</para>
 /// <para>Allocation after warm-up: only the intents and events it raises, and the per-monster state when a monster spawns.</para>
 /// </remarks>
-public sealed class MonsterAiSystem : ITickSystem
+public sealed class MonsterAiSystem : ITickSystem, Reload.IContentReloadable
 {
     private static readonly IReadOnlyCollection<Type> Owned = [];
     private static readonly int AspdStat = StatIndex.IndexOf(DerivedStats.Aspd);
     private static readonly int CastTimeModStat = StatIndex.IndexOf(DerivedStats.CastTimeMod);
     private static readonly int LevelSlot = FormulaSymbols.Default.SlotOf(FormulaVariables.SkillLevel);
 
-    private readonly MonsterCatalog _catalog;
-    private readonly AiBalanceDef _ai;
+    private MonsterCatalog _catalog;
+    private AiBalanceDef _ai;
     private readonly int _bucketSize;
     private readonly int _viewRadius;
     private readonly FormulaContext _formula = new(FormulaSymbols.Default);
@@ -83,6 +83,20 @@ public sealed class MonsterAiSystem : ITickSystem
     /// <summary>Creates the AI with <c>balance.yaml</c> <c>ai</c> and <c>aoi</c>.</summary>
     public static MonsterAiSystem Create(MonsterCatalog catalog, BalanceDef balance) =>
         new(catalog, balance.Ai, balance.Aoi.BucketSize, balance.Aoi.ViewRadius);
+
+    /// <summary>T-801: new monsters and timings. Every monster was removed before this (its brain went with its <c>EntityLeftMap</c>); the new ones get brains as they spawn.</summary>
+    public void Reload(Reload.ServerContent next)
+    {
+        var ai = next.Balance.Ai;
+        Positive(ai.ThinkIntervalMs, nameof(ai.ThinkIntervalMs));
+        Positive(ai.WanderPauseMinMs, nameof(ai.WanderPauseMinMs));
+        Positive(ai.WanderRadius, nameof(ai.WanderRadius));
+        Positive(ai.RepathIntervalMs, nameof(ai.RepathIntervalMs));
+        Positive(ai.ReturnTimeoutMs, nameof(ai.ReturnTimeoutMs));
+        if (ai.WanderPauseMaxMs < ai.WanderPauseMinMs) throw new ArgumentOutOfRangeException(nameof(next), "WanderPauseMaxMs must not be below WanderPauseMinMs.");
+        _catalog = next.Monsters;
+        _ai = ai;
+    }
 
     /// <inheritdoc />
     public string Name => "monster_ai";

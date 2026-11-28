@@ -7,5 +7,6 @@ root.Subcommands.Add(ValidateCommand.Create());
 root.Subcommands.Add(StatsCommand.Create());
 root.Subcommands.Add(GridCommand.Create());
 root.Subcommands.Add(ExportClientCommand.Create());
+root.Subcommands.Add(EditorCommand.Create());
 
 return root.Parse(args).Invoke();

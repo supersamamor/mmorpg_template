@@ -13,13 +13,16 @@ namespace Game.Server.World.Party;
 /// <see cref="PartyRoster"/>, which the party service sends to the other members. A player in no party costs one dictionary read; nothing runs while nobody is in a party.</item>
 /// </list>
 /// </summary>
-public sealed class PartySystem : ITickSystem
+public sealed class PartySystem : ITickSystem, Reload.IContentReloadable
 {
     private readonly PartyRoster _roster;
-    private readonly PartyBalanceDef _balance;
+    private PartyBalanceDef _balance;
     private readonly int _statusIntervalTicks;
     private readonly List<EntityId> _credited = new();
     private MapInstance? _instance;
+
+    /// <summary>T-801: the new party numbers (the party service outside the tick keeps its own until a restart; see ARCHITECTURE §5.5).</summary>
+    public void Reload(Reload.ServerContent next) => _balance = next.Balance.Party;
 
     /// <summary>Creates the system over the shared <paramref name="roster"/>; members' status is reported every <paramref name="statusIntervalTicks"/> ticks (at least 1).</summary>
     public PartySystem(PartyRoster roster, PartyBalanceDef balance, int statusIntervalTicks)
